@@ -1999,9 +1999,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     final playerCount =
         _selectedHomePlayers.length + _selectedAwayPlayers.length;
     if (playerCount > 0 && widget.onCustomVerbChanged != null) {
-      // Use custom verb callback to preserve all selected players
-      // Pass the label (e.g., "Goes to the Net Against") instead of verbPhrase
-      // so the switch statement in caption_fields_widget can match it correctly
+      // Use custom verb callback to preserve all selected players.
+      // Pass [VerbOption.label] (may be an edited display name); caption_fields
+      // resolves it to the built-in verb key via overrides so switch cases match.
       widget.onCustomVerbChanged!(verb.label);
     } else if (_firstPlayerSelected != null &&
         widget.onCaptionGenerated != null) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:dropdown_flutter/custom_dropdown.dart';
 
 import '../services/camera_serial_service.dart';
 import '../services/preferences_service.dart';
@@ -446,37 +447,67 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              PopupMenuButton<String>(
-                onSelected: (v) async {
-                  setState(() => _sportForDefault = v);
-                  try {
-                    if (v.isEmpty) {
-                      await _preferencesService.saveCurrentSport('');
-                    } else {
-                      await _preferencesService.setCurrentSportAsDefault(v);
-                    }
-                    await _loadCurrentPreferences();
-                  } catch (_) {}
-                },
-                itemBuilder: (context) {
-                  const options = ['', 'baseball', 'hockey', 'basketball'];
-                  const labels = ['None', 'Baseball', 'Hockey', 'Basketball'];
-                  final entries = <PopupMenuEntry<String>>[];
-                  for (var i = 0; i < options.length; i++) {
-                    entries.add(PopupMenuItem(value: options[i], child: Text(labels[i], style: TextStyle(fontSize: 11, color: Colors.grey.shade800))));
-                    if (i < options.length - 1) entries.add(const PopupMenuDivider());
-                  }
-                  return entries;
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _sportForDefault.isEmpty ? 'None' : _sportForDefault[0].toUpperCase() + _sportForDefault.substring(1),
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+              SizedBox(
+                width: 220,
+                child: DropdownFlutter<String>(
+                  hintText: 'Select sport',
+                  items: const ['None', 'Baseball', 'Hockey', 'Basketball'],
+                  initialItem: _sportForDefault.isEmpty
+                      ? 'None'
+                      : _sportForDefault[0].toUpperCase() + _sportForDefault.substring(1),
+                  closedHeaderPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  expandedHeaderPadding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  listItemPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: CustomDropdownDecoration(
+                    closedFillColor: Colors.grey.shade50,
+                    expandedFillColor: Colors.white,
+                    closedBorder: Border.all(color: Colors.grey.shade300),
+                    expandedBorder: Border.all(color: Colors.grey.shade300),
+                    closedBorderRadius: BorderRadius.circular(6),
+                    expandedBorderRadius: BorderRadius.circular(8),
+                    closedShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                    expandedShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.10),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    headerStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                    listItemStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                    listItemDecoration: ListItemDecoration(
+                      selectedColor: Colors.grey.shade100,
                     ),
-                    Icon(Icons.arrow_drop_down, size: 20, color: Colors.grey.shade600),
-                  ],
+                  ),
+                  onChanged: (label) async {
+                    if (label == null) return;
+                    final map = {
+                      'None': '',
+                      'Baseball': 'baseball',
+                      'Hockey': 'hockey',
+                      'Basketball': 'basketball',
+                    };
+                    final v = map[label] ?? '';
+                    setState(() => _sportForDefault = v);
+                    try {
+                      if (v.isEmpty) {
+                        await _preferencesService.saveCurrentSport('');
+                      } else {
+                        await _preferencesService.setCurrentSportAsDefault(v);
+                      }
+                      await _loadCurrentPreferences();
+                    } catch (_) {}
+                  },
                 ),
               ),
               const SizedBox(height: 8),
@@ -569,8 +600,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   }
 
   Widget _buildFtpContent() {
-    final firebarRight = _currentPreferences?['placeFirebarOnRight'] == true;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -579,31 +608,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           embedded: true,
           onProfilesChanged: () => _loadCurrentPreferences(),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
-        ),
-        _buildInlineRow('Firebar Position', child: SizedBox(
-          width: 100,
-          child: PopupMenuButton<bool>(
-            onSelected: (v) async {
-              await _preferencesService.savePlaceFirebarOnRight(v);
-              await _loadCurrentPreferences();
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(value: false, child: Text('Left', style: TextStyle(fontSize: 11, color: Colors.grey.shade800))),
-              const PopupMenuDivider(),
-              PopupMenuItem(value: true, child: Text('Right', style: TextStyle(fontSize: 11, color: Colors.grey.shade800))),
-            ],
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(firebarRight ? 'Right' : 'Left', style: TextStyle(fontSize: 11, color: Colors.grey.shade800)),
-                Icon(Icons.arrow_drop_down, size: 20, color: Colors.grey.shade600),
-              ],
-            ),
-          ),
-        )),
       ],
     );
   }

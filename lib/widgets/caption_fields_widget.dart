@@ -741,7 +741,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Shoots',
       'Battles',
       'Scores',
-      'Goes to the Net Against',
+      'Goes to the Net',
       'Faceoff',
       'Celebrates a Goal',
       'Celebrates',
@@ -9484,7 +9484,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Skates',
       'Battles',
       'Faceoff',
-      'Goes to the Net Against',
+      'Goes to the Net',
       'Power Play',
       'Breakaway',
       'Blocks',
@@ -15326,6 +15326,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return;
     }
 
+    final resolvedVerb = _resolveCanonicalVerbKey(verbText.trim());
+
     // List of category verbs that need to go through the switch statement
     // to properly handle opposing players and other logic
     // This includes ALL verbs from player_popup_caption_board that have switch cases
@@ -15369,11 +15371,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     };
 
     // If this is a category verb, don't set _popupCustomVerb so it goes through switch statement
-    if (categoryVerbs.contains(verbText)) {
+    if (categoryVerbs.contains(resolvedVerb)) {
       setState(() {
         _popupCustomVerb = null;
-        _selectedVerb = verbText;
-        _selectedActionVerb = verbText;
+        _selectedVerb = resolvedVerb;
+        _selectedActionVerb = resolvedVerb;
       });
       _updateCaption();
       return;
@@ -15382,7 +15384,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Check if this is a custom verb - look up its verbPhrase
     final customVerbs = await _preferencesService.getCustomVerbs(sport: _currentSport);
     final customVerb = customVerbs.firstWhere(
-      (v) => v['label'] == verbText,
+      (v) => v['label'] == resolvedVerb,
       orElse: () => <String, dynamic>{},
     );
     
@@ -15392,7 +15394,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       if (customVerb.isNotEmpty && customVerb.containsKey('verbPhrase')) {
         // Use the verbPhrase from the custom verb, not the label
-        final verbPhrase = customVerb['verbPhrase'] as String? ?? verbText;
+        final verbPhrase = customVerb['verbPhrase'] as String? ?? resolvedVerb;
         final pluralPhrase = customVerb['pluralPhrase'] as String?;
         
         // Use plural phrase if we have multiple players and a plural phrase is defined
@@ -15401,12 +15403,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         } else {
           _popupCustomVerb = verbPhrase;
         }
-        _selectedVerb = verbText;
-        _selectedActionVerb = verbText;
+        _selectedVerb = resolvedVerb;
+        _selectedActionVerb = resolvedVerb;
       } else {
         // Check if this is a verb override (for built-in verbs that were customized)
-        if (_verbOverrides.containsKey(verbText)) {
-          final override = _verbOverrides[verbText]!;
+        if (_verbOverrides.containsKey(resolvedVerb)) {
+          final override = _verbOverrides[resolvedVerb]!;
           final singularPhrase = override['verbPhrase'] as String?;
           final pluralPhrase = override['pluralPhrase'] as String?;
           
@@ -15414,14 +15416,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           if (activePlayerCount > 1 && pluralPhrase != null && pluralPhrase.isNotEmpty) {
             _popupCustomVerb = pluralPhrase;
           } else {
-            _popupCustomVerb = singularPhrase ?? verbText;
+            _popupCustomVerb = singularPhrase ?? resolvedVerb;
           }
         } else {
           // For custom typed verbs (typed in the text field), use the text directly
-          _popupCustomVerb = verbText;
+          _popupCustomVerb = resolvedVerb;
         }
-        _selectedVerb = verbText;
-        _selectedActionVerb = verbText;
+        _selectedVerb = resolvedVerb;
+        _selectedActionVerb = resolvedVerb;
       }
     });
     _updateCaption();
@@ -18639,6 +18641,41 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return null; // No override found
   }
 
+  /// Map a display label back to the built-in verb key stored in [_verbOverrides].
+  ///
+  /// The player popup passes [VerbOption.label], which may be an edited display name
+  /// (e.g. "Goes to the Net Against") while switch/caption logic keys off the default
+  /// name ("Goes to the Net"). Without this, those verbs fall through to the baseball
+  /// default and produce "hits a …".
+  String _resolveCanonicalVerbKey(String verb) {
+    final v = verb.trim();
+    if (v.isEmpty) return verb;
+
+    // Legacy list accidentally used this label as the verb key; map to canonical.
+    if (v == 'Goes to the Net Against') {
+      return 'Goes to the Net';
+    }
+
+    if (_verbOverrides.containsKey(v)) return v;
+    for (final entry in _verbOverrides.entries) {
+      final label = entry.value['label'] as String?;
+      // Only remap when the override key is a canonical verb name (starts with
+      // an uppercase letter, e.g. "Saves", "Guards the Net", "Goes to the Net").
+      // Stale overrides incorrectly stored the computed verbPhrase as the key
+      // (e.g. "makes a save", "guards the net against") — these are always
+      // all-lowercase and would redirect the canonical input to the default
+      // baseball path, producing "hits a …" in hockey captions.
+      if (label != null &&
+          label.trim() == v &&
+          entry.key.isNotEmpty &&
+          RegExp(r'^[A-Z]').hasMatch(entry.key)) {
+        return entry.key;
+      }
+    }
+    // Always use trimmed form so switch cases match.
+    return v;
+  }
+
   // Helper to check if "against" should be omitted for a verb
   bool _shouldOmitAgainst(String verbLabel) {
     // First, try direct lookup by label (the key used when saving built-in verb overrides)
@@ -18659,8 +18696,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   String _buildActionPhrase() {
-    final originalVerb = _selectedActionVerb ?? _selectedVerb;
-    if (originalVerb == null) return '';
+    final rawVerb = _selectedActionVerb ?? _selectedVerb;
+    if (rawVerb == null) return '';
+    final originalVerb = _resolveCanonicalVerbKey(rawVerb);
 
     if (_popupCustomVerb != null && _popupCustomVerb!.isNotEmpty) {
       return _popupCustomVerb!;

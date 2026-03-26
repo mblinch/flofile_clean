@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/preferences_service.dart';
+import 'package:dropdown_flutter/custom_dropdown.dart';
 
 /// Standalone FTP Server Settings panel. Can be shown in a dialog or embedded (e.g. in Preferences > FTP).
 /// Uses the same storage keys as the caption widget (ftp_profiles, current_ftp_profile).
@@ -33,7 +34,6 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
   int _port = 21;
   String _remotePath = '';
   bool _passiveMode = true;
-  bool _showProfileManager = false;
   String? _successMessage;
 
   final _hostController = TextEditingController();
@@ -275,20 +275,14 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
           // Header
           Row(
             children: [
-              Icon(_showProfileManager ? Icons.folder : Icons.settings, size: 16, color: Colors.grey.shade600),
+              Icon(Icons.settings, size: 16, color: Colors.grey.shade600),
               const SizedBox(width: 6),
               Text(
-                _showProfileManager ? 'FTP Profile Manager' : 'FTP Server Settings',
+                'FTP Server Settings',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
               ),
               const Spacer(),
               _buildPillButton(Icons.add, 'Create New Profile', onTap: _showCreateProfileDialog),
-              const SizedBox(width: 8),
-              _buildPillButton(
-                _showProfileManager ? Icons.settings : Icons.folder,
-                _showProfileManager ? 'Back to Settings' : 'Manage Profiles',
-                onTap: () => setState(() => _showProfileManager = !_showProfileManager),
-              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -307,44 +301,114 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
             ),
             const SizedBox(height: 8),
           ],
-          if (!_showProfileManager) ...[
+          // Profile selection and options
+          ...[
             Text('Select Profile', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
             const SizedBox(height: 4),
             Container(
               constraints: const BoxConstraints(maxWidth: 400),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade300)),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String?>(
-                  value: _currentProfile,
-                  isExpanded: true,
-                  hint: Text('No Profile Selected', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                  items: [
-                    const DropdownMenuItem<String?>(value: null, child: Text('No Profile Selected')),
-                    ..._profiles.keys.map((name) => DropdownMenuItem<String?>(
-                          value: name,
-                          child: Row(
-                            children: [
-                              Expanded(child: Text(name, style: TextStyle(fontSize: 11, color: Colors.grey.shade800), overflow: TextOverflow.ellipsis)),
-                              GestureDetector(
-                                onTap: () => _showEditProfileDialog(name),
-                                child: Icon(Icons.settings, size: 14, color: Colors.grey.shade600),
-                              ),
-                            ],
-                          ),
-                        )),
+              child: DropdownFlutter<String>(
+                hintText: 'Select profile',
+                items: _profiles.keys.toList(),
+                initialItem: _currentProfile != null && _profiles.containsKey(_currentProfile!)
+                    ? _currentProfile
+                    : (_profiles.isNotEmpty ? _profiles.keys.first : null),
+                overlayHeight: 260,
+                closedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                expandedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                listItemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: CustomDropdownDecoration(
+                  closedFillColor: Colors.white,
+                  expandedFillColor: Colors.white,
+                  closedBorder: Border.all(color: Colors.grey.shade300),
+                  expandedBorder: Border.all(color: Colors.grey.shade300),
+                  closedBorderRadius: BorderRadius.circular(4),
+                  expandedBorderRadius: BorderRadius.circular(8),
+                  closedShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
                   ],
-                  onChanged: (v) {
-                    if (v != null) _loadProfile(v);
-                    else {
-                      setState(() => _currentProfile = null);
-                      _saveProfiles();
-                    }
-                  },
+                  expandedShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.10),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  headerStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                  listItemStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                  listItemDecoration: ListItemDecoration(
+                    selectedColor: Colors.grey.shade100,
+                  ),
+                  closedSuffixIcon: Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
+                  expandedSuffixIcon: Icon(Icons.arrow_drop_up, size: 16, color: Colors.grey.shade600),
                 ),
+                listItemBuilder: (context, item, isSelected, onItemSelect) {
+                  final name = item;
+                  final label = name ?? '';
+                  return InkWell(
+                    onTap: onItemSelect,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                              color: Colors.grey.shade800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            if (name != null) _showEditProfileDialog(name);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: 6),
+                            child: Icon(Icons.settings, size: 14, color: Colors.grey.shade600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+                onChanged: (value) {
+                  if (value == null) return;
+                  _loadProfile(value);
+                },
               ),
             ),
-            const SizedBox(height: 12),
+            if (_currentProfile != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Text(
+                    'Current profile: ',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _currentProfile!,
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  _buildPillButton(Icons.edit, 'Edit', onTap: () => _showEditProfileDialog(_currentProfile!)),
+                  const SizedBox(width: 6),
+                  _buildPillButton(Icons.delete, 'Delete', onTap: () => _deleteProfile(_currentProfile!)),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              const SizedBox(height: 12),
+            ],
             // Upload Options
             Container(
               padding: const EdgeInsets.all(10),
@@ -387,41 +451,6 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                   ),
                 ],
               ),
-            ),
-          ] else ...[
-            Text('Profile Manager', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
-            const SizedBox(height: 8),
-            Container(
-              height: 220,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade300)),
-              child: _profiles.isEmpty
-                  ? Center(child: Text('No saved profiles yet.\nCreate one using "Create New Profile".', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey.shade600)))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(8),
-                      itemCount: _profiles.length,
-                      itemBuilder: (context, index) {
-                        final name = _profiles.keys.elementAt(index);
-                        final p = _profiles[name]!;
-                        final isCurrent = _currentProfile == name;
-                        return Card(
-                          margin: const EdgeInsets.symmetric(vertical: 4),
-                          color: isCurrent ? const Color(0xFF0052CC).withOpacity(0.1) : null,
-                          child: ListTile(
-                            leading: Icon(isCurrent ? Icons.check_circle : Icons.storage, color: isCurrent ? const Color(0xFF0052CC) : Colors.grey, size: 18),
-                            title: Text(name, style: TextStyle(fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, fontSize: 12)),
-                            subtitle: Text('${p['host']}:${p['port']}', style: const TextStyle(fontSize: 10)),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (!isCurrent) IconButton(icon: const Icon(Icons.play_arrow, size: 20), onPressed: () => _loadProfile(name), tooltip: 'Load'),
-                                IconButton(icon: const Icon(Icons.edit, size: 18), onPressed: () => _showEditProfileDialog(name), tooltip: 'Edit'),
-                                IconButton(icon: const Icon(Icons.delete, size: 18), onPressed: () => _deleteProfile(name), tooltip: 'Delete'),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
             ),
           ],
           if (!widget.embedded) ...[

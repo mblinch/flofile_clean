@@ -16,6 +16,9 @@ dependencies:
   # For network requests
   http: ^1.2.1
 
+  # Nicer, highly-customizable dropdowns
+  dropdown_flutter: ^1.0.3
+
   # Internationalization & date formatting
   intl: ^0.18.1
 

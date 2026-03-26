@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:io';
 import '../services/api_manager.dart';
 import 'dart:convert'; // Added for jsonDecode
+import 'package:dropdown_flutter/custom_dropdown.dart';
 import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'metadata_preset_dialog.dart';
@@ -672,6 +673,81 @@ class _StartupDialogState extends State<StartupDialog> {
     }
   }
 
+  Future<void> _toggleFavoriteTeam({required bool isHome}) async {
+    setState(() {
+      final selectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
+      if (selectedTeam == null) return;
+      if (isHome) {
+        if (_favoriteHomeTeam == selectedTeam) {
+          _favoriteHomeTeam = null;
+          _favoriteTeams.remove('HOME:$selectedTeam');
+        } else {
+          if (_favoriteHomeTeam != null) {
+            _favoriteTeams.remove('HOME:$_favoriteHomeTeam');
+          }
+          _favoriteHomeTeam = selectedTeam;
+          _favoriteTeams.add('HOME:$selectedTeam');
+        }
+      } else {
+        if (_favoriteAwayTeam == selectedTeam) {
+          _favoriteAwayTeam = null;
+          _favoriteTeams.remove('AWAY:$selectedTeam');
+        } else {
+          if (_favoriteAwayTeam != null) {
+            _favoriteTeams.remove('AWAY:$_favoriteAwayTeam');
+          }
+          _favoriteAwayTeam = selectedTeam;
+          _favoriteTeams.add('AWAY:$selectedTeam');
+        }
+      }
+    });
+
+    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    await _preferencesService.saveFavoriteTeams(_favoriteTeams, sport: sport);
+  }
+
+  Widget _buildStyledTeamDropdown({
+    required bool isHome,
+    required String hintText,
+  }) {
+    final selectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
+    final initial = (selectedTeam != null && availableTeams.contains(selectedTeam))
+        ? selectedTeam
+        : null;
+    return DropdownFlutter<String>(
+      hintText: hintText,
+      items: availableTeams,
+      initialItem: initial,
+      overlayHeight: 320,
+      closedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      expandedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      listItemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: CustomDropdownDecoration(
+        closedFillColor: Colors.grey.shade100,
+        expandedFillColor: Colors.white,
+        closedBorder: Border.all(color: Colors.grey.shade300),
+        expandedBorder: Border.all(color: Colors.grey.shade300),
+        closedBorderRadius: BorderRadius.circular(4),
+        expandedBorderRadius: BorderRadius.circular(8),
+        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+        headerStyle: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+        listItemStyle: const TextStyle(fontSize: 12),
+        listItemDecoration: ListItemDecoration(
+          selectedColor: Colors.grey.shade100,
+        ),
+      ),
+      onChanged: (value) {
+        setState(() {
+          if (isHome) {
+            selectedHomeTeam = value;
+          } else {
+            selectedAwayTeam = value;
+          }
+        });
+      },
+    );
+  }
+
   bool get _canProceed {
     if (hasImagesInFolder) {
       return selectedFolderPath != null &&
@@ -1082,108 +1158,29 @@ class _StartupDialogState extends State<StartupDialog> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2), // More compact padding
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(
-                                      4), // Smaller radius
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: selectedHomeTeam,
-                                    hint: const Text('Select home team',
-                                        style: TextStyle(fontSize: 13)),
-                                    isExpanded: true,
-                                    items: availableTeams.map((team) {
-                                      final isSelected =
-                                          team == selectedHomeTeam;
-                                      return DropdownMenuItem<String>(
-                                        value: team,
-                                        child: Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(team,
-                                                  style: const TextStyle(
-                                                      fontSize: 13)),
-                                            ),
-                                            // Show star only for selected team
-                                            if (isSelected) ...[
-                                              MouseRegion(
-                                                cursor:
-                                                    SystemMouseCursors.click,
-                                                child: GestureDetector(
-                                                  onTap: () {
-                                                    setState(() {
-                                                      // Toggle home team favorite
-                                                      if (_favoriteHomeTeam ==
-                                                          selectedHomeTeam) {
-                                                        _favoriteHomeTeam =
-                                                            null;
-                                                        _favoriteTeams.remove(
-                                                            'HOME:$selectedHomeTeam');
-                                                      } else {
-                                                        // Remove old home favorite if exists
-                                                        if (_favoriteHomeTeam !=
-                                                            null) {
-                                                          _favoriteTeams.remove(
-                                                              'HOME:$_favoriteHomeTeam');
-                                                        }
-                                                        _favoriteHomeTeam =
-                                                            selectedHomeTeam;
-                                                        _favoriteTeams.add(
-                                                            'HOME:$selectedHomeTeam');
-                                                      }
-
-                                                      // Save favorite teams preference for current sport
-                                                      final sport = widget.sport
-                                                              ?.toLowerCase() ??
-                                                          'baseball';
-                                                      _preferencesService
-                                                          .saveFavoriteTeams(
-                                                              _favoriteTeams,
-                                                              sport: sport);
-                                                    });
-                                                  },
-                                                  behavior:
-                                                      HitTestBehavior.opaque,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.all(4),
-                                                    child: Icon(
-                                                      _favoriteHomeTeam ==
-                                                              selectedHomeTeam
-                                                          ? Icons.star
-                                                          : Icons.star_border,
-                                                      size: 16,
-                                                      color: _favoriteHomeTeam ==
-                                                              selectedHomeTeam
-                                                          ? Colors.amber
-                                                          : Colors
-                                                              .grey.shade400,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        selectedHomeTeam = value;
-                                      });
-                                    },
+                              child: _buildStyledTeamDropdown(
+                                isHome: true,
+                                hintText: 'Select home team',
+                              ),
+                            ),
+                            if (selectedHomeTeam != null) ...[
+                              const SizedBox(width: 8),
+                              CustomButton(
+                                onTap: () => _toggleFavoriteTeam(isHome: true),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    _favoriteHomeTeam == selectedHomeTeam
+                                        ? Icons.star
+                                        : Icons.star_border,
+                                    size: 18,
+                                    color: _favoriteHomeTeam == selectedHomeTeam
+                                        ? Colors.amber
+                                        : Colors.grey.shade400,
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
@@ -1203,108 +1200,29 @@ class _StartupDialogState extends State<StartupDialog> {
                         child: Row(
                           children: [
                             Expanded(
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2), // More compact padding
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(
-                                      4), // Smaller radius
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: selectedAwayTeam,
-                                    hint: const Text('Select away team',
-                                        style: TextStyle(fontSize: 13)),
-                                    isExpanded: true,
-                                    items: availableTeams.map((team) {
-                                      final isSelected =
-                                          team == selectedAwayTeam;
-                                      return DropdownMenuItem<String>(
-                                        value: team,
-                                        child: Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(team,
-                                                  style: const TextStyle(
-                                                      fontSize: 13)),
-                                            ),
-                                            // Show star only for selected team
-                                            if (isSelected) ...[
-                                              MouseRegion(
-                                                cursor:
-                                                    SystemMouseCursors.click,
-                                                child: GestureDetector(
-                                                  onTap: () {
-                                                    setState(() {
-                                                      // Toggle away team favorite
-                                                      if (_favoriteAwayTeam ==
-                                                          selectedAwayTeam) {
-                                                        _favoriteAwayTeam =
-                                                            null;
-                                                        _favoriteTeams.remove(
-                                                            'AWAY:$selectedAwayTeam');
-                                                      } else {
-                                                        // Remove old away favorite if exists
-                                                        if (_favoriteAwayTeam !=
-                                                            null) {
-                                                          _favoriteTeams.remove(
-                                                              'AWAY:$_favoriteAwayTeam');
-                                                        }
-                                                        _favoriteAwayTeam =
-                                                            selectedAwayTeam;
-                                                        _favoriteTeams.add(
-                                                            'AWAY:$selectedAwayTeam');
-                                                      }
-
-                                                      // Save favorite teams preference for current sport
-                                                      final sport = widget.sport
-                                                              ?.toLowerCase() ??
-                                                          'baseball';
-                                                      _preferencesService
-                                                          .saveFavoriteTeams(
-                                                              _favoriteTeams,
-                                                              sport: sport);
-                                                    });
-                                                  },
-                                                  behavior:
-                                                      HitTestBehavior.opaque,
-                                                  child: Padding(
-                                                    padding:
-                                                        const EdgeInsets.all(4),
-                                                    child: Icon(
-                                                      _favoriteAwayTeam ==
-                                                              selectedAwayTeam
-                                                          ? Icons.star
-                                                          : Icons.star_border,
-                                                      size: 16,
-                                                      color: _favoriteAwayTeam ==
-                                                              selectedAwayTeam
-                                                          ? Colors.amber
-                                                          : Colors
-                                                              .grey.shade400,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) {
-                                      setState(() {
-                                        selectedAwayTeam = value;
-                                      });
-                                    },
+                              child: _buildStyledTeamDropdown(
+                                isHome: false,
+                                hintText: 'Select away team',
+                              ),
+                            ),
+                            if (selectedAwayTeam != null) ...[
+                              const SizedBox(width: 8),
+                              CustomButton(
+                                onTap: () => _toggleFavoriteTeam(isHome: false),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    _favoriteAwayTeam == selectedAwayTeam
+                                        ? Icons.star
+                                        : Icons.star_border,
+                                    size: 18,
+                                    color: _favoriteAwayTeam == selectedAwayTeam
+                                        ? Colors.amber
+                                        : Colors.grey.shade400,
                                   ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
