@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -127,6 +128,29 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   int? _pinnedVerbIndex;
 
   bool _showPlayoffOvertimes = false;
+
+  // Category drag-to-reorder state (raw pointer events)
+  int? _dragFromCatIndex;
+  int? _dragToCatIndex;
+  Timer? _catLongPressTimer;
+  final Map<int, GlobalKey> _catRowKeys = {};
+
+  GlobalKey _catKey(int i) => _catRowKeys.putIfAbsent(i, () => GlobalKey());
+
+  int? _catIndexAtGlobalY(double y) {
+    for (final entry in _catRowKeys.entries) {
+      final ctx = entry.value.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null) continue;
+      final pos = box.localToGlobal(Offset.zero);
+      if (y >= pos.dy && y < pos.dy + box.size.height) return entry.key;
+    }
+    return null;
+  }
+
+  /// Baseball Keyboard Fire: 0 = innings 1–9, 1 = 10–18, 2 = 19–27.
+  int _baseballInningPage = 0;
 
   /// When true, show players as number-only squares (classic style) in Home/Away columns.
   bool _useSquarePlayerView = false;
@@ -923,7 +947,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   }
 
   /// Category list only (no border; caller wraps with bar inside same box).
-  /// [barText] = current bar input; matching row gets grey, selected category gets blue.
+  /// Hold a row ~500 ms then drag to reorder; quick tap selects.
   Widget _buildCategoryPanelContent({String? barText}) {
     final cats = _verbList;
     if (cats.isEmpty) {
@@ -934,21 +958,91 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
     final barCatNum = int.tryParse(barText?.trim() ?? '');
     return ListView.builder(
-              padding: EdgeInsets.zero,
-              itemCount: cats.length,
-              itemBuilder: (context, i) {
-          final cat = cats[i];
-          final catNum = cat['number'] as int? ?? (i + 1);
-          final name = cat['name'] as String? ?? '';
-          final isFavs = name == 'Favorites';
-          final isSelected = _selectedCategoryIndex == i;
-          final isCurrent = barCatNum != null && barCatNum == catNum;
-          final bgColor = isSelected
-              ? Colors.blue.shade50
-              : (isCurrent ? Colors.grey.shade200 : (isFavs ? Colors.amber.shade50 : Colors.transparent));
-          return InkWell(
-            onTap: () => setState(() => _selectedCategoryIndex = i),
+      padding: EdgeInsets.zero,
+      itemCount: cats.length,
+      itemBuilder: (context, i) {
+        final cat = cats[i];
+        final catNum = cat['number'] as int? ?? (i + 1);
+        final name = cat['name'] as String? ?? '';
+        final isFavs = name == 'Favorites';
+        final isSelected = _selectedCategoryIndex == i;
+        final isCurrent = barCatNum != null && barCatNum == catNum;
+        final isDragging = _dragFromCatIndex == i;
+        final isDragOver =
+            _dragToCatIndex == i && _dragFromCatIndex != i;
+
+        Color bgColor;
+        if (isDragging) {
+          bgColor = Colors.blue.shade100;
+        } else if (isDragOver) {
+          bgColor = Colors.blue.shade50;
+        } else if (isSelected) {
+          bgColor = Colors.blue.shade50;
+        } else if (isCurrent) {
+          bgColor = Colors.grey.shade200;
+        } else if (isFavs) {
+          bgColor = Colors.amber.shade50;
+        } else {
+          bgColor = Colors.transparent;
+        }
+
+        return Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (e) {
+            _catLongPressTimer?.cancel();
+            _catLongPressTimer = Timer(const Duration(milliseconds: 500), () {
+              setState(() {
+                _dragFromCatIndex = i;
+                _dragToCatIndex = i;
+              });
+            });
+          },
+          onPointerMove: (e) {
+            if (_dragFromCatIndex != null) {
+              final target = _catIndexAtGlobalY(e.position.dy);
+              if (target != null && target != _dragToCatIndex) {
+                setState(() => _dragToCatIndex = target);
+              }
+            }
+          },
+          onPointerUp: (e) {
+            _catLongPressTimer?.cancel();
+            if (_dragFromCatIndex != null &&
+                _dragToCatIndex != null &&
+                _dragFromCatIndex != _dragToCatIndex) {
+              final state = widget.captionState;
+              if (state != null) {
+                try {
+                  (state as dynamic)
+                      .reorderCategories(_dragFromCatIndex!, _dragToCatIndex!);
+                } catch (_) {}
+              }
+              setState(() {
+                _dragFromCatIndex = null;
+                _dragToCatIndex = null;
+              });
+            } else if (_dragFromCatIndex == null) {
+              setState(() => _selectedCategoryIndex = i);
+            } else {
+              setState(() {
+                _dragFromCatIndex = null;
+                _dragToCatIndex = null;
+              });
+            }
+          },
+          onPointerCancel: (_) {
+            _catLongPressTimer?.cancel();
+            setState(() {
+              _dragFromCatIndex = null;
+              _dragToCatIndex = null;
+            });
+          },
+          child: MouseRegion(
+            cursor: _dragFromCatIndex != null
+                ? SystemMouseCursors.grabbing
+                : SystemMouseCursors.grab,
             child: Container(
+              key: _catKey(i),
               padding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
               decoration: BoxDecoration(
@@ -956,58 +1050,62 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 border: Border(
                   bottom:
                       BorderSide(color: Colors.grey.shade200, width: 0.5),
+                  top: isDragOver
+                      ? BorderSide(color: Colors.blue.shade400, width: 2)
+                      : BorderSide.none,
                 ),
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 18,
-                    height: 16,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: (isSelected || isCurrent)
-                          ? Colors.grey.shade300
-                          : (isFavs
-                              ? Colors.amber.shade200
-                              : Colors.grey.shade200),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: Text(
-                      '$catNum',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: isSelected
-                            ? Colors.grey.shade800
-                            : Colors.grey.shade800,
+              child: Opacity(
+                opacity: isDragging ? 0.5 : 1.0,
+                child: Row(
+                  children: [
+                    Container(
+                      width: 18,
+                      height: 16,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: (isSelected || isCurrent)
+                            ? Colors.grey.shade300
+                            : (isFavs
+                                ? Colors.amber.shade200
+                                : Colors.grey.shade200),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: Text(
+                        '$catNum',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade800,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: isSelected
-                            ? Colors.grey.shade800
-                            : Colors.grey.shade800,
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                  Icon(
-                    Icons.chevron_right,
-                    size: 14,
-                    color:
-                        isSelected ? Colors.grey.shade700 : Colors.grey.shade400,
-                  ),
-                ],
+                    Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: isSelected
+                          ? Colors.grey.shade700
+                          : Colors.grey.shade400,
+                    ),
+                  ],
+                ),
               ),
             ),
-          );
-        },
+          ),
+        );
+      },
     );
   }
 
@@ -1104,54 +1202,131 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             offset += 1;
             if (flatIndex == headerIndex) {
               final isExpanded = _expandedCategoryIndex == ci;
-              return InkWell(
-                onTap: () {
-                  setState(() {
-                    if (_expandedCategoryIndex == ci) {
-                      _expandedCategoryIndex = null;
-                    } else {
-                      _expandedCategoryIndex = ci;
-                    }
+              final isDragging = _dragFromCatIndex == ci;
+              final isDragOver =
+                  _dragToCatIndex == ci && _dragFromCatIndex != ci;
+              return Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (e) {
+                  _catLongPressTimer?.cancel();
+                  _catLongPressTimer =
+                      Timer(const Duration(milliseconds: 500), () {
+                    setState(() {
+                      _dragFromCatIndex = ci;
+                      _dragToCatIndex = ci;
+                    });
                   });
                 },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    border: Border(
-                      top: BorderSide(color: Colors.white, width: 1),
-                      bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+                onPointerMove: (e) {
+                  if (_dragFromCatIndex != null) {
+                    final target = _catIndexAtGlobalY(e.position.dy);
+                    if (target != null && target != _dragToCatIndex) {
+                      setState(() => _dragToCatIndex = target);
+                    }
+                  }
+                },
+                onPointerUp: (e) {
+                  _catLongPressTimer?.cancel();
+                  if (_dragFromCatIndex != null &&
+                      _dragToCatIndex != null &&
+                      _dragFromCatIndex != _dragToCatIndex) {
+                    final state = widget.captionState;
+                    if (state != null) {
+                      try {
+                        (state as dynamic).reorderCategories(
+                            _dragFromCatIndex!, _dragToCatIndex!);
+                      } catch (_) {}
+                    }
+                    setState(() {
+                      _dragFromCatIndex = null;
+                      _dragToCatIndex = null;
+                    });
+                  } else if (_dragFromCatIndex == null) {
+                    setState(() {
+                      if (_expandedCategoryIndex == ci) {
+                        _expandedCategoryIndex = null;
+                      } else {
+                        _expandedCategoryIndex = ci;
+                      }
+                    });
+                  } else {
+                    setState(() {
+                      _dragFromCatIndex = null;
+                      _dragToCatIndex = null;
+                    });
+                  }
+                },
+                onPointerCancel: (_) {
+                  _catLongPressTimer?.cancel();
+                  setState(() {
+                    _dragFromCatIndex = null;
+                    _dragToCatIndex = null;
+                  });
+                },
+                child: MouseRegion(
+                  cursor: _dragFromCatIndex != null
+                      ? SystemMouseCursors.grabbing
+                      : SystemMouseCursors.grab,
+                  child: Container(
+                    key: _catKey(ci),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isDragging
+                          ? Colors.blue.shade100
+                          : isDragOver
+                              ? Colors.blue.shade50
+                              : Colors.grey.shade100,
+                      border: Border(
+                        top: isDragOver
+                            ? BorderSide(
+                                color: Colors.blue.shade400, width: 2)
+                            : BorderSide(color: Colors.white, width: 1),
+                        bottom: BorderSide(
+                            color: Colors.grey.shade200, width: 0.5),
+                      ),
                     ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 18,
-                        height: 16,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: Text(
-                          '$catNum',
-                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.grey.shade800),
-                        ),
+                    child: Opacity(
+                      opacity: isDragging ? 0.5 : 1.0,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 18,
+                            height: 16,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade200,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                            child: Text(
+                              '$catNum',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade800),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade800),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Icon(
+                            isExpanded
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            size: 14,
+                            color: Colors.grey.shade600,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          name,
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Icon(
-                        isExpanded ? Icons.expand_less : Icons.expand_more,
-                        size: 14,
-                        color: Colors.grey.shade600,
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               );
@@ -1804,22 +1979,41 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     } catch (_) {}
   }
 
+  int? _getSelectedRbiInning() {
+    try {
+      return (widget.captionState as dynamic).selectedRbiInning as int?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _onInningSelect(int? inning) {
+    final state = widget.captionState;
+    if (state == null) return;
+    try {
+      (state as dynamic).updateInningFromPopup(inning);
+      setState(() {});
+    } catch (_) {}
+  }
+
   Widget _buildPeriodPicker() {
     final sport = (() {
       try {
-        return (widget.captionState as dynamic).currentSportName as String? ?? 'hockey';
+        return (widget.captionState as dynamic).currentSportName as String? ??
+            'hockey';
       } catch (_) {
         return 'hockey';
       }
     })();
     final isBasketball = sport == 'basketball';
+    final isBaseball = sport == 'baseball';
     final periodLabels = isBasketball
-        ? (  _showPlayoffOvertimes
-              ? ['Pre-Game', '2OT', '3OT', '4OT', '5OT', 'Post Game']
-              : ['Pre-Game', 'Q1', 'Q2', 'Q3', 'Q4', 'OT', '1H', '2H'])
+        ? (_showPlayoffOvertimes
+            ? ['Pre-Game', '2OT', '3OT', '4OT', '5OT', 'Post Game']
+            : ['Pre-Game', 'Q1', 'Q2', 'Q3', 'Q4', 'OT', '1H', '2H'])
         : (_showPlayoffOvertimes
-              ? ['Pre-Game', '1OT', '2OT', '3OT', '4OT', '5OT']
-              : ['Pre-Game', '1', '2', '3', 'OT', 'SO']);
+            ? ['Pre-Game', '1OT', '2OT', '3OT', '4OT', '5OT']
+            : ['Pre-Game', '1', '2', '3', 'OT', 'SO']);
     final selected = _getSelectedPeriod();
 
     const Set<String> wideLabels = {'Pre-Game', 'Post Game'};
@@ -1843,9 +2037,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     ? Colors.blue.shade500
                     : Colors.grey.shade400,
               ),
-              backgroundColor: isSelected
-                  ? Colors.blue.shade50
-                  : Colors.white,
+              backgroundColor:
+                  isSelected ? Colors.blue.shade50 : Colors.white,
               shape: const RoundedRectangleBorder(
                 borderRadius: BorderRadius.zero,
               ),
@@ -1862,6 +2055,183 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             ),
           ),
+        ),
+      );
+    }
+
+    const double baseballInningCellW = 34.0;
+
+    Widget inningDigitButton(int inningNum) {
+      final sel = _getSelectedRbiInning();
+      final isSelected = sel == inningNum;
+      final label = '$inningNum';
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: SizedBox(
+          width: baseballInningCellW,
+          height: 32,
+          child: OutlinedButton(
+            onPressed: () =>
+                _onInningSelect(isSelected ? null : inningNum),
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 0),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              side: BorderSide(
+                color: isSelected
+                    ? Colors.blue.shade500
+                    : Colors.grey.shade400,
+              ),
+              backgroundColor:
+                  isSelected ? Colors.blue.shade50 : Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+            ),
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected
+                    ? Colors.blue.shade700
+                    : Colors.grey.shade700,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget baseballPageButton({
+      required IconData icon,
+      required bool enabled,
+      required VoidCallback? onPressed,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: SizedBox(
+          width: baseballInningCellW,
+          height: 32,
+          child: OutlinedButton(
+            onPressed: onPressed,
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 0),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              side: BorderSide(
+                color: enabled
+                    ? Colors.grey.shade400
+                    : Colors.grey.shade300,
+              ),
+              backgroundColor: enabled ? Colors.white : Colors.grey.shade100,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 14,
+              color: enabled
+                  ? Colors.grey.shade700
+                  : Colors.grey.shade400,
+            ),
+          ),
+        ),
+      );
+    }
+
+    final String headerLabel = isBasketball
+        ? 'Quarter'
+        : (isBaseball ? 'Inning' : 'Period');
+
+    if (isBaseball) {
+      final page = _baseballInningPage.clamp(0, 2);
+      final startInning = page * 9 + 1;
+      final inningNums =
+          List<int>.generate(9, (i) => startInning + i); // 1–9, 10–18, or 19–27
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(6, 4, 6, 2),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.zero,
+                border: Border(
+                  left: BorderSide(color: Colors.grey.shade300, width: 1),
+                  top: BorderSide(color: Colors.grey.shade300, width: 1),
+                  right: BorderSide(color: Colors.grey.shade300, width: 1),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Text(
+                headerLabel,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                color: _panelBackgroundLight,
+                borderRadius: BorderRadius.zero,
+                border: Border.all(color: Colors.grey.shade300, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(6),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    periodButton('Pre-Game'),
+                    ...inningNums.map(inningDigitButton),
+                    baseballPageButton(
+                      icon: Icons.remove,
+                      enabled: page > 0,
+                      onPressed: page > 0
+                          ? () => setState(() {
+                                _baseballInningPage =
+                                    (_baseballInningPage - 1).clamp(0, 2);
+                              })
+                          : null,
+                    ),
+                    baseballPageButton(
+                      icon: Icons.add,
+                      enabled: page < 2,
+                      onPressed: page < 2
+                          ? () => setState(() {
+                                _baseballInningPage =
+                                    (_baseballInningPage + 1).clamp(0, 2);
+                              })
+                          : null,
+                    ),
+                    periodButton('Post Game'),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -1892,7 +2262,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             ],
           ),
           child: Text(
-            isBasketball ? 'Quarter' : 'Period',
+            headerLabel,
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,

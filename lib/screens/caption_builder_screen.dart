@@ -4714,7 +4714,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               awayRoster: _cachedAwayRoster,
               venue: currentMetadata?['Headline']?.toString(),
               gameDate: _getPhotoDate(),
-              period: 'the first period',
+              period: _selectedSport?.toLowerCase() == 'baseball'
+                  ? 'the first inning'
+                  : 'the first period',
               metadata: currentMetadata,
               onCaptionGenerated: (caption) {
                 // Update caption in metadata
@@ -5200,6 +5202,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     Expanded(
                 child: PlayerPopupCaptionBoard(
                   key: _playerPopupKey,
+                  sport: _selectedSport,
                   homeTeamName: selectedHomeTeam,
                   awayTeamName: selectedAwayTeam,
                   homeRoster: _cachedHomeRoster,
@@ -5218,7 +5221,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   }(),
                   venue: currentMetadata?['Headline']?.toString(),
                   gameDate: _getPhotoDate(),
-                  period: 'the first period',
+                  period: _selectedSport?.toLowerCase() == 'baseball'
+                      ? 'the first inning'
+                      : 'the first period',
                   metadata: currentMetadata,
                   onCaptionGenerated:
                       (Player player, String verb, bool isHome) {
@@ -5282,6 +5287,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         }
                       } catch (e) {
                         print('Error updating period from popup: $e');
+                      }
+                    }
+                  },
+                  onInningChanged: (int? inning) {
+                    final captionState = _captionFieldsKey2.currentState;
+                    if (captionState != null) {
+                      try {
+                        final dynamic state = captionState;
+                        if (state.mounted) {
+                          state.updateInningFromPopup(inning);
+                        }
+                      } catch (e) {
+                        print('Error updating inning from popup: $e');
                       }
                     }
                   },

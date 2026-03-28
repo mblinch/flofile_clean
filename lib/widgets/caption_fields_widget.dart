@@ -8067,6 +8067,62 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  /// Shared category header styles (verb grid and Home Run sub-panels).
+  Widget _categorySectionTitle(
+    String displayTitle,
+    int categoryNumber, {
+    bool favoritesStyle = false,
+    bool showReorderHint = false,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: favoritesStyle ? Colors.amber.shade200 : Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Row(
+        children: [
+          if (showReorderHint) ...[
+            Icon(Icons.drag_indicator, size: 14, color: Colors.grey.shade700),
+            const SizedBox(width: 4),
+          ],
+          Expanded(
+            child: Text(
+              '$categoryNumber. $displayTitle',
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Verb chips for one category column (used by draggable grid and [_buildCategoryContent]).
+  List<Widget> _verbChildrenForCategoryName(String categoryName) {
+    if (categoryName == 'Favorites') {
+      return [
+        ..._favoriteVerbs.toList().asMap().entries.map(
+              (e) => _buildVerbOption(e.value, verbNumber: e.key + 1),
+            ),
+        ...List.generate(
+          10 - _favoriteVerbs.length,
+          (index) => _buildVerbOption(''),
+        ),
+      ];
+    }
+    final verbs = verbCategories[categoryName] ?? [];
+    return verbs
+        .asMap()
+        .entries
+        .map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1))
+        .toList();
+  }
+
   Widget _buildDraggableCategories() {
     // Split categories into two rows of 3 columns each
     List<String> firstRow = _categoryOrder.take(3).toList();
@@ -8114,6 +8170,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildDraggableCategoryCard(String categoryName) {
+    final categoryNumber = _categoryOrder.indexOf(categoryName) + 1;
+    final displayTitle =
+        categoryName == 'Favorites' ? 'Favorites' : categoryName;
     return DragTarget<String>(
       onAccept: (draggedCategory) {
         setState(() {
@@ -8136,33 +8195,48 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       builder: (context, candidateData, rejectedData) {
         return LayoutBuilder(
           builder: (context, constraints) {
-            return Draggable<String>(
-              data: categoryName,
-              feedback: Material(
-                elevation: 4,
-                child: Container(
-                  width: constraints.maxWidth,
-                  child: _buildCategoryContent(categoryName),
-                ),
-              ),
-              childWhenDragging: Container(
-                width: double.infinity,
-                height: 200,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(color: Colors.grey.shade300, width: 1),
-                ),
-                child: Center(
-                  child: Text(
-                    'Drop here',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+            // Long-press must attach to the title bar only: verb chips use
+            // GestureDetector(onTapDown) and would win the gesture arena over
+            // a parent LongPressDraggable on the full column.
+            return Container(
+              margin: const EdgeInsets.only(right: 1),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  LongPressDraggable<String>(
+                    data: categoryName,
+                    delay: const Duration(milliseconds: 400),
+                    hapticFeedbackOnStart: false,
+                    feedback: Material(
+                      elevation: 6,
+                      child: SizedBox(
+                        width: constraints.maxWidth,
+                        child: _categorySectionTitle(
+                          displayTitle,
+                          categoryNumber,
+                          favoritesStyle: categoryName == 'Favorites',
+                          showReorderHint: true,
+                        ),
+                      ),
+                    ),
+                    childWhenDragging: Opacity(
+                      opacity: 0.35,
+                      child: _categorySectionTitle(
+                        displayTitle,
+                        categoryNumber,
+                        favoritesStyle: categoryName == 'Favorites',
+                        showReorderHint: true,
+                      ),
+                    ),
+                    child: _categorySectionTitle(
+                      displayTitle,
+                      categoryNumber,
+                      favoritesStyle: categoryName == 'Favorites',
+                      showReorderHint: true,
+                    ),
                   ),
-                ),
-              ),
-              child: Container(
-                margin: const EdgeInsets.only(right: 1),
-                child: _buildCategoryContent(categoryName),
+                  ..._verbChildrenForCategoryName(categoryName),
+                ],
               ),
             );
           },
@@ -8173,13 +8247,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildCategoryContent(String categoryName) {
     final categoryNumber = _categoryOrder.indexOf(categoryName) + 1;
-    if (categoryName == 'Favorites') {
-      return _buildFavoritesCategory(categoryNumber);
-    }
-    return _buildVerbCategory(
-      categoryName,
-      verbCategories[categoryName] ?? [],
-      categoryNumber,
+    final displayTitle =
+        categoryName == 'Favorites' ? 'Favorites' : categoryName;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _categorySectionTitle(
+          displayTitle,
+          categoryNumber,
+          favoritesStyle: categoryName == 'Favorites',
+          showReorderHint: false,
+        ),
+        ..._verbChildrenForCategoryName(categoryName),
+      ],
     );
   }
 
@@ -8733,6 +8813,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // ── Public helpers for KeyboardFirePanel action bar ──────────────────────
 
+  void reorderCategories(int fromIndex, int toIndex) {
+    final effective = effectiveCategoryOrder;
+    if (fromIndex < 0 || fromIndex >= effective.length) return;
+    if (toIndex < 0 || toIndex >= effective.length) return;
+    if (fromIndex == toIndex) return;
+    final fromCat = effective[fromIndex];
+    final toCat = effective[toIndex];
+    final realFrom = _categoryOrder.indexOf(fromCat);
+    final realTo = _categoryOrder.indexOf(toCat);
+    if (realFrom == -1 || realTo == -1) return;
+    setState(() {
+      _categoryOrder.removeAt(realFrom);
+      _categoryOrder.insert(realTo, fromCat);
+    });
+    _preferencesService.saveCategoryOrder(_categoryOrder, sport: _currentSport);
+  }
+
   void copyCaption() => _copyMetadataFromCaptionWidget();
   Future<void> pasteCaption() async => _pasteMetadataToCaptionWidget();
   Future<void> pastePreviousCaption() async => _pasteLastCaption();
@@ -8808,23 +8905,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title with category number for "caption by numbers"
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text(
-              '$categoryNumber. $title',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-          ),
+          _categorySectionTitle(title, categoryNumber),
           // Verb options (each with its own number 1, 2, 3...)
           ...verbs.asMap().entries.map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1)).toList(),
         ],
@@ -8837,23 +8918,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title with category number for "caption by numbers"
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade200,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Text(
-              '$categoryNumber. Favorites',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-              ),
-            ),
-          ),
+          _categorySectionTitle('Favorites', categoryNumber,
+              favoritesStyle: true),
           // Favorite verb options (each with its own number)
           ..._favoriteVerbs.toList().asMap().entries.map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1)).toList(),
           // Add empty chips to fill remaining space
@@ -15218,6 +15284,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void updatePeriodFromPopup(String? period) {
     setState(() {
       _selectedPeriod = period;
+      final isBaseball = widget.sport?.toLowerCase() == 'baseball';
+      if (isBaseball &&
+          (period == 'Pre-Game' || period == 'Post Game' || period == null)) {
+        _selectedRbiInning = null;
+      }
       if (period == 'Pre-Game') {
         // Pre-Game uses special "ahead of playing against" caption format
         _isPriorToGame = true;
@@ -15227,6 +15298,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _isPriorToGame = false;
         _isPostGame = true;
       } else if (period != null) {
+        _isPriorToGame = false;
+        _isPostGame = false;
+      } else {
         _isPriorToGame = false;
         _isPostGame = false;
       }
@@ -15239,8 +15313,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
+  /// Baseball inning from the player popup / Keyboard Fire (1–27 in main UI).
+  void updateInningFromPopup(int? inning) {
+    setState(() {
+      _selectedRbiInning = inning;
+      _selectedPeriod = null;
+      if (inning != null) {
+        _isPriorToGame = false;
+        _isPostGame = false;
+      }
+    });
+    if (selectedHomePlayers.isNotEmpty || selectedAwayPlayers.isNotEmpty) {
+      _updateCaption();
+    }
+  }
+
   /// Current hockey period selection (for Keyboard Fire panel / popup).
   String? get selectedPeriod => _selectedPeriod;
+
+  /// Current baseball inning selection (for Keyboard Fire panel).
+  int? get selectedRbiInning => _selectedRbiInning;
 
   // Getter for homeOnLeft to allow parent to access it
   bool get homeOnLeft => _homeOnLeft;

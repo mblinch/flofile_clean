@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/mlb_api_service.dart';
@@ -21,6 +22,8 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
   )? onSelectionChanged;
   final ValueChanged<String>? onCustomVerbChanged;
   final ValueChanged<String?>? onPeriodChanged;
+  /// Baseball only: inning 1–9 (or null). Clears when Pre-Game/Post Game is chosen.
+  final ValueChanged<int?>? onInningChanged;
   final VoidCallback? onSwitchTeams;
   final bool homeOnLeft; // Which team is on the left
   final VoidCallback? onSaveIptc;
@@ -32,6 +35,8 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
   final String? currentImagePath;
   final Set<String>? queuedUploads;
   final Set<String>? currentlyUploading;
+  /// When set, drives inning vs period label (e.g. baseball → "Inning").
+  final String? sport;
 
   const PlayerPopupCaptionBoard({
     super.key,
@@ -47,6 +52,7 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
     this.onSelectionChanged,
     this.onCustomVerbChanged,
     this.onPeriodChanged,
+    this.onInningChanged,
     this.onSwitchTeams,
     this.homeOnLeft = true,
     this.onSaveIptc,
@@ -58,6 +64,7 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
     this.currentImagePath,
     this.queuedUploads,
     this.currentlyUploading,
+    this.sport,
   });
 
   @override
@@ -76,7 +83,41 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   bool? _firstTeamSelectedIsHome;
   bool _showPlayoffOvertimes =
       false; // Track whether playoff OT periods are visible
+  /// Baseball: 0 = innings 1–9, 1 = 10–18, 2 = 19–27.
+  int _baseballInningPage = 0;
   String? _selectedHeaderPeriod; // Track period selected from header bar
+  String? _draggingCategory;
+  String? _dragTargetCategory;
+  Timer? _longPressTimer;
+  String? _pendingDragCategory;
+  final Map<String, GlobalKey> _categoryRowKeys = {};
+
+  GlobalKey _rowKey(String cat) =>
+      _categoryRowKeys.putIfAbsent(cat, () => GlobalKey());
+
+  String? _findCategoryAtGlobalY(double y) {
+    for (final cat in _categoryOrder) {
+      final ctx = _categoryRowKeys[cat]?.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null) continue;
+      final topLeft = box.localToGlobal(Offset.zero);
+      if (y >= topLeft.dy && y <= topLeft.dy + box.size.height) return cat;
+    }
+    return null;
+  }
+
+  String? _categoryAtGlobalY(double y) {
+    for (final cat in _categoryOrder) {
+      final ctx = _categoryRowKeys[cat]?.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null) continue;
+      final pos = box.localToGlobal(Offset.zero);
+      if (y >= pos.dy && y < pos.dy + box.size.height) return cat;
+    }
+    return null;
+  }
   final Set<String> _expandedCategories =
       {}; // Track which categories are expanded
   String?
@@ -628,8 +669,149 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     );
   }
 
+  /// Baseball: innings 1–27 (paged by 9) + Pre-Game / Post Game (no hockey periods).
+  Widget _buildBaseballInningHeaderSelector() {
+    const double inningCellW = 26.0;
+    final page = _baseballInningPage.clamp(0, 2);
+    final startInning = page * 9 + 1;
+    final inningLabels =
+        List<String>.generate(9, (i) => '${startInning + i}');
+
+    Widget inningButton(String label) {
+      final isSelected = _selectedHeaderPeriod == label;
+      final isWide = label == 'Pre-Game' || label == 'Post Game';
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: SizedBox(
+          width: isWide ? 58 : inningCellW,
+          height: 22,
+          child: OutlinedButton(
+            onPressed: () => _handleHeaderPeriodSelect(label),
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 0),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              side: BorderSide(
+                color: isSelected
+                    ? Colors.blue.shade500
+                    : Colors.grey.shade400,
+              ),
+              backgroundColor:
+                  isSelected ? Colors.blue.shade50 : Colors.white,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: isWide ? 7.5 : 8.5,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected
+                    ? Colors.blue.shade700
+                    : Colors.grey.shade700,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    Widget pageButton({
+      required IconData icon,
+      required bool enabled,
+      required VoidCallback? onPressed,
+    }) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 1),
+        child: SizedBox(
+          width: inningCellW,
+          height: 22,
+          child: OutlinedButton(
+            onPressed: onPressed,
+            style: OutlinedButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, 0),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              side: BorderSide(
+                color: enabled
+                    ? Colors.grey.shade400
+                    : Colors.grey.shade300,
+              ),
+              backgroundColor: enabled ? Colors.white : Colors.grey.shade100,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 12,
+              color: enabled
+                  ? Colors.grey.shade700
+                  : Colors.grey.shade400,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'Inning:',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade800,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                inningButton('Pre-Game'),
+                ...inningLabels.map(inningButton),
+                pageButton(
+                  icon: Icons.remove,
+                  enabled: page > 0,
+                  onPressed: page > 0
+                      ? () => setState(() {
+                            _baseballInningPage =
+                                (_baseballInningPage - 1).clamp(0, 2);
+                          })
+                      : null,
+                ),
+                pageButton(
+                  icon: Icons.add,
+                  enabled: page < 2,
+                  onPressed: page < 2
+                      ? () => setState(() {
+                            _baseballInningPage =
+                                (_baseballInningPage + 1).clamp(0, 2);
+                          })
+                      : null,
+                ),
+                inningButton('Post Game'),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   /// Compact period selector for the header area (always visible)
   Widget _buildHeaderPeriodSelector() {
+    if (widget.sport?.toLowerCase() == 'baseball') {
+      return _buildBaseballInningHeaderSelector();
+    }
     // Toggle between regular periods and playoff OT periods
     final List<String> firstRowPeriods = _showPlayoffOvertimes
         ? ['1OT', '2OT', '3OT', '4OT', '5OT']
@@ -810,6 +992,28 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   }
 
   void _handleHeaderPeriodSelect(String period) {
+    if (widget.sport?.toLowerCase() == 'baseball') {
+      if (period == 'Pre-Game' || period == 'Post Game') {
+        setState(() {
+          _selectedHeaderPeriod =
+              _selectedHeaderPeriod == period ? null : period;
+        });
+        widget.onPeriodChanged?.call(_selectedHeaderPeriod);
+        widget.onInningChanged?.call(null);
+        return;
+      }
+      final n = int.tryParse(period);
+      if (n != null) {
+        setState(() {
+          _selectedHeaderPeriod =
+              _selectedHeaderPeriod == period ? null : period;
+        });
+        final inning = int.tryParse(_selectedHeaderPeriod ?? '');
+        widget.onInningChanged?.call(inning);
+        widget.onPeriodChanged?.call(null);
+      }
+      return;
+    }
     setState(() {
       // Toggle: if clicking the same period, deselect it (set to null)
       _selectedHeaderPeriod = _selectedHeaderPeriod == period ? null : period;
@@ -966,25 +1170,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                 },
                 child: _categoryOrder.isEmpty
                     ? const SizedBox() // Show nothing while loading
-                    : ReorderableListView(
+                    : ListView(
                         padding: EdgeInsets.zero,
-                        buildDefaultDragHandles: false,
-                        onReorder: (oldIndex, newIndex) {
-                          // Don't allow moving Favorites (index 0)
-                          if (oldIndex == 0 || newIndex == 0) return;
-
-                          // Adjust indices to account for Favorites at index 0
-                          final adjustedOldIndex = oldIndex - 1;
-                          final adjustedNewIndex =
-                              newIndex > oldIndex ? newIndex - 1 : newIndex - 1;
-
-                          setState(() {
-                            final item =
-                                _categoryOrder.removeAt(adjustedOldIndex);
-                            _categoryOrder.insert(adjustedNewIndex, item);
-                          });
-                          _saveCategoryOrder();
-                        },
                         children: [
                           // Favorites category (always show first, not draggable)
                           Theme(
@@ -1320,248 +1507,153 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               return SizedBox.shrink(
                                   key: ValueKey('missing_$categoryName'));
                             }
-                            final isExpanded =
+                            final isCatExpanded =
                                 _expandedCategories.contains(categoryName);
                             final categoryIndex =
                                 _categoryOrder.indexOf(categoryName);
-                            return ReorderableDragStartListener(
-                              key: ValueKey('${categoryName}_$categoryIndex'),
-                              index: categoryIndex + 1, // +1 for Favorites
-                              child: Theme(
-                                data: Theme.of(context).copyWith(
-                                  dividerColor: Colors.transparent,
-                                ),
-                                child: ExpansionTile(
-                                  key: ValueKey('${categoryName}_$isExpanded'),
-                                  initiallyExpanded: isExpanded,
-                                  onExpansionChanged: (expanding) {
-                                    setState(() {
-                                      if (expanding) {
-                                        // If expanding, check if we already have 1 open
-                                        if (_expandedCategories.length >= 1) {
-                                          // Remove the first (oldest) expanded category
-                                          _expandedCategories.remove(
-                                              _expandedCategories.first);
-                                        }
-                                        _expandedCategories.add(categoryName);
-                                      } else {
-                                        // If collapsing, just remove it
-                                        _expandedCategories
-                                            .remove(categoryName);
-                                      }
-                                    });
-                                  },
-                                  tilePadding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 0,
-                                  ),
-                                  minTileHeight: 24,
-                                  childrenPadding: EdgeInsets.zero,
-                                  title: Text(
-                                    '${categoryIndex + 2}. $categoryName',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.grey.shade800,
-                                      height: 1.0,
-                                    ),
-                                  ),
-                                  trailing: Icon(
-                                    Icons.expand_more,
-                                    size: 16,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  backgroundColor: Colors.grey.shade50,
-                                  collapsedBackgroundColor: Colors.grey.shade50,
-                                  children: [
-                                    ..._getVerbsForCategory(categoryName)
-                                        .toList()
-                                        .asMap()
-                                        .entries
-                                        .map((e) {
-                                      final verb = e.value;
-                                      final verbNumber = e.key + 1;
-                                      final verbKey =
-                                          '${categoryName}_${verb.label}';
-                                      final isExpanded =
-                                          _expandedVerb == verbKey;
-                                      final isLastUsed =
-                                          _lastUsedVerbLabel == verb.label;
-                                      final isSticky =
-                                          _stickyVerb?.label == verb.label;
 
-                                      return Column(
-                                        children: [
-                                          GestureDetector(
-                                            onSecondaryTapDown: (details) {
-                                              _showVerbContextMenu(context,
-                                                  details.globalPosition, verb);
-                                            },
-                                            child: InkWell(
-                                              onTap: () =>
-                                                  _handleVerbTap(verb, verbKey),
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 12,
-                                                  vertical: 6,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: isSticky
-                                                      ? Colors.orange.shade50
-                                                      : Colors.white,
-                                                  border: Border(
-                                                    bottom: BorderSide(
-                                                      color:
-                                                          Colors.grey.shade200,
-                                                      width: 0.5,
-                                                    ),
-                                                    left: isSticky
-                                                        ? BorderSide(
-                                                            color: Colors.orange
-                                                                .shade400,
-                                                            width: 3,
-                                                          )
-                                                        : BorderSide.none,
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    const SizedBox(width: 12),
-                                                    Padding(
-                                                      padding:
-                                                          const EdgeInsets.only(
-                                                              right: 6),
-                                                      child: Container(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                                horizontal: 4,
-                                                                vertical: 1),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: Colors
-                                                              .grey.shade500,
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(3),
-                                                        ),
-                                                        child: Text(
-                                                          '$verbNumber',
-                                                          style:
-                                                              const TextStyle(
-                                                            fontSize: 9,
-                                                            color: Colors.white,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    if (isSticky)
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .only(right: 4),
-                                                        child: Icon(
-                                                          Icons.push_pin,
-                                                          size: 12,
-                                                          color: Colors
-                                                              .orange.shade700,
-                                                        ),
-                                                      ),
-                                                    Expanded(
-                                                      child: Text(
-                                                        verb.label,
-                                                        style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          fontSize: 11,
-                                                          color: isSticky
-                                                              ? Colors.orange
-                                                                  .shade700
-                                                              : Colors.grey
-                                                                  .shade700,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    if (isLastUsed)
-                                                      Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .only(right: 4),
-                                                        child: Text(
-                                                          '<- Last Used',
-                                                          style: TextStyle(
-                                                            fontSize: 9,
-                                                            color: Colors.red,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    Icon(
-                                                      isExpanded
-                                                          ? Icons.expand_less
-                                                          : Icons.expand_more,
-                                                      size: 14,
-                                                      color:
-                                                          Colors.grey.shade400,
-                                                    ),
-                                                  ],
-                                                ),
+                            // Build the verb list for this category.
+                            final verbWidgets = [
+                              ..._getVerbsForCategory(categoryName)
+                                  .toList()
+                                  .asMap()
+                                  .entries
+                                  .map((e) {
+                                final verb = e.value;
+                                final verbNumber = e.key + 1;
+                                final verbKey =
+                                    '${categoryName}_${verb.label}';
+                                final isVerbExpanded =
+                                    _expandedVerb == verbKey;
+                                final isLastUsed =
+                                    _lastUsedVerbLabel == verb.label;
+                                final isSticky =
+                                    _stickyVerb?.label == verb.label;
+
+                                return Column(
+                                  key: ValueKey('verb_${verb.label}'),
+                                  children: [
+                                    GestureDetector(
+                                      onSecondaryTapDown: (details) {
+                                        _showVerbContextMenu(context,
+                                            details.globalPosition, verb);
+                                      },
+                                      child: InkWell(
+                                        onTap: () =>
+                                            _handleVerbTap(verb, verbKey),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: isSticky
+                                                ? Colors.orange.shade50
+                                                : Colors.white,
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: Colors.grey.shade200,
+                                                width: 0.5,
                                               ),
+                                              left: isSticky
+                                                  ? BorderSide(
+                                                      color: Colors
+                                                          .orange.shade400,
+                                                      width: 3,
+                                                    )
+                                                  : BorderSide.none,
                                             ),
                                           ),
-                                          // Show action buttons when expanded OR when sticky verb is active
-                                          // Check both regular selected players and sticky players
-                                          if ((isExpanded || isSticky) &&
-                                              (_selectedHomePlayers
-                                                      .isNotEmpty ||
-                                                  _selectedAwayPlayers
-                                                      .isNotEmpty ||
-                                                  _stickyHomePlayers
-                                                      .isNotEmpty ||
-                                                  _stickyAwayPlayers
-                                                      .isNotEmpty))
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey.shade50,
-                                                border: Border(
-                                                  bottom: BorderSide(
-                                                    color: Colors.grey.shade200,
-                                                    width: 0.5,
+                                          child: Row(
+                                            children: [
+                                              const SizedBox(width: 12),
+                                              Padding(
+                                                padding:
+                                                    const EdgeInsets.only(
+                                                        right: 6),
+                                                child: Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 4,
+                                                      vertical: 1),
+                                                  decoration: BoxDecoration(
+                                                    color:
+                                                        Colors.grey.shade500,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            3),
+                                                  ),
+                                                  child: Text(
+                                                    '$verbNumber',
+                                                    style: const TextStyle(
+                                                      fontSize: 9,
+                                                      color: Colors.white,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
                                                   ),
                                                 ),
                                               ),
-                                              child: Row(
-                                                children: [
-                                                  const SizedBox(
-                                                      width:
-                                                          24), // Indent to match verb text
-                                                  Expanded(
-                                                    child:
-                                                        _buildActionButtonsRow(
-                                                            collapseOnAction:
-                                                                true),
+                                              if (isSticky)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          right: 4),
+                                                  child: Icon(
+                                                    Icons.push_pin,
+                                                    size: 12,
+                                                    color: Colors
+                                                        .orange.shade700,
                                                   ),
-                                                ],
+                                                ),
+                                              Expanded(
+                                                child: Text(
+                                                  verb.label,
+                                                  style: TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.w500,
+                                                    fontSize: 11,
+                                                    color: isSticky
+                                                        ? Colors
+                                                            .orange.shade700
+                                                        : Colors
+                                                            .grey.shade700,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
-                                        ],
-                                      );
-                                    }),
-                                    // Add Verb button
-                                    InkWell(
-                                      onTap: () =>
-                                          _showAddVerbDialog(categoryName),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 6,
+                                              if (isLastUsed)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                          right: 4),
+                                                  child: Text(
+                                                    '<- Last Used',
+                                                    style: TextStyle(
+                                                      fontSize: 9,
+                                                      color: Colors.red,
+                                                    ),
+                                                  ),
+                                                ),
+                                              Icon(
+                                                isVerbExpanded
+                                                    ? Icons.expand_less
+                                                    : Icons.expand_more,
+                                                size: 14,
+                                                color: Colors.grey.shade400,
+                                              ),
+                                            ],
+                                          ),
                                         ),
+                                      ),
+                                    ),
+                                    if ((isVerbExpanded || isSticky) &&
+                                        (_selectedHomePlayers.isNotEmpty ||
+                                            _selectedAwayPlayers.isNotEmpty ||
+                                            _stickyHomePlayers.isNotEmpty ||
+                                            _stickyAwayPlayers.isNotEmpty))
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 4),
                                         decoration: BoxDecoration(
                                           color: Colors.grey.shade50,
                                           border: Border(
@@ -1573,31 +1665,207 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                         ),
                                         child: Row(
                                           children: [
-                                            Icon(
-                                              Icons.add,
-                                              size: 14,
-                                              color: Colors.blue.shade600,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'Add New Verb',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.blue.shade600,
-                                              ),
+                                            const SizedBox(width: 24),
+                                            Expanded(
+                                              child: _buildActionButtonsRow(
+                                                  collapseOnAction: true),
                                             ),
                                           ],
                                         ),
                                       ),
-                                    ),
                                   ],
+                                );
+                              }),
+                              // Add Verb button
+                              InkWell(
+                                onTap: () =>
+                                    _showAddVerbDialog(categoryName),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade50,
+                                    border: Border(
+                                      bottom: BorderSide(
+                                        color: Colors.grey.shade200,
+                                        width: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.add,
+                                          size: 14,
+                                          color: Colors.blue.shade600),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Add New Verb',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.blue.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                              ),
+                            ];
+
+                            final isBeingDragged =
+                                _draggingCategory == categoryName;
+                            final isDragTarget =
+                                _dragTargetCategory == categoryName &&
+                                    !isBeingDragged;
+
+                            return Container(
+                              key: ValueKey('cat_$categoryName'),
+                              decoration: BoxDecoration(
+                                color: isBeingDragged
+                                    ? Colors.blue.shade100
+                                    : isDragTarget
+                                        ? Colors.blue.shade50
+                                        : Colors.grey.shade50,
+                                border: Border(
+                                  bottom: BorderSide(
+                                      color: Colors.grey.shade200, width: 0.5),
+                                  top: isDragTarget
+                                      ? BorderSide(
+                                          color: Colors.blue.shade400, width: 2)
+                                      : BorderSide.none,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Raw Listener bypasses the gesture arena
+                                  // entirely — pointer events fire before any
+                                  // GestureDetector / InkWell can steal them.
+                                  Listener(
+                                    behavior: HitTestBehavior.opaque,
+                                    onPointerDown: (e) {
+                                      _pendingDragCategory = categoryName;
+                                      _longPressTimer?.cancel();
+                                      _longPressTimer =
+                                          Timer(const Duration(milliseconds: 500), () {
+                                        setState(() {
+                                          _draggingCategory = categoryName;
+                                          _dragTargetCategory = categoryName;
+                                        });
+                                      });
+                                    },
+                                    onPointerMove: (e) {
+                                      if (_draggingCategory != null) {
+                                        final target =
+                                            _categoryAtGlobalY(e.position.dy);
+                                        if (target != null &&
+                                            target != _dragTargetCategory) {
+                                          setState(() =>
+                                              _dragTargetCategory = target);
+                                        }
+                                      }
+                                    },
+                                    onPointerUp: (e) {
+                                      _longPressTimer?.cancel();
+                                      if (_draggingCategory != null &&
+                                          _dragTargetCategory != null &&
+                                          _draggingCategory !=
+                                              _dragTargetCategory) {
+                                        final from = _categoryOrder
+                                            .indexOf(_draggingCategory!);
+                                        final to = _categoryOrder
+                                            .indexOf(_dragTargetCategory!);
+                                        setState(() {
+                                          _categoryOrder.removeAt(from);
+                                          _categoryOrder.insert(
+                                              to, _draggingCategory!);
+                                          _draggingCategory = null;
+                                          _dragTargetCategory = null;
+                                        });
+                                        _saveCategoryOrder();
+                                      } else if (_draggingCategory == null) {
+                                        // Short tap → expand / collapse
+                                        setState(() {
+                                          if (isCatExpanded) {
+                                            _expandedCategories
+                                                .remove(categoryName);
+                                          } else {
+                                            if (_expandedCategories
+                                                .isNotEmpty) {
+                                              _expandedCategories.remove(
+                                                  _expandedCategories.first);
+                                            }
+                                            _expandedCategories
+                                                .add(categoryName);
+                                          }
+                                        });
+                                      } else {
+                                        setState(() {
+                                          _draggingCategory = null;
+                                          _dragTargetCategory = null;
+                                        });
+                                      }
+                                      _pendingDragCategory = null;
+                                    },
+                                    onPointerCancel: (_) {
+                                      _longPressTimer?.cancel();
+                                      _pendingDragCategory = null;
+                                      setState(() {
+                                        _draggingCategory = null;
+                                        _dragTargetCategory = null;
+                                      });
+                                    },
+                                    child: MouseRegion(
+                                      cursor: _draggingCategory != null
+                                          ? SystemMouseCursors.grabbing
+                                          : SystemMouseCursors.grab,
+                                      child: Container(
+                                        key: _rowKey(categoryName),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
+                                        child: Opacity(
+                                          opacity: isBeingDragged ? 0.5 : 1.0,
+                                          child: Row(
+                                            children: [
+                                              Icon(Icons.drag_indicator,
+                                                  size: 16,
+                                                  color:
+                                                      Colors.grey.shade400),
+                                              const SizedBox(width: 6),
+                                              Expanded(
+                                                child: Text(
+                                                  '${categoryIndex + 2}. $categoryName',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight:
+                                                        FontWeight.w600,
+                                                    color:
+                                                        Colors.grey.shade800,
+                                                  ),
+                                                ),
+                                              ),
+                                              Icon(
+                                                isCatExpanded
+                                                    ? Icons.expand_less
+                                                    : Icons.expand_more,
+                                                size: 16,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                              const SizedBox(width: 4),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  if (isCatExpanded) ...verbWidgets,
+                                ],
                               ),
                             );
                           }).toList(),
                           Padding(
-                            key: const ValueKey('bottom_padding'),
                             padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1973,7 +2241,28 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     _confirmCaptionGeneration(verb, periodLabel);
   }
 
+  String _ordinalSuffix(int n) {
+    if (n <= 0) return '$n';
+    if (n % 100 >= 11 && n % 100 <= 13) return '${n}th';
+    switch (n % 10) {
+      case 1:
+        return '${n}st';
+      case 2:
+        return '${n}nd';
+      case 3:
+        return '${n}rd';
+      default:
+        return '${n}th';
+    }
+  }
+
   String _getPeriodDisplayText(String selection) {
+    if (widget.sport?.toLowerCase() == 'baseball') {
+      final n = int.tryParse(selection);
+      if (n != null && n >= 1 && n <= 27) {
+        return '${_ordinalSuffix(n)} inning';
+      }
+    }
     switch (selection) {
       case '1':
         return '1st';
