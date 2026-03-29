@@ -1346,7 +1346,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 final isHovered = _hoveredVerbKey == verbKey;
                 final isPicked = _pickedVerbCategory == catNum && _pickedVerbIndex == verbNum;
                 final isPinned = _pinnedVerbCategory == catNum && _pinnedVerbIndex == verbNum;
-                return MouseRegion(
+                final isActive = isPicked || isPinned;
+                const hitVerbs = {'Single', 'Double', 'Triple', 'Home Run', 'Sacrifice Fly', 'Bunt', 'Hit by Pitch'};
+                const runningVerbs = {'Steals', 'Slides', 'Runs', 'Rounds'};
+                final isHitVerb = hitVerbs.contains(verb);
+                final isRunningVerb = runningVerbs.contains(verb);
+                final isHomeRun = verb == 'Home Run';
+                final showRbiMenu = isActive && isHitVerb;
+                final showBaseMenu = isActive && isRunningVerb;
+
+                final verbRow = MouseRegion(
                   onEnter: (_) => setState(() => _hoveredVerbKey = verbKey),
                   onExit: (_) => setState(() => _hoveredVerbKey = null),
                   child: GestureDetector(
@@ -1448,6 +1457,36 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     ),
                   ),
                 );
+
+                if (!showRbiMenu && !showBaseMenu) return verbRow;
+
+                if (showBaseMenu) {
+                  final currentBase = (state as dynamic).currentSelectedBase as String?;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      verbRow,
+                      _buildBaseSubMenu(state, verb, currentBase),
+                    ],
+                  );
+                }
+
+                // RBI / Home Run type sub-menu
+                final currentRbi = (state as dynamic).currentRbiCount as int?;
+                final currentHrType = isHomeRun
+                    ? (state as dynamic).currentHomeRunType as String?
+                    : null;
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    verbRow,
+                    if (isHomeRun)
+                      _buildHomeRunTypeSubMenu(state, currentHrType)
+                    else
+                      _buildRbiSubMenu(state, verb, currentRbi),
+                  ],
+                );
             }
             offset += 1;
           }
@@ -1455,6 +1494,221 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           }
           return const SizedBox.shrink();
         },
+      ),
+    );
+  }
+
+  Widget _buildRbiSubMenu(dynamic captionState, String verb, int? currentRbi) {
+    final maxRbi = (verb == 'Sacrifice Fly' || verb == 'Bunt' || verb == 'Hit by Pitch') ? 1 : 3;
+    return Container(
+      padding: const EdgeInsets.only(left: 36, right: 8, top: 2, bottom: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F4FF),
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+          left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text('RBI:',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600)),
+          const SizedBox(width: 6),
+          ...List.generate(maxRbi, (i) {
+            final rbi = i + 1;
+            final isSelected = currentRbi == rbi;
+            return Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(3),
+                onTap: () {
+                  try {
+                    (captionState as dynamic)
+                        .setRbiFromKeyboardFire(isSelected ? null : rbi);
+                  } catch (_) {}
+                  setState(() {});
+                  _refreshCaptionPreviewLater();
+                },
+                child: Container(
+                  width: 22,
+                  height: 18,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFF4A90E2)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF4A90E2)
+                          : Colors.grey.shade300,
+                    ),
+                  ),
+                  child: Text(
+                    '$rbi',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.white : Colors.grey.shade800,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomeRunTypeSubMenu(dynamic captionState, String? currentType) {
+    const types = ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam'];
+    return Container(
+      padding: const EdgeInsets.only(left: 36, right: 8, top: 2, bottom: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F4FF),
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+          left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text('HR:',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600)),
+          const SizedBox(width: 6),
+          ...types.map((type) {
+            final isSelected = currentType == type;
+            return Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(3),
+                onTap: () {
+                  try {
+                    (captionState as dynamic).setHomeRunTypeFromKeyboardFire(
+                        isSelected ? null : type);
+                  } catch (_) {}
+                  setState(() {});
+                  _refreshCaptionPreviewLater();
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? const Color(0xFF4A90E2)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF4A90E2)
+                          : Colors.grey.shade300,
+                    ),
+                  ),
+                  child: Text(
+                    type,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          isSelected ? Colors.white : Colors.grey.shade800,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBaseSubMenu(dynamic captionState, String verb, String? currentBase) {
+    final bases = verb == 'Steals'
+        ? const ['2nd', '3rd', 'Home', 'Tagged Out']
+        : const ['1st', '2nd', '3rd', 'Home', 'Tagged Out'];
+    final storedBase = (captionState as dynamic).baseBeforeTaggedOut as String?;
+    final isTaggedOut = currentBase == 'Tagged Out';
+
+    return Container(
+      padding: const EdgeInsets.only(left: 36, right: 8, top: 2, bottom: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F4FF),
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+          left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text('Base:',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600)),
+          const SizedBox(width: 6),
+          ...bases.map((base) {
+            final isSelected = currentBase == base;
+            // When Tagged Out is active, also highlight the stored original base
+            final isStoredBase = isTaggedOut && base != 'Tagged Out' && storedBase == base;
+
+            final Color bgColor;
+            final Color borderColor;
+            final Color textColor;
+            if (isSelected) {
+              bgColor = base == 'Tagged Out'
+                  ? const Color(0xFFE53935)
+                  : const Color(0xFF4A90E2);
+              borderColor = bgColor;
+              textColor = Colors.white;
+            } else if (isStoredBase) {
+              bgColor = const Color(0xFF4A90E2).withOpacity(0.15);
+              borderColor = const Color(0xFF4A90E2);
+              textColor = const Color(0xFF4A90E2);
+            } else {
+              bgColor = Colors.white;
+              borderColor = Colors.grey.shade300;
+              textColor = Colors.grey.shade800;
+            }
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(3),
+                onTap: () {
+                  try {
+                    (captionState as dynamic).setBaseFromKeyboardFire(base);
+                  } catch (_) {}
+                  setState(() {});
+                  _refreshCaptionPreviewLater();
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Text(
+                    base,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ],
       ),
     );
   }
