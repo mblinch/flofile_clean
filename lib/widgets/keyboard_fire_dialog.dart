@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/mlb_api_service.dart';
+import '../services/preferences_service.dart';
 
 /// Intents for global H/V firebar shortcut (only when not in a text field).
 class _FirebarHIntent extends Intent {
@@ -155,6 +156,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// When true, show players as number-only squares (classic style) in Home/Away columns.
   bool _useSquarePlayerView = false;
 
+  /// Mirrors Preferences → Application → Caption fields (same as CaptionFieldsWidget).
+  PreferencesService? _prefsService;
+  bool _showHeadlineField = false;
+  bool _showKeywordsField = false;
+  bool _showPersonalityField = true;
+
   /// Index of the one expanded category (verbs visible). Null = none expanded.
   int? _expandedCategoryIndex;
 
@@ -237,10 +244,31 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   @override
   void initState() {
     super.initState();
+    PreferencesService.getInstance().then((p) {
+      if (!mounted) return;
+      _prefsService = p;
+      _applyKeyboardFireCaptionFieldVisibility();
+      p.captionFieldVisibilityRevision
+          .addListener(_onKeyboardFireCaptionFieldVisibilityRevision);
+    });
     // Defer state changes to avoid setState() during build (CaptionFieldsWidget).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.captionState?.clearPlayersForKeyboardFire();
       if (mounted) _homeBarFocus.requestFocus();
+    });
+  }
+
+  void _onKeyboardFireCaptionFieldVisibilityRevision() {
+    _applyKeyboardFireCaptionFieldVisibility();
+  }
+
+  void _applyKeyboardFireCaptionFieldVisibility() {
+    final p = _prefsService;
+    if (p == null || !mounted) return;
+    setState(() {
+      _showHeadlineField = p.captionFieldHeadlineVisibleSync;
+      _showKeywordsField = p.captionFieldKeywordsVisibleSync;
+      _showPersonalityField = p.captionFieldPersonalityVisibleSync;
     });
   }
 
@@ -290,6 +318,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   @override
   void dispose() {
+    _prefsService?.captionFieldVisibilityRevision
+        .removeListener(_onKeyboardFireCaptionFieldVisibilityRevision);
     _inputController.dispose();
     _inputFocus.dispose();
     _firebarController.dispose();
@@ -657,6 +687,218 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         ),
       );
     });
+  }
+
+  Widget _buildKbLabeledBox(String label, Widget child) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(6, 4, 6, 2),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.zero,
+            border: Border(
+              left: BorderSide(color: Colors.grey.shade300, width: 1),
+              top: BorderSide(color: Colors.grey.shade300, width: 1),
+              right: BorderSide(color: Colors.grey.shade300, width: 1),
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: _panelBackgroundLight,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(color: Colors.grey.shade300, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.all(4),
+          child: child,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHeadlineFieldKb() {
+    TextEditingController? ctrl;
+    try {
+      ctrl = (widget.captionState as dynamic).headlineTextController
+          as TextEditingController?;
+    } catch (_) {}
+    if (ctrl == null) {
+      return TextField(
+        maxLines: 4,
+        minLines: 4,
+        style: const TextStyle(fontSize: 12),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Headline',
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          contentPadding: const EdgeInsets.all(4),
+          filled: true,
+          fillColor: _panelBackgroundLight,
+        ),
+      );
+    }
+    return TextField(
+      controller: ctrl,
+      maxLines: 4,
+      minLines: 4,
+      style: const TextStyle(fontSize: 12),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Headline',
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: const EdgeInsets.all(4),
+        filled: true,
+        fillColor: _panelBackgroundLight,
+      ),
+    );
+  }
+
+  Widget _buildKeywordsFieldKb() {
+    TextEditingController? ctrl;
+    try {
+      ctrl = (widget.captionState as dynamic).keywordsTextController
+          as TextEditingController?;
+    } catch (_) {}
+    if (ctrl == null) {
+      return TextField(
+        maxLines: 4,
+        minLines: 4,
+        style: const TextStyle(fontSize: 12),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Keywords',
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          contentPadding: const EdgeInsets.all(4),
+          filled: true,
+          fillColor: _panelBackgroundLight,
+        ),
+      );
+    }
+    return TextField(
+      controller: ctrl,
+      maxLines: 4,
+      minLines: 4,
+      style: const TextStyle(fontSize: 12),
+      decoration: InputDecoration(
+        isDense: true,
+        hintText: 'Keywords',
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: const EdgeInsets.all(4),
+        filled: true,
+        fillColor: _panelBackgroundLight,
+      ),
+    );
+  }
+
+  Widget _buildPersonalityFieldKb() {
+    return Builder(builder: (context) {
+      TextEditingController? ctrl;
+      try {
+        ctrl = (widget.captionState as dynamic)
+            .personalityTextController as TextEditingController?;
+      } catch (_) {}
+      if (ctrl == null) {
+        return TextField(
+          maxLines: 4,
+          minLines: 4,
+          style: const TextStyle(fontSize: 12),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: 'Personality',
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            contentPadding: const EdgeInsets.all(4),
+            filled: true,
+            fillColor: _panelBackgroundLight,
+          ),
+        );
+      }
+      return TextField(
+        controller: ctrl,
+        maxLines: 4,
+        minLines: 4,
+        style: const TextStyle(fontSize: 12),
+        decoration: InputDecoration(
+          isDense: true,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          contentPadding: const EdgeInsets.all(4),
+          filled: true,
+          fillColor: _panelBackgroundLight,
+        ),
+      );
+    });
+  }
+
+  /// Caption full width; optional Headline / Keywords / Personality row matches Preferences.
+  Widget _buildKeyboardFireCaptionStrip() {
+    final hasSecondary =
+        _showHeadlineField || _showKeywordsField || _showPersonalityField;
+    final secondaryChildren = <Widget>[];
+    void addSecondary(String label, Widget field) {
+      if (secondaryChildren.isNotEmpty) {
+        secondaryChildren.add(const SizedBox(width: 8));
+      }
+      secondaryChildren.add(Expanded(child: _buildKbLabeledBox(label, field)));
+    }
+
+    if (_showHeadlineField) addSecondary('Headline', _buildHeadlineFieldKb());
+    if (_showKeywordsField) addSecondary('Keywords', _buildKeywordsFieldKb());
+    if (_showPersonalityField) {
+      addSecondary('Personality', _buildPersonalityFieldKb());
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildKbLabeledBox('Caption', _buildCaptionField()),
+        if (hasSecondary)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: secondaryChildren,
+            ),
+          ),
+      ],
+    );
   }
 
 
@@ -2765,149 +3007,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Caption (column-style: title bar + content with shadow)
                 Expanded(
-                  flex: 7,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(6, 4, 6, 2),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.zero,
-                          border: Border(
-                            left: BorderSide(color: Colors.grey.shade300, width: 1),
-                            top: BorderSide(color: Colors.grey.shade300, width: 1),
-                            right: BorderSide(color: Colors.grey.shade300, width: 1),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          'Caption',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: _panelBackgroundLight,
-                          borderRadius: BorderRadius.zero,
-                          border: Border.all(color: Colors.grey.shade300, width: 1),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: _buildCaptionField(),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Personality (column-style: title bar + content with shadow)
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.fromLTRB(6, 4, 6, 2),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.zero,
-                          border: Border(
-                            left: BorderSide(color: Colors.grey.shade300, width: 1),
-                            top: BorderSide(color: Colors.grey.shade300, width: 1),
-                            right: BorderSide(color: Colors.grey.shade300, width: 1),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          'Personality',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: _panelBackgroundLight,
-                          borderRadius: BorderRadius.zero,
-                          border: Border.all(color: Colors.grey.shade300, width: 1),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(4),
-                        child: Builder(builder: (context) {
-                          TextEditingController? ctrl;
-                          try {
-                            ctrl = (widget.captionState as dynamic)
-                                .personalityTextController as TextEditingController?;
-                          } catch (_) {}
-                          if (ctrl == null) {
-                            return TextField(
-                              maxLines: 4,
-                              style: const TextStyle(fontSize: 12),
-                              decoration: InputDecoration(
-                                isDense: true,
-                                border: InputBorder.none,
-                                enabledBorder: InputBorder.none,
-                                focusedBorder: InputBorder.none,
-                                contentPadding: const EdgeInsets.all(4),
-                                filled: true,
-                                fillColor: _panelBackgroundLight,
-                              ),
-                            );
-                          }
-                          return TextField(
-                            controller: ctrl,
-                            maxLines: 4,
-                            style: const TextStyle(fontSize: 12),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: const EdgeInsets.all(4),
-                              filled: true,
-                              fillColor: _panelBackgroundLight,
-                            ),
-                          );
-                        }),
-                      ),
-                    ],
-                  ),
+                  child: _buildKeyboardFireCaptionStrip(),
                 ),
               ],
             ),

@@ -443,6 +443,51 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
         ),
+        _buildInlineRow(
+          'Caption fields',
+          child: Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildCaptionFieldVisibilityRow(
+                  label: 'Headline',
+                  isOn: _currentPreferences?['showHeadlineField'] == true,
+                  onChanged: (on) async {
+                    await _preferencesService.saveShowHeadlineField(on);
+                    await _loadCurrentPreferences();
+                  },
+                ),
+                const SizedBox(height: 10),
+                _buildCaptionFieldVisibilityRow(
+                  label: 'Keywords',
+                  isOn: _currentPreferences?['showKeywordsField'] == true,
+                  onChanged: (on) async {
+                    await _preferencesService.saveShowKeywordsField(on);
+                    await _loadCurrentPreferences();
+                  },
+                ),
+                const SizedBox(height: 10),
+                _buildCaptionFieldVisibilityRow(
+                  label: 'Personality',
+                  isOn: _currentPreferences?['showPersonalityField'] != false,
+                  onChanged: (on) async {
+                    await _preferencesService.saveShowPersonalityField(on);
+                    await _loadCurrentPreferences();
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Show or hide optional fields below the caption. The layout uses the full width for the fields that remain visible.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+        ),
         _buildInlineRow('Sport Default', child: Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -518,6 +563,43 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             ],
           ),
         )),
+      ],
+    );
+  }
+
+  Widget _buildCaptionFieldVisibilityRow({
+    required String label,
+    required bool isOn,
+    required Future<void> Function(bool on) onChanged,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 88,
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.grey.shade200,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: Colors.grey.shade400, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildOnOffSegment('Off', !isOn, () async {
+                if (isOn) await onChanged(false);
+              }, isFirst: true),
+              _buildOnOffSegment('On', isOn, () async {
+                if (!isOn) await onChanged(true);
+              }, isLast: true),
+            ],
+          ),
+        ),
       ],
     );
   }

@@ -26,6 +26,29 @@ import '../services/preferences_service.dart';
 import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
 
+/// Writes IPTC keyword bag and XMP/IPTC **Subject** so apps like Photo Mechanic
+/// show keywords (PM often reads `Subject` / dc:subject; IPTC-only is easy to miss).
+void _appendKeywordsExifArgs(List<String> args, String? keywordsValue) {
+  if (keywordsValue == null || keywordsValue.trim().isEmpty) return;
+  String cleanValue = keywordsValue.trim();
+  if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
+    cleanValue = cleanValue.substring(1, cleanValue.length - 1);
+  }
+  final keywords = cleanValue
+      .split(',')
+      .map((k) => k.trim())
+      .where((k) => k.isNotEmpty)
+      .toSet()
+      .toList();
+  if (keywords.isEmpty) return;
+  args.add('-IPTC:Keywords=');
+  for (final keyword in keywords) {
+    args.add('-IPTC:Keywords+=$keyword');
+  }
+  final joined = keywords.join(', ');
+  args.add('-Subject=$joined');
+}
+
 /// Intent for Cmd+Shift+V — paste previous caption.
 class _PastePreviousCaptionIntent extends Intent {
   const _PastePreviousCaptionIntent();
@@ -1429,6 +1452,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         'IPTC:Caption-Abstract',
         'XMP:Description',
         'ImageDescription',
+        'IPTC:Headline',
+        'Headline',
       };
 
       // Add each field that has a value, handle keywords specially
@@ -1520,29 +1545,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // Convert to string and check if not empty
         String? keywordsString = keywordsValue?.toString();
         if (keywordsString != null && keywordsString.trim().isNotEmpty) {
-          // Clean any array brackets first, then parse keywords from comma-separated string
-          String cleanValue = keywordsString.trim();
-          if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
-            cleanValue = cleanValue.substring(1, cleanValue.length - 1);
-          }
-          final keywords = cleanValue
-              .split(',')
-              .map((k) => k.trim())
-              .where((k) => k.isNotEmpty)
-              .toSet() // Remove duplicates
-              .toList();
-
-          if (keywords.isNotEmpty) {
-            // LIGHTROOM APPROACH: Add each keyword individually to main command
-            print(
-                '🔧 MAIN SAVE LIGHTROOM: Adding ${keywords.length} individual keywords to main command');
-            // Clear existing keywords first
-            args.add('-IPTC:Keywords=');
-            // Add each keyword individually
-            for (final keyword in keywords) {
-              args.add('-IPTC:Keywords+=$keyword');
-            }
-          }
+          print(
+              '🔧 MAIN SAVE: Keywords (IPTC bag + Subject for Photo Mechanic): "$keywordsString"');
+          _appendKeywordsExifArgs(args, keywordsString);
         } else {
           // If user cleared keywords, write empty IPTC:Keywords in a dedicated call
           print(
@@ -1659,16 +1664,31 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         'IPTC:Caption-Abstract',
         'XMP:Description',
         'ImageDescription',
+        'IPTC:Headline',
+        'Headline',
       };
 
       // Add each field that has a value; explicitly clear clearable fields when empty
       allValues.forEach((key, value) {
+        if (key == 'IPTC:Keywords' ||
+            key == 'Keywords' ||
+            key == 'Subject' ||
+            key == 'XMP:Subject' ||
+            key == 'XMP-dc:Subject') {
+          return;
+        }
         if (value.trim().isNotEmpty) {
           args.add('-$key=$value');
         } else if (clearableFieldsBg.contains(key)) {
           args.add('-$key=');
         }
       });
+
+      // Same IPTC + Subject keyword handling as main save (Photo Mechanic compatibility)
+      _appendKeywordsExifArgs(
+        args,
+        allValues['IPTC:Keywords'] ?? allValues['Keywords'],
+      );
 
       // Handle supplemental categories with overwrite semantics
       final List<String> rawInputs = [
@@ -5115,9 +5135,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 )
               : Column(
                   children: [
-                    // Caption Fields Widget (top portion) - fixed height
+                    // Caption area: tall enough for caption + optional Headline/Keywords/Personality row
                     SizedBox(
-                      height: 175,
+                      height: (MediaQuery.sizeOf(context).height * 0.36)
+                          .clamp(260.0, 540.0)
+                          .toDouble(),
                       child:
                   CaptionFieldsWidget(
                     key: _captionFieldsKey2,

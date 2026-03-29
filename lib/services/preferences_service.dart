@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
 class PreferencesService {
@@ -33,6 +34,10 @@ class PreferencesService {
   static const String _keySyncServerUrl = 'sync_server_url';
   static const String _keySyncAccountId = 'sync_account_id';
   static const String _keyUseBallDontLieApi = 'use_balldontlie_api';
+  /// Optional caption entry strip: headline / keywords / personality visibility
+  static const String _keyShowHeadlineField = 'show_headline_field';
+  static const String _keyShowKeywordsField = 'show_keywords_field';
+  static const String _keyShowPersonalityField = 'show_personality_field';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -44,6 +49,56 @@ class PreferencesService {
     _prefs ??= await SharedPreferences.getInstance();
     return _instance!;
   }
+
+  /// Bumped when headline/keywords/personality visibility toggles — caption UI listens to reflow.
+  final ValueNotifier<int> captionFieldVisibilityRevision =
+      ValueNotifier<int>(0);
+
+  void _notifyCaptionFieldVisibilityChanged() {
+    captionFieldVisibilityRevision.value = captionFieldVisibilityRevision.value + 1;
+  }
+
+  Future<bool> getShowHeadlineField() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyShowHeadlineField) ?? false;
+  }
+
+  Future<void> saveShowHeadlineField(bool show) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyShowHeadlineField, show);
+    _notifyCaptionFieldVisibilityChanged();
+  }
+
+  Future<bool> getShowKeywordsField() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyShowKeywordsField) ?? false;
+  }
+
+  Future<void> saveShowKeywordsField(bool show) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyShowKeywordsField, show);
+    _notifyCaptionFieldVisibilityChanged();
+  }
+
+  Future<bool> getShowPersonalityField() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyShowPersonalityField) ?? true;
+  }
+
+  Future<void> saveShowPersonalityField(bool show) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyShowPersonalityField, show);
+    _notifyCaptionFieldVisibilityChanged();
+  }
+
+  /// Immediate read after [getInstance]; matches on-disk values right after each
+  /// `saveShow*Field` call (avoids async lag when [captionFieldVisibilityRevision] fires).
+  bool get captionFieldHeadlineVisibleSync =>
+      _prefs?.getBool(_keyShowHeadlineField) ?? false;
+  bool get captionFieldKeywordsVisibleSync =>
+      _prefs?.getBool(_keyShowKeywordsField) ?? false;
+  bool get captionFieldPersonalityVisibleSync =>
+      _prefs?.getBool(_keyShowPersonalityField) ?? true;
 
   // Category Order Preferences (sport-specific)
   Future<List<String>> getCategoryOrder({String sport = 'baseball'}) async {
@@ -670,6 +725,9 @@ class PreferencesService {
       'lastSavedMetadata': await getLastSavedMetadata(),
       'currentLayout': await getCurrentLayout(),
       'captionEntryMode': await getCaptionEntryMode(),
+      'showHeadlineField': await getShowHeadlineField(),
+      'showKeywordsField': await getShowKeywordsField(),
+      'showPersonalityField': await getShowPersonalityField(),
     };
   }
 
@@ -778,6 +836,15 @@ class PreferencesService {
     }
     if (preferences.containsKey('captionEntryMode')) {
       await saveCaptionEntryMode(preferences['captionEntryMode'] as String);
+    }
+    if (preferences.containsKey('showHeadlineField')) {
+      await saveShowHeadlineField(preferences['showHeadlineField'] as bool);
+    }
+    if (preferences.containsKey('showKeywordsField')) {
+      await saveShowKeywordsField(preferences['showKeywordsField'] as bool);
+    }
+    if (preferences.containsKey('showPersonalityField')) {
+      await saveShowPersonalityField(preferences['showPersonalityField'] as bool);
     }
   }
 

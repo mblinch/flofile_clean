@@ -217,6 +217,32 @@ class _CustomButtonState extends State<CustomButton> {
   }
 }
 
+/// IPTC stores keywords as separate entries; repeated `-IPTC:Keywords+=` writes (or
+/// other tools) can duplicate the same value in the list. Comma-separated strings
+/// can also repeat. Dedupe while preserving first-seen order for display/editing.
+String _dedupeKeywordsForDisplay(dynamic keywordsRaw) {
+  if (keywordsRaw == null) return '';
+  final Iterable<String> parts;
+  if (keywordsRaw is List) {
+    parts = keywordsRaw
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty);
+  } else {
+    String s = keywordsRaw.toString().trim();
+    if (s.isEmpty) return '';
+    if (s.startsWith('[') && s.endsWith(']')) {
+      s = s.substring(1, s.length - 1);
+    }
+    parts = s.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty);
+  }
+  final seen = <String>{};
+  final out = <String>[];
+  for (final p in parts) {
+    if (seen.add(p)) out.add(p);
+  }
+  return out.join(', ');
+}
+
 class CaptionFieldsWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
   final Function(Map<String, dynamic>?)? onMetadataUpdated;
@@ -290,6 +316,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       HighlightingTextEditingController();
   final ValueNotifier<String> _keyboardFireCaptionNotifier = ValueNotifier('');
   final TextEditingController personalityController = TextEditingController();
+  final TextEditingController headlineController = TextEditingController();
+  final TextEditingController keywordsController = TextEditingController();
   final TextEditingController _homeSearchController = TextEditingController();
   final TextEditingController _awaySearchController = TextEditingController();
   final TextEditingController _unifiedSearchController =
@@ -316,6 +344,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Preferences service
   late PreferencesService _preferencesService;
   bool _preferencesLoaded = false;
+  bool _captionFieldVisibilityListenerAttached = false;
+  /// Optional caption strip (Preferences → Application)
+  bool _showHeadlineField = false;
+  bool _showKeywordsField = false;
+  bool _showPersonalityField = true;
   String _currentSport =
       'baseball'; // Track current sport for saving sport-specific preferences
   Map<String, String> _customVerbWordings = {}; // Custom wordings for verbs
@@ -401,6 +434,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _storeCurrentMetadata() {
     if (captionController.text.isNotEmpty ||
         personalityController.text.isNotEmpty ||
+        headlineController.text.isNotEmpty ||
+        keywordsController.text.isNotEmpty ||
         stadiumController.text.isNotEmpty ||
         cityController.text.isNotEmpty ||
         provinceController.text.isNotEmpty) {
@@ -408,6 +443,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'IPTC:Description': captionController.text, // Photo Mechanic's field
         'Caption-Abstract': captionController.text,
         'XMP-getty:Personality': personalityController.text,
+        'IPTC:Headline': headlineController.text,
+        'Headline': headlineController.text,
+        'IPTC:Keywords': keywordsController.text,
+        'Keywords': keywordsController.text,
         'Sub-location': stadiumController.text,
         'City': cityController.text,
         'Province-State': provinceController.text,
@@ -2299,6 +2338,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           captionController.text, // Photo Mechanic compatible caption field
       'ImageDescription': captionController.text, // EXIF description field
       'XMP-getty:Personality': personalityController.text,
+      'IPTC:Headline': headlineController.text,
+      'Headline': headlineController.text,
+      'IPTC:Keywords': keywordsController.text,
+      'Keywords': keywordsController.text,
       'Sub-location': stadiumController.text,
       'City': cityController.text,
       'Province-State': provinceController.text,
@@ -2348,6 +2391,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _loadFtpProfiles();
   }
 
+  void _onCaptionFieldVisibilityRevision() {
+    if (!mounted) return;
+    setState(() {
+      _showHeadlineField =
+          _preferencesService.captionFieldHeadlineVisibleSync;
+      _showKeywordsField =
+          _preferencesService.captionFieldKeywordsVisibleSync;
+      _showPersonalityField =
+          _preferencesService.captionFieldPersonalityVisibleSync;
+    });
+  }
+
   void _syncKeyboardFireCaptionNotifier() {
     _keyboardFireCaptionNotifier.value = captionController.text;
   }
@@ -2368,6 +2423,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _magicBarFocusNode.dispose();
     _verbNumbersFocusNode.dispose();
     _numberBufferTimer?.cancel();
+    if (_captionFieldVisibilityListenerAttached) {
+      _preferencesService.captionFieldVisibilityRevision
+          .removeListener(_onCaptionFieldVisibilityRevision);
+    }
+    headlineController.dispose();
+    keywordsController.dispose();
     super.dispose();
   }
 
@@ -2408,6 +2469,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Load last saved metadata
     _lastSavedMetadata = await _preferencesService.getLastSavedMetadata();
+
+    _showHeadlineField = _preferencesService.captionFieldHeadlineVisibleSync;
+    _showKeywordsField = _preferencesService.captionFieldKeywordsVisibleSync;
+    _showPersonalityField =
+        _preferencesService.captionFieldPersonalityVisibleSync;
+    if (!_captionFieldVisibilityListenerAttached) {
+      _preferencesService.captionFieldVisibilityRevision
+          .addListener(_onCaptionFieldVisibilityRevision);
+      _captionFieldVisibilityListenerAttached = true;
+    }
 
     // Load FTP profiles
     _ftpProfiles = await _preferencesService.getFtpProfiles();
@@ -2705,6 +2776,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final extractedCity = city is String ? city : '';
     final extractedProvince = province is String ? province : '';
 
+    final dynamic headlineRaw = meta['IPTC:Headline'] ?? meta['Headline'];
+    final String extractedHeadline = headlineRaw is String
+        ? headlineRaw
+        : (headlineRaw != null ? headlineRaw.toString() : '');
+
+    final dynamic keywordsRaw = meta['IPTC:Keywords'] ?? meta['Keywords'];
+    final String extractedKeywords = _dedupeKeywordsForDisplay(keywordsRaw);
+
     // Creator field is now handled by metadata widget only
 
     setState(() {
@@ -2712,6 +2791,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _originalPersonalityFromMetadata = personInImageText;
       captionController.text = extractedCaption;
       personalityController.text = personInImageText;
+      headlineController.text = extractedHeadline;
+      keywordsController.text = extractedKeywords;
 
       // Only set personality from metadata if the user hasn't manually reset.
       if (!_hasBeenReset) {
@@ -3506,6 +3587,74 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {});
   }
 
+  /// Headline, keywords, and personality in one row; each `Expanded` shares width for visible fields only.
+  Widget _buildCaptionSecondaryFieldsRow() {
+    final List<Widget> rowChildren = [];
+    void addField(String label, TextEditingController controller) {
+      if (rowChildren.isNotEmpty) {
+        rowChildren.add(const SizedBox(width: 8));
+      }
+      rowChildren.add(
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 0),
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+              TextField(
+                controller: controller,
+                maxLines: 4,
+                style: const TextStyle(fontSize: 12),
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: Colors.grey.shade400,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                    borderSide: BorderSide(
+                      color: Colors.blue.shade400,
+                      width: 2,
+                    ),
+                  ),
+                  contentPadding: const EdgeInsets.all(8),
+                  filled: true,
+                  fillColor: Colors.grey.shade50,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_showHeadlineField) addField('HEADLINE', headlineController);
+    if (_showKeywordsField) addField('KEYWORDS', keywordsController);
+    if (_showPersonalityField) addField('PERSONALITY', personalityController);
+    if (rowChildren.isEmpty) return const SizedBox.shrink();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rowChildren,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -3524,15 +3673,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   flex: 8,
                   child: Column(
                     children: [
-                      // Caption field, Personality field, and Quick Codes button row
-                      Row(
+                      // Caption field, optional Headline/Keywords/Personality row, Quick Codes
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Caption field (flex 7 of 10)
-                          Expanded(
-                            flex: 7,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
                                 // Caption title and Quick Codes button on same line
                                 Padding(
                                   padding: const EdgeInsets.only(
@@ -3727,59 +3874,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ],
                             ),
-                          ),
-                          // Spacing between caption and personality
-                          const SizedBox(width: 8),
-                          // Personality field (flex 3 of 10)
-                          Expanded(
-                            flex: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Padding(
-                                  padding: EdgeInsets.only(
-                                      left: 4, top: 7, bottom: 0),
-                                  child: Text(
-                                    'PERSONALITY',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                                TextField(
-                                  controller: personalityController,
-                                  maxLines: 4,
-                                  style: const TextStyle(fontSize: 12),
-                                  decoration: InputDecoration(
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade400,
-                                      ),
-                                    ),
-                                    enabledBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: BorderSide(
-                                        color: Colors.grey.shade400,
-                                      ),
-                                    ),
-                                    focusedBorder: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(6),
-                                      borderSide: BorderSide(
-                                        color: Colors.blue.shade400,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    contentPadding: const EdgeInsets.all(8),
-                                    filled: true,
-                                    fillColor: Colors.grey.shade50,
-                                  ),
-                                ),
-                              ],
+                          if (_showHeadlineField ||
+                              _showKeywordsField ||
+                              _showPersonalityField)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: _buildCaptionSecondaryFieldsRow(),
                             ),
-                          ),
                         ],
                       ),
                       // No gap between caption and firebar
@@ -9026,6 +9127,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// Exposes the personality controller so the KeyboardFirePanel can embed it.
   TextEditingController get personalityTextController => personalityController;
+  /// Exposes headline/keywords so Keyboard Fire layout can match Preferences visibility.
+  TextEditingController get headlineTextController => headlineController;
+  TextEditingController get keywordsTextController => keywordsController;
 
   /// Exposes the caption controller so the KeyboardFirePanel can show an editable caption field.
   TextEditingController get captionTextController => captionController;
@@ -16838,6 +16942,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     allMetadata['XMP:Description'] = captionController.text;
     allMetadata['ImageDescription'] = captionController.text;
     allMetadata['XMP-getty:Personality'] = personalityController.text;
+    allMetadata['IPTC:Headline'] = headlineController.text;
+    allMetadata['Headline'] = headlineController.text;
+    allMetadata['IPTC:Keywords'] = keywordsController.text;
+    allMetadata['Keywords'] = keywordsController.text;
     allMetadata['Sub-location'] = stadiumController.text;
     allMetadata['City'] = cityController.text;
     allMetadata['Province-State'] = provinceController.text;
@@ -17001,6 +17109,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             );
           }
 
+          final dynamic headlinePaste =
+              metadataMap['IPTC:Headline'] ?? metadataMap['Headline'];
+          if (headlinePaste != null) {
+            final hv = headlinePaste.toString();
+            updatedMetadata['IPTC:Headline'] = hv;
+            updatedMetadata['Headline'] = hv;
+            headlineController.text = hv;
+          }
+          final dynamic keywordsPaste =
+              metadataMap['IPTC:Keywords'] ?? metadataMap['Keywords'];
+          if (keywordsPaste != null) {
+            final String ks = keywordsPaste is List
+                ? keywordsPaste.map((e) => e.toString()).join(', ')
+                : keywordsPaste.toString();
+            updatedMetadata['IPTC:Keywords'] = ks;
+            updatedMetadata['Keywords'] = ks;
+            keywordsController.text = _dedupeKeywordsForDisplay(ks);
+          }
+
           // Date and time are intentionally NOT pasted
 
           widget.onMetadataUpdated!(updatedMetadata);
@@ -17044,6 +17171,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Read the saved personality text
     final personalityValue =
         _lastSavedMetadata!['XMP-getty:Personality']?.toString() ?? '';
+    final headlineValue = (_lastSavedMetadata!['IPTC:Headline'] ??
+            _lastSavedMetadata!['Headline'])
+        ?.toString() ?? '';
+    final keywordsValue = (_lastSavedMetadata!['IPTC:Keywords'] ??
+            _lastSavedMetadata!['Keywords'])
+        ?.toString() ?? '';
 
     print('DEBUG pasteLastCaption: captionValue="$captionValue"');
     print('DEBUG pasteLastCaption: personalityValue="$personalityValue"');
@@ -17052,6 +17185,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       captionController.text = captionValue;
       personalityController.text = personalityValue;
+      headlineController.text = headlineValue;
+      keywordsController.text = _dedupeKeywordsForDisplay(keywordsValue);
     });
     print('DEBUG pasteLastCaption: after setState, captionController.text="${captionController.text}"');
     _keyboardFireCaptionNotifier.value = captionValue;
@@ -17073,6 +17208,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       captionController.clear();
       personalityController.clear();
+      headlineController.clear();
+      keywordsController.clear();
       customCelebrationController.clear();
       // Magic bar removed
       _homeSearchController.clear();
