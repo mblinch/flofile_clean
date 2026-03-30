@@ -224,9 +224,8 @@ String _dedupeKeywordsForDisplay(dynamic keywordsRaw) {
   if (keywordsRaw == null) return '';
   final Iterable<String> parts;
   if (keywordsRaw is List) {
-    parts = keywordsRaw
-        .map((e) => e.toString().trim())
-        .where((s) => s.isNotEmpty);
+    parts =
+        keywordsRaw.map((e) => e.toString().trim()).where((s) => s.isNotEmpty);
   } else {
     String s = keywordsRaw.toString().trim();
     if (s.isEmpty) return '';
@@ -269,7 +268,8 @@ class CaptionFieldsWidget extends StatefulWidget {
       onClearUploadStatus; // Clear upload status for re-upload
   final Map<String, String> Function()? getCurrentMetadataValues;
   final VoidCallback? onCopyMetadata; // Callback to copy metadata to clipboard
-  final VoidCallback? onVerbOverridesChanged; // Called when verb display name overrides are saved (so keyboard fire panel can refresh)
+  final VoidCallback?
+      onVerbOverridesChanged; // Called when verb display name overrides are saved (so keyboard fire panel can refresh)
   final String? sport; // Current sport mode (baseball, hockey, basketball)
   final CameraSerialService?
       cameraService; // Camera serial service for automatic bylines
@@ -345,6 +345,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   late PreferencesService _preferencesService;
   bool _preferencesLoaded = false;
   bool _captionFieldVisibilityListenerAttached = false;
+
   /// Optional caption strip (Preferences → Application)
   bool _showHeadlineField = false;
   bool _showKeywordsField = false;
@@ -385,7 +386,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Verb selection
   String? _selectedVerb;
   String? _selectedActionVerb; // Stores the verb for caption generation
-  String? _stickyVerb; // Cmd+click sticks this verb until Cmd+click again (classic behavior)
+  String?
+      _stickyVerb; // Cmd+click sticks this verb until Cmd+click again (classic behavior)
 
   // Pending pinned verb: set by KeyboardFireDialog before image navigation so
   // the verb is applied synchronously at the end of _loadMetadata(), guaranteeing
@@ -451,7 +453,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'City': cityController.text,
         'Province-State': provinceController.text,
       };
-      print('DEBUG storeCurrentMetadata: stored caption="${captionController.text}"');
+      print(
+          'DEBUG storeCurrentMetadata: stored caption="${captionController.text}"');
     } else {
       print('DEBUG storeCurrentMetadata: all controllers empty — NOT storing');
     }
@@ -499,6 +502,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final FocusNode _verbNumbersFocusNode = FocusNode();
   String _numberBuffer = '';
   Timer? _numberBufferTimer;
+
   /// Cmd+digit (1-6) sets this; next digit selects verb in that category
   int? _pendingCategoryFromCmd;
 
@@ -2394,10 +2398,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _onCaptionFieldVisibilityRevision() {
     if (!mounted) return;
     setState(() {
-      _showHeadlineField =
-          _preferencesService.captionFieldHeadlineVisibleSync;
-      _showKeywordsField =
-          _preferencesService.captionFieldKeywordsVisibleSync;
+      _showHeadlineField = _preferencesService.captionFieldHeadlineVisibleSync;
+      _showKeywordsField = _preferencesService.captionFieldKeywordsVisibleSync;
       _showPersonalityField =
           _preferencesService.captionFieldPersonalityVisibleSync;
     });
@@ -3587,71 +3589,84 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {});
   }
 
-  /// Headline, keywords, and personality in one row; each `Expanded` shares width for visible fields only.
-  Widget _buildCaptionSecondaryFieldsRow() {
-    final List<Widget> rowChildren = [];
-    void addField(String label, TextEditingController controller) {
-      if (rowChildren.isNotEmpty) {
-        rowChildren.add(const SizedBox(width: 8));
-      }
-      rowChildren.add(
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(left: 4, bottom: 0),
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-              TextField(
-                controller: controller,
-                maxLines: 4,
-                style: const TextStyle(fontSize: 12),
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(
-                      color: Colors.grey.shade400,
-                    ),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(
-                      color: Colors.grey.shade400,
-                    ),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(
-                      color: Colors.blue.shade400,
-                      width: 2,
-                    ),
-                  ),
-                  contentPadding: const EdgeInsets.all(8),
-                  filled: true,
-                  fillColor: Colors.grey.shade50,
-                ),
-              ),
-            ],
+  Widget _buildSecondaryFieldCard(
+      String label, TextEditingController controller) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 2, bottom: 0),
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: Colors.black87,
+            ),
           ),
         ),
-      );
+        TextField(
+          controller: controller,
+          minLines: 1,
+          maxLines: 1,
+          style: const TextStyle(fontSize: 11),
+          decoration: InputDecoration(
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(5),
+              borderSide: BorderSide(
+                color: Colors.grey.shade400,
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(5),
+              borderSide: BorderSide(
+                color: Colors.grey.shade400,
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(5),
+              borderSide: BorderSide(
+                color: Colors.blue.shade400,
+                width: 2,
+              ),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 6,
+              vertical: 5,
+            ),
+            filled: true,
+            fillColor: Colors.grey.shade50,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Optional fields stacked vertically on the right.
+  Widget _buildCaptionSecondaryFieldsRow() {
+    if (!_showPersonalityField && !_showHeadlineField && !_showKeywordsField) {
+      return const SizedBox.shrink();
     }
 
-    if (_showHeadlineField) addField('HEADLINE', headlineController);
-    if (_showKeywordsField) addField('KEYWORDS', keywordsController);
-    if (_showPersonalityField) addField('PERSONALITY', personalityController);
-    if (rowChildren.isEmpty) return const SizedBox.shrink();
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: rowChildren,
+    final cards = <Widget>[];
+    if (_showPersonalityField) {
+      cards.add(_buildSecondaryFieldCard('PERSONALITY', personalityController));
+    }
+    if (_showHeadlineField) {
+      cards.add(_buildSecondaryFieldCard('HEADLINE', headlineController));
+    }
+    if (_showKeywordsField) {
+      cards.add(_buildSecondaryFieldCard('KEYWORDS', keywordsController));
+    }
+
+    final children = <Widget>[];
+    for (var i = 0; i < cards.length; i++) {
+      if (i > 0) children.add(const SizedBox(height: 6));
+      children.add(Expanded(child: cards[i]));
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
     );
   }
 
@@ -3673,114 +3688,231 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   flex: 8,
                   child: Column(
                     children: [
-                      // Caption field, optional Headline/Keywords/Personality row, Quick Codes
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                                // Caption title and Quick Codes button on same line
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    left: 4,
-                                    bottom: 0,
-                                  ),
-                                  child: Row(
+                      // Caption field with compact secondary panel on the right, then Quick Codes/firebar rows.
+                      Expanded(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                                Expanded(
+                                  flex: 5,
+                                  child: Column(
                                     crossAxisAlignment:
-                                        CrossAxisAlignment.center,
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
-                                        'CAPTION',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w500,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      TextButton(
-                                        onPressed: _showShortcodesDialog,
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 4,
-                                            vertical: 0,
-                                          ),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize.shrinkWrap,
+                                      // Caption title and Quick Codes button on same line
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 2,
+                                          bottom: 0,
                                         ),
                                         child: Row(
-                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
                                           children: [
-                                            Icon(
-                                              Icons.help_outline,
-                                              size: 12,
-                                              color: Colors.grey.shade600,
-                                            ),
-                                            const SizedBox(width: 2),
-                                            Text(
-                                              'Quick Codes',
-                                              textAlign: TextAlign.center,
+                                            const Text(
+                                              'CAPTION',
                                               style: TextStyle(
-                                                fontSize: 10,
-                                                color: Colors.grey.shade600,
+                                                fontSize: 11,
                                                 fontWeight: FontWeight.w500,
-                                                height: 1.1,
+                                                color: Colors.black87,
                                               ),
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // Remove Diacritics checkbox
-                                      GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            _removeAccent = !_removeAccent;
-                                          });
-                                          // Re-update caption to apply/remove diacritics
-                                          _updateCaption();
-                                        },
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Transform.scale(
-                                              scale: 0.6,
-                                              child: Checkbox(
-                                                value: _removeAccent,
-                                                onChanged: (value) {
-                                                  setState(() {
-                                                    _removeAccent =
-                                                        value ?? false;
-                                                  });
-                                                  // Re-update caption to apply/remove diacritics
-                                                  _updateCaption();
-                                                },
-                                                materialTapTargetSize:
+                                            const Spacer(),
+                                            TextButton(
+                                              onPressed: _showShortcodesDialog,
+                                              style: TextButton.styleFrom(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 4,
+                                                  vertical: 0,
+                                                ),
+                                                minimumSize: Size.zero,
+                                                tapTargetSize:
                                                     MaterialTapTargetSize
                                                         .shrinkWrap,
-                                                visualDensity:
-                                                    VisualDensity.compact,
-                                                splashRadius: 0,
-                                                overlayColor:
-                                                    WidgetStateProperty.all(
-                                                        Colors.transparent),
-                                                side: BorderSide(
-                                                    color: Colors.grey.shade500,
-                                                    width: 1),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.help_outline,
+                                                    size: 12,
+                                                    color: Colors.grey.shade600,
+                                                  ),
+                                                  const SizedBox(width: 2),
+                                                  Text(
+                                                    'Quick Codes',
+                                                    textAlign: TextAlign.center,
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color:
+                                                          Colors.grey.shade600,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      height: 1.1,
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                            Transform.translate(
-                                              offset: const Offset(-6, 0),
-                                              child: Text(
-                                                'Remove Diacritics',
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
+                                            const SizedBox(width: 8),
+                                            // Remove Diacritics checkbox
+                                            GestureDetector(
+                                              onTap: () {
+                                                setState(() {
+                                                  _removeAccent =
+                                                      !_removeAccent;
+                                                });
+                                                // Re-update caption to apply/remove diacritics
+                                                _updateCaption();
+                                              },
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Transform.scale(
+                                                    scale: 0.6,
+                                                    child: Checkbox(
+                                                      value: _removeAccent,
+                                                      onChanged: (value) {
+                                                        setState(() {
+                                                          _removeAccent =
+                                                              value ?? false;
+                                                        });
+                                                        // Re-update caption to apply/remove diacritics
+                                                        _updateCaption();
+                                                      },
+                                                      materialTapTargetSize:
+                                                          MaterialTapTargetSize
+                                                              .shrinkWrap,
+                                                      visualDensity:
+                                                          VisualDensity.compact,
+                                                      splashRadius: 0,
+                                                      overlayColor:
+                                                          WidgetStateProperty
+                                                              .all(Colors
+                                                                  .transparent),
+                                                      side: BorderSide(
+                                                          color: Colors
+                                                              .grey.shade500,
+                                                          width: 1),
+                                                    ),
+                                                  ),
+                                                  Transform.translate(
+                                                    offset: const Offset(-6, 0),
+                                                    child: Text(
+                                                      'Remove Diacritics',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors
+                                                            .grey.shade700,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: TextField(
+                                          controller: captionController,
+                                          expands: true,
+                                          maxLines: null,
+                                          textAlignVertical:
+                                              TextAlignVertical.top,
+                                          onChanged: _onCaptionChanged,
+                                          style: const TextStyle(fontSize: 11),
+                                          decoration: InputDecoration(
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              borderSide: BorderSide(
+                                                color: Colors.grey.shade400,
+                                              ),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              borderSide: BorderSide(
+                                                color: Colors.grey.shade400,
+                                              ),
+                                            ),
+                                            focusedBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              borderSide: BorderSide(
+                                                color: Colors.blue.shade400,
+                                                width: 2,
+                                              ),
+                                            ),
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 5,
+                                            ),
+                                            filled: true,
+                                            fillColor: Colors.grey.shade50,
+                                          ),
+                                          inputFormatters: [
+                                            HighlightedTokenDeletionFormatter(
+                                              getRanges: () =>
+                                                  _highlightedRanges,
+                                              onTokenDeleted:
+                                                  (deletedRange, tokenText) {
+                                                // Update personality if this was a player expansion
+                                                final playerName =
+                                                    _tokenToPlayerName[
+                                                        tokenText.trim()];
+                                                if (playerName != null) {
+                                                  _removePlayerFromPersonality(
+                                                    playerName,
+                                                  );
+                                                  // Remove mapping for this exact token text
+                                                  _tokenToPlayerName.remove(
+                                                    tokenText.trim(),
+                                                  );
+                                                }
+
+                                                // Rebuild highlight ranges after deletion
+                                                final int removedLen =
+                                                    deletedRange.end -
+                                                        deletedRange.start;
+                                                final List<TextRange> updated =
+                                                    [];
+                                                for (final r
+                                                    in _highlightedRanges) {
+                                                  // Skip the deleted range itself
+                                                  if (r.start >=
+                                                          deletedRange.start &&
+                                                      r.end <=
+                                                          deletedRange.end) {
+                                                    continue;
+                                                  }
+                                                  if (r.start >=
+                                                      deletedRange.end) {
+                                                    updated.add(
+                                                      TextRange(
+                                                        start: r.start -
+                                                            removedLen,
+                                                        end: r.end - removedLen,
+                                                      ),
+                                                    );
+                                                  } else {
+                                                    updated.add(r);
+                                                  }
+                                                }
+                                                _highlightedRanges = updated;
+                                                (captionController
+                                                        as HighlightingTextEditingController)
+                                                    .highlightedRanges = updated;
+                                                (captionController
+                                                        as HighlightingTextEditingController)
+                                                    .invalidRanges = [];
+                                                setState(() {});
+                                              },
                                             ),
                                           ],
                                         ),
@@ -3788,100 +3920,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     ],
                                   ),
                                 ),
-                                Transform.translate(
-                                  offset: const Offset(0, -4),
-                                  child: TextField(
-                                    controller: captionController,
-                                    maxLines: 4,
-                                    onChanged: _onCaptionChanged,
-                                    style: const TextStyle(fontSize: 12),
-                                    decoration: InputDecoration(
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                        borderSide: BorderSide(
-                                          color: Colors.grey.shade400,
-                                        ),
-                                      ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                        borderSide: BorderSide(
-                                          color: Colors.grey.shade400,
-                                        ),
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(6),
-                                        borderSide: BorderSide(
-                                          color: Colors.blue.shade400,
-                                          width: 2,
-                                        ),
-                                      ),
-                                      contentPadding: const EdgeInsets.all(8),
-                                      filled: true,
-                                      fillColor: Colors.grey.shade50,
-                                    ),
-                                    inputFormatters: [
-                                      HighlightedTokenDeletionFormatter(
-                                        getRanges: () => _highlightedRanges,
-                                        onTokenDeleted:
-                                            (deletedRange, tokenText) {
-                                          // Update personality if this was a player expansion
-                                          final playerName = _tokenToPlayerName[
-                                              tokenText.trim()];
-                                          if (playerName != null) {
-                                            _removePlayerFromPersonality(
-                                              playerName,
-                                            );
-                                            // Remove mapping for this exact token text
-                                            _tokenToPlayerName.remove(
-                                              tokenText.trim(),
-                                            );
-                                          }
-
-                                          // Rebuild highlight ranges after deletion
-                                          final int removedLen =
-                                              deletedRange.end -
-                                                  deletedRange.start;
-                                          final List<TextRange> updated = [];
-                                          for (final r in _highlightedRanges) {
-                                            // Skip the deleted range itself
-                                            if (r.start >= deletedRange.start &&
-                                                r.end <= deletedRange.end) {
-                                              continue;
-                                            }
-                                            if (r.start >= deletedRange.end) {
-                                              updated.add(
-                                                TextRange(
-                                                  start: r.start - removedLen,
-                                                  end: r.end - removedLen,
-                                                ),
-                                              );
-                                            } else {
-                                              updated.add(r);
-                                            }
-                                          }
-                                          _highlightedRanges = updated;
-                                          (captionController
-                                                  as HighlightingTextEditingController)
-                                              .highlightedRanges = updated;
-                                          (captionController
-                                                  as HighlightingTextEditingController)
-                                              .invalidRanges = [];
-                                          setState(() {});
-                                        },
-                                      ),
-                                    ],
+                                if (_showHeadlineField ||
+                                    _showKeywordsField ||
+                                    _showPersonalityField) ...[
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    flex: 5,
+                                    child: _buildCaptionSecondaryFieldsRow(),
                                   ),
-                                ),
-                              ],
-                            ),
-                          if (_showHeadlineField ||
-                              _showKeywordsField ||
-                              _showPersonalityField)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: _buildCaptionSecondaryFieldsRow(),
-                            ),
-                        ],
+                                ],
+                          ],
+                        ),
                       ),
                       // No gap between caption and firebar
                       // Action buttons are now beside the magic bar
@@ -4019,8 +4068,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             'DEBUG: Magic bar tapped, switching to list mode',
                                                           );
                                                           setState(() {
-                                                            _homePlayerView = 'list';
-                                                            _awayPlayerView = 'list';
+                                                            _homePlayerView =
+                                                                'list';
+                                                            _awayPlayerView =
+                                                                'list';
                                                           });
                                                         },
                                                         onChanged: (value) {
@@ -5655,8 +5706,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
-                                                          ? _homePlayerView == 'grid'
-                                                          : _awayPlayerView == 'grid')
+                                                          ? _homePlayerView ==
+                                                              'grid'
+                                                          : _awayPlayerView ==
+                                                              'grid')
                                                       ? Colors.blue.shade600
                                                       : Colors.grey.shade100,
                                                   borderRadius:
@@ -5667,8 +5720,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   ),
                                                   border: Border.all(
                                                     color: (_homeOnLeft
-                                                            ? _homePlayerView == 'grid'
-                                                            : _awayPlayerView == 'grid')
+                                                            ? _homePlayerView ==
+                                                                'grid'
+                                                            : _awayPlayerView ==
+                                                                'grid')
                                                         ? Colors.blue.shade600
                                                         : Colors.grey.shade300,
                                                   ),
@@ -5682,8 +5737,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         Icons.grid_view,
                                                         size: 9,
                                                         color: (_homeOnLeft
-                                                                ? _homePlayerView == 'grid'
-                                                                : _awayPlayerView == 'grid')
+                                                                ? _homePlayerView ==
+                                                                    'grid'
+                                                                : _awayPlayerView ==
+                                                                    'grid')
                                                             ? Colors.white
                                                             : Colors
                                                                 .grey.shade500,
@@ -5694,8 +5751,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         style: TextStyle(
                                                           fontSize: 10,
                                                           color: (_homeOnLeft
-                                                                  ? _homePlayerView == 'grid'
-                                                                  : _awayPlayerView == 'grid')
+                                                                  ? _homePlayerView ==
+                                                                      'grid'
+                                                                  : _awayPlayerView ==
+                                                                      'grid')
                                                               ? Colors.white
                                                               : Colors.grey
                                                                   .shade500,
@@ -5727,15 +5786,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
-                                                          ? _homePlayerView == 'list'
-                                                          : _awayPlayerView == 'list')
+                                                          ? _homePlayerView ==
+                                                              'list'
+                                                          : _awayPlayerView ==
+                                                              'list')
                                                       ? Colors.blue.shade600
                                                       : Colors.grey.shade100,
-                                                  borderRadius: BorderRadius.zero,
+                                                  borderRadius:
+                                                      BorderRadius.zero,
                                                   border: Border.all(
                                                     color: (_homeOnLeft
-                                                            ? _homePlayerView == 'list'
-                                                            : _awayPlayerView == 'list')
+                                                            ? _homePlayerView ==
+                                                                'list'
+                                                            : _awayPlayerView ==
+                                                                'list')
                                                         ? Colors.blue.shade600
                                                         : Colors.grey.shade300,
                                                   ),
@@ -5749,8 +5813,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         Icons.list,
                                                         size: 9,
                                                         color: (_homeOnLeft
-                                                                ? _homePlayerView == 'list'
-                                                                : _awayPlayerView == 'list')
+                                                                ? _homePlayerView ==
+                                                                    'list'
+                                                                : _awayPlayerView ==
+                                                                    'list')
                                                             ? Colors.white
                                                             : Colors
                                                                 .grey.shade500,
@@ -5761,8 +5827,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         style: TextStyle(
                                                           fontSize: 10,
                                                           color: (_homeOnLeft
-                                                                  ? _homePlayerView == 'list'
-                                                                  : _awayPlayerView == 'list')
+                                                                  ? _homePlayerView ==
+                                                                      'list'
+                                                                  : _awayPlayerView ==
+                                                                      'list')
                                                               ? Colors.white
                                                               : Colors.grey
                                                                   .shade500,
@@ -5794,35 +5862,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 ),
                                                 decoration: BoxDecoration(
                                                   color: (_homeOnLeft
-                                                          ? _homePlayerView == 'square'
-                                                          : _awayPlayerView == 'square')
+                                                          ? _homePlayerView ==
+                                                              'square'
+                                                          : _awayPlayerView ==
+                                                              'square')
                                                       ? Colors.blue.shade600
                                                       : Colors.grey.shade100,
                                                   borderRadius:
                                                       const BorderRadius.only(
-                                                    topRight: Radius.circular(4),
-                                                    bottomRight: Radius.circular(4),
+                                                    topRight:
+                                                        Radius.circular(4),
+                                                    bottomRight:
+                                                        Radius.circular(4),
                                                   ),
                                                   border: Border.all(
                                                     color: (_homeOnLeft
-                                                            ? _homePlayerView == 'square'
-                                                            : _awayPlayerView == 'square')
+                                                            ? _homePlayerView ==
+                                                                'square'
+                                                            : _awayPlayerView ==
+                                                                'square')
                                                         ? Colors.blue.shade600
                                                         : Colors.grey.shade300,
                                                   ),
                                                 ),
                                                 child: Center(
                                                   child: Row(
-                                                    mainAxisSize: MainAxisSize.min,
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
                                                     children: [
                                                       Icon(
                                                         Icons.apps,
                                                         size: 9,
                                                         color: (_homeOnLeft
-                                                                ? _homePlayerView == 'square'
-                                                                : _awayPlayerView == 'square')
+                                                                ? _homePlayerView ==
+                                                                    'square'
+                                                                : _awayPlayerView ==
+                                                                    'square')
                                                             ? Colors.white
-                                                            : Colors.grey.shade500,
+                                                            : Colors
+                                                                .grey.shade500,
                                                       ),
                                                       const SizedBox(width: 2),
                                                       Text(
@@ -5830,11 +5908,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         style: TextStyle(
                                                           fontSize: 10,
                                                           color: (_homeOnLeft
-                                                                  ? _homePlayerView == 'square'
-                                                                  : _awayPlayerView == 'square')
+                                                                  ? _homePlayerView ==
+                                                                      'square'
+                                                                  : _awayPlayerView ==
+                                                                      'square')
                                                               ? Colors.white
-                                                              : Colors.grey.shade500,
-                                                          fontWeight: FontWeight.w500,
+                                                              : Colors.grey
+                                                                  .shade500,
+                                                          fontWeight:
+                                                              FontWeight.w500,
                                                         ),
                                                       ),
                                                     ],
@@ -6119,9 +6201,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
                       )
-                    : (_homeOnLeft ? _homePlayerView == 'square' : _awayPlayerView == 'square')
+                    : (_homeOnLeft
+                            ? _homePlayerView == 'square'
+                            : _awayPlayerView == 'square')
                         ? _buildBothTeamsSquareView()
-                        : (_homeOnLeft ? _homePlayerView == 'grid' : _awayPlayerView == 'grid')
+                        : (_homeOnLeft
+                                ? _homePlayerView == 'grid'
+                                : _awayPlayerView == 'grid')
                             ? _buildBothTeamsGrid()
                             : _magicBarFocusNode.hasFocus
                                 ? _buildBothTeamsList()
@@ -6498,7 +6584,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.grey.shade100,
-            border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1)),
+            border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300, width: 1)),
           ),
           child: Row(
             children: [
@@ -6507,21 +6594,27 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               Expanded(
                 child: Text(
                   _getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'HOME',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
         ),
-        Expanded(child: _buildSingleTeamSquareGrid(homeRoster, selectedHomePlayers, true)),
+        Expanded(
+            child: _buildSingleTeamSquareGrid(
+                homeRoster, selectedHomePlayers, true)),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
             color: Colors.grey.shade100,
-            border: Border(bottom: BorderSide(color: Colors.grey.shade300, width: 1)),
+            border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300, width: 1)),
           ),
           child: Row(
             children: [
@@ -6530,22 +6623,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               Expanded(
                 child: Text(
                   _getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'AWAY',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+                  style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
         ),
-        Expanded(child: _buildSingleTeamSquareGrid(awayRoster, selectedAwayPlayers, false)),
+        Expanded(
+            child: _buildSingleTeamSquareGrid(
+                awayRoster, selectedAwayPlayers, false)),
       ],
     );
   }
 
-  Widget _buildSingleTeamSquareGrid(List<Player> players, Set<String> selectedPlayers, bool isHome) {
+  Widget _buildSingleTeamSquareGrid(
+      List<Player> players, Set<String> selectedPlayers, bool isHome) {
     if (players.isEmpty) {
       return Center(
-        child: Text('No players', style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+        child: Text('No players',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
       );
     }
     return GridView.builder(
@@ -6575,7 +6675,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               } else {
                 if (_firstTeamSelected == null) {
                   _firstTeamSelected = isHome;
-                  _firstPlayerSelected = _removeJerseyNumberFromName(player.displayName);
+                  _firstPlayerSelected =
+                      _removeJerseyNumberFromName(player.displayName);
                 }
                 if (isHome) {
                   selectedHomePlayers.add(player.displayName);
@@ -6614,7 +6715,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     player.jerseyNumber ?? '?',
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: isMainPlayer || isSelected ? FontWeight.w600 : FontWeight.w500,
+                      fontWeight: isMainPlayer || isSelected
+                          ? FontWeight.w600
+                          : FontWeight.w500,
                       color: isMainPlayer
                           ? Colors.red.shade700
                           : isSelected
@@ -8017,12 +8120,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                   children: [
                                                                                     // Home run types (when home run is selected)
                                                                                     if (_selectedVerb == 'Home Run')
-                                                                                      _buildVerbCategory('Home Run Types', [
-                                                                                        'Solo',
-                                                                                        'Two-Run',
-                                                                                        'Three-Run',
-                                                                                        'Grand Slam',
-                                                                                      ], 1),
+                                                                                      _buildVerbCategory(
+                                                                                          'Home Run Types',
+                                                                                          [
+                                                                                            'Solo',
+                                                                                            'Two-Run',
+                                                                                            'Three-Run',
+                                                                                            'Grand Slam',
+                                                                                          ],
+                                                                                          1),
 
                                                                                     // Inning only (when simple verbs are selected)
                                                                                     if (_selectedVerb == 'At Bat' || _selectedVerb == 'Pitching' || _selectedVerb == 'Swings' || _selectedVerb == 'Catches' || _selectedVerb == 'Throws' || _selectedVerb == 'Groundball' || _selectedVerb == 'Fielding Position') ...[
@@ -8411,16 +8517,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (event is! KeyDownEvent) return false;
     final k = event.logicalKey;
     int? digit;
-    if (k == LogicalKeyboardKey.digit1 || k == LogicalKeyboardKey.numpad1) digit = 1;
-    else if (k == LogicalKeyboardKey.digit2 || k == LogicalKeyboardKey.numpad2) digit = 2;
-    else if (k == LogicalKeyboardKey.digit3 || k == LogicalKeyboardKey.numpad3) digit = 3;
-    else if (k == LogicalKeyboardKey.digit4 || k == LogicalKeyboardKey.numpad4) digit = 4;
-    else if (k == LogicalKeyboardKey.digit5 || k == LogicalKeyboardKey.numpad5) digit = 5;
-    else if (k == LogicalKeyboardKey.digit6 || k == LogicalKeyboardKey.numpad6) digit = 6;
-    else if (k == LogicalKeyboardKey.digit7 || k == LogicalKeyboardKey.numpad7) digit = 7;
-    else if (k == LogicalKeyboardKey.digit8 || k == LogicalKeyboardKey.numpad8) digit = 8;
-    else if (k == LogicalKeyboardKey.digit9 || k == LogicalKeyboardKey.numpad9) digit = 9;
-    else if (k == LogicalKeyboardKey.digit0 || k == LogicalKeyboardKey.numpad0) digit = 0;
+    if (k == LogicalKeyboardKey.digit1 || k == LogicalKeyboardKey.numpad1)
+      digit = 1;
+    else if (k == LogicalKeyboardKey.digit2 || k == LogicalKeyboardKey.numpad2)
+      digit = 2;
+    else if (k == LogicalKeyboardKey.digit3 || k == LogicalKeyboardKey.numpad3)
+      digit = 3;
+    else if (k == LogicalKeyboardKey.digit4 || k == LogicalKeyboardKey.numpad4)
+      digit = 4;
+    else if (k == LogicalKeyboardKey.digit5 || k == LogicalKeyboardKey.numpad5)
+      digit = 5;
+    else if (k == LogicalKeyboardKey.digit6 || k == LogicalKeyboardKey.numpad6)
+      digit = 6;
+    else if (k == LogicalKeyboardKey.digit7 || k == LogicalKeyboardKey.numpad7)
+      digit = 7;
+    else if (k == LogicalKeyboardKey.digit8 || k == LogicalKeyboardKey.numpad8)
+      digit = 8;
+    else if (k == LogicalKeyboardKey.digit9 || k == LogicalKeyboardKey.numpad9)
+      digit = 9;
+    else if (k == LogicalKeyboardKey.digit0 || k == LogicalKeyboardKey.numpad0)
+      digit = 0;
     if (digit == null) return false;
 
     final isCmd = HardwareKeyboard.instance.isMetaPressed;
@@ -8447,7 +8563,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _numberBuffer += digit.toString();
     if (_numberBuffer.length >= 2) {
       final cat = int.tryParse(_numberBuffer[0]) ?? 0;
-      final verbNum = _numberBuffer[1] == '0' ? 10 : int.tryParse(_numberBuffer[1]) ?? 0;
+      final verbNum =
+          _numberBuffer[1] == '0' ? 10 : int.tryParse(_numberBuffer[1]) ?? 0;
       _numberBuffer = '';
       _selectVerbByCategoryAndIndex(cat, verbNum);
       return true;
@@ -8465,7 +8582,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// Keyboard Fire: set verb and update caption without showing any dialog.
   /// Use this when the verb is picked from the Keyboard Fire panel so only the panel’s Save/Copy/FTP popup appears.
-  void selectVerbByCategoryAndIndexFromKeyboardFire(int category1Based, int verb1Based, {bool suppressCaptionUpdate = false}) {
+  void selectVerbByCategoryAndIndexFromKeyboardFire(
+      int category1Based, int verb1Based,
+      {bool suppressCaptionUpdate = false}) {
     final order = effectiveCategoryOrder;
     if (category1Based < 1 || category1Based > order.length) return;
     final categoryName = order[category1Based - 1];
@@ -8635,7 +8754,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String get currentCaptionText => captionController.text;
 
   /// Notifier for keyboard fire dialog so caption preview updates live.
-  ValueNotifier<String> get keyboardFireCaptionNotifier => _keyboardFireCaptionNotifier;
+  ValueNotifier<String> get keyboardFireCaptionNotifier =>
+      _keyboardFireCaptionNotifier;
 
   /// Builds the exact same verb categories grid as shown in the main app.
   /// Call from the KeyboardFireDialog to embed the real verb menu.
@@ -8731,16 +8851,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         await _preferencesService.getVerbOverrides(sport: _currentSport);
     if (!mounted) return;
     final initial = _getVerbEditorInitialData(verb);
-    final labelController = TextEditingController(text: initial['label'] as String? ?? verb);
-    final singularController = TextEditingController(text: initial['verbPhrase'] as String? ?? verb);
-    final pluralController = TextEditingController(text: initial['pluralPhrase'] as String? ?? initial['verbPhrase'] as String? ?? verb);
+    final labelController =
+        TextEditingController(text: initial['label'] as String? ?? verb);
+    final singularController =
+        TextEditingController(text: initial['verbPhrase'] as String? ?? verb);
+    final pluralController = TextEditingController(
+        text: initial['pluralPhrase'] as String? ??
+            initial['verbPhrase'] as String? ??
+            verb);
     bool omitAgainst = initial['omitAgainst'] as bool? ?? false;
     bool wantsOpponent = initial['wantsOpponent'] as bool? ?? false;
-    String selectedCategory = initial['category'] as String? ?? ((_categoryOrder.isNotEmpty) ? _categoryOrder.first : '');
+    String selectedCategory = initial['category'] as String? ??
+        ((_categoryOrder.isNotEmpty) ? _categoryOrder.first : '');
 
-    final categories = _categoryOrder.where((c) => c == 'Favorites' || verbCategories.containsKey(c)).toList();
+    final categories = _categoryOrder
+        .where((c) => c == 'Favorites' || verbCategories.containsKey(c))
+        .toList();
     if (categories.isEmpty) return;
-    if (!categories.contains(selectedCategory)) selectedCategory = categories.first;
+    if (!categories.contains(selectedCategory))
+      selectedCategory = categories.first;
 
     final homeTeamName = selectedHomeTeam ?? 'Home Team';
     final awayTeamName = selectedAwayTeam ?? 'Away Team';
@@ -8767,33 +8896,46 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             }
 
             return Dialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4), side: const BorderSide(color: Colors.black, width: 1)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  side: const BorderSide(color: Colors.black, width: 1)),
               child: Container(
                 width: 500,
-                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.9),
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.9),
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(4)),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Edit Verb', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                      Text('Edit Verb',
+                          style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 16),
-                      Text('Display Name', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      Text('Display Name',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade700)),
                       const SizedBox(height: 4),
                       TextField(
                         controller: labelController,
                         style: const TextStyle(fontSize: 12),
                         decoration: InputDecoration(
                           hintText: 'e.g., Skates',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(4)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
                           isDense: true,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Text('Singular Phrase (1 player)', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      Text('Singular Phrase (1 player)',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade700)),
                       const SizedBox(height: 4),
                       TextField(
                         controller: singularController,
@@ -8801,8 +8943,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         onChanged: (_) => setDialogState(() {}),
                         decoration: InputDecoration(
                           hintText: 'e.g., skates, battles, shoots',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(4)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
                           isDense: true,
                         ),
                       ),
@@ -8817,18 +8961,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Example (1 player):', style: TextStyle(fontSize: 9, color: Colors.blue.shade700, fontWeight: FontWeight.bold)),
+                            Text('Example (1 player):',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.bold)),
                             const SizedBox(height: 2),
                             Text(
-                              buildExampleCaption(singularController.text.trim().isEmpty ? verb : singularController.text, 1),
-                              style: TextStyle(fontSize: 10, color: Colors.blue.shade900),
+                              buildExampleCaption(
+                                  singularController.text.trim().isEmpty
+                                      ? verb
+                                      : singularController.text,
+                                  1),
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.blue.shade900),
                               softWrap: true,
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Text('Plural Phrase (2+ players)', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      Text('Plural Phrase (2+ players)',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade700)),
                       const SizedBox(height: 4),
                       TextField(
                         controller: pluralController,
@@ -8836,8 +8991,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         onChanged: (_) => setDialogState(() {}),
                         decoration: InputDecoration(
                           hintText: 'e.g., skate, battle, shoot',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(4)),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 8),
                           isDense: true,
                         ),
                       ),
@@ -8852,18 +9009,31 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Example (2+ players):', style: TextStyle(fontSize: 9, color: Colors.green.shade700, fontWeight: FontWeight.bold)),
+                            Text('Example (2+ players):',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.bold)),
                             const SizedBox(height: 2),
                             Text(
-                              buildExampleCaption(pluralController.text.trim().isEmpty ? singularController.text.trim().isEmpty ? verb : singularController.text : pluralController.text, 2),
-                              style: TextStyle(fontSize: 10, color: Colors.green.shade900),
+                              buildExampleCaption(
+                                  pluralController.text.trim().isEmpty
+                                      ? singularController.text.trim().isEmpty
+                                          ? verb
+                                          : singularController.text
+                                      : pluralController.text,
+                                  2),
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.green.shade900),
                               softWrap: true,
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Text('Category', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      Text('Category',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade700)),
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -8875,10 +9045,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: DropdownButton<String>(
                             value: selectedCategory,
                             isExpanded: true,
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-                            items: categories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade800),
+                            items: categories
+                                .map((cat) => DropdownMenuItem(
+                                    value: cat, child: Text(cat)))
+                                .toList(),
                             onChanged: (value) {
-                              if (value != null) setDialogState(() => selectedCategory = value);
+                              if (value != null)
+                                setDialogState(() => selectedCategory = value);
                             },
                           ),
                         ),
@@ -8892,14 +9067,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             height: 20,
                             child: Checkbox(
                               value: omitAgainst,
-                              onChanged: (v) => setDialogState(() => omitAgainst = v ?? false),
+                              onChanged: (v) => setDialogState(
+                                  () => omitAgainst = v ?? false),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Omit "against" in caption',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade700),
                               softWrap: true,
                             ),
                           ),
@@ -8913,14 +9090,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             height: 20,
                             child: Checkbox(
                               value: wantsOpponent,
-                              onChanged: (v) => setDialogState(() => wantsOpponent = v ?? false),
+                              onChanged: (v) => setDialogState(
+                                  () => wantsOpponent = v ?? false),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               'Include opposing player in caption',
-                              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade700),
                               softWrap: true,
                             ),
                           ),
@@ -8932,29 +9111,39 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         children: [
                           TextButton(
                             onPressed: () => Navigator.of(context).pop(),
-                            child: Text('Cancel', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                            child: Text('Cancel',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey.shade600)),
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
                             onPressed: () async {
                               final newLabel = labelController.text.trim();
-                              final newSingular = singularController.text.trim();
-                              if (newLabel.isEmpty || newSingular.isEmpty) return;
+                              final newSingular =
+                                  singularController.text.trim();
+                              if (newLabel.isEmpty || newSingular.isEmpty)
+                                return;
                               final overrideKey = verb;
                               final override = {
                                 'label': newLabel,
                                 'verbPhrase': newSingular,
-                                'pluralPhrase': pluralController.text.trim().isEmpty ? null : pluralController.text.trim(),
+                                'pluralPhrase':
+                                    pluralController.text.trim().isEmpty
+                                        ? null
+                                        : pluralController.text.trim(),
                                 'wantsOpponent': wantsOpponent,
                                 'omitAgainst': omitAgainst,
                                 'isCustom': false,
                                 'category': selectedCategory,
                               };
-                              await _preferencesService.saveVerbOverride(overrideKey, override, sport: _currentSport);
+                              await _preferencesService.saveVerbOverride(
+                                  overrideKey, override,
+                                  sport: _currentSport);
                               await _preferencesService.saveCustomVerbWording(
                                   overrideKey, newSingular,
                                   sport: _currentSport);
-                              _verbOverrides = await _preferencesService.getVerbOverrides(sport: _currentSport);
+                              _verbOverrides = await _preferencesService
+                                  .getVerbOverrides(sport: _currentSport);
                               _customVerbWordings = await _preferencesService
                                   .getCustomVerbWordings(sport: _currentSport);
                               if (mounted) setState(() {});
@@ -8963,9 +9152,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF0052CC),
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
                             ),
-                            child: const Text('Save', style: TextStyle(fontSize: 11, color: Colors.white)),
+                            child: const Text('Save',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.white)),
                           ),
                         ],
                       ),
@@ -9011,7 +9203,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Called from keyboard fire panel: remove verb override so the verb reverts to its default display name.
   /// [displayLabelOrKey] is the verb string shown in the list (display label) or the original key.
   /// Returns true if an override was removed.
-  Future<bool> deleteVerbOverrideFromKeyboardFire(String displayLabelOrKey) async {
+  Future<bool> deleteVerbOverrideFromKeyboardFire(
+      String displayLabelOrKey) async {
     final s = displayLabelOrKey.trim();
     if (s.isEmpty) return false;
 
@@ -9026,13 +9219,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Add to deleted verbs so it is hidden from the list
-    await _preferencesService.addDeletedVerb(canonicalVerb, sport: _currentSport);
-    _deletedVerbs = await _preferencesService.getDeletedVerbs(sport: _currentSport);
+    await _preferencesService.addDeletedVerb(canonicalVerb,
+        sport: _currentSport);
+    _deletedVerbs =
+        await _preferencesService.getDeletedVerbs(sport: _currentSport);
 
     // Also clear any verb override so it doesn't ghost around
     if (_verbOverrides.containsKey(canonicalVerb)) {
-      await _preferencesService.removeVerbOverride(canonicalVerb, sport: _currentSport);
-      _verbOverrides = await _preferencesService.getVerbOverrides(sport: _currentSport);
+      await _preferencesService.removeVerbOverride(canonicalVerb,
+          sport: _currentSport);
+      _verbOverrides =
+          await _preferencesService.getVerbOverrides(sport: _currentSport);
     }
 
     if (mounted) setState(() {});
@@ -9057,8 +9254,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final order = _categoryOrder
         .where((cat) => cat == 'Favorites' || verbCategories.containsKey(cat))
         .toList();
-    List<String> effective =
-        order.isNotEmpty ? List<String>.from(order) : List<String>.from(categoryOrder);
+    List<String> effective = order.isNotEmpty
+        ? List<String>.from(order)
+        : List<String>.from(categoryOrder);
     if (!effective.contains('Favorites')) {
       effective = [...effective, 'Favorites'];
     }
@@ -9079,7 +9277,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ? _favoriteVerbs.toList()
           : (verbCategories[cat] ?? <String>[]);
       final verbs = rawVerbs.map(_verbDisplayLabel).toList();
-      list.add(<String, dynamic>{'number': catNum, 'name': cat, 'verbs': verbs});
+      list.add(
+          <String, dynamic>{'number': catNum, 'name': cat, 'verbs': verbs});
     }
     return list;
   }
@@ -9127,6 +9326,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// Exposes the personality controller so the KeyboardFirePanel can embed it.
   TextEditingController get personalityTextController => personalityController;
+
   /// Exposes headline/keywords so Keyboard Fire layout can match Preferences visibility.
   TextEditingController get headlineTextController => headlineController;
   TextEditingController get keywordsTextController => keywordsController;
@@ -9150,8 +9350,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final size = MediaQuery.of(context).size;
     final position = Offset(size.width * 0.5, size.height * 0.4);
 
-    final needsInningSelector = !(_selectedVerb == verb) && _shouldShowInningSelector(verb);
-    final needsFullPopup = !(_selectedVerb == verb) && _shouldShowFullPopupInterface(verb);
+    final needsInningSelector =
+        !(_selectedVerb == verb) && _shouldShowInningSelector(verb);
+    final needsFullPopup =
+        !(_selectedVerb == verb) && _shouldShowFullPopupInterface(verb);
 
     if (needsInningSelector) {
       _showCompactInningSelector(position, verb);
@@ -9175,7 +9377,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
-  Widget _buildVerbCategory(String title, List<String> verbs, int categoryNumber) {
+  Widget _buildVerbCategory(
+      String title, List<String> verbs, int categoryNumber) {
     return Container(
       // Removed debug background for cleaner appearance
       child: Column(
@@ -9183,7 +9386,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         children: [
           _categorySectionTitle(title, categoryNumber),
           // Verb options (each with its own number 1, 2, 3...)
-          ...verbs.asMap().entries.map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1)).toList(),
+          ...verbs
+              .asMap()
+              .entries
+              .map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1))
+              .toList(),
         ],
       ),
     );
@@ -9197,7 +9404,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           _categorySectionTitle('Favorites', categoryNumber,
               favoritesStyle: true),
           // Favorite verb options (each with its own number)
-          ..._favoriteVerbs.toList().asMap().entries.map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1)).toList(),
+          ..._favoriteVerbs
+              .toList()
+              .asMap()
+              .entries
+              .map((e) => _buildVerbOption(e.value, verbNumber: e.key + 1))
+              .toList(),
           // Add empty chips to fill remaining space
           ...List.generate(
             10 - _favoriteVerbs.length,
@@ -9433,9 +9645,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           border: Border.all(
             color: isSticky
                 ? const Color(0xFF0052CC)
-                : (isSelected
-                    ? const Color(0xFF4A90E2)
-                    : Colors.grey.shade300),
+                : (isSelected ? const Color(0xFF4A90E2) : Colors.grey.shade300),
             width: (isSelected || isSticky) ? 1.5 : 0.5,
           ),
         ),
@@ -9447,7 +9657,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 Padding(
                   padding: const EdgeInsets.only(right: 4),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
                       color: isSelected
                           ? const Color(0xFF4A90E2)
@@ -9467,229 +9678,253 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               Flexible(
                 child: Builder(
                   builder: (context) {
-              String typed = _magicBarVerbInput;
-              // Only use trailing letters for verb matching (ignore digits like in "h27")
-              final RegExpMatch? lettersMatch = RegExp(
-                r'([a-zA-Z]+)$',
-              ).firstMatch(typed);
-              final String typedLetters =
-                  lettersMatch?.group(1)?.toLowerCase() ?? '';
+                    String typed = _magicBarVerbInput;
+                    // Only use trailing letters for verb matching (ignore digits like in "h27")
+                    final RegExpMatch? lettersMatch = RegExp(
+                      r'([a-zA-Z]+)$',
+                    ).firstMatch(typed);
+                    final String typedLetters =
+                        lettersMatch?.group(1)?.toLowerCase() ?? '';
 
-              // Debug output
-              // print(
-              //     'DEBUG: Verb: $verb, Typed: "$typed", Letters: "$typedLetters"');
+                    // Debug output
+                    // print(
+                    //     'DEBUG: Verb: $verb, Typed: "$typed", Letters: "$typedLetters"');
 
-              // Calculate the shortcut letters for this verb
-              String shortcutLetters = '';
-              final words = verb.split(' ');
-              final filtered = words
-                  .where((w) => w.trim().isNotEmpty && w.toLowerCase() != 'the')
-                  .toList();
+                    // Calculate the shortcut letters for this verb
+                    String shortcutLetters = '';
+                    final words = verb.split(' ');
+                    final filtered = words
+                        .where((w) =>
+                            w.trim().isNotEmpty && w.toLowerCase() != 'the')
+                        .toList();
 
-              if (filtered.isEmpty) {
-                // Fallback if no valid words found
-                shortcutLetters = verb.length >= 3
-                    ? verb.substring(0, 3).toLowerCase()
-                    : verb.toLowerCase();
-              } else if (filtered.length > 1) {
-                // Multi-word verb: use acronym
-                shortcutLetters =
-                    filtered.map((w) => w[0].toLowerCase()).join();
-              } else {
-                // Single word verb: use first 2-3 letters
-                final first = filtered.first.toLowerCase();
-                shortcutLetters =
-                    first.length >= 3 ? first.substring(0, 3) : first;
-              }
+                    if (filtered.isEmpty) {
+                      // Fallback if no valid words found
+                      shortcutLetters = verb.length >= 3
+                          ? verb.substring(0, 3).toLowerCase()
+                          : verb.toLowerCase();
+                    } else if (filtered.length > 1) {
+                      // Multi-word verb: use acronym
+                      shortcutLetters =
+                          filtered.map((w) => w[0].toLowerCase()).join();
+                    } else {
+                      // Single word verb: use first 2-3 letters
+                      final first = filtered.first.toLowerCase();
+                      shortcutLetters =
+                          first.length >= 3 ? first.substring(0, 3) : first;
+                    }
 
-              // Determine what to highlight based on what's typed
-              String displayPrefix;
-              List<int> firstLetterPositions = [];
+                    // Determine what to highlight based on what's typed
+                    String displayPrefix;
+                    List<int> firstLetterPositions = [];
 
-              if (filtered.length > 1) {
-                // Multi-word verb: find positions of first letters to highlight
-                int currentPos = 0;
+                    if (filtered.length > 1) {
+                      // Multi-word verb: find positions of first letters to highlight
+                      int currentPos = 0;
 
-                for (int i = 0; i < words.length; i++) {
-                  String word = words[i].trim();
-                  if (word.isNotEmpty && word.toLowerCase() != 'the') {
-                    // Find the position of the first letter in this word
-                    int wordStart = currentPos +
-                        (i > 0 ? 1 : 0); // Account for space before word
-                    int firstLetterPos = wordStart + word.indexOf(word[0]);
-                    firstLetterPositions.add(firstLetterPos);
-                  }
-                  currentPos +=
-                      word.length + (i > 0 ? 1 : 0); // Add word length + space
-                }
+                      for (int i = 0; i < words.length; i++) {
+                        String word = words[i].trim();
+                        if (word.isNotEmpty && word.toLowerCase() != 'the') {
+                          // Find the position of the first letter in this word
+                          int wordStart = currentPos +
+                              (i > 0 ? 1 : 0); // Account for space before word
+                          int firstLetterPos =
+                              wordStart + word.indexOf(word[0]);
+                          firstLetterPositions.add(firstLetterPos);
+                        }
+                        currentPos += word.length +
+                            (i > 0 ? 1 : 0); // Add word length + space
+                      }
 
-                if (typedLetters.isNotEmpty &&
-                    shortcutLetters.startsWith(typedLetters)) {
-                  // User is typing the shortcut - highlight the first letters they've typed
-                  int lettersToHighlight = typedLetters.length;
-                  if (lettersToHighlight <= firstLetterPositions.length) {
-                    displayPrefix = verb.substring(
-                      0,
-                      firstLetterPositions[lettersToHighlight - 1] + 1,
-                    );
-                  } else {
-                    displayPrefix = verb.substring(
-                      0,
-                      firstLetterPositions.last + 1,
-                    );
-                  }
-                } else {
-                  // Show all first letters
-                  displayPrefix = verb.substring(
-                    0,
-                    firstLetterPositions.last + 1,
-                  );
-                }
-              } else {
-                // Single word verb: use first 2-3 letters
-                if (typedLetters.isNotEmpty &&
-                    shortcutLetters.startsWith(typedLetters)) {
-                  // User is typing the shortcut - highlight what they've typed
-                  final int len = typedLetters.length < verb.length
-                      ? typedLetters.length
-                      : verb.length;
-                  displayPrefix = verb.substring(0, len);
-                } else if (typedLetters.isEmpty) {
-                  // No typing - show the shortcut letters
-                  displayPrefix = verb.substring(0, shortcutLetters.length);
-                } else {
-                  // User typed something else - show shortcut letters
-                  displayPrefix = verb.substring(0, shortcutLetters.length);
-                }
-              }
+                      if (typedLetters.isNotEmpty &&
+                          shortcutLetters.startsWith(typedLetters)) {
+                        // User is typing the shortcut - highlight the first letters they've typed
+                        int lettersToHighlight = typedLetters.length;
+                        if (lettersToHighlight <= firstLetterPositions.length) {
+                          displayPrefix = verb.substring(
+                            0,
+                            firstLetterPositions[lettersToHighlight - 1] + 1,
+                          );
+                        } else {
+                          displayPrefix = verb.substring(
+                            0,
+                            firstLetterPositions.last + 1,
+                          );
+                        }
+                      } else {
+                        // Show all first letters
+                        displayPrefix = verb.substring(
+                          0,
+                          firstLetterPositions.last + 1,
+                        );
+                      }
+                    } else {
+                      // Single word verb: use first 2-3 letters
+                      if (typedLetters.isNotEmpty &&
+                          shortcutLetters.startsWith(typedLetters)) {
+                        // User is typing the shortcut - highlight what they've typed
+                        final int len = typedLetters.length < verb.length
+                            ? typedLetters.length
+                            : verb.length;
+                        displayPrefix = verb.substring(0, len);
+                      } else if (typedLetters.isEmpty) {
+                        // No typing - show the shortcut letters
+                        displayPrefix =
+                            verb.substring(0, shortcutLetters.length);
+                      } else {
+                        // User typed something else - show shortcut letters
+                        displayPrefix =
+                            verb.substring(0, shortcutLetters.length);
+                      }
+                    }
 
-              if (filtered.length > 1) {
-                // Multi-word verb: show fire emoji with shortcut after word
-                if (_magicBarFocusNode.hasFocus) {
-                  return RichText(
-                    maxLines: 2,
-                    overflow: TextOverflow.visible,
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: _getVerbDisplayText(verb),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                            color: isSelected ? const Color(0xFF0052CC) : Colors.grey.shade700,
+                    if (filtered.length > 1) {
+                      // Multi-word verb: show fire emoji with shortcut after word
+                      if (_magicBarFocusNode.hasFocus) {
+                        return RichText(
+                          maxLines: 2,
+                          overflow: TextOverflow.visible,
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: _getVerbDisplayText(verb),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? const Color(0xFF0052CC)
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' 🔥$shortcutLetters',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? const Color(0xFF0052CC)
+                                      : Colors.black87,
+                                ),
+                              ),
+                              if (_favoriteVerbs.contains(verb))
+                                TextSpan(
+                                  text: ' ⭐',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.amber.shade600,
+                                  ),
+                                ),
+                            ],
                           ),
-                        ),
-                        TextSpan(
-                          text: ' 🔥$shortcutLetters',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: isSelected ? const Color(0xFF0052CC) : Colors.black87,
+                        );
+                      } else {
+                        return RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: _getVerbDisplayText(verb),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? const Color(0xFF0052CC)
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                              if (_favoriteVerbs.contains(verb))
+                                TextSpan(
+                                  text: ' ⭐',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.amber.shade600,
+                                  ),
+                                ),
+                            ],
                           ),
-                        ),
-                        if (_favoriteVerbs.contains(verb))
-                          TextSpan(
-                            text: ' ⭐',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.amber.shade600,
-                            ),
+                          maxLines: 2,
+                          overflow: TextOverflow.visible,
+                        );
+                      }
+                    } else {
+                      // Single word verb: show fire emoji with shortcut after word
+                      if (_magicBarFocusNode.hasFocus) {
+                        return RichText(
+                          maxLines: 2,
+                          overflow: TextOverflow.visible,
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: _getVerbDisplayText(verb),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? const Color(0xFF0052CC)
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                              TextSpan(
+                                text: ' 🔥$shortcutLetters',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected
+                                      ? const Color(0xFF0052CC)
+                                      : Colors.black87,
+                                ),
+                              ),
+                              if (_favoriteVerbs.contains(verb))
+                                TextSpan(
+                                  text: ' ⭐',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.amber.shade600,
+                                  ),
+                                ),
+                            ],
                           ),
-                      ],
-                    ),
-                  );
-                } else {
-                  return RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: _getVerbDisplayText(verb),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                            color: isSelected ? const Color(0xFF0052CC) : Colors.grey.shade700,
+                        );
+                      } else {
+                        // Firebar inactive – normal styling
+                        return RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: _getVerbDisplayText(verb),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: isSelected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? const Color(0xFF0052CC)
+                                      : Colors.grey.shade700,
+                                ),
+                              ),
+                              if (_favoriteVerbs.contains(verb))
+                                TextSpan(
+                                  text: ' ⭐',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.amber.shade600,
+                                  ),
+                                ),
+                            ],
                           ),
-                        ),
-                        if (_favoriteVerbs.contains(verb))
-                          TextSpan(
-                            text: ' ⭐',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.amber.shade600,
-                            ),
-                          ),
-                      ],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.visible,
-                  );
-                }
-              } else {
-                // Single word verb: show fire emoji with shortcut after word
-                if (_magicBarFocusNode.hasFocus) {
-                  return RichText(
-                    maxLines: 2,
-                    overflow: TextOverflow.visible,
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: _getVerbDisplayText(verb),
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                            color: isSelected ? const Color(0xFF0052CC) : Colors.grey.shade700,
-                          ),
-                        ),
-                        TextSpan(
-                          text: ' 🔥$shortcutLetters',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: isSelected ? const Color(0xFF0052CC) : Colors.black87,
-                          ),
-                        ),
-                        if (_favoriteVerbs.contains(verb))
-                          TextSpan(
-                            text: ' ⭐',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.amber.shade600,
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
-                } else {
-                  // Firebar inactive – normal styling
-                  return RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(
-                          text: _getVerbDisplayText(verb),
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                            color: isSelected ? const Color(0xFF0052CC) : Colors.grey.shade700,
-                          ),
-                        ),
-                        if (_favoriteVerbs.contains(verb))
-                          TextSpan(
-                            text: ' ⭐',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.amber.shade600,
-                            ),
-                          ),
-                      ],
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.visible,
-                  );
-                }
-              }
-            },
-          ),
-        ),
+                          maxLines: 2,
+                          overflow: TextOverflow.visible,
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
             ],
           ),
         ),
@@ -12294,7 +12529,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     width: 16,
                                                     height: 16,
                                                     fit: BoxFit.contain,
-                                                    colorFilter: ColorFilter.mode(
+                                                    colorFilter:
+                                                        ColorFilter.mode(
                                                       _isFtpDisabled
                                                           ? Colors.grey.shade400
                                                           : Colors.white,
@@ -12931,7 +13167,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '';
     }
   }
-
 
   // Handle multiple player numbers input (e.g., "27 23")
   void _handleMultiplePlayerInput(String value) {
@@ -15447,8 +15682,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'NOTE TO USER: User expressly acknowledges and agrees that, by downloading '
         'and/or using this Photograph, user is consenting to the terms and conditions '
         'of the Getty Images License Agreement.';
-    final isGetty = byline.toLowerCase().contains('getty images') &&
-        sport == 'basketball';
+    final isGetty =
+        byline.toLowerCase().contains('getty images') && sport == 'basketball';
     final disclaimerPart = isGetty ? ' $_gettyDisclaimer' : '';
 
     var caption = '$dateline '
@@ -15629,26 +15864,51 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // List of category verbs that don't use _popupCustomVerb
     final categoryVerbs = {
-      'Skates', 'Shoots', 'Battles', 'Scores', 'Goes to the Net', 'Faceoff',
-      'Blocks', 'Clears', 'Checks', 'Defends',
-      'Saves', 'Handles the Puck', 'Stands in Net', 'Guards the Net',
-      'Power Play', 'Breakaway',
-      'Warm Ups', 'Takes the Ice', 'Walks to the Ice', 'Comes Off the Ice',
-      'National Anthem', 'Stretching', 'Bench', 'Looks On',
-      'Celebrates', 'Celebrates a Goal', 'Dejection', 'Post Game Win', 'Post Game Loss',
+      'Skates',
+      'Shoots',
+      'Battles',
+      'Scores',
+      'Goes to the Net',
+      'Faceoff',
+      'Blocks',
+      'Clears',
+      'Checks',
+      'Defends',
+      'Saves',
+      'Handles the Puck',
+      'Stands in Net',
+      'Guards the Net',
+      'Power Play',
+      'Breakaway',
+      'Warm Ups',
+      'Takes the Ice',
+      'Walks to the Ice',
+      'Comes Off the Ice',
+      'National Anthem',
+      'Stretching',
+      'Bench',
+      'Looks On',
+      'Celebrates',
+      'Celebrates a Goal',
+      'Dejection',
+      'Post Game Win',
+      'Post Game Loss',
     };
 
     // Skip if it's a category verb (they don't use _popupCustomVerb)
     if (categoryVerbs.contains(verbText)) return;
 
     // Reload verb overrides to ensure we have the latest plural phrases
-    _verbOverrides = await _preferencesService.getVerbOverrides(sport: _currentSport);
+    _verbOverrides =
+        await _preferencesService.getVerbOverrides(sport: _currentSport);
 
     // Get player count to determine if we should use plural phrase
-    final activePlayerCount = selectedHomePlayers.length + selectedAwayPlayers.length;
+    final activePlayerCount =
+        selectedHomePlayers.length + selectedAwayPlayers.length;
 
     // Check if this is a custom verb
-    final customVerbs = await _preferencesService.getCustomVerbs(sport: _currentSport);
+    final customVerbs =
+        await _preferencesService.getCustomVerbs(sport: _currentSport);
     final customVerb = customVerbs.firstWhere(
       (v) => v['label'] == verbText,
       orElse: () => <String, dynamic>{},
@@ -15659,7 +15919,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final verbPhrase = customVerb['verbPhrase'] as String? ?? verbText;
         final pluralPhrase = customVerb['pluralPhrase'] as String?;
 
-        if (activePlayerCount > 1 && pluralPhrase != null && pluralPhrase.isNotEmpty) {
+        if (activePlayerCount > 1 &&
+            pluralPhrase != null &&
+            pluralPhrase.isNotEmpty) {
           _popupCustomVerb = pluralPhrase;
         } else {
           _popupCustomVerb = verbPhrase;
@@ -15670,7 +15932,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final singularPhrase = override['verbPhrase'] as String?;
         final pluralPhrase = override['pluralPhrase'] as String?;
 
-        if (activePlayerCount > 1 && pluralPhrase != null && pluralPhrase.isNotEmpty) {
+        if (activePlayerCount > 1 &&
+            pluralPhrase != null &&
+            pluralPhrase.isNotEmpty) {
           _popupCustomVerb = pluralPhrase;
         } else {
           _popupCustomVerb = singularPhrase ?? verbText;
@@ -15750,23 +16014,27 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Check if this is a custom verb - look up its verbPhrase
-    final customVerbs = await _preferencesService.getCustomVerbs(sport: _currentSport);
+    final customVerbs =
+        await _preferencesService.getCustomVerbs(sport: _currentSport);
     final customVerb = customVerbs.firstWhere(
       (v) => v['label'] == resolvedVerb,
       orElse: () => <String, dynamic>{},
     );
-    
+
     // Get player count to determine if we should use plural phrase
-    final activePlayerCount = selectedHomePlayers.length + selectedAwayPlayers.length;
-    
+    final activePlayerCount =
+        selectedHomePlayers.length + selectedAwayPlayers.length;
+
     setState(() {
       if (customVerb.isNotEmpty && customVerb.containsKey('verbPhrase')) {
         // Use the verbPhrase from the custom verb, not the label
         final verbPhrase = customVerb['verbPhrase'] as String? ?? resolvedVerb;
         final pluralPhrase = customVerb['pluralPhrase'] as String?;
-        
+
         // Use plural phrase if we have multiple players and a plural phrase is defined
-        if (activePlayerCount > 1 && pluralPhrase != null && pluralPhrase.isNotEmpty) {
+        if (activePlayerCount > 1 &&
+            pluralPhrase != null &&
+            pluralPhrase.isNotEmpty) {
           _popupCustomVerb = pluralPhrase;
         } else {
           _popupCustomVerb = verbPhrase;
@@ -15779,9 +16047,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final override = _verbOverrides[resolvedVerb]!;
           final singularPhrase = override['verbPhrase'] as String?;
           final pluralPhrase = override['pluralPhrase'] as String?;
-          
+
           // Use plural phrase if we have multiple players and a plural phrase is defined
-          if (activePlayerCount > 1 && pluralPhrase != null && pluralPhrase.isNotEmpty) {
+          if (activePlayerCount > 1 &&
+              pluralPhrase != null &&
+              pluralPhrase.isNotEmpty) {
             _popupCustomVerb = pluralPhrase;
           } else {
             _popupCustomVerb = singularPhrase ?? resolvedVerb;
@@ -17164,19 +17434,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Read the saved caption text
-    final captionValue = (_lastSavedMetadata!['IPTC:Description']
-            ?? _lastSavedMetadata!['Caption-Abstract'])
-        ?.toString() ?? '';
+    final captionValue = (_lastSavedMetadata!['IPTC:Description'] ??
+                _lastSavedMetadata!['Caption-Abstract'])
+            ?.toString() ??
+        '';
 
     // Read the saved personality text
     final personalityValue =
         _lastSavedMetadata!['XMP-getty:Personality']?.toString() ?? '';
     final headlineValue = (_lastSavedMetadata!['IPTC:Headline'] ??
-            _lastSavedMetadata!['Headline'])
-        ?.toString() ?? '';
+                _lastSavedMetadata!['Headline'])
+            ?.toString() ??
+        '';
     final keywordsValue = (_lastSavedMetadata!['IPTC:Keywords'] ??
-            _lastSavedMetadata!['Keywords'])
-        ?.toString() ?? '';
+                _lastSavedMetadata!['Keywords'])
+            ?.toString() ??
+        '';
 
     print('DEBUG pasteLastCaption: captionValue="$captionValue"');
     print('DEBUG pasteLastCaption: personalityValue="$personalityValue"');
@@ -17188,7 +17461,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       headlineController.text = headlineValue;
       keywordsController.text = _dedupeKeywordsForDisplay(keywordsValue);
     });
-    print('DEBUG pasteLastCaption: after setState, captionController.text="${captionController.text}"');
+    print(
+        'DEBUG pasteLastCaption: after setState, captionController.text="${captionController.text}"');
     _keyboardFireCaptionNotifier.value = captionValue;
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -19147,9 +19421,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         overriddenPhrase != null && overriddenPhrase.trim().isNotEmpty;
     final String? resolvedVerbPhrase = hasOverridePhrase
         ? overriddenPhrase!.trim()
-        : (hasCustomWordingFromPrefs
-            ? customWordingFromPrefs!.trim()
-            : null);
+        : (hasCustomWordingFromPrefs ? customWordingFromPrefs!.trim() : null);
     final bool hasResolvedVerbPhrase =
         resolvedVerbPhrase != null && resolvedVerbPhrase.isNotEmpty;
 
@@ -19271,7 +19543,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return overriddenPhrase;
         }
         if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball') {
-          final activePlayersAnthem = selectedHomePlayers.union(selectedAwayPlayers);
+          final activePlayersAnthem =
+              selectedHomePlayers.union(selectedAwayPlayers);
           final isMultipleAnthem = activePlayersAnthem.length > 1;
           final actionAnthem = isMultipleAnthem ? 'look on' : 'looks on';
           return hasResolvedVerbPhrase
@@ -19279,9 +19552,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               : '$actionAnthem during the national anthem prior to play against the ${_getOpposingTeamName()}';
         } else {
           if (activePlayerCount >= 2) {
-            return hasResolvedVerbPhrase ? resolvedVerbPhrase : 'stand for the national anthem';
+            return hasResolvedVerbPhrase
+                ? resolvedVerbPhrase
+                : 'stand for the national anthem';
           } else {
-            return hasResolvedVerbPhrase ? resolvedVerbPhrase : 'stands for the national anthem';
+            return hasResolvedVerbPhrase
+                ? resolvedVerbPhrase
+                : 'stands for the national anthem';
           }
         }
       case 'Stretching':
@@ -19289,9 +19566,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return overriddenPhrase;
         }
         if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball') {
-          final activePlayersStretching = selectedHomePlayers.union(selectedAwayPlayers);
-          final isMultiplePlayersStretching = activePlayersStretching.length > 1;
-          final actionStretching = isMultiplePlayersStretching ? 'stretch' : 'stretches';
+          final activePlayersStretching =
+              selectedHomePlayers.union(selectedAwayPlayers);
+          final isMultiplePlayersStretching =
+              activePlayersStretching.length > 1;
+          final actionStretching =
+              isMultiplePlayersStretching ? 'stretch' : 'stretches';
           return hasResolvedVerbPhrase
               ? '$resolvedVerbPhrase prior to play against the ${_getOpposingTeamName()}'
               : '$actionStretching prior to play against the ${_getOpposingTeamName()}';
@@ -19307,9 +19587,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return overriddenPhrase;
         }
         if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball') {
-          final activePlayersWarmUps = selectedHomePlayers.union(selectedAwayPlayers);
+          final activePlayersWarmUps =
+              selectedHomePlayers.union(selectedAwayPlayers);
           final isMultiplePlayersWarmUps = activePlayersWarmUps.length > 1;
-          final actionWarmUps = isMultiplePlayersWarmUps ? 'take part in warm ups' : 'takes part in warm ups';
+          final actionWarmUps = isMultiplePlayersWarmUps
+              ? 'take part in warm ups'
+              : 'takes part in warm ups';
           return hasResolvedVerbPhrase
               ? '$resolvedVerbPhrase prior to play against the ${_getOpposingTeamName()}'
               : '$actionWarmUps prior to play against the ${_getOpposingTeamName()}';
@@ -19843,8 +20126,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // Hockey verbs
       case 'Shoots':
         final opposingPlayers = _getOpposingPlayers();
-        final shootsPhrase =
-            resolvedVerbPhrase ?? 'shoots';
+        final shootsPhrase = resolvedVerbPhrase ?? 'shoots';
         final omitAgainst = _shouldOmitAgainst(originalVerb);
         final againstText = omitAgainst ? '' : ' against';
         if (opposingPlayers.isNotEmpty) {
@@ -19854,8 +20136,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$shootsPhrase$againstText the ${_getOpposingTeamName()}';
       case 'Scores':
         final opposingPlayers = _getOpposingPlayers();
-        final scoresPhrase =
-            resolvedVerbPhrase ?? 'scores';
+        final scoresPhrase = resolvedVerbPhrase ?? 'scores';
         final omitAgainst = _shouldOmitAgainst(originalVerb);
         final againstText = omitAgainst ? '' : ' against';
         if (opposingPlayers.isNotEmpty) {
@@ -19878,8 +20159,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             : 'passes$againstText the ${_getOpposingTeamName()}';
       case 'Skates':
         final opposingPlayers = _getOpposingPlayers();
-        final skatesPhrase =
-            resolvedVerbPhrase ?? 'skates';
+        final skatesPhrase = resolvedVerbPhrase ?? 'skates';
         final omitAgainst = _shouldOmitAgainst(originalVerb);
         final againstText = omitAgainst ? '' : ' against';
         if (opposingPlayers.isNotEmpty) {
@@ -19901,8 +20181,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Battles':
         final opposingPlayers2 = _getOpposingPlayers();
         // Use overridden phrase if available, then custom wording, then default
-        final battlesPhrase =
-            resolvedVerbPhrase ?? 'battles';
+        final battlesPhrase = resolvedVerbPhrase ?? 'battles';
         final omitAgainst = _shouldOmitAgainst(originalVerb);
         final againstText = omitAgainst ? '' : ' against';
         if (opposingPlayers2.isNotEmpty) {
@@ -19949,8 +20228,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             : 'breaks away$againstText the ${_getOpposingTeamName()}';
       case 'Blocks':
         final opposingPlayers = _getOpposingPlayers();
-        final blocksPhrase =
-            resolvedVerbPhrase ?? 'blocks';
+        final blocksPhrase = resolvedVerbPhrase ?? 'blocks';
         final omitAgainst = _shouldOmitAgainst(originalVerb);
         final againstText = omitAgainst ? '' : ' against';
         if (opposingPlayers.isNotEmpty) {
@@ -20017,8 +20295,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             : 'clears the puck against the ${_getOpposingTeamName()}';
       case 'Checks':
         final opposingPlayers = _getOpposingPlayers();
-        final checksPhrase =
-            resolvedVerbPhrase ?? 'checks';
+        final checksPhrase = resolvedVerbPhrase ?? 'checks';
         final omitAgainst = _shouldOmitAgainst(originalVerb);
         final againstText = omitAgainst ? '' : ' against';
         if (opposingPlayers.isNotEmpty) {
@@ -20028,8 +20305,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$checksPhrase$againstText the ${_getOpposingTeamName()}';
       case 'Defends':
         final opposingPlayers = _getOpposingPlayers();
-        final defendsPhrase =
-            resolvedVerbPhrase ?? 'defends';
+        final defendsPhrase = resolvedVerbPhrase ?? 'defends';
         final omitAgainst = _shouldOmitAgainst(originalVerb);
         final againstText = omitAgainst ? '' : ' against';
         if (opposingPlayers.isNotEmpty) {
@@ -20078,7 +20354,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Drives':
         final drivesOpp = _getOpposingPlayers();
         final drivesPhrase = overriddenPhrase ??
-            (hasResolvedVerbPhrase ? resolvedVerbPhrase : 'drives to the basket');
+            (hasResolvedVerbPhrase
+                ? resolvedVerbPhrase
+                : 'drives to the basket');
         final drivesOmit = _shouldOmitAgainst(originalVerb);
         final drivesAgainst = drivesOmit ? '' : ' against';
         if (drivesOpp.isNotEmpty) {
@@ -20088,8 +20366,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       case 'Dunks':
         final dunksOpp = _getOpposingPlayers();
-        final dunksPhrase =
-            resolvedVerbPhrase ?? 'dunks';
+        final dunksPhrase = resolvedVerbPhrase ?? 'dunks';
         final dunksOmit = _shouldOmitAgainst(originalVerb);
         final dunksAgainst = dunksOmit ? '' : ' against';
         if (dunksOpp.isNotEmpty) {
@@ -20099,8 +20376,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       case 'Lays Up':
         final layupOpp = _getOpposingPlayers();
-        final layupPhrase =
-            resolvedVerbPhrase ?? 'lays up';
+        final layupPhrase = resolvedVerbPhrase ?? 'lays up';
         final layupOmit = _shouldOmitAgainst(originalVerb);
         final layupAgainst = layupOmit ? '' : ' against';
         if (layupOpp.isNotEmpty) {
@@ -20110,8 +20386,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       case 'Dribbles':
         final dribblesOpp = _getOpposingPlayers();
-        final dribblesPhrase =
-            resolvedVerbPhrase ?? 'dribbles';
+        final dribblesPhrase = resolvedVerbPhrase ?? 'dribbles';
         final dribblesOmit = _shouldOmitAgainst(originalVerb);
         final dribblesAgainst = dribblesOmit ? '' : ' against';
         if (dribblesOpp.isNotEmpty) {
@@ -20122,7 +20397,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Three-Pointer':
         final threeOpp = _getOpposingPlayers();
         final threePhrase = overriddenPhrase ??
-            (hasResolvedVerbPhrase ? resolvedVerbPhrase : 'makes a three-pointer');
+            (hasResolvedVerbPhrase
+                ? resolvedVerbPhrase
+                : 'makes a three-pointer');
         final threeOmit = _shouldOmitAgainst(originalVerb);
         final threeAgainst = threeOmit ? '' : ' against';
         if (threeOpp.isNotEmpty) {
@@ -20133,7 +20410,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Free Throw':
         final ftOpp = _getOpposingPlayers();
         final ftPhrase = overriddenPhrase ??
-            (hasResolvedVerbPhrase ? resolvedVerbPhrase : 'shoots a free throw');
+            (hasResolvedVerbPhrase
+                ? resolvedVerbPhrase
+                : 'shoots a free throw');
         final ftOmit = _shouldOmitAgainst(originalVerb);
         final ftAgainst = ftOmit ? '' : ' against';
         if (ftOpp.isNotEmpty) {
@@ -20144,7 +20423,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Steals the Ball':
         final stealOpp = _getOpposingPlayers();
         final stealPhrase = overriddenPhrase ??
-            (hasResolvedVerbPhrase ? resolvedVerbPhrase : 'steals the ball from');
+            (hasResolvedVerbPhrase
+                ? resolvedVerbPhrase
+                : 'steals the ball from');
         if (stealOpp.isNotEmpty) {
           return '$stealPhrase ${_formatPlayersWithTeam(stealOpp)}';
         }
@@ -21503,17 +21784,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory('Offense', [
-                          'Single',
-                          'Double',
-                          'Triple',
-                          'Home Run',
-                          'At Bat',
-                          'Swings',
-                          '',
-                          '',
-                          '',
-                        ], 1),
+                        child: _buildVerbCategory(
+                            'Offense',
+                            [
+                              'Single',
+                              'Double',
+                              'Triple',
+                              'Home Run',
+                              'At Bat',
+                              'Swings',
+                              '',
+                              '',
+                              '',
+                            ],
+                            1),
                       ),
                     ),
                   ),
@@ -21522,17 +21806,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory('Defense', [
-                          'Pitching',
-                          'Catches',
-                          'Throws',
-                          'Tags',
-                          'Groundball',
-                          'Fielding Position',
-                          '',
-                          '',
-                          '',
-                        ], 2),
+                        child: _buildVerbCategory(
+                            'Defense',
+                            [
+                              'Pitching',
+                              'Catches',
+                              'Throws',
+                              'Tags',
+                              'Groundball',
+                              'Fielding Position',
+                              '',
+                              '',
+                              '',
+                            ],
+                            2),
                       ),
                     ),
                   ),
@@ -21541,17 +21828,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory('Running', [
-                          'Steals',
-                          'Slides',
-                          'Runs',
-                          'Rounds',
-                          '',
-                          '',
-                          '',
-                          '',
-                          '',
-                        ], 3),
+                        child: _buildVerbCategory(
+                            'Running',
+                            [
+                              'Steals',
+                              'Slides',
+                              'Runs',
+                              'Rounds',
+                              '',
+                              '',
+                              '',
+                              '',
+                              '',
+                            ],
+                            3),
                       ),
                     ),
                   ),
@@ -21570,17 +21860,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory('Reactions', [
-                          'Celebrates',
-                          'Dejection',
-                          'Post Game Win',
-                          'Post Game Loss',
-                          '',
-                          '',
-                          '',
-                          '',
-                          '',
-                        ], 4),
+                        child: _buildVerbCategory(
+                            'Reactions',
+                            [
+                              'Celebrates',
+                              'Dejection',
+                              'Post Game Win',
+                              'Post Game Loss',
+                              '',
+                              '',
+                              '',
+                              '',
+                              '',
+                            ],
+                            4),
                       ),
                     ),
                   ),
@@ -21589,17 +21882,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: IgnorePointer(
                       child: Opacity(
                         opacity: 0.3,
-                        child: _buildVerbCategory('Non Game-Action', [
-                          'Looks On',
-                          'Batting Practice',
-                          'Fielding Practice',
-                          'Takes the Field',
-                          'Comes Off the Field',
-                          'National Anthem',
-                          'Stretching',
-                          'Warm Ups',
-                          'Pitching Change',
-                        ], 5),
+                        child: _buildVerbCategory(
+                            'Non Game-Action',
+                            [
+                              'Looks On',
+                              'Batting Practice',
+                              'Fielding Practice',
+                              'Takes the Field',
+                              'Comes Off the Field',
+                              'National Anthem',
+                              'Stretching',
+                              'Warm Ups',
+                              'Pitching Change',
+                            ],
+                            5),
                       ),
                     ),
                   ),

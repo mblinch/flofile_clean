@@ -127,6 +127,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Layout preference
   String _currentLayout = 'players_list_left';
+
   /// When true, caption entry uses Keyboard Fire panel; when false, classic CaptionFieldsWidget.
   bool _useKeyboardFireAsDefault = true;
 
@@ -2203,9 +2204,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     if (cs == null) return;
     try {
       final dynamic state = cs;
-      final caption = (state.captionTextController as TextEditingController).text;
-      final personality = (state.personalityTextController as TextEditingController).text;
-      final payload = jsonEncode({'caption': caption, 'personality': personality});
+      final caption =
+          (state.captionTextController as TextEditingController).text;
+      final personality =
+          (state.personalityTextController as TextEditingController).text;
+      final payload =
+          jsonEncode({'caption': caption, 'personality': personality});
       Clipboard.setData(ClipboardData(text: payload));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -2225,7 +2229,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     Clipboard.getData(Clipboard.kTextPlain).then((data) async {
       if (data?.text == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nothing in clipboard'), backgroundColor: Colors.red, duration: Duration(seconds: 2)),
+          const SnackBar(
+              content: Text('Nothing in clipboard'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 2)),
         );
         return;
       }
@@ -2239,8 +2246,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         if (cs != null) {
           try {
             final dynamic state = cs;
-            (state.captionTextController as TextEditingController).text = caption;
-            (state.personalityTextController as TextEditingController).text = personality;
+            (state.captionTextController as TextEditingController).text =
+                caption;
+            (state.personalityTextController as TextEditingController).text =
+                personality;
           } catch (_) {}
         }
 
@@ -2250,7 +2259,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Caption pasted'), backgroundColor: Colors.green, duration: Duration(seconds: 2)),
+          const SnackBar(
+              content: Text('Caption pasted'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2)),
         );
       } catch (_) {
         // Fallback: try as plain text — just paste into caption field
@@ -2263,7 +2275,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           } catch (_) {}
         }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Caption pasted'), backgroundColor: Colors.green, duration: Duration(seconds: 2)),
+          const SnackBar(
+              content: Text('Caption pasted'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2)),
         );
       }
     });
@@ -3728,14 +3743,48 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             }
           },
           onSaveIptc: _saveIptcMetadata,
-          onFtp: cs != null ? () { try { state.triggerFtp(); } catch (_) {} } : null,
-          onFtpSettings: cs != null ? () { try { state.showFtpSettings(); } catch (_) {} } : null,
+          onFtp: cs != null
+              ? () {
+                  try {
+                    state.triggerFtp();
+                  } catch (_) {}
+                }
+              : null,
+          onFtpSettings: cs != null
+              ? () {
+                  try {
+                    state.showFtpSettings();
+                  } catch (_) {}
+                }
+              : null,
           onReset: _handleReset,
           onCopy: _onKeyboardFireCopy,
           onPaste: _onKeyboardFirePaste,
-          onPastePrevious: cs != null ? () { try { state.pastePreviousCaption(); } catch (_) {} } : null,
-          ftpDisabled: cs != null ? (() { try { return state.isFtpDisabled as bool; } catch (_) { return false; } })() : false,
-          currentFtpProfile: cs != null ? (() { try { return state.currentFtpProfile as String?; } catch (_) { return null; } })() : null,
+          onPastePrevious: cs != null
+              ? () {
+                  try {
+                    state.pastePreviousCaption();
+                  } catch (_) {}
+                }
+              : null,
+          ftpDisabled: cs != null
+              ? (() {
+                  try {
+                    return state.isFtpDisabled as bool;
+                  } catch (_) {
+                    return false;
+                  }
+                })()
+              : false,
+          currentFtpProfile: cs != null
+              ? (() {
+                  try {
+                    return state.currentFtpProfile as String?;
+                  } catch (_) {
+                    return null;
+                  }
+                })()
+              : null,
         ),
       ],
     );
@@ -3755,8 +3804,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 // Resolution warning (if applicable)
                 _buildResolutionWarning(),
 
-                  // Picture preview - 50% of screen height
-                  SizedBox(
+                // Picture preview - 50% of screen height
+                SizedBox(
                   height: MediaQuery.of(context).size.height * 0.5,
                   child: PicturePreviewWidget(
                     key: _picturePreviewKey2,
@@ -3893,7 +3942,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               onReset: _handleReset,
               personalityOverride: _personalityOverride,
               onImagesLoaded: (files) {
-                print('DEBUG: onImagesLoaded called with ${files.length} files');
+                print(
+                    'DEBUG: onImagesLoaded called with ${files.length} files');
                 setState(() {
                   imagePaths = files;
                   currentIndex = 0;
@@ -3973,7 +4023,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               onReset: _handleReset,
               personalityOverride: _personalityOverride,
               onImagesLoaded: (files) {
-                print('DEBUG: onImagesLoaded called with ${files.length} files');
+                print(
+                    'DEBUG: onImagesLoaded called with ${files.length} files');
                 setState(() {
                   imagePaths = files;
                   currentIndex = 0;
@@ -4158,7 +4209,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               onReset: _handleReset,
               personalityOverride: _personalityOverride,
               onImagesLoaded: (files) {
-                print('DEBUG: onImagesLoaded called with ${files.length} files');
+                print(
+                    'DEBUG: onImagesLoaded called with ${files.length} files');
                 setState(() {
                   imagePaths = files;
                   currentIndex = 0;
@@ -4475,7 +4527,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               onReset: _handleReset,
               personalityOverride: _personalityOverride,
               onImagesLoaded: (files) {
-                print('DEBUG: onImagesLoaded called with ${files.length} files');
+                print(
+                    'DEBUG: onImagesLoaded called with ${files.length} files');
                 setState(() {
                   imagePaths = files;
                   currentIndex = 0;
@@ -5106,7 +5159,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         awayTeamName: selectedAwayTeam,
                         captionState: cs,
                         showDialogActions: false,
-                        currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                        currentIndex:
+                            imagePaths.isNotEmpty ? currentIndex : null,
                         totalImages: imagePaths.length,
                         onPreviousImage: () {
                           if (currentIndex > 0) {
@@ -5121,14 +5175,48 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           }
                         },
                         onSaveIptc: _saveIptcMetadata,
-                        onFtp: cs != null ? () { try { state.triggerFtp(); } catch (_) {} } : null,
-                        onFtpSettings: cs != null ? () { try { state.showFtpSettings(); } catch (_) {} } : null,
+                        onFtp: cs != null
+                            ? () {
+                                try {
+                                  state.triggerFtp();
+                                } catch (_) {}
+                              }
+                            : null,
+                        onFtpSettings: cs != null
+                            ? () {
+                                try {
+                                  state.showFtpSettings();
+                                } catch (_) {}
+                              }
+                            : null,
                         onReset: _handleReset,
                         onCopy: _onKeyboardFireCopy,
                         onPaste: _onKeyboardFirePaste,
-                        onPastePrevious: cs != null ? () { try { state.pastePreviousCaption(); } catch (_) {} } : null,
-                        ftpDisabled: cs != null ? (() { try { return state.isFtpDisabled as bool; } catch (_) { return false; } })() : false,
-                        currentFtpProfile: cs != null ? (() { try { return state.currentFtpProfile as String?; } catch (_) { return null; } })() : null,
+                        onPastePrevious: cs != null
+                            ? () {
+                                try {
+                                  state.pastePreviousCaption();
+                                } catch (_) {}
+                              }
+                            : null,
+                        ftpDisabled: cs != null
+                            ? (() {
+                                try {
+                                  return state.isFtpDisabled as bool;
+                                } catch (_) {
+                                  return false;
+                                }
+                              })()
+                            : false,
+                        currentFtpProfile: cs != null
+                            ? (() {
+                                try {
+                                  return state.currentFtpProfile as String?;
+                                } catch (_) {
+                                  return null;
+                                }
+                              })()
+                            : null,
                       );
                     }),
                   ],
@@ -5140,239 +5228,239 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                       height: (MediaQuery.sizeOf(context).height * 0.36)
                           .clamp(260.0, 540.0)
                           .toDouble(),
-                      child:
-                  CaptionFieldsWidget(
-                    key: _captionFieldsKey2,
-                    metadata: currentMetadata,
-                    cameraService: _cameraService,
-                    onMetadataUpdated: (metadata) {
-                      setState(() {
-                        currentMetadata = metadata;
-                      });
-                    },
-                    getCurrentMetadataValues: () {
-                      return {};
-                    },
-                    homeTeam: selectedHomeTeam,
-                    awayTeam: selectedAwayTeam,
-                    sport: _selectedSport,
-                    currentImagePath: imagePaths.isNotEmpty &&
-                            currentIndex >= 0 &&
-                            currentIndex < imagePaths.length
-                        ? imagePaths[currentIndex]
-                        : null,
-                    currentIndex: currentIndex,
-                    totalImages: imagePaths.length,
-                    onNextImage: () {
-                      if (currentIndex < imagePaths.length - 1) {
-                        setState(() {
-                          _thumbCenterRequestId++;
-                        });
-                        _onImageSelected(currentIndex + 1);
-                      }
-                    },
-                    onPreviousImage: () {
-                      if (currentIndex > 0) {
-                        setState(() {
-                          _thumbCenterRequestId++;
-                        });
-                        _onImageSelected(currentIndex - 1);
-                      }
-                    },
-                    onReset: _handleReset,
-                    personalityOverride: _personalityOverride,
-                    onImagesLoaded: (files) {
-                      setState(() {
-                        imagePaths = files;
-                        currentIndex = 0;
-                      });
-                    },
-                    preloadedHomeRoster: _cachedHomeRoster,
-                    preloadedAwayRoster: _cachedAwayRoster,
-                    hidePlayerPicker:
-                        true, // Hide old player picker for this layout
-                    onSaveIptc: _saveIptcMetadata,
-                    onSaveIptcBackground: _saveIptcMetadataBackground,
-                    onCopyMetadata: () =>
-                        _onCopyMetadata(imagePaths[currentIndex]),
-                    onImageUploaded: (imagePath) {
-                      if (!_currentlyUploading.contains(imagePath)) {
-                        setState(() {
-                          _uploadedImages.add(imagePath);
-                          _uploadProgress[imagePath] =
-                              1.0; // Set to 1.0 to show "Upload complete"
-                        });
-                      }
-                    },
-                    onUploadProgress: (imagePath, progress) {
-                      setState(() {
-                        _uploadProgress[imagePath] = progress;
-                      });
-                    },
-                    isImageUploaded: (imagePath) {
-                      return _uploadedImages.contains(imagePath);
-                    },
-                    onClearUploadStatus: (imagePath) {
-                      setState(() {
-                        _uploadedImages.remove(imagePath);
-                        _uploadProgress.remove(imagePath);
-                      });
-                    },
-                  ), // end CaptionFieldsWidget
-                ), // end SizedBox(height:175)
+                      child: CaptionFieldsWidget(
+                        key: _captionFieldsKey2,
+                        metadata: currentMetadata,
+                        cameraService: _cameraService,
+                        onMetadataUpdated: (metadata) {
+                          setState(() {
+                            currentMetadata = metadata;
+                          });
+                        },
+                        getCurrentMetadataValues: () {
+                          return {};
+                        },
+                        homeTeam: selectedHomeTeam,
+                        awayTeam: selectedAwayTeam,
+                        sport: _selectedSport,
+                        currentImagePath: imagePaths.isNotEmpty &&
+                                currentIndex >= 0 &&
+                                currentIndex < imagePaths.length
+                            ? imagePaths[currentIndex]
+                            : null,
+                        currentIndex: currentIndex,
+                        totalImages: imagePaths.length,
+                        onNextImage: () {
+                          if (currentIndex < imagePaths.length - 1) {
+                            setState(() {
+                              _thumbCenterRequestId++;
+                            });
+                            _onImageSelected(currentIndex + 1);
+                          }
+                        },
+                        onPreviousImage: () {
+                          if (currentIndex > 0) {
+                            setState(() {
+                              _thumbCenterRequestId++;
+                            });
+                            _onImageSelected(currentIndex - 1);
+                          }
+                        },
+                        onReset: _handleReset,
+                        personalityOverride: _personalityOverride,
+                        onImagesLoaded: (files) {
+                          setState(() {
+                            imagePaths = files;
+                            currentIndex = 0;
+                          });
+                        },
+                        preloadedHomeRoster: _cachedHomeRoster,
+                        preloadedAwayRoster: _cachedAwayRoster,
+                        hidePlayerPicker:
+                            true, // Hide old player picker for this layout
+                        onSaveIptc: _saveIptcMetadata,
+                        onSaveIptcBackground: _saveIptcMetadataBackground,
+                        onCopyMetadata: () =>
+                            _onCopyMetadata(imagePaths[currentIndex]),
+                        onImageUploaded: (imagePath) {
+                          if (!_currentlyUploading.contains(imagePath)) {
+                            setState(() {
+                              _uploadedImages.add(imagePath);
+                              _uploadProgress[imagePath] =
+                                  1.0; // Set to 1.0 to show "Upload complete"
+                            });
+                          }
+                        },
+                        onUploadProgress: (imagePath, progress) {
+                          setState(() {
+                            _uploadProgress[imagePath] = progress;
+                          });
+                        },
+                        isImageUploaded: (imagePath) {
+                          return _uploadedImages.contains(imagePath);
+                        },
+                        onClearUploadStatus: (imagePath) {
+                          setState(() {
+                            _uploadedImages.remove(imagePath);
+                            _uploadProgress.remove(imagePath);
+                          });
+                        },
+                      ), // end CaptionFieldsWidget
+                    ), // end SizedBox(height:175)
                     // Player picker with popup verbs (remaining space)
                     Expanded(
-                child: PlayerPopupCaptionBoard(
-                  key: _playerPopupKey,
-                  sport: _selectedSport,
-                  homeTeamName: selectedHomeTeam,
-                  awayTeamName: selectedAwayTeam,
-                  homeRoster: _cachedHomeRoster,
-                  awayRoster: _cachedAwayRoster,
-                  homeOnLeft: () {
-                    final captionState = _captionFieldsKey2.currentState;
-                    if (captionState != null) {
-                      try {
-                        final dynamic state = captionState;
-                        return state.homeOnLeft ?? true;
-                      } catch (e) {
-                        return true;
-                      }
-                    }
-                    return true;
-                  }(),
-                  venue: currentMetadata?['Headline']?.toString(),
-                  gameDate: _getPhotoDate(),
-                  period: _selectedSport?.toLowerCase() == 'baseball'
-                      ? 'the first inning'
-                      : 'the first period',
-                  metadata: currentMetadata,
-                  onCaptionGenerated:
-                      (Player player, String verb, bool isHome) {
-                    // Use the existing Getty caption generation system
-                    final captionState = _captionFieldsKey2.currentState;
-                    if (captionState != null) {
-                      try {
-                        final dynamic state = captionState;
-                        if (state.mounted) {
-                          // Call the public method to select player and verb
-                          state.selectPlayerAndVerb(player, verb, isHome);
-                        }
-                      } catch (e) {
-                        print('Error triggering caption generation: $e');
-                      }
-                    }
-                  },
-                  onSelectionChanged: (
-                    Set<Player> homePlayers,
-                    Set<Player> awayPlayers,
-                    Player? firstPlayer,
-                    bool? firstIsHome,
-                  ) {
-                    final captionState = _captionFieldsKey2.currentState;
-                    if (captionState != null) {
-                      try {
-                        final dynamic state = captionState;
-                        if (state.mounted) {
-                          state.updatePlayersFromPopup(
-                            homePlayers,
-                            awayPlayers,
-                            firstPlayer,
-                            firstIsHome,
-                          );
-                        }
-                      } catch (e) {
-                        print('Error updating players from popup: $e');
-                      }
-                    }
-                  },
-                  onCustomVerbChanged: (String verb) {
-                    final captionState = _captionFieldsKey2.currentState;
-                    if (captionState != null) {
-                      try {
-                        final dynamic state = captionState;
-                        if (state.mounted) {
-                          state.updateCustomVerbFromPopup(verb);
-                        }
-                      } catch (e) {
-                        print('Error updating custom verb: $e');
-                      }
-                    }
-                  },
-                  onPeriodChanged: (String? period) {
-                    final captionState = _captionFieldsKey2.currentState;
-                    if (captionState != null) {
-                      try {
-                        final dynamic state = captionState;
-                        if (state.mounted) {
-                          state.updatePeriodFromPopup(period);
-                        }
-                      } catch (e) {
-                        print('Error updating period from popup: $e');
-                      }
-                    }
-                  },
-                  onInningChanged: (int? inning) {
-                    final captionState = _captionFieldsKey2.currentState;
-                    if (captionState != null) {
-                      try {
-                        final dynamic state = captionState;
-                        if (state.mounted) {
-                          state.updateInningFromPopup(inning);
-                        }
-                      } catch (e) {
-                        print('Error updating inning from popup: $e');
-                      }
-                    }
-                  },
-                  onSwitchTeams: () {
-                    print('DEBUG: onSwitchTeams callback triggered');
-                    final captionState = _captionFieldsKey2.currentState;
-                    print(
-                        'DEBUG: captionState is null: ${captionState == null}');
-                    if (captionState != null) {
-                      try {
-                        final dynamic state = captionState;
-                        print('DEBUG: state.mounted: ${state.mounted}');
-                        if (state.mounted) {
-                          state.switchTeams();
-                          // Force rebuild of this widget to update PlayerPopupCaptionBoard with new homeOnLeft
-                          setState(() {});
-                        } else {
+                      child: PlayerPopupCaptionBoard(
+                        key: _playerPopupKey,
+                        sport: _selectedSport,
+                        homeTeamName: selectedHomeTeam,
+                        awayTeamName: selectedAwayTeam,
+                        homeRoster: _cachedHomeRoster,
+                        awayRoster: _cachedAwayRoster,
+                        homeOnLeft: () {
+                          final captionState = _captionFieldsKey2.currentState;
+                          if (captionState != null) {
+                            try {
+                              final dynamic state = captionState;
+                              return state.homeOnLeft ?? true;
+                            } catch (e) {
+                              return true;
+                            }
+                          }
+                          return true;
+                        }(),
+                        venue: currentMetadata?['Headline']?.toString(),
+                        gameDate: _getPhotoDate(),
+                        period: _selectedSport?.toLowerCase() == 'baseball'
+                            ? 'the first inning'
+                            : 'the first period',
+                        metadata: currentMetadata,
+                        onCaptionGenerated:
+                            (Player player, String verb, bool isHome) {
+                          // Use the existing Getty caption generation system
+                          final captionState = _captionFieldsKey2.currentState;
+                          if (captionState != null) {
+                            try {
+                              final dynamic state = captionState;
+                              if (state.mounted) {
+                                // Call the public method to select player and verb
+                                state.selectPlayerAndVerb(player, verb, isHome);
+                              }
+                            } catch (e) {
+                              print('Error triggering caption generation: $e');
+                            }
+                          }
+                        },
+                        onSelectionChanged: (
+                          Set<Player> homePlayers,
+                          Set<Player> awayPlayers,
+                          Player? firstPlayer,
+                          bool? firstIsHome,
+                        ) {
+                          final captionState = _captionFieldsKey2.currentState;
+                          if (captionState != null) {
+                            try {
+                              final dynamic state = captionState;
+                              if (state.mounted) {
+                                state.updatePlayersFromPopup(
+                                  homePlayers,
+                                  awayPlayers,
+                                  firstPlayer,
+                                  firstIsHome,
+                                );
+                              }
+                            } catch (e) {
+                              print('Error updating players from popup: $e');
+                            }
+                          }
+                        },
+                        onCustomVerbChanged: (String verb) {
+                          final captionState = _captionFieldsKey2.currentState;
+                          if (captionState != null) {
+                            try {
+                              final dynamic state = captionState;
+                              if (state.mounted) {
+                                state.updateCustomVerbFromPopup(verb);
+                              }
+                            } catch (e) {
+                              print('Error updating custom verb: $e');
+                            }
+                          }
+                        },
+                        onPeriodChanged: (String? period) {
+                          final captionState = _captionFieldsKey2.currentState;
+                          if (captionState != null) {
+                            try {
+                              final dynamic state = captionState;
+                              if (state.mounted) {
+                                state.updatePeriodFromPopup(period);
+                              }
+                            } catch (e) {
+                              print('Error updating period from popup: $e');
+                            }
+                          }
+                        },
+                        onInningChanged: (int? inning) {
+                          final captionState = _captionFieldsKey2.currentState;
+                          if (captionState != null) {
+                            try {
+                              final dynamic state = captionState;
+                              if (state.mounted) {
+                                state.updateInningFromPopup(inning);
+                              }
+                            } catch (e) {
+                              print('Error updating inning from popup: $e');
+                            }
+                          }
+                        },
+                        onSwitchTeams: () {
+                          print('DEBUG: onSwitchTeams callback triggered');
+                          final captionState = _captionFieldsKey2.currentState;
                           print(
-                              'DEBUG: State not mounted, cannot switch teams');
-                        }
-                      } catch (e) {
-                        print('Error switching teams: $e');
-                      }
-                    } else {
-                      print('DEBUG: captionState is null, cannot switch teams');
-                    }
-                  },
-                  onSaveIptc: _saveIptcMetadata,
-                  onNextImage: () {
-                    if (currentIndex < imagePaths.length - 1) {
-                      setState(() {
-                        _thumbCenterRequestId++;
-                      });
-                      _onImageSelected(currentIndex + 1);
-                    }
-                  },
-                  onCopyMetadata: () =>
-                      _onCopyMetadata(imagePaths[currentIndex]),
-                  onFtp: () => _onFtpImage(imagePaths[currentIndex]),
-                  isFtpDisabled: false,
-                  uploadProgress: _uploadProgress,
-                  currentImagePath:
-                      imagePaths.isNotEmpty && currentIndex < imagePaths.length
-                          ? imagePaths[currentIndex]
-                          : null,
-                  queuedUploads: _queuedUploads,
-                  currentlyUploading: _currentlyUploading,
-                ),
-              ),
-            ], // end classic Column children
-          ), // end classic Column
+                              'DEBUG: captionState is null: ${captionState == null}');
+                          if (captionState != null) {
+                            try {
+                              final dynamic state = captionState;
+                              print('DEBUG: state.mounted: ${state.mounted}');
+                              if (state.mounted) {
+                                state.switchTeams();
+                                // Force rebuild of this widget to update PlayerPopupCaptionBoard with new homeOnLeft
+                                setState(() {});
+                              } else {
+                                print(
+                                    'DEBUG: State not mounted, cannot switch teams');
+                              }
+                            } catch (e) {
+                              print('Error switching teams: $e');
+                            }
+                          } else {
+                            print(
+                                'DEBUG: captionState is null, cannot switch teams');
+                          }
+                        },
+                        onSaveIptc: _saveIptcMetadata,
+                        onNextImage: () {
+                          if (currentIndex < imagePaths.length - 1) {
+                            setState(() {
+                              _thumbCenterRequestId++;
+                            });
+                            _onImageSelected(currentIndex + 1);
+                          }
+                        },
+                        onCopyMetadata: () =>
+                            _onCopyMetadata(imagePaths[currentIndex]),
+                        onFtp: () => _onFtpImage(imagePaths[currentIndex]),
+                        isFtpDisabled: false,
+                        uploadProgress: _uploadProgress,
+                        currentImagePath: imagePaths.isNotEmpty &&
+                                currentIndex < imagePaths.length
+                            ? imagePaths[currentIndex]
+                            : null,
+                        queuedUploads: _queuedUploads,
+                        currentlyUploading: _currentlyUploading,
+                      ),
+                    ),
+                  ], // end classic Column children
+                ), // end classic Column
         ), // end Expanded(flex:6) / ternary
       ],
     );
