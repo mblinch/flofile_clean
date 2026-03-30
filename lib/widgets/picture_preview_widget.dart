@@ -338,7 +338,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
   Widget build(BuildContext context) {
     if (widget.imagePaths.isEmpty) {
       return Container(
-        margin: const EdgeInsets.all(10.0),
+        margin: const EdgeInsets.all(3.0),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300, width: 1.0),
           borderRadius: BorderRadius.zero,
@@ -375,7 +375,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     final imageCount = widget.imagePaths.length;
 
     return Container(
-      margin: const EdgeInsets.all(10.0),
+      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 10),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
         borderRadius: BorderRadius.zero,

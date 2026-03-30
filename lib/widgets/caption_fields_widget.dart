@@ -14,6 +14,7 @@ import '../utils/native_file_picker.dart';
 import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/exiftool_helper.dart';
+import '../utils/default_verb_keywords.dart';
 import '../services/preferences_service.dart';
 import 'ftp_settings_panel.dart';
 
@@ -408,6 +409,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _isSliding = false;
   bool _showFieldingOptions = false;
   bool _removeAccent = true; // Toggle for diacritic removal
+  /// When true, verb keyword presets merge into the keywords field on verb selection.
+  bool _applyVerbKeywordsEnabled = true;
+
   bool _disableFtp = false; // Default to false (FTP enabled)
   bool _isFtpDisabled = false; // Track FTP button disable state
   final int _ftpPictureNumber =
@@ -502,9 +506,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   final FocusNode _verbNumbersFocusNode = FocusNode();
   String _numberBuffer = '';
   Timer? _numberBufferTimer;
-
-  /// Cmd+digit (1-6) sets this; next digit selects verb in that category
-  int? _pendingCategoryFromCmd;
 
   bool _shouldShowRbiInlineHint() {
     const verbsWithRbi = {
@@ -2469,6 +2470,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Load firebar position
     _placeFirebarOnRight = await _preferencesService.getPlaceFirebarOnRight();
 
+    _applyVerbKeywordsEnabled =
+        await _preferencesService.getApplyVerbKeywords();
+
     // Load last saved metadata
     _lastSavedMetadata = await _preferencesService.getLastSavedMetadata();
 
@@ -2499,6 +2503,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     await _preferencesService.saveFavoriteVerbs(_favoriteVerbs,
         sport: _currentSport);
     await _preferencesService.savePlaceFirebarOnRight(_placeFirebarOnRight);
+    await _preferencesService.saveApplyVerbKeywords(_applyVerbKeywordsEnabled);
     await _preferencesService.saveLastSavedMetadata(_lastSavedMetadata);
     await _preferencesService.saveFtpProfiles(_ftpProfiles);
     await _preferencesService.saveCurrentFtpProfile(_currentFtpProfile);
@@ -3556,6 +3561,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _autoSelectedAwayJersey = jerseyNumber;
     }
     setState(() {});
+    _reapplyVerbKeywordsIfEnabled();
   }
 
   void _unselectAutoSelectedByToken({
@@ -4918,6 +4924,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       ),
                                                     ),
                                                   ),
+                                                  const SizedBox(width: 4),
                                                 ],
                                               ), // end inner Row
                                             ), // end Expanded
@@ -6335,6 +6342,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   }
                 });
                 _updateCaption();
+                _reapplyVerbKeywordsIfEnabled();
 
                 // Store the original caption AFTER it's been updated (for grid selection)
                 _originalCaptionBeforeCustomVerb = captionController.text;
@@ -6688,6 +6696,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             });
             _updateCaption();
             _originalCaptionBeforeCustomVerb = captionController.text;
+            _reapplyVerbKeywordsIfEnabled();
           },
           child: Container(
             decoration: BoxDecoration(
@@ -6832,6 +6841,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     }
                   }
                 });
+                _reapplyVerbKeywordsIfEnabled();
               },
               child: Container(
                 width: 40,
@@ -7042,6 +7052,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   }
                 });
                 _updateCaption();
+                _reapplyVerbKeywordsIfEnabled();
 
                 // Store the original caption AFTER it's been updated (for grid selection)
                 _originalCaptionBeforeCustomVerb = captionController.text;
@@ -7288,6 +7299,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           }
                         });
                         _updateCaption();
+                        _reapplyVerbKeywordsIfEnabled();
                       },
                       child: Container(
                         padding: EdgeInsets.symmetric(
@@ -7425,6 +7437,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           }
                         });
                         _updateCaption();
+                        _reapplyVerbKeywordsIfEnabled();
                       },
                       child: Container(
                         padding: EdgeInsets.symmetric(
@@ -7564,6 +7577,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   }
                 }
               });
+              _reapplyVerbKeywordsIfEnabled();
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -7715,6 +7729,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   }
                 }
               });
+              _reapplyVerbKeywordsIfEnabled();
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -8539,26 +8554,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       digit = 0;
     if (digit == null) return false;
 
-    final isCmd = HardwareKeyboard.instance.isMetaPressed;
-
-    // Cmd+digit 1-6: set category; next digit will pick verb in that category
-    if (isCmd && digit >= 1 && digit <= 6) {
-      _numberBufferTimer?.cancel();
-      _numberBuffer = '';
-      setState(() => _pendingCategoryFromCmd = digit);
-      return true;
-    }
-
-    // After Cmd+category: single digit = verb in that category
-    if (_pendingCategoryFromCmd != null && !isCmd) {
-      final verbNum = digit == 0 ? 10 : digit;
-      final cat = _pendingCategoryFromCmd!;
-      setState(() => _pendingCategoryFromCmd = null);
-      _numberBuffer = '';
-      _selectVerbByCategoryAndIndex(cat, verbNum);
-      return true;
-    }
-
     _numberBufferTimer?.cancel();
     _numberBuffer += digit.toString();
     if (_numberBuffer.length >= 2) {
@@ -8615,6 +8610,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _selectedHomeRunType = null;
         _rbiCount = null;
       });
+      _mergeVerbKeywordsIntoFieldIfEnabled(verb);
       if (!suppressCaptionUpdate) _updateCaption();
     }
   }
@@ -8796,10 +8792,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
       var plural = (o['pluralPhrase'] as String?)?.trim();
       if (plural == null || plural.isEmpty) plural = vp;
+      var kw = verbKeywordsFromJson(o['keywords']);
+      if (kw.isEmpty) kw = defaultKeywordsForVerbLabel(label);
       return {
         'label': label,
         'verbPhrase': vp,
         'pluralPhrase': plural,
+        'usePluralPhrase': o['usePluralPhrase'] as bool? ?? true,
+        'keywords': kw,
         'omitAgainst': o['omitAgainst'] as bool? ?? false,
         'wantsOpponent': o['wantsOpponent'] as bool? ?? false,
         'category': o['category'] as String? ?? _findVerbCategory(verb),
@@ -8815,6 +8815,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'label': verb,
       'verbPhrase': vp,
       'pluralPhrase': vp,
+      'usePluralPhrase': true,
+      'keywords': defaultKeywordsForVerbLabel(verb),
       'omitAgainst': false,
       'wantsOpponent': false,
       'category': category ??
@@ -8861,6 +8863,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             verb);
     bool omitAgainst = initial['omitAgainst'] as bool? ?? false;
     bool wantsOpponent = initial['wantsOpponent'] as bool? ?? false;
+    bool usePluralPhrase = initial['usePluralPhrase'] as bool? ?? true;
+    final rawKw = initial['keywords'];
+    final List<String> keywordsList = rawKw is List
+        ? rawKw
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .toList()
+        : <String>[];
+    final keywordsController =
+        TextEditingController(text: keywordsList.join(', '));
+    bool showKeywordsEditor = keywordsList.isNotEmpty;
     String selectedCategory = initial['category'] as String? ??
         ((_categoryOrder.isNotEmpty) ? _categoryOrder.first : '');
 
@@ -8981,13 +8994,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Text('Plural Phrase (2+ players)',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade700)),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text('Plural Phrase (2+ players)',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade700)),
+                          ),
+                          Text('Use plural',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade700)),
+                          const SizedBox(width: 6),
+                          Switch(
+                            value: usePluralPhrase,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            onChanged: (v) =>
+                                setDialogState(() => usePluralPhrase = v),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 4),
                       TextField(
                         controller: pluralController,
                         style: const TextStyle(fontSize: 12),
+                        enabled: usePluralPhrase,
                         onChanged: (_) => setDialogState(() {}),
                         decoration: InputDecoration(
                           hintText: 'e.g., skate, battle, shoot',
@@ -9017,11 +9050,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             const SizedBox(height: 2),
                             Text(
                               buildExampleCaption(
-                                  pluralController.text.trim().isEmpty
-                                      ? singularController.text.trim().isEmpty
+                                  !usePluralPhrase
+                                      ? (singularController.text.trim().isEmpty
                                           ? verb
-                                          : singularController.text
-                                      : pluralController.text,
+                                          : singularController.text)
+                                      : (pluralController.text.trim().isEmpty
+                                          ? (singularController.text.trim().isEmpty
+                                              ? verb
+                                              : singularController.text)
+                                          : pluralController.text),
                                   2),
                               style: TextStyle(
                                   fontSize: 10, color: Colors.green.shade900),
@@ -9029,6 +9066,84 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Keywords',
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.grey.shade700)),
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: showKeywordsEditor
+                                ? TextField(
+                                    controller: keywordsController,
+                                    style: const TextStyle(fontSize: 12),
+                                    maxLines: 2,
+                                    onChanged: (_) => setDialogState(() {}),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'e.g., pitch, pitcher, pitching (comma-separated)',
+                                      border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(4)),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 8),
+                                      isDense: true,
+                                    ),
+                                  )
+                                : Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                      borderRadius: BorderRadius.circular(4),
+                                      color: Colors.grey.shade50,
+                                    ),
+                                    child: Text(
+                                      keywordsController.text.trim().isEmpty
+                                          ? '—'
+                                          : keywordsController.text,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: keywordsController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? Colors.grey.shade400
+                                            : Colors.grey.shade800,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 2),
+                          Tooltip(
+                            message: showKeywordsEditor
+                                ? 'Hide keywords editor'
+                                : 'Show keywords editor',
+                            child: IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 36, minHeight: 36),
+                              icon: Icon(
+                                showKeywordsEditor
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                                size: 22,
+                                color: Colors.grey.shade700,
+                              ),
+                              onPressed: () => setDialogState(
+                                  () => showKeywordsEditor =
+                                      !showKeywordsEditor),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
                       Text('Category',
@@ -9131,6 +9246,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     pluralController.text.trim().isEmpty
                                         ? null
                                         : pluralController.text.trim(),
+                                'usePluralPhrase': usePluralPhrase,
+                                'keywords': parseVerbKeywordsField(
+                                    keywordsController.text),
                                 'wantsOpponent': wantsOpponent,
                                 'omitAgainst': omitAgainst,
                                 'isCustom': false,
@@ -9330,6 +9448,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Exposes headline/keywords so Keyboard Fire layout can match Preferences visibility.
   TextEditingController get headlineTextController => headlineController;
   TextEditingController get keywordsTextController => keywordsController;
+
+  /// Keyboard Fire: whether selecting a verb should merge keyword presets
+  /// into the Keywords field.
+  bool get applyVerbKeywordsEnabled => _applyVerbKeywordsEnabled;
+
+  Future<void> setApplyVerbKeywordsEnabled(bool enabled) async {
+    if (_applyVerbKeywordsEnabled == enabled) return;
+    setState(() => _applyVerbKeywordsEnabled = enabled);
+    await _preferencesService.saveApplyVerbKeywords(enabled);
+  }
 
   /// Exposes the caption controller so the KeyboardFirePanel can show an editable caption field.
   TextEditingController get captionTextController => captionController;
@@ -9585,6 +9713,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             }
           });
           _updateCaption();
+          if (_stickyVerb == verb) {
+            _mergeVerbKeywordsIntoFieldIfEnabled(verb);
+          }
           return;
         }
 
@@ -9621,6 +9752,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           _rbiCount = null;
           _selectedRbiInning = null;
         });
+        _mergeVerbKeywordsIntoFieldIfEnabled(verb);
         _updateCaption();
 
         // Open any relevant popup for extra options (inning, hitting details, etc.)
@@ -9955,6 +10087,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _isBatterRunning = false;
           }
         });
+        if (!isSelected &&
+            (_selectedVerb == verb && _selectedActionVerb == verb)) {
+          _mergeVerbKeywordsIntoFieldIfEnabled(verb);
+        }
         _updateCaption();
       },
       child: Container(
@@ -11099,6 +11235,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       _selectedVerb = verbName;
                                       _selectedActionVerb = verbName;
                                     });
+                                    _mergeVerbKeywordsIntoFieldIfEnabled(
+                                        verbName);
                                     _updateCaption();
                                     // Save IPTC metadata
                                     if (widget.onSaveIptc != null) {
@@ -12886,6 +13024,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         'DEBUG: Before _updateCaption - home: ${selectedHomePlayers.length}, away: ${selectedAwayPlayers.length}');
                   });
                   _updateCaption();
+                  _reapplyVerbKeywordsIfEnabled();
 
                   // Store the original caption AFTER it's been updated (for grid selection)
                   _originalCaptionBeforeCustomVerb = captionController.text;
@@ -13515,6 +13654,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
       });
       _updateCaption();
+      _reapplyVerbKeywordsIfEnabled();
       return;
     }
 
@@ -14549,6 +14689,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Update caption
     _updateCaption();
+    final mergeVerb = _selectedVerb;
+    if (mergeVerb != null && mergeVerb.isNotEmpty) {
+      _mergeVerbKeywordsIntoFieldIfEnabled(mergeVerb);
+    }
   }
 
   void _processMagicInputWithPlayerKeepBar(
@@ -14845,6 +14989,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Update caption but DON'T clear the magic bar
     _updateCaption();
+    final mergeVerbKb = _selectedVerb;
+    if (mergeVerbKb != null && mergeVerbKb.isNotEmpty) {
+      _mergeVerbKeywordsIntoFieldIfEnabled(mergeVerbKb);
+    }
   }
 
   void _showTeamSelectionDebug(String teamName, bool isHome) {
@@ -15743,6 +15891,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     });
 
     // Trigger caption generation
+    _mergeVerbKeywordsIntoFieldIfEnabled(verb);
     _updateCaption();
   }
 
@@ -15781,6 +15930,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (homePlayers.isNotEmpty || awayPlayers.isNotEmpty) {
       await _reEvaluateCustomVerbPhrase();
       _updateCaption();
+      _reapplyVerbKeywordsIfEnabled();
     } else {
       // Revert to original caption/personality for this image.
       captionController.text = _originalCaptionFromMetadata ?? '';
@@ -15918,8 +16068,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (customVerb.isNotEmpty && customVerb.containsKey('verbPhrase')) {
         final verbPhrase = customVerb['verbPhrase'] as String? ?? verbText;
         final pluralPhrase = customVerb['pluralPhrase'] as String?;
+        final usePluralPhrase = customVerb['usePluralPhrase'] as bool? ?? true;
 
         if (activePlayerCount > 1 &&
+            usePluralPhrase &&
             pluralPhrase != null &&
             pluralPhrase.isNotEmpty) {
           _popupCustomVerb = pluralPhrase;
@@ -15931,8 +16083,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final override = _verbOverrides[verbText]!;
         final singularPhrase = override['verbPhrase'] as String?;
         final pluralPhrase = override['pluralPhrase'] as String?;
+        final usePluralPhrase = override['usePluralPhrase'] as bool? ?? true;
 
         if (activePlayerCount > 1 &&
+            usePluralPhrase &&
             pluralPhrase != null &&
             pluralPhrase.isNotEmpty) {
           _popupCustomVerb = pluralPhrase;
@@ -16030,9 +16184,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Use the verbPhrase from the custom verb, not the label
         final verbPhrase = customVerb['verbPhrase'] as String? ?? resolvedVerb;
         final pluralPhrase = customVerb['pluralPhrase'] as String?;
+        final usePluralPhrase = customVerb['usePluralPhrase'] as bool? ?? true;
 
         // Use plural phrase if we have multiple players and a plural phrase is defined
         if (activePlayerCount > 1 &&
+            usePluralPhrase &&
             pluralPhrase != null &&
             pluralPhrase.isNotEmpty) {
           _popupCustomVerb = pluralPhrase;
@@ -16047,9 +16203,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final override = _verbOverrides[resolvedVerb]!;
           final singularPhrase = override['verbPhrase'] as String?;
           final pluralPhrase = override['pluralPhrase'] as String?;
+          final usePluralPhrase = override['usePluralPhrase'] as bool? ?? true;
 
           // Use plural phrase if we have multiple players and a plural phrase is defined
           if (activePlayerCount > 1 &&
+              usePluralPhrase &&
               pluralPhrase != null &&
               pluralPhrase.isNotEmpty) {
             _popupCustomVerb = pluralPhrase;
@@ -16794,6 +16952,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           }
                         });
                         _updateCaption();
+                        _reapplyVerbKeywordsIfEnabled();
                         Navigator.of(context).pop();
                       },
                       controlAffinity: ListTileControlAffinity.trailing,
@@ -17083,6 +17242,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     _selectedActionVerb = verb; // Store for caption generation
                     _clearVerbSubSelections();
                   });
+                  _mergeVerbKeywordsIntoFieldIfEnabled(verb);
                   Navigator.pop(context);
                 },
               );
@@ -19289,8 +19449,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final override = _verbOverrides[verbLabel]!;
       final singularPhrase = override['verbPhrase'] as String?;
       final pluralPhrase = override['pluralPhrase'] as String?;
+      final usePluralPhrase = override['usePluralPhrase'] as bool? ?? true;
 
-      if (playerCount > 1 && pluralPhrase != null && pluralPhrase.isNotEmpty) {
+      if (playerCount > 1 &&
+          usePluralPhrase &&
+          pluralPhrase != null &&
+          pluralPhrase.isNotEmpty) {
         return pluralPhrase;
       }
       return singularPhrase;
@@ -19304,8 +19468,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Found an override for this verb
         final singularPhrase = override['verbPhrase'] as String?;
         final pluralPhrase = override['pluralPhrase'] as String?;
+        final usePluralPhrase = override['usePluralPhrase'] as bool? ?? true;
 
         if (playerCount > 1 &&
+            usePluralPhrase &&
             pluralPhrase != null &&
             pluralPhrase.isNotEmpty) {
           return pluralPhrase;
@@ -22561,6 +22727,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Update caption when player is selected from Magic Bar
     _updateCaption();
+    _reapplyVerbKeywordsIfEnabled();
 
     // Ensure the original main player remains selected
     _ensureMainPlayerStillSelected();
@@ -22630,6 +22797,58 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _firstTeamSelected == false) {
       selectedAwayPlayers.add(awayDisplay);
     }
+  }
+
+  List<String> _keywordStringsForVerbLabel(String verb) {
+    final initial = _getVerbEditorInitialData(verb);
+    final rawKw = initial['keywords'];
+    if (rawKw is List) {
+      return rawKw
+          .map((e) => e.toString().trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    return const [];
+  }
+
+  /// Display names from the current selection, jersey suffix stripped; home then
+  /// away, each group sorted for stable keyword order.
+  List<String> _keywordStringsForSelectedPlayers() {
+    final home = selectedHomePlayers
+        .map((s) => _removeJerseyNumberFromName(s.trim()))
+        .where((s) => s.isNotEmpty)
+        .toList()
+      ..sort();
+    final away = selectedAwayPlayers
+        .map((s) => _removeJerseyNumberFromName(s.trim()))
+        .where((s) => s.isNotEmpty)
+        .toList()
+      ..sort();
+    return [...home, ...away];
+  }
+
+  void _mergeVerbKeywordsIntoFieldIfEnabled(String verb) {
+    if (!_applyVerbKeywordsEnabled) return;
+    final verbKws = _keywordStringsForVerbLabel(verb);
+    final playerKws = _keywordStringsForSelectedPlayers();
+    if (verbKws.isEmpty && playerKws.isEmpty) return;
+    var text = keywordsController.text;
+    if (verbKws.isNotEmpty) {
+      text = mergeVerbKeywordFieldText(text, verbKws);
+    }
+    if (playerKws.isNotEmpty) {
+      text = mergeVerbKeywordFieldText(text, playerKws);
+    }
+    keywordsController.text = text;
+    keywordsController.selection =
+        TextSelection.collapsed(offset: keywordsController.text.length);
+  }
+
+  /// After the user adds/changes players, refresh Keywords if a verb is active.
+  void _reapplyVerbKeywordsIfEnabled() {
+    final verb = _selectedVerb;
+    if (verb == null || verb.isEmpty) return;
+    _mergeVerbKeywordsIntoFieldIfEnabled(verb);
   }
 
   Widget _buildNavigationButtons() {
@@ -22757,7 +22976,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
+                    const SizedBox(width: 6),
                     // Hint text
                     Expanded(
                       child: Text(
@@ -24674,6 +24894,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             }
                           });
                           _updateCaption();
+                          _reapplyVerbKeywordsIfEnabled();
                         },
                         child: Container(
                           padding: EdgeInsets.symmetric(
@@ -24819,6 +25040,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             }
                           });
                           _updateCaption();
+                          _reapplyVerbKeywordsIfEnabled();
                         },
                         child: Container(
                           padding: EdgeInsets.symmetric(

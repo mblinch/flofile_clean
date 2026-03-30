@@ -21,6 +21,8 @@ class PreferencesService {
   static const String _keyCustomVerbWordingsBaseball =
       'custom_verb_wordings_baseball';
   static const String _keySerialNumberBylines = 'serial_number_bylines';
+  /// When true, selecting a verb merges its keyword presets into the IPTC keywords field.
+  static const String _keyApplyVerbKeywords = 'apply_verb_keywords';
   static const String _keyResolutionWarningThreshold =
       'resolution_warning_threshold';
   static const String _keyPhotoshopPath = 'photoshop_path';
@@ -38,6 +40,9 @@ class PreferencesService {
   static const String _keyShowHeadlineField = 'show_headline_field';
   static const String _keyShowKeywordsField = 'show_keywords_field';
   static const String _keyShowPersonalityField = 'show_personality_field';
+  /// Keyboard Fire: Actions column — expand/collapse shortcut cheatsheet under FTP.
+  static const String _keyShowKeyboardFireShortcutsHelp =
+      'show_keyboard_fire_shortcuts_help';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -99,6 +104,19 @@ class PreferencesService {
       _prefs?.getBool(_keyShowKeywordsField) ?? false;
   bool get captionFieldPersonalityVisibleSync =>
       _prefs?.getBool(_keyShowPersonalityField) ?? true;
+
+  Future<bool> getShowKeyboardFireShortcutsHelp() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyShowKeyboardFireShortcutsHelp) ?? true;
+  }
+
+  Future<void> saveShowKeyboardFireShortcutsHelp(bool show) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyShowKeyboardFireShortcutsHelp, show);
+  }
+
+  bool get showKeyboardFireShortcutsHelpSync =>
+      _prefs?.getBool(_keyShowKeyboardFireShortcutsHelp) ?? true;
 
   // Category Order Preferences (sport-specific)
   Future<List<String>> getCategoryOrder({String sport = 'baseball'}) async {
@@ -448,6 +466,16 @@ class PreferencesService {
   Future<void> saveSerialNumberBylines(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keySerialNumberBylines, enabled);
+  }
+
+  Future<bool> getApplyVerbKeywords() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyApplyVerbKeywords) ?? true;
+  }
+
+  Future<void> saveApplyVerbKeywords(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyApplyVerbKeywords, enabled);
   }
 
   // Resolution Warning Threshold Preference

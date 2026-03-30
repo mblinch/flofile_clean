@@ -718,10 +718,10 @@ class _StartupDialogState extends State<StartupDialog> {
       hintText: hintText,
       items: availableTeams,
       initialItem: initial,
-      overlayHeight: 320,
-      closedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      expandedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      listItemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      overlayHeight: 220,
+      closedHeaderPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      expandedHeaderPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      listItemPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: CustomDropdownDecoration(
         closedFillColor: Colors.grey.shade100,
         expandedFillColor: Colors.white,
@@ -729,9 +729,9 @@ class _StartupDialogState extends State<StartupDialog> {
         expandedBorder: Border.all(color: Colors.grey.shade300),
         closedBorderRadius: BorderRadius.circular(4),
         expandedBorderRadius: BorderRadius.circular(8),
-        hintStyle: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-        headerStyle: TextStyle(fontSize: 12, color: Colors.grey.shade800),
-        listItemStyle: const TextStyle(fontSize: 12),
+        hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+        headerStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+        listItemStyle: const TextStyle(fontSize: 11),
         listItemDecoration: ListItemDecoration(
           selectedColor: Colors.grey.shade100,
         ),
@@ -773,9 +773,9 @@ class _StartupDialogState extends State<StartupDialog> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: 900, // Increased from 800
-            height: 800, // Increased from 700 to accommodate debug info
-            padding: const EdgeInsets.all(40), // Increased padding
+            width: 640,
+            height: 500,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: Colors.white, // Added white background
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -787,7 +787,7 @@ class _StartupDialogState extends State<StartupDialog> {
                     const Text(
                       'FLO FILE',
                       style: TextStyle(
-                        fontSize: 24, // Increased from 20
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
                         letterSpacing: -0.5,
@@ -797,10 +797,16 @@ class _StartupDialogState extends State<StartupDialog> {
                       const Spacer(),
                       TextButton(
                         onPressed: widget.onBackToSportSelection,
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
                         child: Text(
                           '← Back to sports selection',
                           style: TextStyle(
-                            fontSize: 13,
+                            fontSize: 11,
                             color: Colors.grey.shade700,
                           ),
                         ),
@@ -808,13 +814,13 @@ class _StartupDialogState extends State<StartupDialog> {
                     ],
                   ],
                 ),
-                const SizedBox(height: 8), // Small spacing
+                const SizedBox(height: 4),
                 Container(
                   width: double.infinity,
                   height: 1,
                   color: Colors.grey.shade300,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 6),
 
                 // Scrollable body so content never overflows
                 Expanded(
@@ -827,14 +833,12 @@ class _StartupDialogState extends State<StartupDialog> {
                 Text(
                   displayedText + (isTyping ? '|' : ''),
                   style: const TextStyle(
-                    fontSize: 16, // Match "Please select your teams:" size
-                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                     color: Colors.black,
                   ),
                 ),
-                const SizedBox(
-                    height:
-                        16), // Reduced from 32 to bring button closer to header
+                const SizedBox(height: 6),
 
                 // Question-specific content
                 if (currentQuestion == 0 && !isTyping) ...[
@@ -847,12 +851,12 @@ class _StartupDialogState extends State<StartupDialog> {
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 6),
+                            horizontal: 8, vertical: 5),
                         decoration: BoxDecoration(
                           color: isLoadingFolder
                               ? Colors.grey.shade300
                               : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: Colors.grey.shade300),
                         ),
                         child: Row(
@@ -860,20 +864,20 @@ class _StartupDialogState extends State<StartupDialog> {
                           children: [
                             isLoadingFolder
                                 ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
+                                    width: 14,
+                                    height: 14,
                                     child: CircularProgressIndicator(
                                         strokeWidth: 2),
                                   )
                                 : Icon(Icons.folder_open,
-                                    size: 12, color: Colors.grey.shade700),
+                                    size: 11, color: Colors.grey.shade700),
                             const SizedBox(width: 4),
                             Text(
                               isLoadingFolder
                                   ? 'Loading...'
                                   : 'Pick Images Folder',
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 12,
                                 color: isLoadingFolder
                                     ? Colors.grey.shade600
                                     : Colors.grey.shade700,
@@ -885,7 +889,7 @@ class _StartupDialogState extends State<StartupDialog> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16), // Increased spacing
+                  const SizedBox(height: 10),
                 ] else if (currentQuestion == 1) ...[
                   // Date selection (only show if no date was extracted from images)
                   if (selectedGameDate == null) ...[
@@ -894,22 +898,22 @@ class _StartupDialogState extends State<StartupDialog> {
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 6),
+                            horizontal: 8, vertical: 5),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: Colors.grey.shade300),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.calendar_today,
-                                size: 12, color: Colors.grey.shade700),
+                                size: 11, color: Colors.grey.shade700),
                             const SizedBox(width: 4),
                             Text(
                               'Select Game Date',
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 12,
                                 color: Colors.grey.shade600,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -918,28 +922,28 @@ class _StartupDialogState extends State<StartupDialog> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 24), // Increased spacing
+                    const SizedBox(height: 12),
                     CustomButton(
                       onTap: () => _nextQuestion(),
                       child: Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 6),
+                            horizontal: 8, vertical: 5),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(4),
                           border: Border.all(color: Colors.grey.shade300),
                         ),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.arrow_forward,
-                                size: 12, color: Colors.grey.shade700),
+                                size: 11, color: Colors.grey.shade700),
                             const SizedBox(width: 4),
                             Text(
                               'Next',
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: 12,
                                 color: Colors.grey.shade700,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -961,12 +965,12 @@ class _StartupDialogState extends State<StartupDialog> {
                         child: Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 6),
+                              horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
                             color: isLoadingFolder
                                 ? Colors.grey.shade300
                                 : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(4),
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Row(
@@ -974,20 +978,20 @@ class _StartupDialogState extends State<StartupDialog> {
                             children: [
                               isLoadingFolder
                                   ? const SizedBox(
-                                      width: 16,
-                                      height: 16,
+                                      width: 14,
+                                      height: 14,
                                       child: CircularProgressIndicator(
                                           strokeWidth: 2),
                                     )
                                   : Icon(Icons.folder_open,
-                                      size: 12, color: Colors.grey.shade700),
+                                      size: 11, color: Colors.grey.shade700),
                               const SizedBox(width: 4),
                               Text(
                                 isLoadingFolder
                                     ? 'Loading...'
                                     : 'Pick Images Folder',
                                 style: TextStyle(
-                                  fontSize: 13,
+                                  fontSize: 12,
                                   color: isLoadingFolder
                                       ? Colors.grey.shade600
                                       : Colors.grey.shade700,
@@ -999,7 +1003,7 @@ class _StartupDialogState extends State<StartupDialog> {
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 6),
 
                     // Display selected folder path if exists (no box)
                     if (selectedFolderPath != null) ...[
@@ -1010,7 +1014,7 @@ class _StartupDialogState extends State<StartupDialog> {
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: Colors.grey.shade800,
-                              fontSize: 13,
+                              fontSize: 12,
                             ),
                           ),
                           Expanded(
@@ -1034,7 +1038,7 @@ class _StartupDialogState extends State<StartupDialog> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: Colors.grey.shade800,
-                                fontSize: 13,
+                                fontSize: 12,
                               ),
                             ),
                             Text(
@@ -1046,15 +1050,15 @@ class _StartupDialogState extends State<StartupDialog> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 10),
                         Container(
                           width: double.infinity,
                           height: 1,
                           color: Colors.grey.shade300,
                         ),
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 10),
                       ] else ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 6),
                       ],
                     ],
 
@@ -1065,8 +1069,8 @@ class _StartupDialogState extends State<StartupDialog> {
                           _teamSelectionText +
                               (_isTypingTeamSelection ? '|' : ''),
                           style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
                           ),
                         ),
                         if (_isOffline) ...[
@@ -1108,50 +1112,18 @@ class _StartupDialogState extends State<StartupDialog> {
                         ],
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 6),
 
                     // Show team dropdowns only after typewriter is done
                     if (!_isTypingTeamSelection) ...[
-                      // BallDontLie API option (baseball and basketball only)
-                      if (widget.sport?.toLowerCase() == 'baseball' ||
-                          widget.sport?.toLowerCase() == 'basketball') ...[
-                        FractionallySizedBox(
-                          widthFactor: 0.75,
-                          alignment: Alignment.centerLeft,
-                          child: SwitchListTile(
-                            title: Text(
-                              'Use BallDontLie API (testing)',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                            subtitle: Text(
-                              'Use balldontlie.io for teams/rosters instead of official/ESPN APIs.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                            value: _useBallDontLieApi,
-                            onChanged: (bool value) async {
-                              await _preferencesService.setUseBallDontLieApi(value);
-                              setState(() => _useBallDontLieApi = value);
-                              await _loadTeams();
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
                       // Home Team
                       Text('Home Team:',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: Colors.grey.shade800,
-                            fontSize: 13,
+                            fontSize: 12,
                           )),
-                      const SizedBox(height: 4), // Reduced spacing
+                      const SizedBox(height: 3),
                       FractionallySizedBox(
                         widthFactor: 0.75,
                         alignment: Alignment.centerLeft,
@@ -1184,16 +1156,16 @@ class _StartupDialogState extends State<StartupDialog> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24), // Increased spacing
+                      const SizedBox(height: 8),
 
                       // Away Team
                       Text('Away Team:',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: Colors.grey.shade800,
-                            fontSize: 13,
+                            fontSize: 12,
                           )),
-                      const SizedBox(height: 4), // Reduced spacing
+                      const SizedBox(height: 3),
                       FractionallySizedBox(
                         widthFactor: 0.75,
                         alignment: Alignment.centerLeft,
@@ -1227,15 +1199,15 @@ class _StartupDialogState extends State<StartupDialog> {
                         ),
                       ),
                       if (selectedAwayTeam != null) ...[
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 6),
                         Container(
                           width: double.infinity,
                           height: 1,
                           color: Colors.grey.shade300,
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 6),
                       ] else ...[
-                        const SizedBox(height: 24), // Increased spacing
+                        const SizedBox(height: 8),
                       ],
 
                       // Date already shown under Current Folder when available
@@ -1245,104 +1217,31 @@ class _StartupDialogState extends State<StartupDialog> {
                           selectedAwayTeam != null &&
                           selectedHomeTeam == selectedAwayTeam)
                         Container(
-                          padding:
-                              const EdgeInsets.all(12), // Increased padding
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
                           decoration: BoxDecoration(
                             color: Colors.red.shade50,
                             border: Border.all(color: Colors.red.shade200),
-                            borderRadius:
-                                BorderRadius.circular(6), // Increased radius
+                            borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Row(
                             children: [
                               Icon(Icons.error,
-                                  color: Colors.red,
-                                  size: 18), // Increased size
-                              SizedBox(width: 8),
+                                  color: Colors.red, size: 16),
+                              SizedBox(width: 6),
                               Text(
                                 'Home and away teams must be different',
                                 style: TextStyle(
                                   color: Colors.red,
-                                  fontSize: 14, // Added font size
+                                  fontSize: 12,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      const SizedBox(height: 24), // Increased spacing
+                      const SizedBox(height: 6),
 
-                      // Optional section
-                      const Text('Optional:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                            fontSize: 13,
-                          )),
-                      const SizedBox(height: 8),
-                      FractionallySizedBox(
-                        widthFactor: 0.75,
-                        alignment: Alignment.centerLeft,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            CustomButton(
-                              onTap: _openMetadataPreset,
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(6),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.description,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 4),
-                                    Text('Metadata Preset',
-                                        style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey.shade700,
-                                            fontWeight: FontWeight.w500)),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: _applyPresetToAllImages,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _applyPresetToAllImages = value ?? false;
-                                    });
-                                  },
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                Expanded(
-                                  child: Text(
-                                    'Apply preset to all images in session',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Start button
+                      // Go Time — above optional metadata / API controls
                       FractionallySizedBox(
                         widthFactor: 0.75,
                         alignment: Alignment.centerLeft,
@@ -1359,12 +1258,12 @@ class _StartupDialogState extends State<StartupDialog> {
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 6),
+                                horizontal: 8, vertical: 5),
                             decoration: BoxDecoration(
                               color: _canProceed
                                   ? const Color(0xFF0052CC)
                                   : Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(4),
                               border: Border.all(
                                 color: _canProceed
                                     ? const Color(0xFF0052CC)
@@ -1379,7 +1278,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                   children: [
                                     Icon(
                                       Icons.rocket_launch,
-                                      size: 12,
+                                      size: 11,
                                       color: _canProceed
                                           ? Colors.white
                                           : Colors.grey.shade600,
@@ -1388,7 +1287,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                     Text(
                                       'Go Time',
                                       style: TextStyle(
-                                        fontSize: 13,
+                                        fontSize: 12,
                                         color: _canProceed
                                             ? Colors.white
                                             : Colors.grey.shade600,
@@ -1422,6 +1321,110 @@ class _StartupDialogState extends State<StartupDialog> {
                               ],
                             ),
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+
+                      // Optional: metadata preset, then BallDontLie (baseball/basketball)
+                      const Text('Optional:',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                            fontSize: 12,
+                          )),
+                      const SizedBox(height: 4),
+                      FractionallySizedBox(
+                        widthFactor: 0.75,
+                        alignment: Alignment.centerLeft,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            CustomButton(
+                              onTap: _openMetadataPreset,
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  borderRadius: BorderRadius.circular(4),
+                                  border:
+                                      Border.all(color: Colors.grey.shade300),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.description,
+                                        size: 11, color: Colors.grey.shade700),
+                                    const SizedBox(width: 4),
+                                    Text('Metadata Preset',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade700,
+                                            fontWeight: FontWeight.w500)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _applyPresetToAllImages,
+                                  onChanged: (value) {
+                                    setState(() {
+                                      _applyPresetToAllImages = value ?? false;
+                                    });
+                                  },
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    'Apply preset to all images in session',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (widget.sport?.toLowerCase() == 'baseball' ||
+                                widget.sport?.toLowerCase() ==
+                                    'basketball') ...[
+                              const SizedBox(height: 2),
+                              SwitchListTile(
+                                contentPadding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                title: Text(
+                                  'Use BallDontLie API (testing)',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade800,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'Use balldontlie.io for teams/rosters instead of official/ESPN APIs.',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                value: _useBallDontLieApi,
+                                onChanged: (bool value) async {
+                                  await _preferencesService
+                                      .setUseBallDontLieApi(value);
+                                  setState(() => _useBallDontLieApi = value);
+                                  await _loadTeams();
+                                },
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],

@@ -42,7 +42,7 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   _AppHeaderWidgetState createState() => _AppHeaderWidgetState();
 
   @override
-  Size get preferredSize => const Size.fromHeight(28);
+  Size get preferredSize => const Size.fromHeight(34);
 }
 
 class _AppHeaderWidgetState extends State<AppHeaderWidget> {
@@ -183,43 +183,47 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     setState(() {});
   }
 
-  Future<void> _toggleSerialNumberBylines() async {
-    _serialNumberBylinesEnabled = !_serialNumberBylinesEnabled;
-    await _preferencesService
-        .saveSerialNumberBylines(_serialNumberBylinesEnabled);
-    setState(() {});
+  Future<void> _applySerialNumberBylines(bool enabled) async {
+    if (_serialNumberBylinesEnabled == enabled) return;
+    _serialNumberBylinesEnabled = enabled;
+    await _preferencesService.saveSerialNumberBylines(enabled);
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
     return AdaptiveAppBar(
-      toolbarHeight: 28, // Larger to accommodate 20px font
+      toolbarHeight: 34,
       titleSpacing: 0,
       backgroundColor: Colors.grey.shade200,
       elevation: 0,
       automaticallyImplyLeading: false,
       title: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+        padding: const EdgeInsets.only(left: 12, right: 6),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              'FLO FILE Beta',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade700,
-                letterSpacing: -1.0,
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  'FLO FILE Beta',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade700,
+                    letterSpacing: -0.5,
+                    height: 1.0,
+                  ),
+                ),
               ),
             ),
-            const Spacer(),
-            // Live resolution indicator
+            // Live resolution indicator — centered in title bar (balanced Expanded sides)
             Container(
-              margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.grey.shade300, width: 1),
+                borderRadius: BorderRadius.zero,
               ),
               child: Builder(
                 builder: (context) {
@@ -234,7 +238,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                     children: [
                       Icon(
                         Icons.aspect_ratio,
-                        size: 12,
+                        size: 11,
                         color: isTargetSize
                             ? Colors.green.shade600
                             : Colors.grey.shade600,
@@ -243,7 +247,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                       Text(
                         '${currentWidth}x${currentHeight}',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 9,
                           fontWeight: FontWeight.w500,
                           color: isTargetSize
                               ? Colors.green.shade700
@@ -254,7 +258,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                         const SizedBox(width: 4),
                         Icon(
                           Icons.check_circle,
-                          size: 12,
+                          size: 11,
                           color: Colors.green.shade600,
                         ),
                       ],
@@ -263,53 +267,21 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                 },
               ),
             ),
+            const Expanded(child: SizedBox.shrink()),
           ],
         ),
       ),
       actions: [
-        InkWell(
-          onTap: _toggleSerialNumberBylines,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.grey.shade300, width: 1),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.badge,
-                  size: 12,
-                  color: _serialNumberBylinesEnabled
-                      ? Colors.green.shade600
-                      : Colors.grey.shade600,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'Serial Number Byline Mode',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: _serialNumberBylinesEnabled
-                        ? Colors.green.shade700
-                        : Colors.grey.shade700,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  _serialNumberBylinesEnabled
-                      ? Icons.check_circle
-                      : Icons.cancel,
-                  size: 12,
-                  color: _serialNumberBylinesEnabled
-                      ? Colors.green.shade600
-                      : Colors.grey.shade600,
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  onPressed: () {
+        Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Tooltip(
+                message: 'Edit Camera Serial Numbers',
+                child: InkWell(
+                  onTap: () {
                     showDialog(
                       context: context,
                       builder: (context) => CameraSerialDialog(
@@ -317,15 +289,73 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.edit),
-                  iconSize: 12,
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 20, minHeight: 20),
-                  tooltip: 'Edit Camera Serial Numbers',
+                  borderRadius: BorderRadius.circular(2),
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8, top: 2, bottom: 2),
+                    child: Icon(
+                      Icons.edit_outlined,
+                      size: 11,
+                      color: Colors.black54,
+                    ),
+                  ),
                 ),
-              ],
-            ),
+              ),
+              Text(
+                'Serial Number Byline ',
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  height: 1.0,
+                  color: Colors.black87,
+                ),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Mode',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      height: 1.0,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  // Tight layout: Transform.scale keeps full Switch width and pushes the
+                  // toggle away from "Mode"; FittedBox sizes the track next to the label.
+                  SizedBox(
+                    width: 36,
+                    height: 18,
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      alignment: Alignment.centerLeft,
+                      child: Switch(
+                        value: _serialNumberBylinesEnabled,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onChanged: (v) => _applySerialNumberBylines(v),
+                        thumbColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return Colors.white;
+                          }
+                          return Colors.grey.shade400;
+                        }),
+                        trackColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return const Color(0xFF1976D2);
+                          }
+                          return Colors.grey.shade300;
+                        }),
+                        trackOutlineColor: WidgetStateProperty.all(
+                          Colors.transparent,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         IconButton(
@@ -336,8 +366,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             );
             widget.onPreferencesClosed?.call();
           },
-          icon: const Icon(Icons.settings),
+          icon: Icon(Icons.settings, color: Colors.grey.shade800),
           tooltip: 'Preferences',
+          iconSize: 18,
+          padding: const EdgeInsets.all(4),
+          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          style: IconButton.styleFrom(
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
         ),
       ],
     );

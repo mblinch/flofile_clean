@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../utils/default_verb_keywords.dart';
 import 'package:flutter/services.dart';
 import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
@@ -166,41 +167,73 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
   // Verb categories matching the existing system
   final Map<String, List<VerbOption>> _verbCategories = {
     'Offense': [
-      VerbOption('Skates', 'skates'),
-      VerbOption('Shoots', 'shoots'),
-      VerbOption('Battles', 'battles against', wantsOpponent: true),
-      VerbOption('Scores', 'scores', wantsOpponent: true),
+      VerbOption('Skates', 'skates',
+          keywords: defaultKeywordsForVerbLabel('Skates')),
+      VerbOption('Shoots', 'shoots',
+          keywords: defaultKeywordsForVerbLabel('Shoots')),
+      VerbOption('Battles', 'battles against',
+          wantsOpponent: true,
+          keywords: defaultKeywordsForVerbLabel('Battles')),
+      VerbOption('Scores', 'scores',
+          wantsOpponent: true,
+          keywords: defaultKeywordsForVerbLabel('Scores')),
       VerbOption('Goes to the Net', 'goes to the net against',
-          wantsOpponent: true),
-      VerbOption('Faceoff', 'takes a faceoff', wantsOpponent: true),
-      VerbOption('Celebrates a Goal', 'celebrates a goal'),
-      VerbOption('Celebrates', 'celebrates'),
+          wantsOpponent: true,
+          keywords: defaultKeywordsForVerbLabel('Goes to the Net')),
+      VerbOption('Faceoff', 'takes a faceoff',
+          wantsOpponent: true,
+          keywords: defaultKeywordsForVerbLabel('Faceoff')),
+      VerbOption('Celebrates a Goal', 'celebrates a goal',
+          keywords: defaultKeywordsForVerbLabel('Celebrates a Goal')),
+      VerbOption('Celebrates', 'celebrates',
+          keywords: defaultKeywordsForVerbLabel('Celebrates')),
     ],
     'Defense': [
-      VerbOption('Blocks', 'blocks a shot'),
-      VerbOption('Clears', 'clears the puck'),
-      VerbOption('Checks', 'checks', wantsOpponent: true),
-      VerbOption('Defends', 'defends', wantsOpponent: true),
+      VerbOption('Blocks', 'blocks a shot',
+          keywords: defaultKeywordsForVerbLabel('Blocks')),
+      VerbOption('Clears', 'clears the puck',
+          keywords: defaultKeywordsForVerbLabel('Clears')),
+      VerbOption('Checks', 'checks',
+          wantsOpponent: true,
+          keywords: defaultKeywordsForVerbLabel('Checks')),
+      VerbOption('Defends', 'defends',
+          wantsOpponent: true,
+          keywords: defaultKeywordsForVerbLabel('Defends')),
     ],
     'Goalie': [
-      VerbOption('Saves', 'makes a save'),
-      VerbOption('Handles the Puck', 'handles the puck'),
-      VerbOption('Stands in Net', 'stands in net'),
-      VerbOption('Guards the Net', 'guards the net'),
+      VerbOption('Saves', 'makes a save',
+          keywords: defaultKeywordsForVerbLabel('Saves')),
+      VerbOption('Handles the Puck', 'handles the puck',
+          keywords: defaultKeywordsForVerbLabel('Handles the Puck')),
+      VerbOption('Stands in Net', 'stands in net',
+          keywords: defaultKeywordsForVerbLabel('Stands in Net')),
+      VerbOption('Guards the Net', 'guards the net',
+          keywords: defaultKeywordsForVerbLabel('Guards the Net')),
     ],
     'Non Game-Action': [
-      VerbOption('Looks On', 'looks on'),
-      VerbOption('Warm Ups', 'warms up prior to play'),
-      VerbOption('Takes the Ice', 'takes the ice prior to play'),
-      VerbOption('Walks to the Ice', 'walks to the ice'),
-      VerbOption('Comes Off the Ice', 'comes off the ice'),
+      VerbOption('Looks On', 'looks on',
+          keywords: defaultKeywordsForVerbLabel('Looks On')),
+      VerbOption('Warm Ups', 'warms up prior to play',
+          keywords: defaultKeywordsForVerbLabel('Warm Ups')),
+      VerbOption('Takes the Ice', 'takes the ice prior to play',
+          keywords: defaultKeywordsForVerbLabel('Takes the Ice')),
+      VerbOption('Walks to the Ice', 'walks to the ice',
+          keywords: defaultKeywordsForVerbLabel('Walks to the Ice')),
+      VerbOption('Comes Off the Ice', 'comes off the ice',
+          keywords: defaultKeywordsForVerbLabel('Comes Off the Ice')),
       VerbOption('National Anthem',
-          'looks on during the national anthem prior to play'),
-      VerbOption('Stretching', 'stretches prior to play'),
-      VerbOption('Bench', 'on the bench'),
-      VerbOption('Post Game Win', 'celebrates'),
-      VerbOption('Post Game Loss', 'reacts'),
-      VerbOption('Dejection', 'reacts with dejection'),
+          'looks on during the national anthem prior to play',
+          keywords: defaultKeywordsForVerbLabel('National Anthem')),
+      VerbOption('Stretching', 'stretches prior to play',
+          keywords: defaultKeywordsForVerbLabel('Stretching')),
+      VerbOption('Bench', 'on the bench',
+          keywords: defaultKeywordsForVerbLabel('Bench')),
+      VerbOption('Post Game Win', 'celebrates',
+          keywords: defaultKeywordsForVerbLabel('Post Game Win')),
+      VerbOption('Post Game Loss', 'reacts',
+          keywords: defaultKeywordsForVerbLabel('Post Game Loss')),
+      VerbOption('Dejection', 'reacts with dejection',
+          keywords: defaultKeywordsForVerbLabel('Dejection')),
     ],
   };
 
@@ -2564,6 +2597,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           _verbOverrides[verb.label] ?? _verbOverrides[verb.verbPhrase];
       if (overrideData != null) {
         effectiveVerb = VerbOption.fromJson(overrideData);
+        if (effectiveVerb.keywords.isEmpty && verb.keywords.isNotEmpty) {
+          effectiveVerb = effectiveVerb.copyWith(keywords: verb.keywords);
+        }
       }
     }
 
@@ -2572,11 +2608,15 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         TextEditingController(text: effectiveVerb.verbPhrase);
     final pluralController = TextEditingController(
         text: effectiveVerb.pluralPhrase ?? effectiveVerb.verbPhrase);
+    bool usePluralPhrase = effectiveVerb.usePluralPhrase;
     bool wantsOpponent = effectiveVerb.wantsOpponent;
     bool omitAgainst = effectiveVerb.omitAgainst;
     bool removePlayerFromExample = false;
     String selectedCategory =
         targetCategory ?? verb.category ?? _verbCategories.keys.first;
+    final keywordsController = TextEditingController(
+        text: effectiveVerb.keywords.join(', '));
+    bool showKeywordsEditor = effectiveVerb.keywords.isNotEmpty;
 
     // Get random players for example captions
     final homePlayers = widget.homeRoster ?? _getMockHomePlayers();
@@ -2733,15 +2773,37 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       const SizedBox(height: 12),
 
                       // Plural phrase field
-                      Text(
-                        'Plural Phrase (2+ players)',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade700),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Plural Phrase (2+ players)',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.grey.shade700),
+                            ),
+                          ),
+                          Text(
+                            'Use plural',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade700),
+                          ),
+                          const SizedBox(width: 6),
+                          Switch(
+                            value: usePluralPhrase,
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            onChanged: (v) {
+                              setDialogState(() => usePluralPhrase = v);
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       TextField(
                         controller: pluralController,
                         style: const TextStyle(fontSize: 12),
+                        enabled: usePluralPhrase,
                         onChanged: (_) => setDialogState(() {}),
                         decoration: InputDecoration(
                           hintText: 'e.g., skate, battle, shoot',
@@ -2774,7 +2836,11 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              buildExampleCaption(pluralController.text, 2),
+                              buildExampleCaption(
+                                  usePluralPhrase
+                                      ? pluralController.text
+                                      : singularController.text,
+                                  2),
                               style: TextStyle(
                                   fontSize: 10, color: Colors.green.shade900),
                               softWrap: true,
@@ -2782,6 +2848,88 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                             ),
                           ],
                         ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Keywords (comma-separated; IPTC-style tags for this verb)
+                      Text(
+                        'Keywords',
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade700),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: showKeywordsEditor
+                                ? TextField(
+                                    controller: keywordsController,
+                                    style: const TextStyle(fontSize: 12),
+                                    maxLines: 2,
+                                    onChanged: (_) => setDialogState(() {}),
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'e.g., pitch, pitcher, pitching (comma-separated)',
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 8, vertical: 8),
+                                      isDense: true,
+                                    ),
+                                  )
+                                : Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                      borderRadius: BorderRadius.circular(4),
+                                      color: Colors.grey.shade50,
+                                    ),
+                                    child: Text(
+                                      keywordsController.text.trim().isEmpty
+                                          ? '—'
+                                          : keywordsController.text,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: keywordsController.text
+                                                .trim()
+                                                .isEmpty
+                                            ? Colors.grey.shade400
+                                            : Colors.grey.shade800,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 2),
+                          Tooltip(
+                            message: showKeywordsEditor
+                                ? 'Hide keywords editor'
+                                : 'Show keywords editor',
+                            child: IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 36, minHeight: 36),
+                              icon: Icon(
+                                showKeywordsEditor
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                                size: 22,
+                                color: Colors.grey.shade700,
+                              ),
+                              onPressed: () => setDialogState(
+                                  () => showKeywordsEditor =
+                                      !showKeywordsEditor),
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 12),
 
@@ -2917,8 +3065,11 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                 pluralController.text.isEmpty
                                     ? null
                                     : pluralController.text,
+                                usePluralPhrase,
                                 wantsOpponent,
                                 omitAgainst,
+                                parseVerbKeywordsField(
+                                    keywordsController.text),
                                 selectedCategory,
                               );
                               print('DEBUG: Save completed, closing dialog');
@@ -2955,8 +3106,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     String newLabel,
     String newSingular,
     String? newPlural,
+    bool usePluralPhrase,
     bool wantsOpponent,
     bool omitAgainst,
+    List<String> newKeywords,
     String category,
   ) async {
     print('DEBUG: ========== _saveVerbEdit CALLED ==========');
@@ -2978,6 +3131,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       newLabel,
       newSingular,
       pluralPhrase: newPlural,
+      usePluralPhrase: usePluralPhrase,
+      keywords: newKeywords,
       wantsOpponent: wantsOpponent,
       omitAgainst: omitAgainst,
       isCustom: originalVerb.isCustom,
@@ -4014,6 +4169,10 @@ class VerbOption {
   final String verbPhrase; // Used as singular phrase
   final String?
       pluralPhrase; // Phrase for multiple players (null = same as singular)
+  /// When false, captions always use [verbPhrase] even with 2+ players.
+  final bool usePluralPhrase;
+  /// IPTC-style search terms for this verb (comma-separated in editors).
+  final List<String> keywords;
   final bool wantsOpponent;
   final bool omitAgainst; // If true, don't include "against" in caption
   final bool isCustom;
@@ -4023,15 +4182,20 @@ class VerbOption {
     this.label,
     this.verbPhrase, {
     this.pluralPhrase,
+    this.usePluralPhrase = true,
+    List<String>? keywords,
     this.wantsOpponent = false,
     this.omitAgainst = false,
     this.isCustom = false,
     this.category,
-  });
+  }) : keywords = keywords ?? const [];
 
   // Get the appropriate phrase based on player count
   String getPhraseForPlayerCount(int count) {
-    if (count > 1 && pluralPhrase != null) {
+    if (!usePluralPhrase) return verbPhrase;
+    if (count > 1 &&
+        pluralPhrase != null &&
+        pluralPhrase!.isNotEmpty) {
       return pluralPhrase!;
     }
     return verbPhrase;
@@ -4042,6 +4206,8 @@ class VerbOption {
     String? label,
     String? verbPhrase,
     String? pluralPhrase,
+    bool? usePluralPhrase,
+    List<String>? keywords,
     bool? wantsOpponent,
     bool? omitAgainst,
     bool? isCustom,
@@ -4051,6 +4217,8 @@ class VerbOption {
       label ?? this.label,
       verbPhrase ?? this.verbPhrase,
       pluralPhrase: pluralPhrase ?? this.pluralPhrase,
+      usePluralPhrase: usePluralPhrase ?? this.usePluralPhrase,
+      keywords: keywords ?? this.keywords,
       wantsOpponent: wantsOpponent ?? this.wantsOpponent,
       omitAgainst: omitAgainst ?? this.omitAgainst,
       isCustom: isCustom ?? this.isCustom,
@@ -4064,6 +4232,8 @@ class VerbOption {
       'label': label,
       'verbPhrase': verbPhrase,
       'pluralPhrase': pluralPhrase,
+      'usePluralPhrase': usePluralPhrase,
+      'keywords': keywords,
       'wantsOpponent': wantsOpponent,
       'omitAgainst': omitAgainst,
       'isCustom': isCustom,
@@ -4077,6 +4247,8 @@ class VerbOption {
       json['label'] as String,
       json['verbPhrase'] as String,
       pluralPhrase: json['pluralPhrase'] as String?,
+      usePluralPhrase: json['usePluralPhrase'] as bool? ?? true,
+      keywords: verbKeywordsFromJson(json['keywords']),
       wantsOpponent: json['wantsOpponent'] as bool? ?? false,
       omitAgainst: json['omitAgainst'] as bool? ?? false,
       isCustom: json['isCustom'] as bool? ?? true,

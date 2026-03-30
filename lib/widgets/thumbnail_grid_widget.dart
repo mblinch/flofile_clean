@@ -102,6 +102,13 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   Set<String> _selectedImages = {};
   bool _isMultiSelectMode = false;
 
+  /// Compact label for the FTP filter bar trigger (team-picker style).
+  String _ftpFilterBarLabel() {
+    if (_ftpFilterMode == null) return 'All images';
+    if (_ftpFilterMode == 'hide_ftpd') return 'Hide FTPd';
+    return 'Show FTPd';
+  }
+
   void _handleThumbnailTap(String imagePath) {
     // Check if Cmd/Meta key is pressed
     final isMetaPressed = RawKeyboard.instance.keysPressed
@@ -428,7 +435,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         margin: const EdgeInsets.all(3.0),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300, width: 1.0),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
           color: Colors.grey.shade50,
         ),
         child: const Center(
@@ -464,7 +471,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         margin: const EdgeInsets.all(3.0),
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300, width: 1.0),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
           color: Colors.white,
         ),
         child: Center(
@@ -528,7 +535,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 16),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.zero,
         color: Colors.white,
         boxShadow: [
           BoxShadow(
@@ -540,130 +547,133 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       ),
       child: Column(
         children: [
-          // Top bar with controls (moved from bottom)
           Container(
-            padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
             decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(8),
-                topRight: Radius.circular(8),
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.zero,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300, width: 1),
               ),
             ),
-            child: SizedBox(
-              height: 24,
-              child: Row(
+            child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Left side - FTP Filter
+                  // Left — FTP filter (same chrome as team picker: Material + bordered white box)
                   Expanded(
                     flex: 1,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        const SizedBox(width: 8),
-                        Container(
-                          height: 22,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: DropdownButton<String>(
-                            value: _ftpFilterMode == null
-                                ? 'all'
-                                : _ftpFilterMode == 'hide_ftpd'
-                                    ? 'hide'
-                                    : 'show',
-                            isDense: true,
-                            underline: const SizedBox(),
-                            icon: Icon(Icons.arrow_drop_down, size: 13, color: Colors.grey.shade700),
-                            style: TextStyle(fontSize: 10, color: Colors.grey.shade700),
-                            items: const [
-                              DropdownMenuItem(
-                                value: 'all',
-                                child: Text('Show All Images'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'hide',
-                                child: Text('Hide FTPd Images'),
-                              ),
-                              DropdownMenuItem(
-                                value: 'show',
-                                child: Text('Show FTPd Images'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                if (value == 'all') {
-                                  _ftpFilterMode = null;
-                                } else if (value == 'hide') {
-                                  _ftpFilterMode = 'hide_ftpd';
-                                } else if (value == 'show') {
-                                  _ftpFilterMode = 'show_ftpd';
-                                }
-
-                                // Handle current image selection when hiding FTPd images
-                                if (_ftpFilterMode == 'hide_ftpd' &&
-                                    widget.currentIndex <
-                                        widget.imagePaths.length &&
-                                    widget.uploadedImages.contains(widget
-                                        .imagePaths[widget.currentIndex])) {
-                                  int nextIndex = widget.currentIndex + 1;
-                                  while (nextIndex < widget.imagePaths.length &&
-                                      widget.uploadedImages.contains(
-                                          widget.imagePaths[nextIndex])) {
-                                    nextIndex++;
-                                  }
-                                  if (nextIndex >= widget.imagePaths.length) {
-                                    nextIndex = widget.currentIndex - 1;
-                                    while (nextIndex >= 0 &&
-                                        widget.uploadedImages.contains(
-                                            widget.imagePaths[nextIndex])) {
-                                      nextIndex--;
-                                    }
-                                  }
-                                  if (nextIndex >= 0 &&
-                                      nextIndex < widget.imagePaths.length) {
-                                    widget.onImageSelected(nextIndex);
-                                  }
-                                }
-                              });
-                              _ensureVisibleAfterLayout();
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Center - Thumbnail Viewer
-                  Expanded(
-                    flex: 1,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        // See Larger Thumbnails button
-                        GestureDetector(
-                          onTap: () {
-                            _showThumbnailPopup();
-                          },
+                        Material(
+                          elevation: 2,
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(4),
                           child: Container(
-                            height: 22,
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.grey.shade300),
+                              border: Border.all(
+                                  color: Colors.grey.shade300, width: 1),
                             ),
-                            child: Center(
-                              child: Text(
-                                'See Larger Thumbnails',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey.shade700,
-                                  fontWeight: FontWeight.w500,
+                            child: PopupMenuButton<String>(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 0),
+                              // Do not set [constraints] on PopupMenuButton — it is applied to
+                              // the *popup menu* (showMenu), not the trigger. A small maxHeight
+                              // here was clipping the menu to ~22px so labels looked empty.
+                              onSelected: (value) {
+                                setState(() {
+                                  if (value == 'all') {
+                                    _ftpFilterMode = null;
+                                  } else if (value == 'hide') {
+                                    _ftpFilterMode = 'hide_ftpd';
+                                  } else {
+                                    _ftpFilterMode = 'show_ftpd';
+                                  }
+                                  if (_ftpFilterMode == 'hide_ftpd' &&
+                                      widget.currentIndex <
+                                          widget.imagePaths.length &&
+                                      widget.uploadedImages.contains(widget
+                                          .imagePaths[widget.currentIndex])) {
+                                    int nextIndex = widget.currentIndex + 1;
+                                    while (nextIndex <
+                                            widget.imagePaths.length &&
+                                        widget.uploadedImages.contains(
+                                            widget.imagePaths[nextIndex])) {
+                                      nextIndex++;
+                                    }
+                                    if (nextIndex >= widget.imagePaths.length) {
+                                      nextIndex = widget.currentIndex - 1;
+                                      while (nextIndex >= 0 &&
+                                          widget.uploadedImages.contains(
+                                              widget.imagePaths[nextIndex])) {
+                                        nextIndex--;
+                                      }
+                                    }
+                                    if (nextIndex >= 0 &&
+                                        nextIndex < widget.imagePaths.length) {
+                                      widget.onImageSelected(nextIndex);
+                                    }
+                                  }
+                                });
+                                _ensureVisibleAfterLayout();
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem<String>(
+                                  value: 'all',
+                                  child: Text(
+                                    'Show All Images',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade900,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                PopupMenuItem<String>(
+                                  value: 'hide',
+                                  child: Text(
+                                    'Hide FTPd Images',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade900,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                PopupMenuItem<String>(
+                                  value: 'show',
+                                  child: Text(
+                                    'Show FTPd Images',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade900,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              child: SizedBox(
+                                height: 24,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      _ftpFilterBarLabel(),
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.grey.shade800,
+                                        height: 1.0,
+                                      ),
+                                    ),
+                                    Icon(Icons.arrow_drop_down,
+                                        size: 12,
+                                        color: Colors.grey.shade700),
+                                  ],
                                 ),
                               ),
                             ),
@@ -673,105 +683,133 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     ),
                   ),
 
-                  // Right side - Size controls
+                  // Center — plain text link (no chip)
+                  Expanded(
+                    flex: 1,
+                    child: Center(
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () => _showThumbnailPopup(),
+                          child: Text(
+                            'SEE LARGER THUMBNAILS',
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w600,
+                              height: 1.0,
+                              letterSpacing: 0.35,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Right — size stepper (fixed width for stable layout)
                   Expanded(
                     flex: 1,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        // Thumbnail size control with plus/minus buttons
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // Minus button
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    // Move to previous division (30px increments)
-                                    final currentStep =
-                                        ((_thumbSize - 80) / 30).round();
-                                    final newStep =
-                                        (currentStep - 1).clamp(0, 4);
-                                    _thumbSize = 80 + (newStep * 30);
-                                    _thumbSpacing = _thumbSize * 0.1;
-                                  });
-                                  _ensureVisibleAfterLayout();
-                                },
-                                child: Container(
-                                  width: 22,
-                                  height: 22,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border:
-                                        Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Icon(
-                                    Icons.remove,
-                                    size: 13,
-                                    color: Colors.grey.shade700,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Size text
-                              Text(
-                                '${_thumbSize.toInt()}px',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Plus button
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    // Move to next division (30px increments)
-                                    final currentStep =
-                                        ((_thumbSize - 80) / 30).round();
-                                    final newStep =
-                                        (currentStep + 1).clamp(0, 4);
-                                    _thumbSize = 80 + (newStep * 30);
-                                    _thumbSpacing = _thumbSize * 0.1;
-                                  });
-                                  _ensureVisibleAfterLayout();
-                                },
-                                child: Container(
-                                  width: 22,
-                                  height: 22,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border:
-                                        Border.all(color: Colors.grey.shade300),
-                                  ),
-                                  child: Icon(
-                                    Icons.add,
-                                    size: 13,
-                                    color: Colors.grey.shade700,
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: 118),
+                            child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                  color: Colors.grey.shade300, width: 1),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.max,
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      final currentStep =
+                                          ((_thumbSize - 80) / 30).round();
+                                      final newStep =
+                                          (currentStep - 1).clamp(0, 4);
+                                      _thumbSize = 80 + (newStep * 30);
+                                      _thumbSpacing = _thumbSize * 0.1;
+                                    });
+                                    _ensureVisibleAfterLayout();
+                                  },
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                    ),
+                                    child: Icon(
+                                      Icons.remove,
+                                      size: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                                SizedBox(
+                                  width: 44,
+                                  child: Text(
+                                    '${_thumbSize.toInt()}px',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade800,
+                                      height: 1.0,
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: () {
+                                    setState(() {
+                                      final currentStep =
+                                          ((_thumbSize - 80) / 30).round();
+                                      final newStep =
+                                          (currentStep + 1).clamp(0, 4);
+                                      _thumbSize = 80 + (newStep * 30);
+                                      _thumbSpacing = _thumbSize * 0.1;
+                                    });
+                                    _ensureVisibleAfterLayout();
+                                  },
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                          color: Colors.grey.shade300),
+                                    ),
+                                    child: Icon(
+                                      Icons.add,
+                                      size: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
                       ],
                     ),
                   ),
                 ],
               ),
-            ),
           ),
 
           // Thumbnail grid
@@ -801,7 +839,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.zero,
                         border: Border.all(
                           color: _selectedImages.contains(imagePath)
                               ? Colors.blue
@@ -907,14 +945,11 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             children: [
                               // Image thumbnail
                               Expanded(
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(4),
-                                    child: Opacity(
-                                      opacity: widget.uploadedImages.contains(imagePath) ? 0.5 : 1.0,
-                                      child: _buildThumbnail(imagePath),
-                                    ),
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Opacity(
+                                    opacity: widget.uploadedImages.contains(imagePath) ? 0.5 : 1.0,
+                                    child: _buildThumbnail(imagePath),
                                   ),
                                 ),
                               ),
@@ -983,7 +1018,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               child: Container(
                                 decoration: BoxDecoration(
                                   color: Colors.black.withOpacity(0.85),
-                                  borderRadius: BorderRadius.circular(6),
+                                  borderRadius: BorderRadius.zero,
                                 ),
                                 child: Center(
                                   child: Column(
@@ -1081,7 +1116,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       height: double.infinity,
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: BorderRadius.zero,
       ),
       child: ExtendedImage.file(
         File(imagePath),

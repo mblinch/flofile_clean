@@ -19,17 +19,17 @@ class SportSelectionDialog extends StatelessWidget {
       child: GestureDetector(
         onTap: () => onSportSelected(sport.toLowerCase()),
         child: Container(
-          width: 180,
-          height: 200,
+          width: 128,
+          height: 132,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.grey.shade300, width: 2),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300, width: 1),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
               ),
             ],
           ),
@@ -37,24 +37,24 @@ class SportSelectionDialog extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 80,
-                height: 80,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   icon,
-                  size: 40,
+                  size: 28,
                   color: color,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               Text(
                 sport,
                 style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
                   color: Colors.black87,
                 ),
               ),
@@ -75,9 +75,9 @@ class SportSelectionDialog extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: 700,
-            height: 500,
-            padding: const EdgeInsets.all(40),
+            width: 480,
+            constraints: const BoxConstraints(maxHeight: 340),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             color: Colors.white,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -86,30 +86,30 @@ class SportSelectionDialog extends StatelessWidget {
                 const Text(
                   'FLO FILE',
                   style: TextStyle(
-                    fontSize: 24,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
                     letterSpacing: -0.5,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Container(
                   width: double.infinity,
                   height: 1,
                   color: Colors.grey.shade300,
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 14),
 
                 // Question
                 const Text(
                   'What sport are you working on today?',
                   style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
                     color: Colors.black87,
                   ),
                 ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 18),
 
                 // Sport cards
                 Row(
@@ -121,14 +121,14 @@ class SportSelectionDialog extends StatelessWidget {
                       Icons.sports_baseball,
                       const Color(0xFF0052CC),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 10),
                     _buildSportCard(
                       context,
                       'Hockey',
                       Icons.sports_hockey,
                       const Color(0xFFD32F2F),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 10),
                     _buildSportCard(
                       context,
                       'Basketball',

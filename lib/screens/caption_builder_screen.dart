@@ -7,7 +7,6 @@ import 'dart:async';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../helpers.dart';
-import '../intents.dart';
 import '../widgets/app_header_widget.dart';
 import '../widgets/picture_preview_widget.dart';
 import '../widgets/caption_fields_widget.dart';
@@ -1124,18 +1123,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
-  /// Cmd+Shift+K: open Keyboard Fire dialog (global, no focus needed).
-  bool _handleKeyboardFireShortcut(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-    if (event.logicalKey != LogicalKeyboardKey.keyK) return false;
-    final k = HardwareKeyboard.instance;
-    if (!(k.isMetaPressed || k.isControlPressed) || !k.isShiftPressed) {
-      return false;
-    }
-    _showKeyboardFireDialog();
-    return true;
-  }
-
   /// Option (Alt) + digit: no focus needed. First digit 1-6 = category, second 0-9 = verb.
   bool _handleOptionVerbShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
@@ -1203,7 +1190,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     HardwareKeyboard.instance.addHandler(_handleSaveAndNextShortcut);
     HardwareKeyboard.instance.addHandler(_handleSaveFtpNextShortcut);
     HardwareKeyboard.instance.addHandler(_handlePastePreviousKeyEvent);
-    HardwareKeyboard.instance.addHandler(_handleKeyboardFireShortcut);
     HardwareKeyboard.instance.addHandler(_handleOptionVerbShortcut);
   }
 
@@ -3241,7 +3227,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     HardwareKeyboard.instance.removeHandler(_handleSaveAndNextShortcut);
     HardwareKeyboard.instance.removeHandler(_handleSaveFtpNextShortcut);
     HardwareKeyboard.instance.removeHandler(_handlePastePreviousKeyEvent);
-    HardwareKeyboard.instance.removeHandler(_handleKeyboardFireShortcut);
     HardwareKeyboard.instance.removeHandler(_handleOptionVerbShortcut);
     _optionVerbBufferTimer?.cancel();
     _thumbnailScrollController.dispose();
@@ -3499,20 +3484,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           } catch (_) {}
         },
       ),
-      body: Focus(
-        canRequestFocus: false,
-        onKeyEvent: (node, event) {
-          if (event is! KeyDownEvent) return KeyEventResult.ignored;
-          if (event.logicalKey == LogicalKeyboardKey.keyK &&
-              (HardwareKeyboard.instance.isMetaPressed ||
-                  HardwareKeyboard.instance.isControlPressed) &&
-              HardwareKeyboard.instance.isShiftPressed) {
-            _showKeyboardFireDialog();
-            return KeyEventResult.handled;
-          }
-          return KeyEventResult.ignored;
-        },
-        child: Shortcuts(
+      body: Shortcuts(
           shortcuts: const <ShortcutActivator, Intent>{
             SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
                 _PastePreviousCaptionIntent(),
@@ -3585,12 +3557,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   return _handleArrowUpDownByRow(up: false);
                 },
               ),
-              KeyboardFireIntent: CallbackAction<KeyboardFireIntent>(
-                onInvoke: (_) {
-                  _showKeyboardFireDialog();
-                  return null;
-                },
-              ),
             },
             child: Padding(
               padding: const EdgeInsets.fromLTRB(8.0, 1.0, 4.0, 0.0),
@@ -3598,7 +3564,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             ),
           ),
         ),
-      ), // Focus
     );
   }
 
