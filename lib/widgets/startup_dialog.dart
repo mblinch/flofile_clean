@@ -5,6 +5,7 @@ import 'dart:io';
 import '../services/api_manager.dart';
 import 'dart:convert'; // Added for jsonDecode
 import 'package:dropdown_flutter/custom_dropdown.dart';
+import 'package:flutter_switch/flutter_switch.dart';
 import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'metadata_preset_dialog.dart';
@@ -92,6 +93,7 @@ class _StartupDialogState extends State<StartupDialog> {
   String? _favoriteHomeTeam;
   String? _favoriteAwayTeam;
   bool _useBallDontLieApi = false;
+  String? _goTimeWarningText;
 
   final List<String> questions = [
     'Where is your images folder?',
@@ -736,15 +738,109 @@ class _StartupDialogState extends State<StartupDialog> {
           selectedColor: Colors.grey.shade100,
         ),
       ),
+      listItemBuilder: (context, item, isSelected, onItemSelect) {
+        final team = item;
+        final blockedByOtherSelection =
+            (isHome && selectedAwayTeam == team) ||
+                (!isHome && selectedHomeTeam == team);
+        final isFavForSlot =
+            isHome ? _favoriteHomeTeam == team : _favoriteAwayTeam == team;
+        return InkWell(
+          onTap: blockedByOtherSelection ? null : onItemSelect,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  team,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: blockedByOtherSelection
+                        ? Colors.grey.shade400
+                        : Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () async {
+                  if (blockedByOtherSelection) return;
+                  setState(() {
+                    if (isHome) {
+                      selectedHomeTeam = team;
+                    } else {
+                      selectedAwayTeam = team;
+                    }
+                  });
+                  await _toggleFavoriteTeam(isHome: isHome);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    isFavForSlot ? Icons.star : Icons.star_border,
+                    size: 16,
+                    color: isFavForSlot ? Colors.amber : Colors.grey.shade400,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
       onChanged: (value) {
+        if (value == null) return;
+        final blockedByOtherSelection =
+            (isHome && selectedAwayTeam == value) ||
+                (!isHome && selectedHomeTeam == value);
+        if (blockedByOtherSelection) return;
         setState(() {
           if (isHome) {
             selectedHomeTeam = value;
           } else {
             selectedAwayTeam = value;
           }
+          _goTimeWarningText = null;
         });
       },
+    );
+  }
+
+  Widget _buildTeamDropdownWithFavoriteIndicator({
+    required bool isHome,
+    required String hintText,
+  }) {
+    final selectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
+    final isFavoriteSelected =
+        selectedTeam != null &&
+            ((isHome && _favoriteHomeTeam == selectedTeam) ||
+                (!isHome && _favoriteAwayTeam == selectedTeam));
+
+    return Stack(
+      alignment: Alignment.centerRight,
+      children: [
+        _buildStyledTeamDropdown(isHome: isHome, hintText: hintText),
+        if (isFavoriteSelected)
+          IgnorePointer(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 34),
+              child: Icon(
+                Icons.star,
+                size: 14,
+                color: Colors.amber.shade700,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// Match button width to full Away + @ + Home row width.
+  Widget _buildTeamRowWidth({required Widget child}) {
+    return FractionallySizedBox(
+      widthFactor: 1.0,
+      alignment: Alignment.centerLeft,
+      child: child,
     );
   }
 
@@ -773,7 +869,7 @@ class _StartupDialogState extends State<StartupDialog> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: 640,
+            width: 532,
             height: 500,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: Colors.white, // Added white background
@@ -787,7 +883,7 @@ class _StartupDialogState extends State<StartupDialog> {
                     const Text(
                       'FLO FILE',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: Colors.black,
                         letterSpacing: -0.5,
@@ -833,7 +929,7 @@ class _StartupDialogState extends State<StartupDialog> {
                 Text(
                   displayedText + (isTyping ? '|' : ''),
                   style: const TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: Colors.black,
                   ),
@@ -877,7 +973,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                   ? 'Loading...'
                                   : 'Pick Images Folder',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: isLoadingFolder
                                     ? Colors.grey.shade600
                                     : Colors.grey.shade700,
@@ -913,7 +1009,7 @@ class _StartupDialogState extends State<StartupDialog> {
                             Text(
                               'Select Game Date',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: Colors.grey.shade600,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -943,7 +1039,7 @@ class _StartupDialogState extends State<StartupDialog> {
                             Text(
                               'Next',
                               style: TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: Colors.grey.shade700,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -957,9 +1053,7 @@ class _StartupDialogState extends State<StartupDialog> {
                   // Team selection
                   if (!isLoadingTeams) ...[
                     // Pick Images Folder option
-                    FractionallySizedBox(
-                      widthFactor: 0.75,
-                      alignment: Alignment.centerLeft,
+                    _buildTeamRowWidth(
                       child: CustomButton(
                         onTap: isLoadingFolder ? null : _pickFolder,
                         child: Container(
@@ -991,7 +1085,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                     ? 'Loading...'
                                     : 'Pick Images Folder',
                                 style: TextStyle(
-                                  fontSize: 12,
+                                  fontSize: 11,
                                   color: isLoadingFolder
                                       ? Colors.grey.shade600
                                       : Colors.grey.shade700,
@@ -1014,7 +1108,7 @@ class _StartupDialogState extends State<StartupDialog> {
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               color: Colors.grey.shade800,
-                              fontSize: 12,
+                              fontSize: 11,
                             ),
                           ),
                           Expanded(
@@ -1022,7 +1116,7 @@ class _StartupDialogState extends State<StartupDialog> {
                               selectedFolderPath!,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: Colors.grey,
                               ),
                             ),
@@ -1038,13 +1132,13 @@ class _StartupDialogState extends State<StartupDialog> {
                               style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 color: Colors.grey.shade800,
-                                fontSize: 12,
+                                fontSize: 11,
                               ),
                             ),
                             Text(
                               _formatDate(selectedGameDate!),
                               style: const TextStyle(
-                                fontSize: 12,
+                                fontSize: 11,
                                 color: Colors.grey,
                               ),
                             ),
@@ -1070,7 +1164,7 @@ class _StartupDialogState extends State<StartupDialog> {
                               (_isTypingTeamSelection ? '|' : ''),
                           style: const TextStyle(
                             fontWeight: FontWeight.w600,
-                            fontSize: 12,
+                            fontSize: 11,
                           ),
                         ),
                         if (_isOffline) ...[
@@ -1116,85 +1210,77 @@ class _StartupDialogState extends State<StartupDialog> {
 
                     // Show team dropdowns only after typewriter is done
                     if (!_isTypingTeamSelection) ...[
-                      // Home Team
-                      Text('Home Team:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade800,
-                            fontSize: 12,
-                          )),
-                      const SizedBox(height: 3),
+                      // Away + Home Team on one line (home shown last)
                       FractionallySizedBox(
-                        widthFactor: 0.75,
+                        widthFactor: 1.0,
                         alignment: Alignment.centerLeft,
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: _buildStyledTeamDropdown(
-                                isHome: true,
-                                hintText: 'Select home team',
-                              ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text('Away Team:',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade800,
+                                        fontSize: 11,
+                                      )),
+                                ),
+                                const SizedBox(width: 28),
+                                Expanded(
+                                  child: Text('Home Team:',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade800,
+                                        fontSize: 11,
+                                      )),
+                                ),
+                              ],
                             ),
-                            if (selectedHomeTeam != null) ...[
-                              const SizedBox(width: 8),
-                              CustomButton(
-                                onTap: () => _toggleFavoriteTeam(isHome: true),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Icon(
-                                    _favoriteHomeTeam == selectedHomeTeam
-                                        ? Icons.star
-                                        : Icons.star_border,
-                                    size: 18,
-                                    color: _favoriteHomeTeam == selectedHomeTeam
-                                        ? Colors.amber
-                                        : Colors.grey.shade400,
+                            const SizedBox(height: 3),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildTeamDropdownWithFavoriteIndicator(
+                                          isHome: false,
+                                          hintText: 'Away team',
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-
-                      // Away Team
-                      Text('Away Team:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade800,
-                            fontSize: 12,
-                          )),
-                      const SizedBox(height: 3),
-                      FractionallySizedBox(
-                        widthFactor: 0.75,
-                        alignment: Alignment.centerLeft,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: _buildStyledTeamDropdown(
-                                isHome: false,
-                                hintText: 'Select away team',
-                              ),
-                            ),
-                            if (selectedAwayTeam != null) ...[
-                              const SizedBox(width: 8),
-                              CustomButton(
-                                onTap: () => _toggleFavoriteTeam(isHome: false),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Icon(
-                                    _favoriteAwayTeam == selectedAwayTeam
-                                        ? Icons.star
-                                        : Icons.star_border,
-                                    size: 18,
-                                    color: _favoriteAwayTeam == selectedAwayTeam
-                                        ? Colors.amber
-                                        : Colors.grey.shade400,
+                                SizedBox(
+                                  width: 28,
+                                  child: Center(
+                                    child: Text(
+                                      '@',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildTeamDropdownWithFavoriteIndicator(
+                                          isHome: true,
+                                          hintText: 'Home team',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
@@ -1233,7 +1319,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                 'Home and away teams must be different',
                                 style: TextStyle(
                                   color: Colors.red,
-                                  fontSize: 12,
+                                  fontSize: 11,
                                 ),
                               ),
                             ],
@@ -1242,19 +1328,34 @@ class _StartupDialogState extends State<StartupDialog> {
                       const SizedBox(height: 6),
 
                       // Go Time — above optional metadata / API controls
-                      FractionallySizedBox(
-                        widthFactor: 0.75,
-                        alignment: Alignment.centerLeft,
+                      _buildTeamRowWidth(
                         child: CustomButton(
-                          onTap: _canProceed
-                              ? () {
-                                  widget.onConfigurationComplete(
-                                    selectedFolderPath!,
-                                    selectedHomeTeam,
-                                    selectedAwayTeam,
-                                  );
-                                }
-                              : null,
+                          onTap: () {
+                            if (_canProceed) {
+                              setState(() => _goTimeWarningText = null);
+                              widget.onConfigurationComplete(
+                                selectedFolderPath!,
+                                selectedHomeTeam,
+                                selectedAwayTeam,
+                              );
+                              return;
+                            }
+
+                            final missingTeams =
+                                selectedHomeTeam == null ||
+                                    selectedAwayTeam == null;
+                            final sameTeam = selectedHomeTeam != null &&
+                                selectedAwayTeam != null &&
+                                selectedHomeTeam == selectedAwayTeam;
+
+                            String message = 'Complete setup before continuing.';
+                            if (missingTeams) {
+                              message = 'Select both Away and Home teams.';
+                            } else if (sameTeam) {
+                              message = 'Home and away teams must be different.';
+                            }
+                            setState(() => _goTimeWarningText = message);
+                          },
                           child: Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(
@@ -1287,7 +1388,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                     Text(
                                       'Go Time',
                                       style: TextStyle(
-                                        fontSize: 12,
+                                        fontSize: 11,
                                         color: _canProceed
                                             ? Colors.white
                                             : Colors.grey.shade600,
@@ -1296,26 +1397,16 @@ class _StartupDialogState extends State<StartupDialog> {
                                     ),
                                   ],
                                 ),
-                                if (!_canProceed) ...[
+                                if (_goTimeWarningText != null) ...[
                                   const SizedBox(height: 2),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.warning,
-                                        size: 10,
-                                        color: Colors.red.shade600,
-                                      ),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        'Select home and away teams',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.red.shade600,
-                                          fontWeight: FontWeight.w400,
-                                        ),
-                                      ),
-                                    ],
+                                  Text(
+                                    _goTimeWarningText!,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.red.shade600,
+                                      fontWeight: FontWeight.w500,
+                                    ),
                                   ),
                                 ],
                               ],
@@ -1323,19 +1414,23 @@ class _StartupDialogState extends State<StartupDialog> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        height: 1,
+                        color: Colors.grey.shade300,
+                      ),
+                      const SizedBox(height: 14),
 
                       // Optional: metadata preset, then BallDontLie (baseball/basketball)
                       const Text('Optional:',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: Colors.black87,
-                            fontSize: 12,
+                            fontSize: 11,
                           )),
                       const SizedBox(height: 4),
-                      FractionallySizedBox(
-                        widthFactor: 0.75,
-                        alignment: Alignment.centerLeft,
+                      _buildTeamRowWidth(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1359,7 +1454,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                     const SizedBox(width: 4),
                                     Text('Metadata Preset',
                                         style: TextStyle(
-                                            fontSize: 12,
+                                            fontSize: 11,
                                             color: Colors.grey.shade700,
                                             fontWeight: FontWeight.w500)),
                                   ],
@@ -1369,22 +1464,31 @@ class _StartupDialogState extends State<StartupDialog> {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                Checkbox(
-                                  value: _applyPresetToAllImages,
-                                  onChanged: (value) {
-                                    setState(() {
-                                      _applyPresetToAllImages = value ?? false;
-                                    });
-                                  },
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
+                                SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: Transform.scale(
+                                    scale: 0.62,
+                                    child: Checkbox(
+                                      value: _applyPresetToAllImages,
+                                      onChanged: (value) {
+                                        setState(() {
+                                          _applyPresetToAllImages =
+                                              value ?? false;
+                                        });
+                                      },
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      visualDensity: VisualDensity.compact,
+                                    ),
+                                  ),
                                 ),
+                                const SizedBox(width: 6),
                                 Expanded(
                                   child: Text(
                                     'Apply preset to all images in session',
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: 10,
                                       color: Colors.grey.shade700,
                                     ),
                                   ),
@@ -1394,34 +1498,55 @@ class _StartupDialogState extends State<StartupDialog> {
                             if (widget.sport?.toLowerCase() == 'baseball' ||
                                 widget.sport?.toLowerCase() ==
                                     'basketball') ...[
-                              const SizedBox(height: 2),
-                              SwitchListTile(
-                                contentPadding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                title: Text(
-                                  'Use BallDontLie API (testing)',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade800,
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Use BallDontLie API (testing)',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.grey.shade800,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Use balldontlie.io for teams/rosters instead of official/ESPN APIs.',
+                                          style: TextStyle(
+                                            fontSize: 8,
+                                            color: Colors.grey.shade600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                subtitle: Text(
-                                  'Use balldontlie.io for teams/rosters instead of official/ESPN APIs.',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.grey.shade600,
+                                  const SizedBox(width: 6),
+                                  SizedBox(
+                                    width: 36,
+                                    height: 18,
+                                    child: FlutterSwitch(
+                                      value: _useBallDontLieApi,
+                                      width: 36,
+                                      height: 18,
+                                      toggleSize: 14,
+                                      padding: 2,
+                                      activeColor: const Color(0xFF1976D2),
+                                      inactiveColor: Colors.grey.shade300,
+                                      toggleColor: Colors.white,
+                                      onToggle: (bool value) async {
+                                        await _preferencesService
+                                            .setUseBallDontLieApi(value);
+                                        setState(() =>
+                                            _useBallDontLieApi = value);
+                                        await _loadTeams();
+                                      },
+                                    ),
                                   ),
-                                ),
-                                value: _useBallDontLieApi,
-                                onChanged: (bool value) async {
-                                  await _preferencesService
-                                      .setUseBallDontLieApi(value);
-                                  setState(() => _useBallDontLieApi = value);
-                                  await _loadTeams();
-                                },
+                                ],
                               ),
                             ],
                           ],

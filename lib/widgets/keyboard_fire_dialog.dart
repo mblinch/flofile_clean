@@ -2,8 +2,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_switch/flutter_switch.dart';
 import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
+import '../utils/default_verb_keywords.dart';
 import 'verb_keyword_quick_bar.dart';
 
 /// Intents for global H/V firebar shortcut (only when not in a text field).
@@ -173,6 +175,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   bool _showPersonalityField = true;
 
   bool _applyVerbKeywordsEnabledKb = true;
+  bool _applyPlayerNamesToKeywordsEnabledKb = true;
+
+  /// Editable keyword shortcut chips shown under "Keyword Shortcuts".
+  /// Seeded with built-in defaults immediately so chips are visible before
+  /// the async prefs load completes.
+  List<Map<String, dynamic>> _keywordShortcuts = [
+    {'label': 'c', 'keywords': List<String>.from(verbKeywordQuickGroupC)},
+    {'label': 'p', 'keywords': List<String>.from(verbKeywordQuickGroupP)},
+    {'label': 'ps', 'keywords': List<String>.from(verbKeywordQuickGroupPs)},
+    {'label': 'b', 'keywords': List<String>.from(verbKeywordQuickGroupB)},
+    {'label': 'o', 'keywords': List<String>.from(verbKeywordQuickGroupO)},
+    {'label': 'TPX', 'keywords': List<String>.from(verbKeywordQuickTpx)},
+  ];
 
   /// Actions column shortcut list (under FTP); persisted.
   bool _showKeyboardFireShortcutsHelp = true;
@@ -269,6 +284,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         if (!mounted) return;
         setState(() => _applyVerbKeywordsEnabledKb = enabled);
       });
+      p.getApplyPlayerNamesToKeywords().then((enabled) {
+        if (!mounted) return;
+        setState(() => _applyPlayerNamesToKeywordsEnabledKb = enabled);
+      });
+      p.getKeywordShortcuts().then((saved) {
+        if (!mounted || saved.isEmpty) return;
+        setState(() => _keywordShortcuts = saved);
+      });
       p.captionFieldVisibilityRevision
           .addListener(_onKeyboardFireCaptionFieldVisibilityRevision);
     });
@@ -291,6 +314,85 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _showKeywordsField = p.captionFieldKeywordsVisibleSync;
       _showPersonalityField = p.captionFieldPersonalityVisibleSync;
     });
+  }
+
+  // ── Keyword shortcut helpers ──────────────────────────────────────────────
+
+  List<Map<String, dynamic>> _defaultKeywordShortcuts() => [
+        {'label': 'c', 'keywords': List<String>.from(verbKeywordQuickGroupC)},
+        {'label': 'p', 'keywords': List<String>.from(verbKeywordQuickGroupP)},
+        {'label': 'ps', 'keywords': List<String>.from(verbKeywordQuickGroupPs)},
+        {'label': 'b', 'keywords': List<String>.from(verbKeywordQuickGroupB)},
+        {'label': 'o', 'keywords': List<String>.from(verbKeywordQuickGroupO)},
+        {'label': 'TPX', 'keywords': List<String>.from(verbKeywordQuickTpx)},
+      ];
+
+  Future<void> _saveKeywordShortcuts() async {
+    try {
+      await _prefsService?.saveKeywordShortcuts(_keywordShortcuts);
+    } catch (_) {}
+  }
+
+  void _showKeywordShortcutContextMenu(int index, Offset position) async {
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          position.dx, position.dy, position.dx + 1, position.dy + 1),
+      color: Colors.grey.shade50,
+      elevation: 3,
+      items: [
+        PopupMenuItem(
+          value: 'edit',
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text('Edit',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade800)),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text('Delete',
+              style: TextStyle(fontSize: 11, color: Colors.red.shade600)),
+        ),
+      ],
+    );
+    if (!mounted) return;
+    if (result == 'edit') {
+      _showKeywordShortcutEditor(editIndex: index);
+    } else if (result == 'delete') {
+      setState(() => _keywordShortcuts.removeAt(index));
+      _saveKeywordShortcuts();
+    }
+  }
+
+  void _showKeywordShortcutEditor({int? editIndex}) {
+    final existing = editIndex != null ? _keywordShortcuts[editIndex] : null;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => _KeywordShortcutEditorDialog(
+        initialLabel: existing?['label'] as String? ?? '',
+        initialKeywords: (existing?['keywords'] as List?)
+                ?.map((e) => e.toString())
+                .join(', ') ??
+            '',
+        isEdit: editIndex != null,
+        onSave: (label, keywords) {
+          final entry = <String, dynamic>{
+            'label': label,
+            'keywords': keywords,
+          };
+          setState(() {
+            if (editIndex != null) {
+              _keywordShortcuts[editIndex] = entry;
+            } else {
+              _keywordShortcuts.add(entry);
+            }
+          });
+          _saveKeywordShortcuts();
+        },
+      ),
+    );
   }
 
   @override
@@ -691,7 +793,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           textAlignVertical: TextAlignVertical.top,
           cursorHeight: 12,
           cursorColor: Colors.black87,
-          style: const TextStyle(fontSize: 10),
+          style: const TextStyle(fontSize: 11),
           decoration: InputDecoration(
             isDense: true,
             hintText: 'Caption will appear here as you add players and a verb.',
@@ -712,7 +814,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 10),
+        style: const TextStyle(fontSize: 11),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Caption will appear here as you add players and a verb.',
@@ -728,7 +830,51 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     });
   }
 
-  Widget _buildKbLabeledBox(String label, Widget child) {
+  Widget _buildBylineButton() {
+    final hasOverride =
+        (widget.captionState as dynamic?)?.hasBylineOverride == true;
+    return GestureDetector(
+      onTap: () => (widget.captionState as dynamic?)?.openBylineEditor(),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.edit_outlined,
+            size: 11,
+            color: hasOverride
+                ? const Color(0xFF1976D2)
+                : Colors.grey.shade500,
+          ),
+          const SizedBox(width: 2),
+          Text(
+            'Byline',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: hasOverride
+                  ? const Color(0xFF1976D2)
+                  : Colors.grey.shade500,
+            ),
+          ),
+          if (hasOverride) ...[
+            const SizedBox(width: 3),
+            Container(
+              width: 5,
+              height: 5,
+              decoration: const BoxDecoration(
+                color: Color(0xFF1976D2),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKbLabeledBox(String label, Widget child,
+      {Widget? trailingAction}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -751,14 +897,29 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             ],
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
-            ),
-          ),
+          child: trailingAction != null
+              ? Row(
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const Spacer(),
+                    trailingAction,
+                  ],
+                )
+              : Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
         ),
         Expanded(
           child: Container(
@@ -795,7 +956,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 10),
+        style: const TextStyle(fontSize: 11),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Headline',
@@ -814,12 +975,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       expands: true,
       maxLines: null,
       textAlignVertical: TextAlignVertical.top,
-      cursorHeight: 12,
-      cursorColor: Colors.black87,
-      style: const TextStyle(fontSize: 10),
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: 'Headline',
+        cursorHeight: 12,
+        cursorColor: Colors.black87,
+        style: const TextStyle(fontSize: 11),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Headline',
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
@@ -843,7 +1004,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 10),
+        style: const TextStyle(fontSize: 11),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Keywords',
@@ -862,12 +1023,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       expands: true,
       maxLines: null,
       textAlignVertical: TextAlignVertical.top,
-      cursorHeight: 12,
-      cursorColor: Colors.black87,
-      style: const TextStyle(fontSize: 10),
-      decoration: InputDecoration(
-        isDense: true,
-        hintText: 'Keywords',
+        cursorHeight: 12,
+        cursorColor: Colors.black87,
+        style: const TextStyle(fontSize: 11),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Keywords',
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
@@ -890,12 +1051,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           expands: true,
           maxLines: null,
           textAlignVertical: TextAlignVertical.top,
-          cursorHeight: 12,
-          cursorColor: Colors.black87,
-          style: const TextStyle(fontSize: 10),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: 'Personality',
+        cursorHeight: 12,
+        cursorColor: Colors.black87,
+        style: const TextStyle(fontSize: 11),
+        decoration: InputDecoration(
+          isDense: true,
+          hintText: 'Personality',
             border: InputBorder.none,
             enabledBorder: InputBorder.none,
             focusedBorder: InputBorder.none,
@@ -913,7 +1074,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 10),
+        style: const TextStyle(fontSize: 11),
         decoration: InputDecoration(
           isDense: true,
           border: InputBorder.none,
@@ -934,7 +1095,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         _showHeadlineField || _showKeywordsField || _showPersonalityField;
 
     if (!hasSecondary) {
-      return _buildKbLabeledBox('Caption', _buildCaptionField());
+      return _buildKbLabeledBox('Caption', _buildCaptionField(),
+          trailingAction: _buildBylineButton());
     }
 
     final cards = <Widget>[];
@@ -959,7 +1121,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       children: [
         Expanded(
           flex: 5,
-          child: _buildKbLabeledBox('Caption', _buildCaptionField()),
+          child: _buildKbLabeledBox('Caption', _buildCaptionField(),
+              trailingAction: _buildBylineButton()),
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -1041,7 +1204,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: Text(
                     num,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       color: isPicked
                           ? const Color(0xFF0052CC)
@@ -1053,7 +1216,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: Text(
                     displayName,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color:
                           isPicked ? const Color(0xFF0052CC) : Colors.black87,
                       fontWeight:
@@ -1076,17 +1239,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     required bool isHomeTeam,
     required Set<String> selectedNames,
   }) {
+    const double gridCellHeight = 30;
     if (player == null) {
-      return AspectRatio(
-        aspectRatio: 1,
+      return SizedBox(
+        height: gridCellHeight,
         child: Container(
-          margin: const EdgeInsets.all(0.5),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            border: Border.all(color: Colors.grey.shade200, width: 0.5),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
+            margin: const EdgeInsets.all(0.5),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border.all(color: Colors.grey.shade200, width: 0.5),
+              borderRadius: BorderRadius.circular(2),
+            )),
       );
     }
     final jersey = player.jerseyNumber ?? '?';
@@ -1094,37 +1257,36 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final lastName = player.fullName.contains(' ')
         ? player.fullName.split(' ').sublist(1).join(' ').trim()
         : player.fullName;
-    return AspectRatio(
-      aspectRatio: 1,
-      child: GestureDetector(
-        onTap: () {
-          final state = widget.captionState;
-          if (state == null) return;
-          if (isPicked) {
-            (state as dynamic).removePlayerByJersey(isHomeTeam, jersey);
-          } else {
-            state.addPlayerByJersey(isHomeTeam, jersey);
-          }
-          state.updateCaptionFromKeyboardFire();
-          setState(() {});
-          _refreshCaptionPreviewLater();
-        },
-        child: Container(
-          margin: const EdgeInsets.all(0.5),
-          decoration: BoxDecoration(
-            color: isPicked ? const Color(0xFFDBEAFF) : Colors.white,
-            border: Border.all(
-              color: isPicked ? const Color(0xFF4A90E2) : Colors.grey.shade300,
-              width: isPicked ? 2 : 1,
+    return SizedBox(
+      height: gridCellHeight,
+      child: Tooltip(
+        message: player.fullName,
+        waitDuration: const Duration(milliseconds: 250),
+        child: GestureDetector(
+          onTap: () {
+            final state = widget.captionState;
+            if (state == null) return;
+            if (isPicked) {
+              (state as dynamic).removePlayerByJersey(isHomeTeam, jersey);
+            } else {
+              state.addPlayerByJersey(isHomeTeam, jersey);
+            }
+            state.updateCaptionFromKeyboardFire();
+            setState(() {});
+            _refreshCaptionPreviewLater();
+          },
+          child: Container(
+            margin: const EdgeInsets.all(0.5),
+            decoration: BoxDecoration(
+              color: isPicked ? const Color(0xFFDBEAFF) : Colors.white,
+              border: Border.all(
+                color: isPicked ? const Color(0xFF4A90E2) : Colors.grey.shade300,
+                width: isPicked ? 2 : 1,
+              ),
+              borderRadius: BorderRadius.circular(2),
             ),
-            borderRadius: BorderRadius.circular(2),
-          ),
-          // Square cells are very short when 10 fit across; intrinsic text height
-          // overflows without scaling (red "BOTTOM OVERFLOWED" stripes).
-          padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.center,
+            // Keep name text at a fixed size across all cells.
+            padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
@@ -1140,13 +1302,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 Text(
                   lastName,
                   style: TextStyle(
-                    fontSize: 8,
+                    fontSize: 9,
                     fontWeight: FontWeight.w500,
-                    height: 1.05,
+                    height: 1.0,
                     color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  softWrap: false,
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -1157,8 +1320,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     );
   }
 
-  /// Number grid: one **row per decade** (0–9, 10–19, 20–29, …), **10 columns**
-  /// (ones digit). Empty slots stay visible so columns line up.
+  /// Number grid: one row per decade (0–9, 10–19, 20–29, …) and only real
+  /// player cells are rendered (no empty placeholder squares).
   Widget _buildRosterSquareGrid(List<Player> roster, bool isHomeTeam) {
     if (roster.isEmpty) {
       return Center(
@@ -1193,17 +1356,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           for (final b in buckets)
             Padding(
               padding: const EdgeInsets.only(bottom: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Wrap(
+                spacing: 1,
+                runSpacing: 1,
                 children: [
                   for (int d = 0; d < 10; d++)
-                    Expanded(
-                      child: _buildRosterSquareGridCell(
-                        player: byNum[b * 10 + d],
-                        isHomeTeam: isHomeTeam,
-                        selectedNames: selectedNames,
+                    if (byNum[b * 10 + d] != null)
+                      SizedBox(
+                        width: 40,
+                        child: _buildRosterSquareGridCell(
+                          player: byNum[b * 10 + d],
+                          isHomeTeam: isHomeTeam,
+                          selectedNames: selectedNames,
+                        ),
                       ),
-                    ),
                 ],
               ),
             ),
@@ -1383,6 +1549,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 14),
+        Container(
+          width: double.infinity,
+          height: 1,
+          color: Colors.grey.shade300,
+        ),
+        const SizedBox(height: 6),
         MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
@@ -1404,7 +1576,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   Text(
                     'Shortcuts',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.w600,
                       color: Colors.grey.shade700,
                     ),
@@ -1566,22 +1738,49 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Keyword Shortcuts',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                color: Colors.grey.shade700,
-                letterSpacing: 0.2,
-              ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'Keyword Shortcuts',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade700,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => _showKeywordShortcutEditor(),
+                  child: Tooltip(
+                    message: 'Add keyword shortcut',
+                    waitDuration: const Duration(milliseconds: 500),
+                    child: Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        border: Border.all(color: Colors.grey.shade400),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                      child: Icon(Icons.add,
+                          size: 11, color: Colors.grey.shade700),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 3),
             VerbKeywordQuickBar(
+              key: ValueKey(widget.currentIndex ?? 0),
               controller: ctrl,
+              shortcuts: _keywordShortcuts,
               onInserted: () {
-                widget.captionState?.updateCaptionFromKeyboardFire();
+                _refreshCaptionPreviewLater();
                 if (mounted) setState(() {});
               },
+              onContextMenu: _showKeywordShortcutContextMenu,
             ),
           ],
         ),
@@ -1592,63 +1791,147 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   }
 
   Widget _buildApplyKeywordsToggleKb() {
+    Future<void> syncKeywordsFieldVisibility({
+      required bool applyVerbKeywords,
+      required bool applyNameKeywords,
+    }) async {
+      final shouldShowKeywords = applyVerbKeywords || applyNameKeywords;
+      if (_showKeywordsField == shouldShowKeywords) return;
+      setState(() => _showKeywordsField = shouldShowKeywords);
+      try {
+        await _prefsService?.saveShowKeywordsField(shouldShowKeywords);
+      } catch (_) {}
+    }
+
     return Tooltip(
       message:
-          'When On, choosing a verb adds its keyword presets and selected player names to the Keywords field.',
+          'When On, choosing a verb adds its keyword presets to the Keywords field.',
       waitDuration: const Duration(milliseconds: 400),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Text(
-            'Keywords',
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              height: 1.0,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(width: 2),
-          SizedBox(
-            width: 36,
-            height: 18,
-            child: FittedBox(
-              fit: BoxFit.contain,
-              alignment: Alignment.centerLeft,
-              child: Switch(
-                value: _applyVerbKeywordsEnabledKb,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                onChanged: (v) async {
-                  setState(() => _applyVerbKeywordsEnabledKb = v);
-                  try {
-                    await (widget.captionState as dynamic)
-                        .setApplyVerbKeywordsEnabled(v);
-                  } catch (_) {
-                    // Fallback: persist preference without captionState.
-                    try {
-                      await _prefsService?.saveApplyVerbKeywords(v);
-                    } catch (_) {}
-                  }
-                },
-                thumbColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) {
-                    return Colors.white;
-                  }
-                  return Colors.grey.shade400;
-                }),
-                trackColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) {
-                    return const Color(0xFF1976D2);
-                  }
-                  return Colors.grey.shade300;
-                }),
-                trackOutlineColor:
-                    WidgetStateProperty.all(Colors.transparent),
+      child: InkWell(
+        onTap: () async {
+          final v = !_applyVerbKeywordsEnabledKb;
+          setState(() => _applyVerbKeywordsEnabledKb = v);
+          try {
+            await (widget.captionState as dynamic)
+                .setApplyVerbKeywordsEnabled(v);
+          } catch (_) {
+            try {
+              await _prefsService?.saveApplyVerbKeywords(v);
+            } catch (_) {}
+          }
+          await syncKeywordsFieldVisibility(
+            applyVerbKeywords: v,
+            applyNameKeywords: _applyPlayerNamesToKeywordsEnabledKb,
+          );
+        },
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildKeywordToggleLabel('Keyword Verbs', fontSize: 9),
+            const SizedBox(width: 4),
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: const Color(0xFF1976D2),
+                  width: 1.2,
+                ),
+                borderRadius: BorderRadius.circular(2),
+                color: _applyVerbKeywordsEnabledKb
+                    ? const Color(0xFF1976D2)
+                    : Colors.white,
               ),
+              child: _applyVerbKeywordsEnabledKb
+                  ? const Center(
+                      child: Icon(
+                        Icons.check,
+                        size: 10,
+                        color: Colors.white,
+                      ),
+                    )
+                  : null,
             ),
+            const SizedBox(width: 2),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPlayerNamesKeywordsToggleKb() {
+    Future<void> setKeywordNamesEnabled(bool v) async {
+      setState(() => _applyPlayerNamesToKeywordsEnabledKb = v);
+      try {
+        await (widget.captionState as dynamic)
+            .setApplyPlayerNamesToKeywordsEnabled(v);
+      } catch (_) {
+        try {
+          await _prefsService?.saveApplyPlayerNamesToKeywords(v);
+        } catch (_) {}
+      }
+      final shouldShowKeywords = _applyVerbKeywordsEnabledKb || v;
+      if (_showKeywordsField != shouldShowKeywords) {
+        setState(() => _showKeywordsField = shouldShowKeywords);
+        try {
+          await _prefsService?.saveShowKeywordsField(shouldShowKeywords);
+        } catch (_) {}
+      }
+    }
+
+    return Tooltip(
+      message:
+          'When On, selected player names are added to Keywords when applying verb keywords.',
+      waitDuration: const Duration(milliseconds: 400),
+      child: InkWell(
+          onTap: () =>
+              setKeywordNamesEnabled(!_applyPlayerNamesToKeywordsEnabledKb),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _buildKeywordToggleLabel('Keyword Names', fontSize: 9),
+              const SizedBox(width: 4),
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: const Color(0xFF1976D2),
+                    width: 1.2,
+                  ),
+                  borderRadius: BorderRadius.circular(2),
+                  color: _applyPlayerNamesToKeywordsEnabledKb
+                      ? const Color(0xFF1976D2)
+                      : Colors.white,
+                ),
+                child: _applyPlayerNamesToKeywordsEnabledKb
+                    ? const Center(
+                        child: Icon(
+                          Icons.check,
+                          size: 10,
+                          color: Colors.white,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 2),
+            ],
           ),
-        ],
+        ),
+    );
+  }
+
+  Widget _buildKeywordToggleLabel(String text, {double fontSize = 9}) {
+    return Text(
+      text,
+      softWrap: false,
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: FontWeight.normal,
+        height: 1.0,
+        color: Colors.black87,
       ),
     );
   }
@@ -1808,7 +2091,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         '$catNum',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: (isSelected || isCurrent)
                               ? Colors.grey.shade900
@@ -1821,7 +2104,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: Text(
                         name,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           fontWeight: FontWeight.w600,
                           color: Colors.grey.shade800,
                         ),
@@ -1869,7 +2152,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       thumbVisibility: true,
       child: ListView.builder(
         controller: _categoriesScrollController,
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.only(top: 6),
         itemCount: totalCount,
         itemBuilder: (context, flatIndex) {
           // Custom verb input — last item in the list
@@ -1880,6 +2163,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    height: 1,
+                    color: Colors.grey.shade300,
+                  ),
+                  const SizedBox(height: 6),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 1),
                     child: Text(
@@ -2033,7 +2322,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               '$catNum',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                   color: Colors.grey.shade800),
                             ),
@@ -2043,7 +2332,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             child: Text(
                               name,
                               style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                   color: Colors.grey.shade800),
                               overflow: TextOverflow.ellipsis,
@@ -2162,7 +2451,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 child: Text(
                                   '$verbNum',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                     color: isPinned
                                         ? const Color(0xFFB45309)
@@ -2179,7 +2468,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       child: Text(
                                         verb,
                                         style: TextStyle(
-                                          fontSize: 11,
+                                          fontSize: 12,
                                           color: isPinned
                                               ? const Color(0xFFB45309)
                                               : (isPicked
@@ -3202,30 +3491,24 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           List<int>.generate(9, (i) => startInning + i); // 1–9, 10–18, or 19–27
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(4, 3, 4, 2),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.zero,
-                border: Border(
-                  left: BorderSide(color: Colors.grey.shade300, width: 1),
-                  top: BorderSide(color: Colors.grey.shade300, width: 1),
-                  right: BorderSide(color: Colors.grey.shade300, width: 1),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
+        child: Container(
+          decoration: BoxDecoration(
+            color: _panelBackgroundLight,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(color: Colors.grey.shade300, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
               ),
-              child: Text(
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
                 headerLabel,
                 style: TextStyle(
                   fontSize: 10,
@@ -3233,85 +3516,67 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   color: Colors.grey.shade700,
                 ),
               ),
-            ),
-            Container(
-              decoration: BoxDecoration(
-                color: _panelBackgroundLight,
-                borderRadius: BorderRadius.zero,
-                border: Border.all(color: Colors.grey.shade300, width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
+              const SizedBox(width: 6),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      periodButton('Pre-Game'),
+                      ...inningNums.map(inningDigitButton),
+                      baseballPageButton(
+                        icon: Icons.remove,
+                        enabled: page > 0,
+                        onPressed: page > 0
+                            ? () => setState(() {
+                                  _baseballInningPage =
+                                      (_baseballInningPage - 1).clamp(0, 2);
+                                })
+                            : null,
+                      ),
+                      baseballPageButton(
+                        icon: Icons.add,
+                        enabled: page < 2,
+                        onPressed: page < 2
+                            ? () => setState(() {
+                                  _baseballInningPage =
+                                      (_baseballInningPage + 1).clamp(0, 2);
+                                })
+                            : null,
+                      ),
+                      periodButton('Post Game'),
+                    ],
                   ),
-                ],
-              ),
-              padding: const EdgeInsets.fromLTRB(3, 8, 3, 8),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    periodButton('Pre-Game'),
-                    ...inningNums.map(inningDigitButton),
-                    baseballPageButton(
-                      icon: Icons.remove,
-                      enabled: page > 0,
-                      onPressed: page > 0
-                          ? () => setState(() {
-                                _baseballInningPage =
-                                    (_baseballInningPage - 1).clamp(0, 2);
-                              })
-                          : null,
-                    ),
-                    baseballPageButton(
-                      icon: Icons.add,
-                      enabled: page < 2,
-                      onPressed: page < 2
-                          ? () => setState(() {
-                                _baseballInningPage =
-                                    (_baseballInningPage + 1).clamp(0, 2);
-                              })
-                          : null,
-                    ),
-                    periodButton('Post Game'),
-                  ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(4, 3, 4, 2),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              borderRadius: BorderRadius.zero,
-              border: Border(
-                left: BorderSide(color: Colors.grey.shade300, width: 1),
-                top: BorderSide(color: Colors.grey.shade300, width: 1),
-                right: BorderSide(color: Colors.grey.shade300, width: 1),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
+      child: Container(
+        decoration: BoxDecoration(
+          color: _panelBackgroundLight,
+          borderRadius: BorderRadius.zero,
+          border: Border.all(color: Colors.grey.shade300, width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
             ),
-            child: Text(
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
               headerLabel,
               style: TextStyle(
                 fontSize: 10,
@@ -3319,67 +3584,56 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 color: Colors.grey.shade700,
               ),
             ),
-          ),
-          Container(
-            decoration: BoxDecoration(
-              color: _panelBackgroundLight,
-              borderRadius: BorderRadius.zero,
-              border: Border.all(color: Colors.grey.shade300, width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                ...periodLabels.map(periodButton),
-                const SizedBox(width: 3),
-                SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: OutlinedButton(
-                    onPressed: () {
-                      setState(
-                          () => _showPlayoffOvertimes = !_showPlayoffOvertimes);
-                    },
-                    style: OutlinedButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(0, 0),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      side: BorderSide(
-                        color: _showPlayoffOvertimes
-                            ? Colors.blue.shade500
-                            : Colors.grey.shade400,
+            const SizedBox(width: 6),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    ...periodLabels.map(periodButton),
+                    const SizedBox(width: 3),
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: OutlinedButton(
+                        onPressed: () {
+                          setState(() =>
+                              _showPlayoffOvertimes = !_showPlayoffOvertimes);
+                        },
+                        style: OutlinedButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(0, 0),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          side: BorderSide(
+                            color: _showPlayoffOvertimes
+                                ? Colors.blue.shade500
+                                : Colors.grey.shade400,
+                          ),
+                          backgroundColor: _showPlayoffOvertimes
+                              ? Colors.blue.shade50
+                              : Colors.white,
+                          shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero),
+                        ),
+                        child: Icon(
+                          _showPlayoffOvertimes ? Icons.remove : Icons.add,
+                          size: 12,
+                          color: _showPlayoffOvertimes
+                              ? Colors.blue.shade700
+                              : Colors.grey.shade700,
+                        ),
                       ),
-                      backgroundColor: _showPlayoffOvertimes
-                          ? Colors.blue.shade50
-                          : Colors.white,
-                      shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.zero),
                     ),
-                    child: Icon(
-                      _showPlayoffOvertimes
-                          ? Icons.remove
-                          : Icons.add,
-                      size: 12,
-                      color: _showPlayoffOvertimes
-                          ? Colors.blue.shade700
-                          : Colors.grey.shade700,
-                    ),
-                  ),
+                    const SizedBox(width: 3),
+                    periodButton('Post Game'),
+                  ],
                 ),
-                const SizedBox(width: 3),
-                periodButton('Post Game'),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -3626,8 +3880,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                           color: Colors.grey.shade700,
                         ),
                       ),
@@ -3661,7 +3915,29 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 focusNode: _homeBarFocus,
                                 onSubmitted: _onHomeBarSubmit,
                                 rosterForGhostNames: widget.homeRoster,
-                                trailing: _buildPlayerViewModeToggle(),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 1,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: _buildPlayerViewModeToggle(),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: _buildPlayerNamesKeywordsToggleKb(),
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 6),
                               Expanded(
@@ -3719,8 +3995,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: Text(
                         'Verbs',
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                           color: Colors.grey.shade700,
                         ),
                       ),
@@ -3760,7 +4036,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 onChanged: (v) {
                                   if (v.length >= 2) _onVerbBarInput(v);
                                 },
-                                trailing: _buildApplyKeywordsToggleKb(),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerRight,
+                                    child: _buildApplyKeywordsToggleKb(),
+                                  ),
+                                ],
                               ),
                               Expanded(
                                 child: ValueListenableBuilder<TextEditingValue>(
@@ -3811,8 +4097,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                           color: Colors.grey.shade700,
                         ),
                       ),
@@ -3846,7 +4132,29 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 focusNode: _awayBarFocus,
                                 onSubmitted: _onAwayBarSubmit,
                                 rosterForGhostNames: widget.awayRoster,
-                                trailing: _buildPlayerViewModeToggle(),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 1,
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: _buildPlayerViewModeToggle(),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Align(
+                                      alignment: Alignment.centerRight,
+                                      child: _buildPlayerNamesKeywordsToggleKb(),
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 6),
                               Expanded(
@@ -4215,6 +4523,332 @@ class KeyboardFireDialog extends StatelessWidget {
       captionState: captionState,
       showDialogActions: true,
       onDone: () => Navigator.of(context).pop(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Keyword shortcut editor dialog (add / edit)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _KeywordShortcutEditorDialog extends StatefulWidget {
+  final String initialLabel;
+  final String initialKeywords;
+  final bool isEdit;
+  final void Function(String label, List<String> keywords) onSave;
+
+  const _KeywordShortcutEditorDialog({
+    required this.initialLabel,
+    required this.initialKeywords,
+    required this.isEdit,
+    required this.onSave,
+  });
+
+  @override
+  State<_KeywordShortcutEditorDialog> createState() =>
+      _KeywordShortcutEditorDialogState();
+}
+
+class _KeywordShortcutEditorDialogState
+    extends State<_KeywordShortcutEditorDialog> {
+  late final TextEditingController _labelCtrl;
+  late final TextEditingController _keywordsCtrl;
+  final FocusNode _labelFocus = FocusNode();
+  final FocusNode _keywordsFocus = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _labelCtrl = TextEditingController(text: widget.initialLabel);
+    _keywordsCtrl = TextEditingController(text: widget.initialKeywords);
+    _labelCtrl.addListener(() => setState(() {}));
+    _keywordsCtrl.addListener(() => setState(() {}));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _labelFocus.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _labelCtrl.dispose();
+    _keywordsCtrl.dispose();
+    _labelFocus.dispose();
+    _keywordsFocus.dispose();
+    super.dispose();
+  }
+
+  List<String> get _parsedKeywords => _keywordsCtrl.text
+      .split(',')
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
+
+  bool get _canSave => _labelCtrl.text.trim().isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = _parsedKeywords;
+    final label = _labelCtrl.text.trim();
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      backgroundColor: Colors.grey.shade50,
+      child: Container(
+        width: 360,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header bar
+            Container(
+              padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(4),
+                ),
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.07),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.label_outline,
+                      size: 11, color: Colors.black54),
+                  const SizedBox(width: 4),
+                  Text(
+                    widget.isEdit ? 'Edit Keyword Shortcut' : 'Add Keyword Shortcut',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Icon(Icons.close,
+                        size: 13, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+
+            // Content
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Label field
+                  Text(
+                    'Chip label',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  _inputField(_labelCtrl,
+                      hint: 'e.g. c, TPX, sport',
+                      focusNode: _labelFocus),
+
+                  const SizedBox(height: 8),
+
+                  // Keywords field
+                  Text(
+                    'Keywords (comma-separated)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  _inputField(_keywordsCtrl,
+                      hint: 'e.g. capture, caught, catching',
+                      focusNode: _keywordsFocus,
+                      maxLines: 2),
+
+                  const SizedBox(height: 8),
+
+                  // Preview
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFCFCFC),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PREVIEW',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade500,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Chip preview
+                            if (label.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade100,
+                                  border: Border.all(
+                                      color: Colors.grey.shade400),
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                                child: Text(
+                                  label,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.normal,
+                                    height: 1.0,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            if (label.isNotEmpty)
+                              const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                parsed.isNotEmpty
+                                    ? '→ ${parsed.join(', ')}'
+                                    : label.isEmpty
+                                        ? 'Enter a label above'
+                                        : 'No keywords — enter comma-separated keywords',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: parsed.isNotEmpty
+                                      ? Colors.black87
+                                      : Colors.grey.shade400,
+                                  fontStyle: parsed.isEmpty
+                                      ? FontStyle.italic
+                                      : FontStyle.normal,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 2,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Buttons
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: _canSave
+                            ? () {
+                                widget.onSave(
+                                  _labelCtrl.text.trim(),
+                                  _parsedKeywords,
+                                );
+                                Navigator.of(context).pop();
+                              }
+                            : null,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: _canSave
+                                ? const Color(0xFF1976D2)
+                                : Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            widget.isEdit ? 'Save' : 'Add',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: _canSave
+                                  ? Colors.white
+                                  : Colors.grey.shade500,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _inputField(
+    TextEditingController ctrl, {
+    String hint = '',
+    FocusNode? focusNode,
+    int maxLines = 1,
+  }) {
+    return TextField(
+      controller: ctrl,
+      focusNode: focusNode,
+      maxLines: maxLines,
+      style: const TextStyle(fontSize: 11),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+        isDense: true,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(3)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(3),
+          borderSide: BorderSide(color: Colors.grey.shade400),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(3),
+          borderSide:
+              const BorderSide(color: Color(0xFF1976D2), width: 1.5),
+        ),
+        filled: true,
+        fillColor: Colors.white,
+      ),
     );
   }
 }

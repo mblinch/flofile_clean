@@ -23,6 +23,9 @@ class PreferencesService {
   static const String _keySerialNumberBylines = 'serial_number_bylines';
   /// When true, selecting a verb merges its keyword presets into the IPTC keywords field.
   static const String _keyApplyVerbKeywords = 'apply_verb_keywords';
+  /// When true, selected player names are also merged into the IPTC keywords field.
+  static const String _keyApplyPlayerNamesToKeywords =
+      'apply_player_names_to_keywords';
   static const String _keyResolutionWarningThreshold =
       'resolution_warning_threshold';
   static const String _keyPhotoshopPath = 'photoshop_path';
@@ -43,6 +46,7 @@ class PreferencesService {
   /// Keyboard Fire: Actions column — expand/collapse shortcut cheatsheet under FTP.
   static const String _keyShowKeyboardFireShortcutsHelp =
       'show_keyboard_fire_shortcuts_help';
+  static const String _keyKeywordShortcuts = 'keyword_shortcuts';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -113,6 +117,29 @@ class PreferencesService {
   Future<void> saveShowKeyboardFireShortcutsHelp(bool show) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyShowKeyboardFireShortcutsHelp, show);
+  }
+
+  /// Returns saved keyword shortcuts as a list of maps with 'label' (String)
+  /// and 'keywords' (List<String>). Returns empty list when nothing is saved
+  /// (caller should fall back to built-in defaults).
+  Future<List<Map<String, dynamic>>> getKeywordShortcuts() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyKeywordShortcuts);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final decoded = jsonDecode(raw) as List;
+      return decoded
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveKeywordShortcuts(
+      List<Map<String, dynamic>> shortcuts) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyKeywordShortcuts, jsonEncode(shortcuts));
   }
 
   bool get showKeyboardFireShortcutsHelpSync =>
@@ -476,6 +503,16 @@ class PreferencesService {
   Future<void> saveApplyVerbKeywords(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyApplyVerbKeywords, enabled);
+  }
+
+  Future<bool> getApplyPlayerNamesToKeywords() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyApplyPlayerNamesToKeywords) ?? true;
+  }
+
+  Future<void> saveApplyPlayerNamesToKeywords(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyApplyPlayerNamesToKeywords, enabled);
   }
 
   // Resolution Warning Threshold Preference

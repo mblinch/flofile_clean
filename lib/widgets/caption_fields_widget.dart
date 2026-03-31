@@ -411,6 +411,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _removeAccent = true; // Toggle for diacritic removal
   /// When true, verb keyword presets merge into the keywords field on verb selection.
   bool _applyVerbKeywordsEnabled = true;
+  bool _applyPlayerNamesToKeywordsEnabled = true;
+
+  // Byline overrides – set by the byline editor dialog.
+  // When non-null, they take precedence over photo metadata values.
+  String? _bylinePhotographerOverride;
+  String? _bylineCreditOverride;
+  String _bylinePrefixText = 'Photo by';
+  bool _bylineUseBrackets = true;
+  bool _bylineUseSlash = true;
 
   bool _disableFtp = false; // Default to false (FTP enabled)
   bool _isFtpDisabled = false; // Track FTP button disable state
@@ -1533,6 +1542,76 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  // ── Byline Editor Dialog ────────────────────────────────────────────────────
+  /// Opens the byline editor. Pre-fills fields with the current in-session
+  /// overrides (if any) or falls back to values from photo metadata.
+  Future<void> _showBylineEditorDialog() async {
+    // Load raw metadata values (no override) – used for variable indicators.
+    String metaPhotographer =
+        widget.metadata?['Creator']?.toString() ??
+        widget.metadata?['IPTC:By-line']?.toString() ??
+        widget.metadata?['By-line']?.toString() ??
+        widget.metadata?['XMP:Creator']?.toString() ??
+        '';
+    String metaCredit =
+        widget.metadata?['IPTC:Credit']?.toString() ??
+        widget.metadata?['Credit']?.toString() ??
+        '';
+
+    // If we have an image path, freshen from exiftool.
+    if ((metaPhotographer.isEmpty || metaCredit.isEmpty) &&
+        widget.currentImagePath != null &&
+        widget.currentImagePath!.isNotEmpty) {
+      try {
+        final vals =
+            await _loadCreatorAndCreditFromImage(widget.currentImagePath!);
+        if (metaPhotographer.isEmpty) metaPhotographer = vals['creator'] ?? '';
+        if (metaCredit.isEmpty) metaCredit = vals['credit'] ?? '';
+      } catch (_) {}
+    }
+
+    // Seed initial field values: prefer in-session overrides, then metadata.
+    final initPhotographer = _bylinePhotographerOverride ?? metaPhotographer;
+    final initCredit = _bylineCreditOverride ?? metaCredit;
+
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => _BylineEditorDialog(
+        initialPhotographer: initPhotographer,
+        initialCredit: initCredit,
+        initialPrefixText: _bylinePrefixText,
+        initialUseBrackets: _bylineUseBrackets,
+        initialUseSlash: _bylineUseSlash,
+        metadataPhotographer: metaPhotographer,
+        metadataCredit: metaCredit,
+        onApply: (photographer, credit, prefixText, useBrackets, useSlash) {
+          setState(() {
+            _bylinePhotographerOverride =
+                photographer.trim().isEmpty ? null : photographer.trim();
+            _bylineCreditOverride =
+                credit.trim().isEmpty ? null : credit.trim();
+            _bylinePrefixText = prefixText;
+            _bylineUseBrackets = useBrackets;
+            _bylineUseSlash = useSlash;
+          });
+          _updateCaption();
+        },
+        onClear: () {
+          setState(() {
+            _bylinePhotographerOverride = null;
+            _bylineCreditOverride = null;
+            _bylinePrefixText = 'Photo by';
+            _bylineUseBrackets = true;
+            _bylineUseSlash = true;
+          });
+          _updateCaption();
+        },
+      ),
+    );
+  }
+
   // Show shortcodes dialog
   void _showShortcodesDialog() {
     showDialog(
@@ -2472,6 +2551,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     _applyVerbKeywordsEnabled =
         await _preferencesService.getApplyVerbKeywords();
+    _applyPlayerNamesToKeywordsEnabled =
+        await _preferencesService.getApplyPlayerNamesToKeywords();
 
     // Load last saved metadata
     _lastSavedMetadata = await _preferencesService.getLastSavedMetadata();
@@ -2504,6 +2585,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         sport: _currentSport);
     await _preferencesService.savePlaceFirebarOnRight(_placeFirebarOnRight);
     await _preferencesService.saveApplyVerbKeywords(_applyVerbKeywordsEnabled);
+    await _preferencesService
+        .saveApplyPlayerNamesToKeywords(_applyPlayerNamesToKeywordsEnabled);
     await _preferencesService.saveLastSavedMetadata(_lastSavedMetadata);
     await _preferencesService.saveFtpProfiles(_ftpProfiles);
     await _preferencesService.saveCurrentFtpProfile(_currentFtpProfile);
@@ -3560,6 +3643,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     } else {
       _autoSelectedAwayJersey = jerseyNumber;
     }
+    // Immediately add the player's name to keywords if the toggle is on.
+    // _reapplyVerbKeywordsIfEnabled (below) only fires when a verb is already
+    // selected; this ensures names appear as soon as the player is clicked.
+    if (_applyPlayerNamesToKeywordsEnabled && _showKeywordsField) {
+      final kwName = _removeDiacritics(_removeJerseyNumberFromName(name));
+      if (kwName.isNotEmpty) {
+        final merged =
+            mergeVerbKeywordFieldText(keywordsController.text, [kwName]);
+        keywordsController.text = merged;
+        keywordsController.selection =
+            TextSelection.collapsed(offset: merged.length);
+      }
+    }
+
     setState(() {});
     _reapplyVerbKeywordsIfEnabled();
   }
@@ -9457,6 +9554,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (_applyVerbKeywordsEnabled == enabled) return;
     setState(() => _applyVerbKeywordsEnabled = enabled);
     await _preferencesService.saveApplyVerbKeywords(enabled);
+  }
+
+  bool get applyPlayerNamesToKeywordsEnabled =>
+      _applyPlayerNamesToKeywordsEnabled;
+
+  Future<void> setApplyPlayerNamesToKeywordsEnabled(bool enabled) async {
+    if (_applyPlayerNamesToKeywordsEnabled == enabled) return;
+    setState(() => _applyPlayerNamesToKeywordsEnabled = enabled);
+    await _preferencesService.saveApplyPlayerNamesToKeywords(enabled);
   }
 
   /// Exposes the caption controller so the KeyboardFirePanel can show an editable caption field.
@@ -15684,29 +15790,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Use home team stadium from API, fallback to controller if not available
     final stadium = homeTeamStadium ?? stadiumController.text;
-    // Get creator and credit from current image file directly using ExifTool
-    String? creatorValue;
-    String? creditValue;
+    // Get creator and credit – prefer in-session byline overrides first.
+    String? creatorValue = _bylinePhotographerOverride;
+    String? creditValue = _bylineCreditOverride;
 
-    // Load Creator and Credit directly from the current image file
-    if (widget.currentImagePath != null &&
-        widget.currentImagePath!.isNotEmpty) {
-      final values =
-          await _loadCreatorAndCreditFromImage(widget.currentImagePath!);
-      creatorValue = values['creator'];
-      creditValue = values['credit'];
-      print(
-          'DEBUG: Loaded from image file - Creator: "$creatorValue", Credit: "$creditValue"');
-    } else {
-      // Fall back to metadata if no image path
-      creatorValue = widget.metadata?['IPTC:By-line']?.toString() ??
-          widget.metadata?['By-line']?.toString() ??
-          widget.metadata?['Creator']?.toString() ??
-          widget.metadata?['XMP:Creator']?.toString();
-      creditValue = widget.metadata?['IPTC:Credit']?.toString() ??
-          widget.metadata?['Credit']?.toString();
-      print(
-          'DEBUG: No image path, using metadata - Creator: "$creatorValue", Credit: "$creditValue"');
+    // Only fetch from image / metadata when at least one field is not overridden.
+    if (creatorValue == null || creditValue == null) {
+      // Load Creator and Credit directly from the current image file
+      if (widget.currentImagePath != null &&
+          widget.currentImagePath!.isNotEmpty) {
+        final values =
+            await _loadCreatorAndCreditFromImage(widget.currentImagePath!);
+        creatorValue ??= values['creator'];
+        creditValue ??= values['credit'];
+        print(
+            'DEBUG: Loaded from image file - Creator: "$creatorValue", Credit: "$creditValue"');
+      } else {
+        // Fall back to metadata if no image path
+        creatorValue ??= widget.metadata?['IPTC:By-line']?.toString() ??
+            widget.metadata?['By-line']?.toString() ??
+            widget.metadata?['Creator']?.toString() ??
+            widget.metadata?['XMP:Creator']?.toString();
+        creditValue ??= widget.metadata?['IPTC:Credit']?.toString() ??
+            widget.metadata?['Credit']?.toString();
+        print(
+            'DEBUG: No image path, using metadata - Creator: "$creatorValue", Credit: "$creditValue"');
+      }
     }
 
     // Debug logging
@@ -15763,7 +15872,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (photoBy.isNotEmpty &&
         creditValue != null &&
         creditValue.toString().isNotEmpty) {
-      byline = '$photoBy/$creditValue';
+      byline = _bylineUseSlash
+          ? '$photoBy/$creditValue'
+          : '$photoBy $creditValue';
     } else if (photoBy.isNotEmpty) {
       byline = photoBy;
     } else if (creditValue != null && creditValue.toString().isNotEmpty) {
@@ -15834,9 +15945,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         byline.toLowerCase().contains('getty images') && sport == 'basketball';
     final disclaimerPart = isGetty ? ' $_gettyDisclaimer' : '';
 
+    String bylineSuffix = '';
+    if (byline.isNotEmpty) {
+      final prefix = _bylinePrefixText.trim();
+      final body = prefix.isNotEmpty ? '$prefix $byline' : byline;
+      bylineSuffix = _bylineUseBrackets ? ' ($body)' : ' $body';
+    }
     var caption = '$dateline '
         '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${skipInningPart ? '' : inningPart} '
-        '$gamePart at $stadium on $formattedDate $locationSuffix.$disclaimerPart${byline.isNotEmpty ? ' (Photo by $byline)' : ''}';
+        '$gamePart at $stadium on $formattedDate $locationSuffix.$disclaimerPart$bylineSuffix';
 
     // Apply diacritic removal if checkbox is checked
     if (_removeAccent) {
@@ -15849,6 +15966,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Update personality field with all selected players (always call to handle empty case)
     _updatePersonalityField();
   }
+
+  /// Called by external widgets (e.g. KeyboardFireDialog) to open the byline editor.
+  void openBylineEditor() => _showBylineEditorDialog();
+
+  /// Whether a byline override is currently active (for indicator display).
+  bool get hasBylineOverride =>
+      _bylinePhotographerOverride != null || _bylineCreditOverride != null;
 
   // Public method to select a player and verb from external widgets (like PlayerPopupCaptionBoard)
   void selectPlayerAndVerb(Player player, String verb, bool isHome) {
@@ -22811,16 +22935,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return const [];
   }
 
-  /// Display names from the current selection, jersey suffix stripped; home then
-  /// away, each group sorted for stable keyword order.
+  /// Display names from the current selection, jersey suffix stripped and
+  /// diacritics removed; home then away, each group sorted for stable keyword order.
   List<String> _keywordStringsForSelectedPlayers() {
     final home = selectedHomePlayers
-        .map((s) => _removeJerseyNumberFromName(s.trim()))
+        .map((s) => _removeDiacritics(_removeJerseyNumberFromName(s.trim())))
         .where((s) => s.isNotEmpty)
         .toList()
       ..sort();
     final away = selectedAwayPlayers
-        .map((s) => _removeJerseyNumberFromName(s.trim()))
+        .map((s) => _removeDiacritics(_removeJerseyNumberFromName(s.trim())))
         .where((s) => s.isNotEmpty)
         .toList()
       ..sort();
@@ -22830,7 +22954,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   void _mergeVerbKeywordsIntoFieldIfEnabled(String verb) {
     if (!_applyVerbKeywordsEnabled) return;
     final verbKws = _keywordStringsForVerbLabel(verb);
-    final playerKws = _keywordStringsForSelectedPlayers();
+    final playerKws = (_applyPlayerNamesToKeywordsEnabled && _showKeywordsField)
+        ? _keywordStringsForSelectedPlayers()
+        : const <String>[];
     if (verbKws.isEmpty && playerKws.isEmpty) return;
     var text = keywordsController.text;
     if (verbKws.isNotEmpty) {
@@ -25117,6 +25243,585 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Byline Editor Dialog ─────────────────────────────────────────────────────
+
+class _BylineEditorDialog extends StatefulWidget {
+  final String initialPhotographer;
+  final String initialCredit;
+  final String initialPrefixText;
+  final bool initialUseBrackets;
+  final bool initialUseSlash;
+  /// Raw metadata values (before any override). Used to show variable indicators.
+  final String metadataPhotographer;
+  final String metadataCredit;
+  final void Function(
+      String photographer,
+      String credit,
+      String prefixText,
+      bool useBrackets,
+      bool useSlash) onApply;
+  final VoidCallback onClear;
+
+  const _BylineEditorDialog({
+    required this.initialPhotographer,
+    required this.initialCredit,
+    required this.initialPrefixText,
+    required this.initialUseBrackets,
+    required this.initialUseSlash,
+    required this.metadataPhotographer,
+    required this.metadataCredit,
+    required this.onApply,
+    required this.onClear,
+  });
+
+  @override
+  State<_BylineEditorDialog> createState() => _BylineEditorDialogState();
+}
+
+class _BylineEditorDialogState extends State<_BylineEditorDialog> {
+  late final TextEditingController _photographerCtrl;
+  late final TextEditingController _creditCtrl;
+  late final TextEditingController _prefixCtrl;
+  final FocusNode _photographerFocus = FocusNode();
+  final FocusNode _creditFocus = FocusNode();
+  late bool _useBrackets;
+  late bool _useSlash;
+
+  @override
+  void initState() {
+    super.initState();
+    _photographerCtrl =
+        TextEditingController(text: widget.initialPhotographer);
+    _creditCtrl = TextEditingController(text: widget.initialCredit);
+    _prefixCtrl = TextEditingController(text: widget.initialPrefixText);
+    _useBrackets = widget.initialUseBrackets;
+    _useSlash = widget.initialUseSlash;
+    _photographerCtrl.addListener(() => setState(() {}));
+    _creditCtrl.addListener(() => setState(() {}));
+    _prefixCtrl.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _photographerCtrl.dispose();
+    _creditCtrl.dispose();
+    _prefixCtrl.dispose();
+    _photographerFocus.dispose();
+    _creditFocus.dispose();
+    super.dispose();
+  }
+
+  String get _previewByline {
+    final p = _photographerCtrl.text.trim();
+    final c = _creditCtrl.text.trim();
+    String inner = '';
+    if (p.isNotEmpty && c.isNotEmpty) {
+      inner = _useSlash ? '$p/$c' : '$p $c';
+    } else if (p.isNotEmpty) {
+      inner = p;
+    } else if (c.isNotEmpty) {
+      inner = c;
+    }
+    if (inner.isEmpty) return '';
+    final prefix = _prefixCtrl.text.trim();
+    final body = prefix.isNotEmpty ? '$prefix $inner' : inner;
+    return _useBrackets ? '($body)' : body;
+  }
+
+  bool get _photographerIsOverridden =>
+      _photographerCtrl.text.trim() != widget.metadataPhotographer.trim();
+  bool get _creditIsOverridden =>
+      _creditCtrl.text.trim() != widget.metadataCredit.trim();
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = _previewByline;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      backgroundColor: Colors.grey.shade50,
+      child: Container(
+        width: 380,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header bar — matches _buildKbLabeledBox style
+            Container(
+              padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(4),
+                ),
+                border: Border(
+                  bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.07),
+                    blurRadius: 2,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.edit_outlined,
+                      size: 11, color: Colors.black54),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Edit Byline',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Icon(Icons.close,
+                        size: 13, color: Colors.grey.shade500),
+                  ),
+                ],
+              ),
+            ),
+
+            // Content
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Photographer field
+                  _fieldLabel(
+                    'Photographer',
+                    varSource: 'IPTC: Creator / By-line',
+                    isOverridden: _photographerIsOverridden,
+                    metadataValue: widget.metadataPhotographer,
+                    ctrl: _photographerCtrl,
+                    focusNode: _photographerFocus,
+                  ),
+                  const SizedBox(height: 3),
+                  _field(_photographerCtrl,
+                      hint: 'e.g. Mark Blinch',
+                      isOverridden: _photographerIsOverridden,
+                      focusNode: _photographerFocus),
+
+                  const SizedBox(height: 8),
+
+                  // Credit / Agency field
+                  _fieldLabel(
+                    'Credit / Agency',
+                    varSource: 'IPTC: Credit',
+                    isOverridden: _creditIsOverridden,
+                    metadataValue: widget.metadataCredit,
+                    ctrl: _creditCtrl,
+                    focusNode: _creditFocus,
+                  ),
+                  const SizedBox(height: 3),
+                  _field(_creditCtrl,
+                      hint: 'e.g. NHLI via Getty Images',
+                      isOverridden: _creditIsOverridden,
+                      focusNode: _creditFocus),
+
+                  const SizedBox(height: 8),
+
+                  // Format options
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFCFCFC),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'FORMAT',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade500,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        // Prefix text row
+                        Row(
+                          children: [
+                            Text(
+                              'Prefix text',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: TextField(
+                                controller: _prefixCtrl,
+                                style: const TextStyle(fontSize: 10),
+                                decoration: InputDecoration(
+                                  hintText: 'e.g. Photo by',
+                                  hintStyle: TextStyle(
+                                      color: Colors.grey.shade400,
+                                      fontSize: 10),
+                                  isDense: true,
+                                  contentPadding:
+                                      const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 4),
+                                  border: OutlineInputBorder(
+                                      borderRadius:
+                                          BorderRadius.circular(3)),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(3),
+                                    borderSide: BorderSide(
+                                        color: Colors.grey.shade400),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(3),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFF1976D2), width: 1.5),
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        // Brackets + Slash toggles
+                        Row(
+                          children: [
+                            _optionCheckbox(
+                              label: 'Brackets',
+                              value: _useBrackets,
+                              onTap: () => setState(
+                                  () => _useBrackets = !_useBrackets),
+                            ),
+                            const SizedBox(width: 16),
+                            _optionCheckbox(
+                              label: 'Slash separator',
+                              value: _useSlash,
+                              onTap: () =>
+                                  setState(() => _useSlash = !_useSlash),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // Live preview
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFCFCFC),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'PREVIEW',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade500,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          preview.isNotEmpty ? preview : '(no byline)',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: preview.isNotEmpty
+                                ? Colors.black87
+                                : Colors.grey.shade400,
+                            fontStyle: preview.isEmpty
+                                ? FontStyle.italic
+                                : FontStyle.normal,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Buttons
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          widget.onClear();
+                          Navigator.of(context).pop();
+                        },
+                        child: Text(
+                          'Reset to Metadata',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.red.shade500,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () {
+                          widget.onApply(
+                            _photographerCtrl.text,
+                            _creditCtrl.text,
+                            _prefixCtrl.text.trim(),
+                            _useBrackets,
+                            _useSlash,
+                          );
+                          Navigator.of(context).pop();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1976D2),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: const Text(
+                            'Apply',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Compact checkbox row used for format options.
+  Widget _optionCheckbox({
+    required String label,
+    required bool value,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: value
+                    ? const Color(0xFF1976D2)
+                    : Colors.grey.shade400,
+                width: 1.2,
+              ),
+              borderRadius: BorderRadius.circular(2),
+              color: value ? const Color(0xFF1976D2) : Colors.white,
+            ),
+            child: value
+                ? const Center(
+                    child: Icon(Icons.check, size: 9, color: Colors.white),
+                  )
+                : null,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: value ? Colors.black87 : Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Label row: field name + variable source chip + "Use metadata" checkbox.
+  Widget _fieldLabel(
+    String text, {
+    required String varSource,
+    required bool isOverridden,
+    required String metadataValue,
+    required TextEditingController ctrl,
+    FocusNode? focusNode,
+  }) {
+    final usingMetadata = !isOverridden && metadataValue.isNotEmpty;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade700,
+          ),
+        ),
+        const SizedBox(width: 6),
+        // Variable source chip
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFFE8F0FE),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0xFFBBCEFA)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.data_object, size: 9, color: Color(0xFF1565C0)),
+              const SizedBox(width: 3),
+              Text(
+                varSource,
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: Color(0xFF1565C0),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (metadataValue.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          // "Use metadata" checkbox
+          GestureDetector(
+            onTap: () {
+              final wasUsingMetadata = usingMetadata;
+              setState(() {
+                if (wasUsingMetadata) {
+                  ctrl.text = '';
+                } else {
+                  ctrl.text = metadataValue;
+                }
+              });
+              if (wasUsingMetadata) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  focusNode?.requestFocus();
+                });
+              }
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: usingMetadata
+                          ? const Color(0xFF1976D2)
+                          : Colors.grey.shade400,
+                      width: 1.2,
+                    ),
+                    borderRadius: BorderRadius.circular(2),
+                    color: usingMetadata
+                        ? const Color(0xFF1976D2)
+                        : Colors.white,
+                  ),
+                  child: usingMetadata
+                      ? const Center(
+                          child: Icon(Icons.check,
+                              size: 9, color: Colors.white),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'Use metadata',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: usingMetadata
+                        ? Colors.black87
+                        : Colors.grey.shade500,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _field(TextEditingController ctrl,
+      {String hint = '', bool isOverridden = false, FocusNode? focusNode}) {
+    final borderColor =
+        isOverridden ? const Color(0xFFFFB74D) : Colors.grey.shade400;
+    final fillColor =
+        isOverridden ? const Color(0xFFFFFBF5) : Colors.white;
+    return TextField(
+      controller: ctrl,
+      focusNode: focusNode,
+      style: const TextStyle(fontSize: 11),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+        isDense: true,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(color: borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(6),
+          borderSide: BorderSide(
+            color: isOverridden
+                ? const Color(0xFFE65100)
+                : const Color(0xFF1976D2),
+            width: 2,
+          ),
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        filled: true,
+        fillColor: fillColor,
       ),
     );
   }

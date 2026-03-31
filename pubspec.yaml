@@ -54,6 +54,7 @@ dependencies:
 
   # Native-style settings/preferences UI (sectioned lists)
   flutter_settings_ui: ^3.0.1
+  flutter_switch: ^0.3.2
 
 dev_dependencies:
   flutter_test:
