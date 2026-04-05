@@ -591,26 +591,23 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     print(
         'DEBUG: Available supplemental category fields: SupplementalCategories=${currentMetadata!['SupplementalCategories']}, IPTC:SupplementalCategories=${currentMetadata!['IPTC:SupplementalCategories']}, XMP:SupplementalCategories=${currentMetadata!['XMP:SupplementalCategories']}');
 
+    // Preserve split fields if combined IPTC/XMP parse yields nothing (e.g. only
+    // in-memory edits, or empty XMP shadowing IPTC before we skipped empties).
+    final String prev1 =
+        currentMetadata!['SupplementalCategories1']?.toString() ?? '';
+    final String prev2 =
+        currentMetadata!['SupplementalCategories2']?.toString() ?? '';
+    final String prev3 =
+        currentMetadata!['SupplementalCategories3']?.toString() ?? '';
+
     // Clear existing values first
     currentMetadata!.remove('SupplementalCategories1');
     currentMetadata!.remove('SupplementalCategories2');
     currentMetadata!.remove('SupplementalCategories3');
 
-    final dynamic supp =
-        currentMetadata!['XMP-photoshop:SupplementalCategories'] ??
-            currentMetadata!['IPTC:SupplementalCategories'] ??
-            currentMetadata!['SupplementalCategories'] ??
-            currentMetadata!['XMP:SupplementalCategories'];
-
-    String sourceField = 'none';
-    if (currentMetadata!['XMP-photoshop:SupplementalCategories'] != null)
-      sourceField = 'XMP-photoshop:SupplementalCategories';
-    else if (currentMetadata!['IPTC:SupplementalCategories'] != null)
-      sourceField = 'IPTC:SupplementalCategories';
-    else if (currentMetadata!['SupplementalCategories'] != null)
-      sourceField = 'SupplementalCategories';
-    else if (currentMetadata!['XMP:SupplementalCategories'] != null)
-      sourceField = 'XMP:SupplementalCategories';
+    final String sourceField =
+        sourceKeyForSupplementalCategories(currentMetadata!) ?? 'none';
+    final dynamic supp = combinedSupplementalCategoriesValue(currentMetadata!);
 
     print(
         'DEBUG: Found supplemental categories: $supp (${supp.runtimeType}) from field: $sourceField');
@@ -664,6 +661,18 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     if (parts.length > 2) {
       currentMetadata!['SupplementalCategories3'] = parts[2];
       print('DEBUG: Set SupplementalCategories3 = "${parts[2]}"');
+    }
+
+    if (parts.isEmpty) {
+      if (prev1.isNotEmpty) {
+        currentMetadata!['SupplementalCategories1'] = prev1;
+      }
+      if (prev2.isNotEmpty) {
+        currentMetadata!['SupplementalCategories2'] = prev2;
+      }
+      if (prev3.isNotEmpty) {
+        currentMetadata!['SupplementalCategories3'] = prev3;
+      }
     }
 
     print(

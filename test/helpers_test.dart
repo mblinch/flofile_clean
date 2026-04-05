@@ -71,16 +71,26 @@ void main() {
       expect(
           result,
           equals([
+            '-SupplementalCategories=',
+            '-IPTC:SupplementalCategories=',
+            '-XMP:SupplementalCategories=',
             '-XMP-photoshop:SupplementalCategories=',
-            '-XMP-photoshop:SupplementalCategories+=SPO1',
-            '-XMP-photoshop:SupplementalCategories+=BBN1',
-            '-XMP-photoshop:SupplementalCategories+=BBA1',
+            '-sep',
+            ',',
+            '-XMP-photoshop:SupplementalCategories=SPO1,BBN1,BBA1',
           ]));
     });
 
     test('should clear field when input is empty', () {
       final result = buildSupplementalCategoriesArgs(['', '  ', '']);
-      expect(result, equals(['-XMP-photoshop:SupplementalCategories=']));
+      expect(
+          result,
+          equals([
+            '-SupplementalCategories=',
+            '-IPTC:SupplementalCategories=',
+            '-XMP:SupplementalCategories=',
+            '-XMP-photoshop:SupplementalCategories=',
+          ]));
     });
 
     test('should handle single value', () {
@@ -88,9 +98,48 @@ void main() {
       expect(
           result,
           equals([
+            '-SupplementalCategories=',
+            '-IPTC:SupplementalCategories=',
+            '-XMP:SupplementalCategories=',
             '-XMP-photoshop:SupplementalCategories=',
-            '-XMP-photoshop:SupplementalCategories+=SPO1',
+            '-sep',
+            ',',
+            '-XMP-photoshop:SupplementalCategories=SPO1',
           ]));
+    });
+  });
+
+  group('supplementalCategoryRawInputsForSave', () {
+    test('uses currentMetadata when caption form omits supp cats', () {
+      final form = <String, String>{'IPTC:Description': 'x'};
+      final meta = <String, dynamic>{
+        'SupplementalCategories1': 'SPO',
+        'SupplementalCategories2': 'BBN',
+      };
+      expect(
+        supplementalCategoryRawInputsForSave(form, meta),
+        equals(['SPO', 'BBN', '']),
+      );
+    });
+
+    test('prefers form values over currentMetadata', () {
+      final form = <String, String>{'SupplementalCategories1': 'NEW'};
+      final meta = <String, dynamic>{'SupplementalCategories1': 'OLD'};
+      expect(
+        supplementalCategoryRawInputsForSave(form, meta),
+        equals(['NEW', '', '']),
+      );
+    });
+
+    test('falls back to combined IPTC when split keys are empty', () {
+      final form = <String, String>{};
+      final meta = <String, dynamic>{
+        'IPTC:SupplementalCategories': 'SPO, BBN, BBA',
+      };
+      final r = supplementalCategoryRawInputsForSave(form, meta);
+      expect(r[0], 'SPO, BBN, BBA');
+      expect(r[1], '');
+      expect(r[2], '');
     });
   });
 }

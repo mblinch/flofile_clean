@@ -139,6 +139,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   int? _pinnedVerbCategory;
   int? _pinnedVerbIndex;
 
+  /// Set in Reset Caption [InkWell.onTapDown] so the confirm dialog can anchor near the tap.
+  Offset? _resetCaptionTapAnchor;
+
+  /// When true, the upcoming verb row [InkWell.onTap] must be ignored because Cmd+pin
+  /// was already handled in [onTapDown]. Otherwise [onTap] runs after Meta is released
+  /// and calls [selectVerbByCategoryAndIndexFromKeyboardFire] again, toggling the verb off.
+  bool _verbRowTapConsumedByCmd = false;
+
   bool _showPlayoffOvertimes = false;
 
   // Category drag-to-reorder state (raw pointer events)
@@ -2400,11 +2408,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       },
                       child: InkWell(
                         onTapDown: (TapDownDetails d) {
+                          _verbRowTapConsumedByCmd = false;
                           if (HardwareKeyboard.instance.isMetaPressed) {
+                            _verbRowTapConsumedByCmd = true;
                             _onVerbTapped(catNum, verbNum, cmdHeld: true);
                           }
                         },
                         onTap: () {
+                          if (_verbRowTapConsumedByCmd) {
+                            _verbRowTapConsumedByCmd = false;
+                            return;
+                          }
                           if (!HardwareKeyboard.instance.isMetaPressed) {
                             _onVerbTapped(catNum, verbNum);
                           }
@@ -2935,7 +2949,22 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         context, d.globalPosition, verb, isFavorite);
                   },
                   child: InkWell(
-                    onTap: () => _onVerbTapped(selectedCatNum!, verbNum),
+                    onTapDown: (TapDownDetails d) {
+                      _verbRowTapConsumedByCmd = false;
+                      if (HardwareKeyboard.instance.isMetaPressed) {
+                        _verbRowTapConsumedByCmd = true;
+                        _onVerbTapped(selectedCatNum!, verbNum, cmdHeld: true);
+                      }
+                    },
+                    onTap: () {
+                      if (_verbRowTapConsumedByCmd) {
+                        _verbRowTapConsumedByCmd = false;
+                        return;
+                      }
+                      if (!HardwareKeyboard.instance.isMetaPressed) {
+                        _onVerbTapped(selectedCatNum!, verbNum);
+                      }
+                    },
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 4),
@@ -3016,6 +3045,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   Widget _btn({
     required Widget child,
     required VoidCallback? onTap,
+    void Function(TapDownDetails)? onTapDown,
     Color? bg,
     double width = 60,
   }) {
@@ -3033,6 +3063,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
+            onTapDown: enabled ? onTapDown : null,
             onTap: enabled ? onTap : null,
             borderRadius: BorderRadius.zero,
             splashColor: Colors.black.withOpacity(0.08),
@@ -3259,6 +3290,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           // Reset
           _btn(
             width: 60,
+            onTapDown: (d) => _resetCaptionTapAnchor = d.globalPosition,
             onTap: _onResetPressed,
             bg: Colors.grey.shade200,
             child: Row(
@@ -3288,7 +3320,152 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
+  String? _verbLabelForCategoryAndVerb(int cat1Based, int verb1Based) {
+    final cats = _verbList;
+    if (cat1Based < 1 || cat1Based > cats.length) return null;
+    final verbs =
+        (cats[cat1Based - 1]['verbs'] as List<dynamic>?)?.cast<String>() ?? [];
+    if (verb1Based < 1 || verb1Based > verbs.length) return null;
+    final v = verbs[verb1Based - 1].trim();
+    return v.isEmpty ? null : v;
+  }
+
+  void _showPinnedResetConfirmNear(Offset anchor, String verbLabel) {
+    final media = MediaQuery.of(context);
+    final padding = media.padding;
+    final size = media.size;
+    const dialogW = 280.0;
+    const dialogH = 88.0;
+    var left = anchor.dx - dialogW / 2;
+    var top = anchor.dy + 8;
+    final maxRight = size.width - padding.right - 8;
+    final minLeft = padding.left + 8;
+    if (left < minLeft) left = minLeft;
+    if (left + dialogW > maxRight) left = maxRight - dialogW;
+    if (top + dialogH > size.height - padding.bottom - 8) {
+      top = anchor.dy - dialogH - 8;
+    }
+    if (top < padding.top + 8) top = padding.top + 8;
+
+    showGeneralDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel:
+          MaterialLocalizations.of(context).modalBarrierDismissLabel,
+      barrierColor: Colors.black45,
+      transitionDuration: const Duration(milliseconds: 120),
+      pageBuilder: (ctx, _, __) {
+        return Material(
+          color: Colors.transparent,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => Navigator.of(ctx).pop(),
+                  child: const SizedBox.expand(),
+                ),
+              ),
+              Positioned(
+                left: left,
+                top: top,
+                width: dialogW,
+                child: Material(
+                  color: Colors.grey.shade50,
+                  elevation: 6,
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.of(ctx).pop(),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                child: Text(
+                                  'Cancel',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: GestureDetector(
+                                onTap: () {
+                                  Navigator.of(ctx).pop();
+                                  _performCaptionReset();
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1976D2),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    'Unpin "$verbLabel"',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   void _onResetPressed() {
+    final anchor = _resetCaptionTapAnchor;
+    _resetCaptionTapAnchor = null;
+
+    final pinned =
+        _pinnedVerbCategory != null && _pinnedVerbIndex != null;
+    if (pinned) {
+      final verbLabel = _verbLabelForCategoryAndVerb(
+            _pinnedVerbCategory!, _pinnedVerbIndex!,
+          ) ??
+          'verb';
+      final a = anchor ??
+          Offset(
+            MediaQuery.of(context).size.width / 2,
+            MediaQuery.of(context).size.height / 3,
+          );
+      _showPinnedResetConfirmNear(a, verbLabel);
+      return;
+    }
+    _performCaptionReset();
+  }
+
+  void _performCaptionReset() {
     // Reset all caption/verb/player state via the caption state object
     try {
       (widget.captionState as dynamic)?.resetCaption();
@@ -4377,6 +4554,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               const SizedBox(height: 3),
                               _btn(
                                 width: double.infinity,
+                                onTapDown: (d) =>
+                                    _resetCaptionTapAnchor = d.globalPosition,
                                 onTap: _onResetPressed,
                                 bg: Colors.grey.shade200,
                                 child: Row(

@@ -5,6 +5,79 @@ void _handleVerbClick(
   });
 }
 
+/// Combined supplemental categories from the first IPTC/XMP key that has a
+/// non-empty value. [??] alone is not enough: an empty string in XMP would
+/// block reading IPTC.
+dynamic combinedSupplementalCategoriesValue(Map<String, dynamic> m) {
+  const keys = <String>[
+    'XMP-photoshop:SupplementalCategories',
+    'IPTC:SupplementalCategories',
+    'SupplementalCategories',
+    'XMP:SupplementalCategories',
+  ];
+  for (final key in keys) {
+    final v = m[key];
+    if (v == null) continue;
+    if (v is String && v.trim().isEmpty) continue;
+    if (v is List && v.isEmpty) continue;
+    return v;
+  }
+  return null;
+}
+
+/// Which key [combinedSupplementalCategoriesValue] uses (for logging).
+String? sourceKeyForSupplementalCategories(Map<String, dynamic> m) {
+  const keys = <String>[
+    'XMP-photoshop:SupplementalCategories',
+    'IPTC:SupplementalCategories',
+    'SupplementalCategories',
+    'XMP:SupplementalCategories',
+  ];
+  for (final key in keys) {
+    final v = m[key];
+    if (v == null) continue;
+    if (v is String && v.trim().isEmpty) continue;
+    if (v is List && v.isEmpty) continue;
+    return key;
+  }
+  return null;
+}
+
+/// Values for [buildSupplementalCategoriesArgs] when saving IPTC.
+///
+/// [getCurrentCaptionValues] does not include `SupplementalCategories1..3`, so
+/// without this merge every save would pass empty strings and
+/// [buildSupplementalCategoriesArgs] would **clear** all supplemental categories
+/// in the file.
+List<String> supplementalCategoryRawInputsForSave(
+  Map<String, String> allValues,
+  Map<String, dynamic>? currentMetadata,
+) {
+  String pick(String key) {
+    final fromForm = allValues[key]?.trim() ?? '';
+    if (fromForm.isNotEmpty) return fromForm;
+    return currentMetadata?[key]?.toString().trim() ?? '';
+  }
+
+  String s1 = pick('SupplementalCategories1');
+  String s2 = pick('SupplementalCategories2');
+  String s3 = pick('SupplementalCategories3');
+
+  if (s1.isEmpty && s2.isEmpty && s3.isEmpty && currentMetadata != null) {
+    final combined = combinedSupplementalCategoriesValue(currentMetadata);
+    if (combined is List && combined.isNotEmpty) {
+      s1 = combined
+          .map((e) => e.toString().trim())
+          .where((x) => x.isNotEmpty)
+          .join(',');
+    } else if (combined is String && combined.trim().isNotEmpty) {
+      s1 = combined.trim();
+    }
+  }
+
+  return [s1, s2, s3];
+}
+
 /// Normalizes supplemental category input for Photo Mechanic compatibility
 ///
 /// Takes raw UI input (from Supp Cat 1/2/3 fields or combined strings) and returns

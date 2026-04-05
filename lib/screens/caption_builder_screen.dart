@@ -1556,12 +1556,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // Continue with the normal save since keywords are now part of main command
       }
 
-      // Handle supplemental categories with overwrite semantics
-      final List<String> rawInputs = [
-        allValues['SupplementalCategories1']?.toString() ?? '',
-        allValues['SupplementalCategories2']?.toString() ?? '',
-        allValues['SupplementalCategories3']?.toString() ?? '',
-      ];
+      // Handle supplemental categories with overwrite semantics.
+      // Merge currentMetadata — caption getCurrentCaptionValues() omits supp cats;
+      // otherwise empty raw inputs would clear every supplemental field on save.
+      final List<String> rawInputs =
+          supplementalCategoryRawInputsForSave(allValues, currentMetadata);
 
       // Remove any existing supplemental category args to ensure clean state
       args.removeWhere((arg) =>
@@ -1677,12 +1676,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         allValues['IPTC:Keywords'] ?? allValues['Keywords'],
       );
 
-      // Handle supplemental categories with overwrite semantics
-      final List<String> rawInputs = [
-        allValues['SupplementalCategories1']?.toString() ?? '',
-        allValues['SupplementalCategories2']?.toString() ?? '',
-        allValues['SupplementalCategories3']?.toString() ?? '',
-      ];
+      // Handle supplemental categories (merge currentMetadata — same as main save)
+      final List<String> rawInputs =
+          supplementalCategoryRawInputsForSave(allValues, currentMetadata);
 
       // Remove any existing supplemental category args to ensure clean state
       args.removeWhere((arg) =>
@@ -2512,12 +2508,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
-      // Handle supplemental categories with overwrite semantics
-      final List<String> rawInputs = [
-        allValues['SupplementalCategories1']?.toString() ?? '',
-        allValues['SupplementalCategories2']?.toString() ?? '',
-        allValues['SupplementalCategories3']?.toString() ?? '',
-      ];
+      final List<String> rawInputs =
+          supplementalCategoryRawInputsForSave(allValues, metadata);
 
       // Remove any existing supplemental category args to ensure clean state
       args.removeWhere((arg) =>
@@ -2550,13 +2542,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Build exiftool command arguments directly from ExifTool-style metadata
       List<String> args = [];
 
-      // Collect supplemental categories using normalized approach
-      // ONLY use the individual UI fields, NOT the corrupted SupplementalCategories array
-      final List<String> rawInputs = [
-        metadata['SupplementalCategories1']?.toString() ?? '',
-        metadata['SupplementalCategories2']?.toString() ?? '',
-        metadata['SupplementalCategories3']?.toString() ?? '',
-      ];
+      // Supplemental categories: merge split keys + combined IPTC/XMP (same as main save)
+      final Map<String, String> suppAllValues = metadata.map(
+        (k, v) => MapEntry(k, v?.toString() ?? ''),
+      );
+      final List<String> rawInputs =
+          supplementalCategoryRawInputsForSave(suppAllValues, metadata);
 
       // Clone metadata to allow removals (e.g., keywords keys)
       final Map<String, dynamic> md = Map<String, dynamic>.from(metadata);
