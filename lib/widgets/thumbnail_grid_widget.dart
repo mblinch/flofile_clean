@@ -826,6 +826,9 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               itemCount: visiblePaths.length,
               itemBuilder: (context, index) {
                 final imagePath = visiblePaths[index];
+                final isCurrent =
+                    widget.imagePaths.indexOf(imagePath) == widget.currentIndex;
+                final isMultiSelected = _selectedImages.contains(imagePath);
                 return MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: GestureDetector(
@@ -838,20 +841,23 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     },
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: isCurrent
+                            ? Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withValues(alpha: 0.08)
+                            : Colors.white,
                         borderRadius: BorderRadius.zero,
                         border: Border.all(
-                          color: _selectedImages.contains(imagePath)
+                          color: isMultiSelected
                               ? Colors.blue
-                              : widget.imagePaths.indexOf(imagePath) ==
-                                      widget.currentIndex
+                              : isCurrent
                                   ? Theme.of(context).colorScheme.primary
                                   : Colors.grey.shade500,
-                          width: _selectedImages.contains(imagePath)
+                          width: isMultiSelected
                               ? 2.0
-                              : widget.imagePaths.indexOf(imagePath) ==
-                                      widget.currentIndex
-                                  ? 1.5
+                              : isCurrent
+                                  ? 3.0
                                   : 0.5,
                         ),
                         boxShadow: [
@@ -900,7 +906,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             }),
                           ),
                           // Selection checkmark for multi-selected images
-                          if (_selectedImages.contains(imagePath))
+                          if (isMultiSelected)
                             Positioned(
                               top: 4,
                               right: 4,
@@ -917,6 +923,29 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                   Icons.check,
                                   size: 12,
                                   color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          // Current preview marker
+                          if (isCurrent && !isMultiSelected)
+                            Positioned(
+                              top: 4,
+                              right: 4,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                                child: const Text(
+                                  'CURRENT',
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.2,
+                                  ),
                                 ),
                               ),
                             ),

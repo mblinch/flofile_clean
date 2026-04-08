@@ -2841,12 +2841,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         meta['Caption-Abstract'] ?? meta['IPTC:Caption-Abstract'];
     final dynamic imageDescription = meta['ImageDescription'];
     final dynamic xmpDescription = meta['XMP:Description'];
-    final extractedCaption =
-        (iptcDescription is String ? iptcDescription : '') ??
-            (captionAbstract is String ? captionAbstract : '') ??
-            (imageDescription is String ? imageDescription : '') ??
-            (xmpDescription is String ? xmpDescription : '') ??
-            '';
+    String _asNonEmptyString(dynamic v) {
+      if (v is String) {
+        final t = v.trim();
+        if (t.isNotEmpty) return t;
+      }
+      return '';
+    }
+
+    final extractedCaption = [
+      _asNonEmptyString(iptcDescription),
+      _asNonEmptyString(captionAbstract),
+      _asNonEmptyString(imageDescription),
+      _asNonEmptyString(xmpDescription),
+    ].firstWhere((s) => s.isNotEmpty, orElse: () => '');
 
     // Load Personality: Read from XMP-getty:Personality
     final dynamic extractedPersonality =
@@ -8676,7 +8684,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Use this when the verb is picked from the Keyboard Fire panel so only the panel’s Save/Copy/FTP popup appears.
   void selectVerbByCategoryAndIndexFromKeyboardFire(
       int category1Based, int verb1Based,
-      {bool suppressCaptionUpdate = false}) {
+      {bool suppressCaptionUpdate = false, bool forceSelect = false}) {
     final order = effectiveCategoryOrder;
     if (category1Based < 1 || category1Based > order.length) return;
     final categoryName = order[category1Based - 1];
@@ -8688,7 +8696,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final verb = verbList[verbIndex];
     if (verb.isEmpty) return;
 
-    if (_selectedVerb == verb) {
+    if (!forceSelect && _selectedVerb == verb) {
       setState(() {
         _selectedVerb = null;
         _selectedActionVerb = null;

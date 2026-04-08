@@ -1426,6 +1426,56 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       return;
     }
 
+    // Preserve location/headline fields if the caption form doesn't provide them.
+    // This prevents accidental wipes of original IPTC values during normal saves.
+    void preserveIfMissing(String key, List<String> fallbacks) {
+      final existing = (allValues[key] ?? '').trim();
+      if (existing.isNotEmpty) return;
+      for (final fb in fallbacks) {
+        final v = currentMetadata?[fb]?.toString().trim() ?? '';
+        if (v.isNotEmpty) {
+          allValues[key] = v;
+          return;
+        }
+      }
+    }
+
+    preserveIfMissing('IPTC:Headline', ['IPTC:Headline', 'Headline']);
+    preserveIfMissing('Headline', ['IPTC:Headline', 'Headline']);
+    preserveIfMissing('IPTC:CountryPrimaryLocationName', [
+      'IPTC:CountryPrimaryLocationName',
+      'CountryPrimaryLocationName',
+      'Country',
+      'XMP:Country'
+    ]);
+    preserveIfMissing('CountryPrimaryLocationName', [
+      'IPTC:CountryPrimaryLocationName',
+      'CountryPrimaryLocationName',
+      'Country',
+      'XMP:Country'
+    ]);
+    preserveIfMissing('Country', [
+      'IPTC:CountryPrimaryLocationName',
+      'CountryPrimaryLocationName',
+      'Country',
+      'XMP:Country'
+    ]);
+    preserveIfMissing('IPTC:CountryPrimaryLocationCode', [
+      'IPTC:CountryPrimaryLocationCode',
+      'CountryPrimaryLocationCode',
+      'CountryCode'
+    ]);
+    preserveIfMissing('CountryPrimaryLocationCode', [
+      'IPTC:CountryPrimaryLocationCode',
+      'CountryPrimaryLocationCode',
+      'CountryCode'
+    ]);
+    preserveIfMissing('CountryCode', [
+      'IPTC:CountryPrimaryLocationCode',
+      'CountryPrimaryLocationCode',
+      'CountryCode'
+    ]);
+
     try {
       // Build exiftool command arguments
       List<String> args = [];
@@ -1439,8 +1489,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         'IPTC:Caption-Abstract',
         'XMP:Description',
         'ImageDescription',
-        'IPTC:Headline',
-        'Headline',
       };
 
       // Add each field that has a value, handle keywords specially
@@ -1636,6 +1684,55 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       return;
     }
 
+    // Preserve location/headline fields if the caption form doesn't provide them.
+    void preserveIfMissingBg(String key, List<String> fallbacks) {
+      final existing = (allValues[key] ?? '').trim();
+      if (existing.isNotEmpty) return;
+      for (final fb in fallbacks) {
+        final v = currentMetadata?[fb]?.toString().trim() ?? '';
+        if (v.isNotEmpty) {
+          allValues[key] = v;
+          return;
+        }
+      }
+    }
+
+    preserveIfMissingBg('IPTC:Headline', ['IPTC:Headline', 'Headline']);
+    preserveIfMissingBg('Headline', ['IPTC:Headline', 'Headline']);
+    preserveIfMissingBg('IPTC:CountryPrimaryLocationName', [
+      'IPTC:CountryPrimaryLocationName',
+      'CountryPrimaryLocationName',
+      'Country',
+      'XMP:Country'
+    ]);
+    preserveIfMissingBg('CountryPrimaryLocationName', [
+      'IPTC:CountryPrimaryLocationName',
+      'CountryPrimaryLocationName',
+      'Country',
+      'XMP:Country'
+    ]);
+    preserveIfMissingBg('Country', [
+      'IPTC:CountryPrimaryLocationName',
+      'CountryPrimaryLocationName',
+      'Country',
+      'XMP:Country'
+    ]);
+    preserveIfMissingBg('IPTC:CountryPrimaryLocationCode', [
+      'IPTC:CountryPrimaryLocationCode',
+      'CountryPrimaryLocationCode',
+      'CountryCode'
+    ]);
+    preserveIfMissingBg('CountryPrimaryLocationCode', [
+      'IPTC:CountryPrimaryLocationCode',
+      'CountryPrimaryLocationCode',
+      'CountryCode'
+    ]);
+    preserveIfMissingBg('CountryCode', [
+      'IPTC:CountryPrimaryLocationCode',
+      'CountryPrimaryLocationCode',
+      'CountryCode'
+    ]);
+
     print('DEBUG: Background save - allValues: $allValues');
 
     try {
@@ -1650,8 +1747,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         'IPTC:Caption-Abstract',
         'XMP:Description',
         'ImageDescription',
-        'IPTC:Headline',
-        'Headline',
       };
 
       // Add each field that has a value; explicitly clear clearable fields when empty

@@ -240,7 +240,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       });
       if (!alreadyPinned) {
         widget.captionState?.selectVerbByCategoryAndIndexFromKeyboardFire(
-            selectedCatNum, verbNum);
+            selectedCatNum, verbNum, forceSelect: true);
         widget.captionState?.updateCaptionFromKeyboardFire();
         _refreshCaptionPreviewLater();
       }
@@ -478,6 +478,34 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         .toList();
   }
 
+  List<Player> _searchPlayersInRoster(List<Player> roster, String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return const <Player>[];
+    final tokens = q.split(RegExp(r'[\s,]+')).where((t) => t.isNotEmpty).toList();
+    return roster.where((p) {
+      final display = p.displayName.toLowerCase();
+      final jersey = (p.jerseyNumber ?? '').toLowerCase();
+      return tokens.every((t) => display.contains(t) || jersey == t);
+    }).toList();
+  }
+
+  bool _applyPlayerSearchSelection({
+    required bool isHomeTeam,
+    required List<Player> roster,
+    required String query,
+  }) {
+    final matches = _searchPlayersInRoster(roster, query);
+    if (matches.isEmpty) return false;
+    for (final p in matches) {
+      final jersey = (p.jerseyNumber ?? '').trim();
+      if (jersey.isNotEmpty) {
+        widget.captionState?.addPlayerByJersey(isHomeTeam, jersey);
+      }
+    }
+    widget.captionState?.updateCaptionFromKeyboardFire();
+    return true;
+  }
+
   /// Given number string(s) (e.g. "7 23") and roster, return ghosted text like "Smith, Jones".
   String _playerNamesForNumbers(String text, List<Player> roster) {
     if (roster.isEmpty) return '';
@@ -539,14 +567,33 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   void _onHomeBarSubmit() {
     final numbers = _parseNumbers(_homeBarController.text);
-    if (numbers.isEmpty) return;
-    for (final n in numbers) {
-      widget.captionState?.addPlayerByJersey(true, n);
+    if (numbers.isNotEmpty) {
+      for (final n in numbers) {
+        widget.captionState?.addPlayerByJersey(true, n);
+      }
+      widget.captionState?.updateCaptionFromKeyboardFire();
+      _homeBarController.clear();
+      setState(() {
+        _homeSummary = numbers.map((n) => '#$n').join(', ');
+        if (_step == 0) _step = 1;
+      });
+      _awayBarFocus.requestFocus();
+      _refreshCaptionPreviewLater();
+      return;
     }
-    widget.captionState?.updateCaptionFromKeyboardFire();
+
+    final query = _homeBarController.text.trim();
+    if (!_applyPlayerSearchSelection(
+      isHomeTeam: true,
+      roster: widget.homeRoster,
+      query: query,
+    )) {
+      return;
+    }
+
     _homeBarController.clear();
     setState(() {
-      _homeSummary = numbers.map((n) => '#$n').join(', ');
+      _homeSummary = query;
       if (_step == 0) _step = 1;
     });
     _awayBarFocus.requestFocus();
@@ -567,31 +614,37 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       return;
     }
     final numbers = _parseNumbers(_awayBarController.text);
-    for (final n in numbers) {
-      widget.captionState?.addPlayerByJersey(false, n);
+    if (numbers.isNotEmpty) {
+      for (final n in numbers) {
+        widget.captionState?.addPlayerByJersey(false, n);
+      }
+      widget.captionState?.updateCaptionFromKeyboardFire();
+      _awayBarController.clear();
+      setState(() {
+        _awaySummary =
+            numbers.isEmpty ? 'None' : numbers.map((n) => '#$n').join(', ');
+        _step = 2;
+      });
+      _categoryBarFocus.requestFocus();
+      _refreshCaptionPreviewLater();
+      return;
     }
-    widget.captionState?.updateCaptionFromKeyboardFire();
+
+    final rawQuery = _awayBarController.text.trim();
+    final matched = _applyPlayerSearchSelection(
+      isHomeTeam: false,
+      roster: widget.awayRoster,
+      query: rawQuery,
+    );
+    if (!matched) return;
+
     _awayBarController.clear();
     setState(() {
-      _awaySummary =
-          numbers.isEmpty ? 'None' : numbers.map((n) => '#$n').join(', ');
+      _awaySummary = rawQuery;
       _step = 2;
     });
     _categoryBarFocus.requestFocus();
     _refreshCaptionPreviewLater();
-  }
-
-  void _onCategoryBarSubmit() {
-    final n = int.tryParse(_categoryBarController.text.trim());
-    if (n == null || n < 1) return;
-    final cats = _verbList;
-    if (cats.isEmpty) return;
-    final index = (n - 1).clamp(0, cats.length - 1);
-    setState(() {
-      _selectedCategoryIndex = index;
-      _categoryBarController.clear();
-    });
-    _verbBarFocus.requestFocus();
   }
 
   void _onVerbBarInput(String value) {
@@ -609,6 +662,70 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _selectedCategoryIndex = (cat - 1).clamp(0, _verbList.length - 1);
     });
     _refreshCaptionPreviewLater();
+  }
+
+  void _onCategoryVerbBarSubmit() {
+    final raw = _categoryBarController.text.trim();
+    if (raw.isEmpty) return;
+
+    if (RegExp(r'^\d{2}$').hasMatch(raw)) {
+      _onVerbBarInput(raw);
+      return;
+    }
+
+    if (RegExp(r'^\d$').hasMatch(raw)) {
+      final n = int.tryParse(raw);
+      if (n != null) {
+        final cats = _verbList;
+        if (cats.isNotEmpty) {
+          final index = (n - 1).clamp(0, cats.length - 1);
+          setState(() {
+            _selectedCategoryIndex = index;
+            _categoryBarController.clear();
+          });
+          _categoryBarFocus.requestFocus();
+        }
+      }
+      return;
+    }
+
+    final q = raw.toLowerCase();
+    final cats = _verbList;
+    int? matchedCatNum;
+    int? matchedVerbNum;
+    for (int ci = 0; ci < cats.length; ci++) {
+      final cat = cats[ci];
+      final catName = (cat['name'] as String? ?? '').toLowerCase();
+      final verbs =
+          (cat['verbs'] as List<dynamic>? ?? const <dynamic>[]).cast<String>();
+      if (matchedCatNum == null && catName.contains(q)) {
+        matchedCatNum = ci + 1;
+      }
+      if (matchedVerbNum == null) {
+        for (int vi = 0; vi < verbs.length; vi++) {
+          if (verbs[vi].toLowerCase().contains(q)) {
+            matchedCatNum = ci + 1;
+            matchedVerbNum = vi + 1;
+            break;
+          }
+        }
+      }
+      if (matchedVerbNum != null) break;
+    }
+
+    if (matchedCatNum == null) return;
+    if (matchedVerbNum != null) {
+      _onVerbTapped(matchedCatNum, matchedVerbNum);
+      _categoryBarController.clear();
+      _refreshCaptionPreviewLater();
+      return;
+    }
+
+    setState(() {
+      _selectedCategoryIndex = matchedCatNum! - 1;
+      _categoryBarController.clear();
+    });
+    _categoryBarFocus.requestFocus();
   }
 
   void _refreshCaptionPreviewLater() {
@@ -4205,13 +4322,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               _buildColumnBar(
                                 controller: _categoryBarController,
                                 focusNode: _categoryBarFocus,
-                                onSubmitted: () {},
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                  LengthLimitingTextInputFormatter(2),
-                                ],
+                                onSubmitted: _onCategoryVerbBarSubmit,
                                 onChanged: (v) {
-                                  if (v.length >= 2) _onVerbBarInput(v);
+                                  if (RegExp(r'^\d{2}$').hasMatch(v.trim())) {
+                                    _onVerbBarInput(v.trim());
+                                  }
                                 },
                               ),
                               const SizedBox(height: 4),
