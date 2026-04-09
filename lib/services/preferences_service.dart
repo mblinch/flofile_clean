@@ -47,6 +47,7 @@ class PreferencesService {
   static const String _keyShowKeyboardFireShortcutsHelp =
       'show_keyboard_fire_shortcuts_help';
   static const String _keyKeywordShortcuts = 'keyword_shortcuts';
+  static const String _keyHasLaunchedBefore = 'has_launched_before';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -56,7 +57,27 @@ class PreferencesService {
   static Future<PreferencesService> getInstance() async {
     _instance ??= PreferencesService._();
     _prefs ??= await SharedPreferences.getInstance();
+    await _instance!._applyFirstLaunchDefaults();
     return _instance!;
+  }
+
+  /// On first launch, explicitly save keyword-related prefs as off.
+  /// Existing users already have saved prefs so this is a no-op for them.
+  Future<void> _applyFirstLaunchDefaults() async {
+    final prefs = await _getPrefs();
+    if (prefs.getBool(_keyHasLaunchedBefore) == true) return;
+    await prefs.setBool(_keyHasLaunchedBefore, true);
+
+    // Only set defaults if user has never saved these prefs
+    if (!prefs.containsKey(_keyApplyVerbKeywords)) {
+      await prefs.setBool(_keyApplyVerbKeywords, false);
+    }
+    if (!prefs.containsKey(_keyApplyPlayerNamesToKeywords)) {
+      await prefs.setBool(_keyApplyPlayerNamesToKeywords, false);
+    }
+    if (!prefs.containsKey(_keyShowKeywordsField)) {
+      await prefs.setBool(_keyShowKeywordsField, false);
+    }
   }
 
   /// Bumped when headline/keywords/personality visibility toggles — caption UI listens to reflow.

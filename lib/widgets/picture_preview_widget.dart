@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:extended_image/extended_image.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math' as math;
 import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
@@ -38,6 +39,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final Map<String, String>? xmpLabels;
   final Map<String, bool>? xmpTagged;
   final Set<String>? lockedPaths;
+  final List<String> multiSelectedPaths;
 
   final VoidCallback? onEditMetadata;
 
@@ -67,6 +69,7 @@ class PicturePreviewWidget extends StatefulWidget {
     this.xmpLabels,
     this.xmpTagged,
     this.lockedPaths,
+    this.multiSelectedPaths = const [],
     this.onEditMetadata,
   });
 
@@ -334,8 +337,246 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     return parts.join(' ');
   }
 
+  /// Picks column count so square-ish cells fit in [innerW] x [innerH] without scrolling when possible.
+  static int _crossAxisCountForFit(
+    double innerW,
+    double innerH,
+    int count, {
+    double spacing = 4,
+    double childAspectRatio = 1.0,
+  }) {
+    if (count <= 0) return 1;
+    if (innerW <= 0 || innerH <= 0) return math.min(2, count);
+
+    int bestCols = 1;
+    double bestTileCross = 0;
+
+    for (int cols = 1; cols <= count; cols++) {
+      final tileCross =
+          (innerW - (cols - 1) * spacing) / cols;
+      if (tileCross <= 0) continue;
+      final tileMain = tileCross / childAspectRatio;
+      final rows = (count / cols).ceil();
+      final totalMain =
+          rows * tileMain + (rows - 1) * spacing;
+      if (totalMain <= innerH && tileCross > bestTileCross) {
+        bestTileCross = tileCross;
+        bestCols = cols;
+      }
+    }
+
+    if (bestTileCross > 0) return bestCols;
+
+    // Too tall for viewport: pick columns that minimize vertical overflow (scroll).
+    int fallback = 1;
+    double minOverflow = double.infinity;
+    final maxTry = math.min(count, 8);
+    for (int cols = 1; cols <= maxTry; cols++) {
+      final tileCross =
+          (innerW - (cols - 1) * spacing) / cols;
+      if (tileCross <= 0) continue;
+      final tileMain = tileCross / childAspectRatio;
+      final rows = (count / cols).ceil();
+      final totalMain =
+          rows * tileMain + (rows - 1) * spacing;
+      final overflow = totalMain - innerH;
+      if (overflow < minOverflow) {
+        minOverflow = overflow;
+        fallback = cols;
+      }
+    }
+    return fallback;
+  }
+
+  Widget _buildMultiSelectionView(BuildContext context) {
+    final paths = widget.multiSelectedPaths;
+    final count = paths.length;
+    const double gridPad = 6;
+    const double gap = 4;
+    const double bannerH = 28;
+    const double aspect = 1.0;
+
+    return Container(
+      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 10),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.blue.shade300, width: 2.0),
+        borderRadius: BorderRadius.zero,
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Container(
+            height: bannerH,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              border: Border(
+                bottom: BorderSide(color: Colors.blue.shade200, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.photo_library, size: 14, color: Colors.blue.shade700),
+                const SizedBox(width: 6),
+                Text(
+                  '$count images selected',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.blue.shade800,
+                  ),
+                ),
+                const Spacer(),
+                Flexible(
+                  child: Text(
+                    'Caption will apply to all selected images',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.blue.shade600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final innerW =
+                    constraints.maxWidth - 2 * gridPad;
+                final innerH =
+                    constraints.maxHeight - 2 * gridPad;
+                final cols = _crossAxisCountForFit(
+                  innerW,
+                  innerH,
+                  count,
+                  spacing: gap,
+                  childAspectRatio: aspect,
+                );
+                final tileW =
+                    (innerW - (cols - 1) * gap) / cols;
+                final rows = (count / cols).ceil();
+                final tileH = tileW / aspect;
+                final gridMainExtent =
+                    rows * tileH + (rows - 1) * gap;
+                final fitsWithoutScroll =
+                    gridMainExtent <= innerH + 0.5;
+
+                final dpr = MediaQuery.devicePixelRatioOf(context);
+                final cacheW =
+                    math.max(64, (tileW * dpr).round());
+
+                return GridView.builder(
+                  padding: const EdgeInsets.all(gridPad),
+                  physics: fitsWithoutScroll
+                      ? const NeverScrollableScrollPhysics()
+                      : const ClampingScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    mainAxisSpacing: gap,
+                    crossAxisSpacing: gap,
+                    childAspectRatio: aspect,
+                  ),
+                  itemCount: count,
+                  itemBuilder: (context, index) {
+                    final imgPath = paths[index];
+                    return Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: Colors.grey.shade300, width: 0.5),
+                        color: Colors.grey.shade50,
+                      ),
+                      clipBehavior: Clip.hardEdge,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Positioned.fill(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                  2, 2, 2, 16),
+                              child: ClipRect(
+                                child: ExtendedImage.file(
+                                  File(imgPath),
+                                  fit: BoxFit.contain,
+                                  alignment: Alignment.center,
+                                  cacheWidth: cacheW,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 1),
+                              color: Colors.black.withOpacity(0.55),
+                              child: Text(
+                                p.basename(imgPath),
+                                style: const TextStyle(
+                                  fontSize: 8,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            top: 2,
+                            right: 2,
+                            child: Container(
+                              width: 16,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: Colors.blue,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: Colors.white, width: 1.5),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${index + 1}',
+                                  style: const TextStyle(
+                                    fontSize: 8,
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (widget.multiSelectedPaths.length > 1) {
+      return _buildMultiSelectionView(context);
+    }
+
     if (widget.imagePaths.isEmpty) {
       return Container(
         margin: const EdgeInsets.all(3.0),

@@ -177,6 +177,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   List<Player> _cachedHomeRoster = [];
   List<Player> _cachedAwayRoster = [];
 
+  // Multi-selection state (tracks Cmd+click selections from thumbnail grid)
+  List<String> _multiSelectedImages = [];
+
   // Track uploaded images
   final Set<String> _uploadedImages = {};
   // Track upload progress for thumbnails
@@ -1080,6 +1083,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       if (!mounted) return;
       // Snapshot the current caption (with verb) as "last saved" before moving on.
       (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
+      // Don't advance when multi-selection is active
+      if (_multiSelectedImages.length > 1) return;
       if (imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1) {
         setState(() => _thumbCenterRequestId++);
         _onImageSelected(currentIndex + 1);
@@ -1116,7 +1121,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
     if (!mounted) return;
 
-    // 3. Advance to next image
+    // 3. Advance to next image (skip when multi-selection is active)
+    if (_multiSelectedImages.length > 1) return;
     if (imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1) {
       setState(() => _thumbCenterRequestId++);
       _onImageSelected(currentIndex + 1);
@@ -1395,8 +1401,81 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
+  // Save caption metadata to multiple selected images at once
+  Future<void> _saveIptcToMultipleImages(List<String> targets) async {
+    if (targets.isEmpty) return;
+
+    (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
+
+    dynamic captionState = _captionFieldsKey2.currentState;
+    if (captionState == null) return;
+
+    Map<String, String> captionValues = captionState.getCurrentCaptionValues();
+    if (captionValues.isEmpty) return;
+
+    try {
+      List<String> args = [];
+
+      captionValues.forEach((key, value) {
+        if (key == 'IPTC:Keywords' ||
+            key == 'Keywords' ||
+            key == 'Subject' ||
+            key == 'XMP:Subject' ||
+            key == 'XMP-dc:Subject') return;
+        if (value.trim().isNotEmpty) {
+          args.add('-$key=$value');
+        }
+      });
+
+      final keywordsValue =
+          captionValues['IPTC:Keywords'] ?? captionValues['Keywords'];
+      _appendKeywordsExifArgs(args, keywordsValue);
+
+      args.addAll(['-overwrite_original', '-P', '-m', '-charset', 'iptc=UTF8']);
+      for (final target in targets) {
+        args.add(target);
+      }
+
+      if (args.length > targets.length + 1) {
+        print('Saving caption to ${targets.length} images...');
+        final proc = await ExiftoolHelper.run(args);
+
+        if (proc.exitCode == 0) {
+          print('Caption saved to ${targets.length} images successfully');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content:
+                    Text('Caption saved to ${targets.length} images'),
+                backgroundColor: Colors.green,
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        } else {
+          print('Exiftool error saving to multiple images: ${proc.stderrText}');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error saving to multiple images'),
+                backgroundColor: Colors.red,
+                duration: const Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      print('Error saving to multiple images: $e');
+    }
+  }
+
   // Save IPTC metadata to the current image (with UI refresh)
   Future<void> _saveIptcMetadata() async {
+    if (_multiSelectedImages.length > 1) {
+      return _saveIptcToMultipleImages(_multiSelectedImages);
+    }
+
     if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
 
     // Snapshot the current caption (with verb) BEFORE any async yields.
@@ -1972,10 +2051,28 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     print('Images sorted by date taken (earliest to latest)');
   }
 
-  // Handle image selection
+  /// Shown on Save buttons as "Save (N)" when multiple thumbs are selected for bulk caption.
+  int? get _bulkSaveCount =>
+      _multiSelectedImages.length > 1 ? _multiSelectedImages.length : null;
+
+  // Clear multi-selection in both parent state and thumbnail grid
+  void _clearMultiSelection() {
+    if (_multiSelectedImages.isNotEmpty) {
+      setState(() {
+        _multiSelectedImages = [];
+      });
+    }
+    _thumbnailGridKey.currentState?.clearMultiSelection();
+  }
+
+  // Handle image selection (single image navigation)
   void _onImageSelected(int index) {
     // TEMPORARILY DISABLED: Don't save on navigation to prevent conflicts with popup save
     // _saveIptcMetadata(); // DISABLED
+
+    // Clear multi-selection — this is safe because the thumbnail grid no longer
+    // calls onImageSelected during Cmd+click (it uses onMultiSelect only).
+    _clearMultiSelection();
 
     // Switch to the selected image
     _switchToImage(index);
@@ -2073,6 +2170,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         homeTeamName: selectedHomeTeam,
         awayTeamName: selectedAwayTeam,
         captionState: state,
+        bulkSaveCount: _bulkSaveCount,
       ),
     );
   }
@@ -3231,11 +3329,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
-  // Handle multi-selection
+  // Handle multi-selection from thumbnail grid
   void _onMultiSelect(List<String> selectedPaths) {
     print('Multi-selection: ${selectedPaths.length} images selected');
-    // For now, just log the selection
-    // In the future, this could enable bulk operations
+    setState(() {
+      _multiSelectedImages = List.from(selectedPaths);
+    });
+    // Update currentIndex to the last selected image so caption fields load its data
+    if (selectedPaths.isNotEmpty) {
+      final lastPath = selectedPaths.last;
+      final idx = imagePaths.indexOf(lastPath);
+      if (idx != -1 && idx != currentIndex) {
+        _switchToImage(idx);
+      }
+    }
   }
 
   // Handle image rename
@@ -3610,6 +3717,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 onInvoke: (_) {
                   if (_isTextInputFocused()) return null;
                   if (imagePaths.isEmpty) return null;
+                  _clearMultiSelection();
                   if (currentIndex > 0) {
                     setState(() => _thumbCenterRequestId++);
                     _onImageSelected(currentIndex - 1);
@@ -3622,6 +3730,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 onInvoke: (_) {
                   if (_isTextInputFocused()) return null;
                   if (imagePaths.isEmpty) return null;
+                  _clearMultiSelection();
                   if (currentIndex < imagePaths.length - 1) {
                     setState(() => _thumbCenterRequestId++);
                     _onImageSelected(currentIndex + 1);
@@ -3633,6 +3742,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 consumesKeyWhen: () => !_isTextInputFocused(),
                 onInvoke: (_) {
                   if (_isTextInputFocused()) return null;
+                  _clearMultiSelection();
                   return _handleArrowUpDownByRow(up: true);
                 },
               ),
@@ -3640,6 +3750,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 consumesKeyWhen: () => !_isTextInputFocused(),
                 onInvoke: (_) {
                   if (_isTextInputFocused()) return null;
+                  _clearMultiSelection();
                   return _handleArrowUpDownByRow(up: false);
                 },
               ),
@@ -3794,6 +3905,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             }
           },
           onSaveIptc: _saveIptcMetadata,
+          bulkSaveCount: _bulkSaveCount,
           onFtp: cs != null
               ? () {
                   try {
@@ -3862,6 +3974,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     key: _picturePreviewKey2,
                     imagePaths: imagePaths,
                     currentIndex: currentIndex,
+                    multiSelectedPaths: _multiSelectedImages,
                     onImageSelected: _onImageSelected,
                     onNextImage: () {
                       if (currentIndex < imagePaths.length - 1) {
@@ -4010,6 +4123,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
               totalImages: imagePaths.length,
               onSaveIptc: _saveIptcMetadata,
+              bulkSaveCount: _bulkSaveCount,
               onImageUploaded: (imagePath) {
                 if (!_currentlyUploading.contains(imagePath)) {
                   setState(() {
@@ -4091,6 +4205,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
               totalImages: imagePaths.length,
               onSaveIptc: _saveIptcMetadata,
+              bulkSaveCount: _bulkSaveCount,
               onImageUploaded: (imagePath) {
                 if (!_currentlyUploading.contains(imagePath)) {
                   setState(() {
@@ -4123,6 +4238,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   key: _picturePreviewKey2,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
+                  multiSelectedPaths: _multiSelectedImages,
                   onImageSelected: _onImageSelected,
                   onNextImage: () {
                     if (currentIndex < imagePaths.length - 1) {
@@ -4277,6 +4393,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
               totalImages: imagePaths.length,
               onSaveIptc: _saveIptcMetadata,
+              bulkSaveCount: _bulkSaveCount,
               onImageUploaded: (imagePath) {
                 if (!_currentlyUploading.contains(imagePath)) {
                   setState(() {
@@ -4311,6 +4428,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         key: _picturePreviewKey2,
                         imagePaths: imagePaths,
                         currentIndex: currentIndex,
+                        multiSelectedPaths: _multiSelectedImages,
                         onImageSelected: _onImageSelected,
                         onNextImage: () {
                           if (currentIndex < imagePaths.length - 1) {
@@ -4437,6 +4555,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         key: _picturePreviewKey2,
                         imagePaths: imagePaths,
                         currentIndex: currentIndex,
+                        multiSelectedPaths: _multiSelectedImages,
                         onImageSelected: _onImageSelected,
                         onNextImage: () {
                           if (currentIndex < imagePaths.length - 1) {
@@ -4595,6 +4714,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
               totalImages: imagePaths.length,
               onSaveIptc: _saveIptcMetadata,
+              bulkSaveCount: _bulkSaveCount,
               onImageUploaded: (imagePath) {
                 if (!_currentlyUploading.contains(imagePath)) {
                   setState(() {
@@ -4635,6 +4755,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   key: _picturePreviewKey2,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
+                  multiSelectedPaths: _multiSelectedImages,
                   onImageSelected: _onImageSelected,
                   onNextImage: () {
                     if (currentIndex < imagePaths.length - 1) {
@@ -4796,6 +4917,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
                     totalImages: imagePaths.length,
                     onSaveIptc: _saveIptcMetadata,
+                    bulkSaveCount: _bulkSaveCount,
                     onImageUploaded: (imagePath) {
                       if (!_currentlyUploading.contains(imagePath)) {
                         setState(() {
@@ -4869,6 +4991,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   key: _picturePreviewKey2,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
+                  multiSelectedPaths: _multiSelectedImages,
                   onImageSelected: _onImageSelected,
                   onNextImage: () {
                     if (currentIndex < imagePaths.length - 1) {
@@ -4952,6 +5075,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onApplyIptcTemplate: _onApplyIptcTemplate,
                   onFtpImage: _onFtpImage,
                   onImageRenamed: _onImageRenamed,
+                  onMultiSelect: _onMultiSelect,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                  onColumnsComputed: (cols) {
+                    if (_lastThumbColumns != cols) {
+                      setState(() => _lastThumbColumns = cols);
+                    }
+                  },
                   exifTimes: _exifTimes,
                 ),
               ),
@@ -5085,6 +5216,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   key: _picturePreviewKey2,
                   imagePaths: imagePaths,
                   currentIndex: currentIndex,
+                  multiSelectedPaths: _multiSelectedImages,
                   onImageSelected: _onImageSelected,
                   onNextImage: () {
                     if (currentIndex < imagePaths.length - 1) {
@@ -5161,6 +5293,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onApplyIptcTemplate: _onApplyIptcTemplate,
                   onFtpImage: _onFtpImage,
                   onImageRenamed: _onImageRenamed,
+                  onMultiSelect: _onMultiSelect,
+                  onEditMetadata: _showMetadataPopup,
+                  onEditInPhotoshop: _launchPhotoshop,
+                  onColumnsComputed: (cols) {
+                    if (_lastThumbColumns != cols) {
+                      setState(() => _lastThumbColumns = cols);
+                    }
+                  },
                   exifTimes: _exifTimes,
                 ),
               ),
@@ -5196,6 +5336,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           preloadedAwayRoster: _cachedAwayRoster,
                           hidePlayerPicker: true,
                           onSaveIptc: _saveIptcMetadata,
+                          bulkSaveCount: _bulkSaveCount,
                           onSaveIptcBackground: _saveIptcMetadataBackground,
                         ),
                       ),
@@ -5226,6 +5367,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           }
                         },
                         onSaveIptc: _saveIptcMetadata,
+                        bulkSaveCount: _bulkSaveCount,
                         onFtp: cs != null
                             ? () {
                                 try {
@@ -5330,6 +5472,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         hidePlayerPicker:
                             true, // Hide old player picker for this layout
                         onSaveIptc: _saveIptcMetadata,
+                        bulkSaveCount: _bulkSaveCount,
                         onSaveIptcBackground: _saveIptcMetadataBackground,
                         onCopyMetadata: () =>
                             _onCopyMetadata(imagePaths[currentIndex]),

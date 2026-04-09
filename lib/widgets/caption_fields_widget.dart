@@ -261,6 +261,8 @@ class CaptionFieldsWidget extends StatefulWidget {
   final int? totalImages;
   final Future<void> Function()? onSaveIptc;
   final Future<void> Function()? onSaveIptcBackground;
+  /// When >1, Save buttons show "Save (N)" for bulk IPTC write.
+  final int? bulkSaveCount;
   final Function(String)? onImageUploaded; // Callback when image is uploaded
   final Function(String, double)?
       onUploadProgress; // Callback for upload progress
@@ -295,6 +297,7 @@ class CaptionFieldsWidget extends StatefulWidget {
     this.totalImages,
     this.onSaveIptc,
     this.onSaveIptcBackground,
+    this.bulkSaveCount,
     this.onImageUploaded,
     this.onUploadProgress,
     this.isImageUploaded,
@@ -312,6 +315,18 @@ class CaptionFieldsWidget extends StatefulWidget {
 }
 
 class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
+  String _iptcSaveLabel() {
+    final n = widget.bulkSaveCount;
+    if (n != null && n > 1) return 'Save ($n)';
+    return 'Save';
+  }
+
+  String _iptcSaveNextLabel() {
+    final n = widget.bulkSaveCount;
+    if (n != null && n > 1) return 'Save ($n) →';
+    return 'Save →';
+  }
+
   // Controllers
   final HighlightingTextEditingController captionController =
       HighlightingTextEditingController();
@@ -10832,12 +10847,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 child: Row(
                                                   mainAxisSize:
                                                       MainAxisSize.min,
-                                                  children: const [
-                                                    Text('Save',
-                                                        style: TextStyle(
+                                                  children: [
+                                                    Text(_iptcSaveLabel(),
+                                                        style: const TextStyle(
                                                             fontSize: 10)),
-                                                    SizedBox(width: 4),
-                                                    Icon(Icons.arrow_forward,
+                                                    const SizedBox(width: 4),
+                                                    const Icon(
+                                                        Icons.arrow_forward,
                                                         size: 14),
                                                   ],
                                                 ),
@@ -11373,11 +11389,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      Text('Save',
-                                          style: TextStyle(fontSize: 10)),
-                                      SizedBox(width: 4),
-                                      Icon(Icons.arrow_forward, size: 14),
+                                    children: [
+                                      Text(_iptcSaveLabel(),
+                                          style:
+                                              const TextStyle(fontSize: 10)),
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.arrow_forward,
+                                          size: 14),
                                     ],
                                   ),
                                 ),
@@ -11921,12 +11939,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
-                                                children: const [
-                                                  Text('Save',
-                                                      style: TextStyle(
+                                                children: [
+                                                  Text(_iptcSaveLabel(),
+                                                      style: const TextStyle(
                                                           fontSize: 10)),
-                                                  SizedBox(width: 4),
-                                                  Icon(Icons.arrow_forward,
+                                                  const SizedBox(width: 4),
+                                                  const Icon(
+                                                      Icons.arrow_forward,
                                                       size: 14),
                                                 ],
                                               ),
@@ -12668,7 +12687,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     widget.onNextImage?.call();
                                                   },
                                                   child: Text(
-                                                    'Save →',
+                                                    _iptcSaveNextLabel(),
                                                     style: TextStyle(
                                                       fontSize: 12,
                                                       color:
@@ -17217,7 +17236,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Save',
+                      _iptcSaveLabel(),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -17313,7 +17332,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      'Save',
+                      _iptcSaveLabel(),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
@@ -23176,12 +23195,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 color: Colors.grey.shade700,
                               ),
                               const SizedBox(width: 2),
-                              Text(
-                                'Save',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    _iptcSaveLabel(),
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
@@ -23357,12 +23383,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                'Save',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey.shade700,
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerRight,
+                                  child: Text(
+                                    _iptcSaveLabel(),
+                                    maxLines: 1,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 2),

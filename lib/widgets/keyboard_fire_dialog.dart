@@ -70,6 +70,8 @@ class KeyboardFirePanel extends StatefulWidget {
   final VoidCallback? onPreviousImage;
   final VoidCallback? onNextImage;
   final Future<void> Function()? onSaveIptc;
+  /// When >1, action-bar Save shows "Save (N)" for bulk IPTC write.
+  final int? bulkSaveCount;
   final VoidCallback? onFtp;
   final VoidCallback? onFtpSettings;
   final VoidCallback? onReset;
@@ -93,6 +95,7 @@ class KeyboardFirePanel extends StatefulWidget {
     this.onPreviousImage,
     this.onNextImage,
     this.onSaveIptc,
+    this.bulkSaveCount,
     this.onFtp,
     this.onFtpSettings,
     this.onReset,
@@ -110,6 +113,18 @@ class KeyboardFirePanel extends StatefulWidget {
 }
 
 class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
+  String _bulkSaveLabel() {
+    final n = widget.bulkSaveCount;
+    if (n != null && n > 1) return 'Save ($n)';
+    return 'Save';
+  }
+
+  int _saveActionBarBtnWidth() {
+    final n = widget.bulkSaveCount;
+    if (n != null && n > 1) return 88;
+    return 72;
+  }
+
   int _step = 0;
   final TextEditingController _inputController = TextEditingController();
   final FocusNode _inputFocus = FocusNode();
@@ -3298,6 +3313,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         widget.totalImages != null &&
         widget.currentIndex! < widget.totalImages! - 1;
 
+    final saveW = _saveActionBarBtnWidth().toDouble();
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Wrap(
@@ -3306,7 +3322,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         children: [
           // ← Save Prev
           _btn(
-            width: 72,
+            width: saveW,
             onTap: hasPrev
                 ? () async {
                     if (widget.onSaveIptc != null) widget.onSaveIptc!();
@@ -3319,17 +3335,23 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 Icon(Icons.chevron_left,
                     size: 12, color: Colors.grey.shade700),
                 const SizedBox(width: 2),
-                Text('Save',
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500)),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(_bulkSaveLabel(),
+                        maxLines: 1,
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500)),
+                  ),
+                ),
               ],
             ),
           ),
           // Save → Next
           _btn(
-            width: 72,
+            width: saveW,
             onTap: hasNext
                 ? () async {
                     if (widget.onSaveIptc != null) widget.onSaveIptc!();
@@ -3339,11 +3361,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Save',
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: Colors.grey.shade700,
-                        fontWeight: FontWeight.w500)),
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(_bulkSaveLabel(),
+                        maxLines: 1,
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500)),
+                  ),
+                ),
                 const SizedBox(width: 2),
                 Icon(Icons.chevron_right,
                     size: 12, color: Colors.grey.shade700),
@@ -4555,11 +4583,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                               size: 12,
                                               color: Colors.grey.shade700),
                                           const SizedBox(width: 2),
-                                          Text('Save',
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
+                                          Flexible(
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Text(_bulkSaveLabel(),
+                                                  maxLines: 1,
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color:
+                                                          Colors.grey.shade700,
+                                                      fontWeight:
+                                                          FontWeight.w500)),
+                                            ),
+                                          ),
                                         ],
                                       ),
                                     ),
@@ -4582,11 +4618,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
                                         children: [
-                                          Text('Save',
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
+                                          Flexible(
+                                            child: FittedBox(
+                                              fit: BoxFit.scaleDown,
+                                              child: Text(_bulkSaveLabel(),
+                                                  maxLines: 1,
+                                                  style: TextStyle(
+                                                      fontSize: 10,
+                                                      color:
+                                                          Colors.grey.shade700,
+                                                      fontWeight:
+                                                          FontWeight.w500)),
+                                            ),
+                                          ),
                                           const SizedBox(width: 2),
                                           Icon(Icons.chevron_right,
                                               size: 12,
@@ -4797,6 +4841,7 @@ class KeyboardFireDialog extends StatelessWidget {
   final String? homeTeamName;
   final String? awayTeamName;
   final dynamic captionState;
+  final int? bulkSaveCount;
 
   const KeyboardFireDialog({
     super.key,
@@ -4805,6 +4850,7 @@ class KeyboardFireDialog extends StatelessWidget {
     this.homeTeamName,
     this.awayTeamName,
     required this.captionState,
+    this.bulkSaveCount,
   });
 
   @override
@@ -4815,6 +4861,7 @@ class KeyboardFireDialog extends StatelessWidget {
       homeTeamName: homeTeamName,
       awayTeamName: awayTeamName,
       captionState: captionState,
+      bulkSaveCount: bulkSaveCount,
       showDialogActions: true,
       onDone: () => Navigator.of(context).pop(),
     );

@@ -102,6 +102,15 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   Set<String> _selectedImages = {};
   bool _isMultiSelectMode = false;
 
+  /// Clear multi-selection (called from parent on arrow-key navigation, etc.)
+  void clearMultiSelection() {
+    if (_selectedImages.isEmpty) return;
+    setState(() {
+      _selectedImages.clear();
+      _isMultiSelectMode = false;
+    });
+  }
+
   /// Compact label for the FTP filter bar trigger (team-picker style).
   String _ftpFilterBarLabel() {
     if (_ftpFilterMode == null) return 'All images';
@@ -115,15 +124,16 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             .contains(LogicalKeyboardKey.metaLeft) ||
         RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.metaRight);
 
-    print('DEBUG: _handleThumbnailTap called, isMetaPressed: $isMetaPressed');
-    print('DEBUG: Keys pressed: ${RawKeyboard.instance.keysPressed}');
-
     // If Cmd is not pressed, clear selection and select single image
     if (!isMetaPressed) {
+      final hadSelection = _selectedImages.isNotEmpty;
       setState(() {
         _selectedImages.clear();
         _isMultiSelectMode = false;
       });
+      if (hadSelection) {
+        widget.onMultiSelect?.call([]);
+      }
 
       final originalIndex = widget.imagePaths.indexOf(imagePath);
       if (originalIndex != -1) {
@@ -139,43 +149,35 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         widget.currentIndex >= 0 &&
         widget.currentIndex < widget.imagePaths.length) {
       final currentImagePath = widget.imagePaths[widget.currentIndex];
-      setState(() {
-        _selectedImages.add(currentImagePath);
-        _isMultiSelectMode = true;
-      });
-      print('DEBUG: Added current image to selection: $currentImagePath');
+      _selectedImages.add(currentImagePath);
     }
 
     if (_selectedImages.contains(imagePath)) {
       // Remove from selection
-      setState(() {
-        _selectedImages.remove(imagePath);
-        _isMultiSelectMode = _selectedImages.isNotEmpty;
-      });
+      _selectedImages.remove(imagePath);
 
-      // If no more selections, select the clicked image normally
       if (_selectedImages.isEmpty) {
+        // All deselected — revert to single-image mode
+        setState(() {
+          _isMultiSelectMode = false;
+        });
+        widget.onMultiSelect?.call([]);
         final originalIndex = widget.imagePaths.indexOf(imagePath);
         if (originalIndex != -1) {
           widget.onImageSelected(originalIndex);
         }
+        return;
       }
     } else {
       // Add to selection
-      setState(() {
-        _selectedImages.add(imagePath);
-        _isMultiSelectMode = true;
-      });
-
-      // Also make this the current image
-      final originalIndex = widget.imagePaths.indexOf(imagePath);
-      if (originalIndex != -1) {
-        widget.onImageSelected(originalIndex);
-      }
-
-      // Notify parent of multi-selection
-      widget.onMultiSelect?.call(_selectedImages.toList());
+      _selectedImages.add(imagePath);
     }
+
+    // Update local UI and notify parent of the full selection
+    setState(() {
+      _isMultiSelectMode = true;
+    });
+    widget.onMultiSelect?.call(_selectedImages.toList());
   }
 
   String _formatTime(String? dateTimeStr) {
