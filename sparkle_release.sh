@@ -9,16 +9,30 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Prefer pubspec `x.y.z+build` so Sparkle build matches CFBundleVersion (not 1013 from "1.0.13").
 VERSION_ARG="${1:-}"
-if [ -n "$VERSION_ARG" ]; then
-  VERSION="$VERSION_ARG"
-else
-  VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | tr -d '\r\n')
-  [ -z "$VERSION" ] && VERSION="1.0.0"
-fi
+PUBSPEC_VER=$(grep '^version:' pubspec.yaml | sed 's/version: *//' | tr -d '\r\n')
+[ -z "$PUBSPEC_VER" ] && PUBSPEC_VER="1.0.0+1"
 
-SHORT_VERSION="$VERSION"
-SPARKLE_VERSION="${SPARKLE_VERSION:-$(echo "$VERSION" | sed 's/[^0-9]//g')}"
+if [ -n "$VERSION_ARG" ]; then
+  if [[ "$VERSION_ARG" == *+* ]]; then
+    VERSION="$VERSION_ARG"
+  elif [[ "$PUBSPEC_VER" == "$VERSION_ARG"+* ]]; then
+    VERSION="$PUBSPEC_VER"
+  else
+    VERSION="$VERSION_ARG"
+  fi
+else
+  VERSION="$PUBSPEC_VER"
+fi
+[ -z "$VERSION" ] && VERSION="1.0.0+1"
+
+SHORT_VERSION="${VERSION%%+*}"
+if [[ "$VERSION" == *+* ]]; then
+  SPARKLE_VERSION="${SPARKLE_VERSION:-${VERSION#*+}}"
+else
+  SPARKLE_VERSION="${SPARKLE_VERSION:-$(echo "$SHORT_VERSION" | sed 's/[^0-9]//g')}"
+fi
 [ -z "$SPARKLE_VERSION" ] && SPARKLE_VERSION="1"
 
 APP_NAME="FloFile Beta"
