@@ -7,8 +7,10 @@ import 'dart:async';
 import '../services/api_manager.dart';
 import '../services/preferences_service.dart';
 import 'preferences_dialog.dart';
-import 'camera_serial_dialog.dart';
 import '../services/camera_serial_service.dart';
+
+/// Same On/Off control as Preferences → Application (`preferences_dialog.dart`).
+const Color _kHeaderPrefsBlue = Color(0xFF0052CC);
 
 class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final Function(List<String>) onImagesLoaded;
@@ -23,6 +25,8 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final VoidCallback? onPreferencesClosed;
   /// Called to open FTP Settings (e.g. from Preferences > FTP). When set, Preferences dialog shows "Open FTP Settings" in the FTP section.
   final VoidCallback? onOpenFtpSettings;
+  /// Burst detection toggled from the title bar; keeps [CaptionBuilderScreen] in sync.
+  final ValueChanged<bool>? onBurstDetectionChanged;
 
   const AppHeaderWidget({
     super.key,
@@ -36,6 +40,7 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
     this.onLayoutChanged,
     this.onPreferencesClosed,
     this.onOpenFtpSettings,
+    this.onBurstDetectionChanged,
   });
 
   @override
@@ -61,6 +66,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
   // Serial number bylines state
   bool _serialNumberBylinesEnabled = true;
+  bool _burstDetectionEnabled = false;
   String selectedApi = 'MLB Stats API'; // API selection
   final bool _isConnectedToApi =
       false; // This would be connected to your API service
@@ -168,6 +174,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     _preferencesService = await PreferencesService.getInstance();
     await _loadFavoriteTeams();
     await _loadSerialNumberBylines();
+    _burstDetectionEnabled =
+        await _preferencesService.getBurstDetectionEnabled();
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadFavoriteTeams() async {
@@ -188,6 +197,119 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     _serialNumberBylinesEnabled = enabled;
     await _preferencesService.saveSerialNumberBylines(enabled);
     if (mounted) setState(() {});
+  }
+
+  Future<void> _applyBurstDetection(bool enabled) async {
+    if (_burstDetectionEnabled == enabled) return;
+    await _preferencesService.saveBurstDetectionEnabled(enabled);
+    if (mounted) setState(() => _burstDetectionEnabled = enabled);
+    widget.onBurstDetectionChanged?.call(enabled);
+  }
+
+  Widget _headerOnOffSegment(
+    String label,
+    bool selected,
+    VoidCallback onTap, {
+    bool isFirst = false,
+    bool isLast = false,
+  }) {
+    const radius = 2.0;
+    final borderRadius = BorderRadius.only(
+      topLeft: Radius.circular(isFirst ? radius : 0),
+      bottomLeft: Radius.circular(isFirst ? radius : 0),
+      topRight: Radius.circular(isLast ? radius : 0),
+      bottomRight: Radius.circular(isLast ? radius : 0),
+    );
+    return Material(
+      color: selected ? _kHeaderPrefsBlue : Colors.transparent,
+      borderRadius: borderRadius,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: borderRadius,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w600,
+              height: 1.0,
+              color: selected ? Colors.white : Colors.grey.shade500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static const String _kTooltipSerialBylines =
+      'When on, the app uses camera serial numbers from image EXIF,\n'
+      'and your serial list in Preferences, to fill photographer\n'
+      'names and bylines.';
+
+  static const String _kTooltipBurstDetection =
+      'When on, saving a caption can detect a burst of shots taken\n'
+      'right after this frame (each following shot within one second\n'
+      'of the previous) and offer to apply the same caption to\n'
+      'those images.';
+
+  Widget _headerHelpHint(BuildContext context, String message) {
+    final baseStyle = Theme.of(context).tooltipTheme.textStyle ??
+        const TextStyle(color: Colors.white);
+    return Tooltip(
+      message: message,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      textStyle: baseStyle.copyWith(
+        fontSize: 12,
+        height: 1.5,
+      ),
+      waitDuration: const Duration(milliseconds: 350),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.help,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 3),
+          child: Icon(
+            Icons.help_outline,
+            size: 11,
+            color: Colors.grey.shade600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _headerPrefsOnOff({
+    required bool isOn,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(color: Colors.grey.shade400, width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _headerOnOffSegment(
+            'Off',
+            !isOn,
+            () {
+              if (isOn) onChanged(false);
+            },
+            isFirst: true,
+          ),
+          _headerOnOffSegment(
+            'On',
+            isOn,
+            () {
+              if (!isOn) onChanged(true);
+            },
+            isLast: true,
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -278,43 +400,12 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Tooltip(
-                message: 'Edit Camera Serial Numbers',
-                child: InkWell(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (context) => CameraSerialDialog(
-                        cameraService: widget.cameraService,
-                      ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(2),
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8, top: 2, bottom: 2),
-                    child: Icon(
-                      Icons.edit_outlined,
-                      size: 11,
-                      color: Colors.black54,
-                    ),
-                  ),
-                ),
-              ),
-              Text(
-                'Serial Number Byline ',
-                style: const TextStyle(
-                  fontSize: 9,
-                  fontWeight: FontWeight.w600,
-                  height: 1.0,
-                  color: Colors.black87,
-                ),
-              ),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   const Text(
-                    'Mode',
+                    'Serial bylines',
                     style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.w600,
@@ -322,38 +413,35 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                       color: Colors.black87,
                     ),
                   ),
-                  const SizedBox(width: 2),
-                  // Tight layout: Transform.scale keeps full Switch width and pushes the
-                  // toggle away from "Mode"; FittedBox sizes the track next to the label.
-                  SizedBox(
-                    width: 36,
-                    height: 18,
-                    child: FittedBox(
-                      fit: BoxFit.contain,
-                      alignment: Alignment.centerLeft,
-                      child: Switch(
-                        value: _serialNumberBylinesEnabled,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        onChanged: (v) => _applySerialNumberBylines(v),
-                        thumbColor: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.selected)) {
-                            return Colors.white;
-                          }
-                          return Colors.grey.shade400;
-                        }),
-                        trackColor: WidgetStateProperty.resolveWith((states) {
-                          if (states.contains(WidgetState.selected)) {
-                            return const Color(0xFF1976D2);
-                          }
-                          return Colors.grey.shade300;
-                        }),
-                        trackOutlineColor: WidgetStateProperty.all(
-                          Colors.transparent,
-                        ),
-                      ),
+                  _headerHelpHint(context, _kTooltipSerialBylines),
+                ],
+              ),
+              const SizedBox(width: 6),
+              _headerPrefsOnOff(
+                isOn: _serialNumberBylinesEnabled,
+                onChanged: _applySerialNumberBylines,
+              ),
+              const SizedBox(width: 14),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  const Text(
+                    'Burst detection',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      height: 1.0,
+                      color: Colors.black87,
                     ),
                   ),
+                  _headerHelpHint(context, _kTooltipBurstDetection),
                 ],
+              ),
+              const SizedBox(width: 6),
+              _headerPrefsOnOff(
+                isOn: _burstDetectionEnabled,
+                onChanged: _applyBurstDetection,
               ),
             ],
           ),
@@ -364,6 +452,12 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
               context: context,
               builder: (context) => PreferencesDialog(onOpenFtpSettings: widget.onOpenFtpSettings),
             );
+            _serialNumberBylinesEnabled =
+                await _preferencesService.getSerialNumberBylines();
+            _burstDetectionEnabled =
+                await _preferencesService.getBurstDetectionEnabled();
+            if (mounted) setState(() {});
+            widget.onBurstDetectionChanged?.call(_burstDetectionEnabled);
             widget.onPreferencesClosed?.call();
           },
           icon: Icon(Icons.settings, color: Colors.grey.shade800),

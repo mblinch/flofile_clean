@@ -17,6 +17,7 @@ import '../widgets/player_popup_caption_board.dart';
 import '../widgets/startup_dialog.dart';
 import '../widgets/sport_selection_dialog.dart';
 import '../widgets/keyboard_fire_dialog.dart';
+import '../widgets/burst_caption_confirm_dialog.dart';
 
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
@@ -24,6 +25,7 @@ import '../services/mlb_api_service.dart'; // For Player model
 import '../services/preferences_service.dart';
 import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
+import '../utils/burst_chain_helper.dart';
 
 /// Writes IPTC keyword bag and XMP/IPTC **Subject** so apps like Photo Mechanic
 /// show keywords (PM often reads `Subject` / dc:subject; IPTC-only is easy to miss).
@@ -88,6 +90,28 @@ class _ConditionalArrowAction extends CallbackAction<Intent> {
   bool consumesKey(Intent intent) => consumesKeyWhen();
 }
 
+/// Result of [CaptionBuilderScreen] save so burst "apply to all" can move the
+/// selection to the first frame after the saved chain.
+class _IptcInternalSaveResult {
+  final bool cancelled;
+  /// When non-null, select this index after a successful save (burst apply-all).
+  final int? selectIndexAfterSave;
+
+  const _IptcInternalSaveResult._({
+    required this.cancelled,
+    this.selectIndexAfterSave,
+  });
+
+  factory _IptcInternalSaveResult.cancelled() =>
+      const _IptcInternalSaveResult._(cancelled: true);
+
+  factory _IptcInternalSaveResult.saved({int? selectIndexAfterSave}) =>
+      _IptcInternalSaveResult._(
+        cancelled: false,
+        selectIndexAfterSave: selectIndexAfterSave,
+      );
+}
+
 class CaptionBuilderScreen extends StatefulWidget {
   const CaptionBuilderScreen({super.key});
 
@@ -113,6 +137,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Precomputed EXIF times for thumbnails
   Map<String, String> _exifTimes = {};
+  /// Capture DateTime per path (for burst-chain detection); filled in _loadExifTimesAndSort.
+  Map<String, DateTime> _captureDateTimeByPath = {};
   // XMP metadata for rating and color label
   Map<String, int> _xmpRatings = {};
   Map<String, String> _xmpLabels = {};
@@ -129,6 +155,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   /// When true, caption entry uses Keyboard Fire panel; when false, classic CaptionFieldsWidget.
   bool _useKeyboardFireAsDefault = true;
+
+  /// When true, rapid-sequence (burst) save prompt may appear. Default off; see Preferences / startup.
+  bool _burstDetectionEnabled = false;
 
   // Player selection state
   List<Player> selectedHomePlayers = [];
@@ -730,6 +759,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       _isStartupComplete = true;
     });
 
+    _reloadBurstDetectionFromPrefs();
+
     // Start sequential loading: players first, then thumbnails
     _startLoadingSequence(folderPath);
 
@@ -1035,6 +1066,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       setState(() {
         _exifTimes = formatted;
+        _captureDateTimeByPath = Map<String, DateTime>.from(times);
         _xmpRatings = ratings;
         _xmpLabels = labels;
         _xmpTagged = tagged;
@@ -1079,16 +1111,23 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     if (!(k.isMetaPressed || k.isControlPressed) || k.isShiftPressed) {
       return false;
     }
-    _saveIptcMetadata().then((_) {
-      if (!mounted) return;
+    _saveIptcMetadataInternal().then((r) {
+      if (r.cancelled || !mounted) return;
       // Snapshot the current caption (with verb) as "last saved" before moving on.
       (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
       // Don't advance when multi-selection is active
       if (_multiSelectedImages.length > 1) return;
-      if (imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1) {
-        setState(() => _thumbCenterRequestId++);
-        _onImageSelected(currentIndex + 1);
+      if (imagePaths.isEmpty) return;
+      final int nextIdx;
+      if (r.selectIndexAfterSave != null) {
+        nextIdx = r.selectIndexAfterSave!.clamp(0, imagePaths.length - 1);
+      } else if (currentIndex < imagePaths.length - 1) {
+        nextIdx = currentIndex + 1;
+      } else {
+        return;
       }
+      setState(() => _thumbCenterRequestId++);
+      _onImageSelected(nextIdx);
     });
     return true;
   }
@@ -1106,8 +1145,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   Future<void> _saveFtpAndNext() async {
     // 1. Save IPTC metadata
-    await _saveIptcMetadata();
-    if (!mounted) return;
+    final r = await _saveIptcMetadataInternal();
+    if (r.cancelled || !mounted) return;
 
     // Snapshot the current caption (with verb) as "last saved" before moving on.
     (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
@@ -1123,10 +1162,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     // 3. Advance to next image (skip when multi-selection is active)
     if (_multiSelectedImages.length > 1) return;
-    if (imagePaths.isNotEmpty && currentIndex < imagePaths.length - 1) {
-      setState(() => _thumbCenterRequestId++);
-      _onImageSelected(currentIndex + 1);
+    if (imagePaths.isEmpty) return;
+    final int nextIdx;
+    if (r.selectIndexAfterSave != null) {
+      nextIdx = r.selectIndexAfterSave!.clamp(0, imagePaths.length - 1);
+    } else if (currentIndex < imagePaths.length - 1) {
+      nextIdx = currentIndex + 1;
+    } else {
+      return;
     }
+    setState(() => _thumbCenterRequestId++);
+    _onImageSelected(nextIdx);
   }
 
   /// Option (Alt) + digit: no focus needed. First digit 1-6 = category, second 0-9 = verb.
@@ -1199,6 +1245,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     HardwareKeyboard.instance.addHandler(_handleOptionVerbShortcut);
   }
 
+  Future<void> _reloadBurstDetectionFromPrefs() async {
+    final preferencesService = await PreferencesService.getInstance();
+    final burst = await preferencesService.getBurstDetectionEnabled();
+    if (mounted) setState(() => _burstDetectionEnabled = burst);
+  }
+
   Future<void> _initializeServices() async {
     await _cameraService.initialize();
     print('DEBUG: Camera service initialized successfully');
@@ -1211,6 +1263,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     _currentLayout = await preferencesService.getCurrentLayout();
     final captionMode = await preferencesService.getCaptionEntryMode();
     _useKeyboardFireAsDefault = captionMode == 'keyboard_fire';
+    _burstDetectionEnabled =
+        await preferencesService.getBurstDetectionEnabled();
+    if (mounted) setState(() {});
   }
 
   // Load metadata from the current image
@@ -1401,20 +1456,28 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
-  // Save caption metadata to multiple selected images at once
-  Future<void> _saveIptcToMultipleImages(List<String> targets) async {
+  /// Save caption metadata to multiple images at once.
+  /// If [preCapturedValues] is provided, those values are used directly
+  /// (avoids re-reading from controllers after an async gap like a dialog).
+  Future<void> _saveIptcToMultipleImages(
+    List<String> targets, {
+    Map<String, String>? preCapturedValues,
+  }) async {
     if (targets.isEmpty) return;
 
-    (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
-
-    dynamic captionState = _captionFieldsKey2.currentState;
-    if (captionState == null) return;
-
-    Map<String, String> captionValues = captionState.getCurrentCaptionValues();
-    if (captionValues.isEmpty) return;
+    Map<String, String> captionValues;
+    if (preCapturedValues != null && preCapturedValues.isNotEmpty) {
+      captionValues = preCapturedValues;
+    } else {
+      (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
+      dynamic captionState = _captionFieldsKey2.currentState;
+      if (captionState == null) return;
+      captionValues = captionState.getCurrentCaptionValues();
+      if (captionValues.isEmpty) return;
+    }
 
     try {
-      List<String> args = [];
+      final List<String> tagAndFlags = [];
 
       captionValues.forEach((key, value) {
         if (key == 'IPTC:Keywords' ||
@@ -1423,46 +1486,63 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             key == 'XMP:Subject' ||
             key == 'XMP-dc:Subject') return;
         if (value.trim().isNotEmpty) {
-          args.add('-$key=$value');
+          tagAndFlags.add('-$key=$value');
         }
       });
 
       final keywordsValue =
           captionValues['IPTC:Keywords'] ?? captionValues['Keywords'];
-      _appendKeywordsExifArgs(args, keywordsValue);
+      _appendKeywordsExifArgs(tagAndFlags, keywordsValue);
 
-      args.addAll(['-overwrite_original', '-P', '-m', '-charset', 'iptc=UTF8']);
-      for (final target in targets) {
-        args.add(target);
+      tagAndFlags.addAll(['-overwrite_original', '-P', '-m', '-charset', 'iptc=UTF8']);
+
+      // Nothing to write (same guard as before, but per-field list).
+      if (tagAndFlags.length <= 5) {
+        print('No metadata values to save for bulk');
+        return;
       }
 
-      if (args.length > targets.length + 1) {
-        print('Saving caption to ${targets.length} images...');
+      // One exiftool run per file so only [targets] are written (burst “skip” cannot pick up strays).
+      print('Saving caption to ${targets.length} images (one process per file)...');
+      int ok = 0;
+      for (final target in targets) {
+        final args = [...tagAndFlags, target];
         final proc = await ExiftoolHelper.run(args);
-
         if (proc.exitCode == 0) {
-          print('Caption saved to ${targets.length} images successfully');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content:
-                    Text('Caption saved to ${targets.length} images'),
-                backgroundColor: Colors.green,
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
+          ok++;
         } else {
-          print('Exiftool error saving to multiple images: ${proc.stderrText}');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error saving to multiple images'),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 3),
+          print('Exiftool error for $target: ${proc.stderrText}');
+        }
+      }
+
+      if (mounted) {
+        if (ok == targets.length) {
+          print('Caption saved to ${targets.length} images successfully');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Caption saved to ${targets.length} images'),
+              backgroundColor: Colors.green,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        } else if (ok > 0) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Caption saved to $ok of ${targets.length} images; see log for errors',
               ),
-            );
-          }
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Error saving to images'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 3),
+            ),
+          );
         }
       }
     } catch (e) {
@@ -1470,20 +1550,136 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
-  // Save IPTC metadata to the current image (with UI refresh)
-  Future<void> _saveIptcMetadata() async {
+  /// First index after the last file in [chain], or the last index if [chain]
+  /// ends at the end of the roll.
+  int? _selectionIndexAfterBurstChain(List<String> chain) {
+    if (chain.isEmpty || imagePaths.isEmpty) return null;
+    final lastPath = chain.last;
+    final li = imagePaths.indexOf(lastPath);
+    if (li < 0) return null;
+    if (li >= imagePaths.length - 1) return li;
+    return li + 1;
+  }
+
+  /// After a burst save, move selection to the first skipped frame (burst order)
+  /// so captioning can resume there; if every frame in the burst was written,
+  /// keep the previous behavior (first index after the last written file).
+  int? _selectionIndexAfterBurstApply(
+    List<String> chain,
+    List<String> targets,
+  ) {
+    if (chain.isEmpty || imagePaths.isEmpty) return null;
+    final targetNorm = targets.map((t) => p.normalize(t)).toSet();
+    for (final path in chain) {
+      if (targetNorm.contains(p.normalize(path))) continue;
+      final needle = p.normalize(path);
+      for (var i = 0; i < imagePaths.length; i++) {
+        if (p.normalize(imagePaths[i]) == needle) return i;
+      }
+    }
+    return _selectionIndexAfterBurstChain(targets);
+  }
+
+  String _captionPreviewFromValues(Map<String, String>? v) {
+    if (v == null) return '';
+    const keys = [
+      'IPTC:Caption-Abstract',
+      'Caption-Abstract',
+      'IPTC:Description',
+      'Description',
+      'XMP:Description',
+    ];
+    for (final k in keys) {
+      final s = v[k]?.trim();
+      if (s != null && s.isNotEmpty) return s;
+    }
+    return '';
+  }
+
+  /// [cancelled] is true only when the user dismisses or cancels the burst dialog.
+  /// [selectIndexAfterSave] is set after a successful burst "apply to all" save.
+  Future<_IptcInternalSaveResult> _saveIptcMetadataInternal() async {
     if (_multiSelectedImages.length > 1) {
-      return _saveIptcToMultipleImages(_multiSelectedImages);
+      await _saveIptcToMultipleImages(_multiSelectedImages);
+      return _IptcInternalSaveResult.saved();
     }
 
-    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) return;
+    if (imagePaths.isEmpty || currentIndex >= imagePaths.length) {
+      return _IptcInternalSaveResult.saved();
+    }
 
     // Snapshot the current caption (with verb) BEFORE any async yields.
-    // Navigation can trigger didUpdateWidget which resets captionController.text,
-    // so we must capture it here, synchronously, before the first await.
     (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
 
-    final imagePath = imagePaths[currentIndex];
+    final anchor = imagePaths[currentIndex];
+    final chain = burstChainAdjacentInList(
+      imagePaths,
+      anchor,
+      _captureDateTimeByPath,
+    );
+
+    if (_burstDetectionEnabled && chain.length > 1 && mounted) {
+      dynamic captionState = _captionFieldsKey2.currentState;
+      Map<String, String>? vals;
+      if (captionState != null) {
+        vals = captionState.getCurrentCaptionValues();
+      }
+
+      // Freeze caption values NOW before any async gap (dialog / prefs).
+      // After the dialog returns the controllers may be stale.
+      final Map<String, String> frozenValues = vals != null ? Map.of(vals) : {};
+
+      final captionPreview = _captionPreviewFromValues(vals);
+      final dialogResult = await showBurstCaptionConfirmDialog(
+        context: context,
+        imagePathsInOrder: chain,
+        captionPreview: captionPreview,
+        onBurstDetectionDisabled: () {
+          if (mounted) setState(() => _burstDetectionEnabled = false);
+        },
+      );
+      if (!mounted) return _IptcInternalSaveResult.cancelled();
+      if (dialogResult == null) {
+        return _IptcInternalSaveResult.cancelled();
+      }
+
+      if (dialogResult.choice == BurstCaptionSaveChoice.cancel) {
+        return _IptcInternalSaveResult.cancelled();
+      }
+      if (dialogResult.choice == BurstCaptionSaveChoice.applyToAll) {
+        final targets = dialogResult.pathsToApply;
+        if (targets.isEmpty) {
+          return _IptcInternalSaveResult.cancelled();
+        }
+        await _saveIptcToMultipleImages(targets, preCapturedValues: frozenValues);
+        _clearPopupSelections();
+        final after = _selectionIndexAfterBurstApply(chain, targets);
+        return _IptcInternalSaveResult.saved(selectIndexAfterSave: after);
+      }
+      if (dialogResult.choice == BurstCaptionSaveChoice.thisImageOnly) {
+        if (!mounted) return _IptcInternalSaveResult.cancelled();
+        await _saveIptcToMultipleImages([anchor], preCapturedValues: frozenValues);
+        _clearPopupSelections();
+        return _IptcInternalSaveResult.saved();
+      }
+    }
+
+    await _saveIptcMetadataToImagePath(imagePaths[currentIndex]);
+    return _IptcInternalSaveResult.saved();
+  }
+
+  // Save IPTC metadata to the current image (with UI refresh)
+  Future<void> _saveIptcMetadata() async {
+    final r = await _saveIptcMetadataInternal();
+    if (r.cancelled || !mounted) return;
+    if (r.selectIndexAfterSave != null) {
+      final idx = r.selectIndexAfterSave!.clamp(0, imagePaths.length - 1);
+      setState(() => _thumbCenterRequestId++);
+      _onImageSelected(idx);
+    }
+  }
+
+  Future<void> _saveIptcMetadataToImagePath(String imagePath) async {
     print('Saving IPTC metadata to: $imagePath');
 
     // Get values from both widgets
@@ -2302,7 +2498,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       });
 
       // Save both metadata and caption changes
-      await _saveIptcMetadata();
+      final saved = await _saveIptcMetadataInternal();
+      if (saved.cancelled) return;
 
       // Update original caption data to mark changes as saved
       final captionState = _captionFieldsKey2.currentState;
@@ -2353,6 +2550,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       // Remove from EXIF times cache
       _exifTimes?.remove(imagePath);
+      _captureDateTimeByPath.remove(imagePath);
 
       // Remove from XMP data
       _xmpRatings?.remove(imagePath);
@@ -2430,7 +2628,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
         // Write to file
         if (imagePaths.isNotEmpty && currentIndex < imagePaths.length) {
-          await _saveIptcMetadata();
+          final r = await _saveIptcMetadataInternal();
+          if (!mounted) return;
+          if (!r.cancelled) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('Caption pasted'),
+                  backgroundColor: Colors.green,
+                  duration: Duration(seconds: 2)),
+            );
+          }
+          return;
         }
 
         ScaffoldMessenger.of(context).showSnackBar(
@@ -3384,6 +3592,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           _exifTimes!.remove(oldPath);
           _exifTimes![newPath] = time;
         }
+        if (_captureDateTimeByPath.containsKey(oldPath)) {
+          final dt = _captureDateTimeByPath.remove(oldPath)!;
+          _captureDateTimeByPath[newPath] = dt;
+        }
 
         // Update XMP ratings if they were cached
         if (_xmpRatings?.containsKey(oldPath) ?? false) {
@@ -3665,11 +3877,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         onPreferencesClosed: () async {
           final preferencesService = await PreferencesService.getInstance();
           final mode = await preferencesService.getCaptionEntryMode();
+          final burst = await preferencesService.getBurstDetectionEnabled();
           if (mounted) {
             setState(() {
               _useKeyboardFireAsDefault = mode == 'keyboard_fire';
+              _burstDetectionEnabled = burst;
             });
           }
+        },
+        onBurstDetectionChanged: (enabled) {
+          if (mounted) setState(() => _burstDetectionEnabled = enabled);
         },
         onOpenFtpSettings: () {
           try {

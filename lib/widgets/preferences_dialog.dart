@@ -230,6 +230,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
 
   Widget _buildApplicationContent() {
     final serialBylines = _currentPreferences?['serialNumberBylines'] == true;
+    final burstOn = _currentPreferences?['burstDetectionEnabled'] == true;
     final resolutionThreshold = _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
     final resolutionEnabled = resolutionThreshold > 0;
 
@@ -292,6 +293,56 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 const SizedBox(height: 8),
                 Text(
                   'Write photographer name and bylines according to camera serial numbers.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+        ),
+        _buildInlineRow(
+          'Burst sequence detection',
+          child: Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.grey.shade400, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _buildOnOffSegment('Off', !burstOn, () async {
+                            if (burstOn) {
+                              await _preferencesService
+                                  .saveBurstDetectionEnabled(false);
+                              await _loadCurrentPreferences();
+                            }
+                          }, isFirst: true),
+                          _buildOnOffSegment('On', burstOn, () async {
+                            if (!burstOn) {
+                              await _preferencesService
+                                  .saveBurstDetectionEnabled(true);
+                              await _loadCurrentPreferences();
+                            }
+                          }, isLast: true),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'When saving, detect rapid bursts only forward in time from the current photo (each following shot ≤1s after the previous; earlier frames are ignored) and offer to apply the same caption to those frames. Default is off.',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
               ],

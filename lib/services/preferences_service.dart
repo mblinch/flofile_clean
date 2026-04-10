@@ -48,6 +48,8 @@ class PreferencesService {
       'show_keyboard_fire_shortcuts_help';
   static const String _keyKeywordShortcuts = 'keyword_shortcuts';
   static const String _keyHasLaunchedBefore = 'has_launched_before';
+  /// When true, saving may prompt to apply captions across rapid (≤1s) sequences.
+  static const String _keyBurstDetectionEnabled = 'burst_detection_enabled';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -78,6 +80,19 @@ class PreferencesService {
     if (!prefs.containsKey(_keyShowKeywordsField)) {
       await prefs.setBool(_keyShowKeywordsField, false);
     }
+    if (!prefs.containsKey(_keyBurstDetectionEnabled)) {
+      await prefs.setBool(_keyBurstDetectionEnabled, false);
+    }
+  }
+
+  Future<bool> getBurstDetectionEnabled() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyBurstDetectionEnabled) ?? false;
+  }
+
+  Future<void> saveBurstDetectionEnabled(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyBurstDetectionEnabled, enabled);
   }
 
   /// Bumped when headline/keywords/personality visibility toggles — caption UI listens to reflow.
@@ -814,6 +829,7 @@ class PreferencesService {
       'showHeadlineField': await getShowHeadlineField(),
       'showKeywordsField': await getShowKeywordsField(),
       'showPersonalityField': await getShowPersonalityField(),
+      'burstDetectionEnabled': await getBurstDetectionEnabled(),
     };
   }
 
@@ -931,6 +947,10 @@ class PreferencesService {
     }
     if (preferences.containsKey('showPersonalityField')) {
       await saveShowPersonalityField(preferences['showPersonalityField'] as bool);
+    }
+    if (preferences.containsKey('burstDetectionEnabled')) {
+      await saveBurstDetectionEnabled(
+          preferences['burstDetectionEnabled'] as bool);
     }
   }
 

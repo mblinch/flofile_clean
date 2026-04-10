@@ -68,6 +68,7 @@ class _StartupDialogState extends State<StartupDialog> {
   bool hasImagesInFolder = false;
   bool isExtractingDate = false;
   bool _applyPresetToAllImages = false;
+  bool _burstDetectionEnabled = false;
 
   // Questionnaire state
   int currentQuestion = 0;
@@ -156,6 +157,9 @@ class _StartupDialogState extends State<StartupDialog> {
     }
 
     _useBallDontLieApi = await _preferencesService.getUseBallDontLieApi();
+
+    _burstDetectionEnabled =
+        await _preferencesService.getBurstDetectionEnabled();
 
     if (mounted) {
       setState(() {});
@@ -1412,6 +1416,57 @@ class _StartupDialogState extends State<StartupDialog> {
                               ],
                             ),
                           ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildTeamRowWidth(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: Transform.scale(
+                                scale: 0.62,
+                                child: Checkbox(
+                                  value: _burstDetectionEnabled,
+                                  onChanged: (value) async {
+                                    final v = value ?? false;
+                                    await _preferencesService
+                                        .saveBurstDetectionEnabled(v);
+                                    setState(
+                                        () => _burstDetectionEnabled = v);
+                                  },
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Burst sequence detection when saving',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Offer to caption following frames only (≤1s apart, not earlier shots). Off by default.',
+                                    style: TextStyle(
+                                      fontSize: 8,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       const SizedBox(height: 14),
