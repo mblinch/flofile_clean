@@ -5,6 +5,8 @@ import 'dart:convert';
 class PreferencesService {
   static const String _keyCategoryOrder = 'category_order';
   static const String _keyCategoryOrderBaseball = 'category_order_baseball';
+  /// Per-category ordered verb lists (JSON map: category name -> list of verb strings).
+  static const String _keyVerbOrderBaseball = 'verb_order_baseball';
   static const String _keyFavoriteVerbs = 'favorite_verbs';
   static const String _keyFavoriteVerbsBaseball =
       'favorite_verbs_baseball'; // Sport-specific favorites
@@ -50,6 +52,9 @@ class PreferencesService {
   static const String _keyHasLaunchedBefore = 'has_launched_before';
   /// When true, saving may prompt to apply captions across rapid (≤1s) sequences.
   static const String _keyBurstDetectionEnabled = 'burst_detection_enabled';
+  /// [package_info_plus] build number for which “What’s new” was dismissed.
+  static const String _keyLastAcknowledgedAppBuild =
+      'last_acknowledged_app_build';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -93,6 +98,17 @@ class PreferencesService {
   Future<void> saveBurstDetectionEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyBurstDetectionEnabled, enabled);
+  }
+
+  /// Last [package_info_plus] build number the user saw update notes for (0 = never).
+  Future<int> getLastAcknowledgedAppBuild() async {
+    final prefs = await _getPrefs();
+    return prefs.getInt(_keyLastAcknowledgedAppBuild) ?? 0;
+  }
+
+  Future<void> setLastAcknowledgedAppBuild(int buildNumber) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(_keyLastAcknowledgedAppBuild, buildNumber);
   }
 
   /// Bumped when headline/keywords/personality visibility toggles — caption UI listens to reflow.
@@ -288,6 +304,43 @@ class PreferencesService {
       default:
         return '${_keyCategoryOrder}_${sport.toLowerCase()}';
     }
+  }
+
+  String _getVerbOrderKey(String sport) {
+    switch (sport.toLowerCase()) {
+      case 'baseball':
+        return _keyVerbOrderBaseball;
+      default:
+        return 'verb_order_${sport.toLowerCase()}';
+    }
+  }
+
+  /// Saved verb order per category for [sport]. Empty map if none.
+  Future<Map<String, List<String>>> getVerbOrder({String sport = 'baseball'}) async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_getVerbOrderKey(sport));
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = json.decode(raw) as Map<String, dynamic>;
+      return decoded.map(
+        (k, v) => MapEntry(k, List<String>.from(v as List<dynamic>)),
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> saveVerbOrder(
+    Map<String, List<String>> order, {
+    String sport = 'baseball',
+  }) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbOrderKey(sport);
+    if (order.isEmpty) {
+      await prefs.remove(key);
+      return;
+    }
+    await prefs.setString(key, json.encode(order));
   }
 
   // Per-sport default (e.g. "Set as default for Baseball") — used when user has no saved prefs for that sport
@@ -744,6 +797,7 @@ class PreferencesService {
   Future<void> setCurrentSportAsDefault(String sport) async {
     final data = {
       'categoryOrder': await getCategoryOrder(sport: sport),
+      'verbOrder': await getVerbOrder(sport: sport),
       'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
       'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
       'customVerbWordings': await getCustomVerbWordings(sport: sport),
@@ -802,6 +856,7 @@ class PreferencesService {
     for (final sport in sports) {
       verbSettingsBySport[sport] = {
         'categoryOrder': await getCategoryOrder(sport: sport),
+        'verbOrder': await getVerbOrder(sport: sport),
         'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
         'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
         'customVerbWordings': await getCustomVerbWordings(sport: sport),
@@ -893,6 +948,20 @@ class PreferencesService {
         }
         if (data.containsKey('deletedVerbs')) {
           await saveDeletedVerbs(Set<String>.from(data['deletedVerbs']), sport: sport);
+        }
+        if (data.containsKey('verbOrder')) {
+          final vo = data['verbOrder'];
+          if (vo is Map<String, dynamic>) {
+            await saveVerbOrder(
+              vo.map(
+                (k, v) => MapEntry(
+                  k,
+                  List<String>.from(v as List<dynamic>),
+                ),
+              ),
+              sport: sport,
+            );
+          }
         }
       }
     }

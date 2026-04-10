@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as p;
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../helpers.dart';
 import '../widgets/app_header_widget.dart';
@@ -18,6 +19,8 @@ import '../widgets/startup_dialog.dart';
 import '../widgets/sport_selection_dialog.dart';
 import '../widgets/keyboard_fire_dialog.dart';
 import '../widgets/burst_caption_confirm_dialog.dart';
+import '../widgets/update_notes_dialog.dart';
+import '../app_update_notes.dart';
 
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
@@ -1239,6 +1242,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     super.initState();
     _thumbnailAreaFocusNode = FocusNode();
     _initializeServices();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _maybeShowUpdateNotes();
+    });
     HardwareKeyboard.instance.addHandler(_handleSaveAndNextShortcut);
     HardwareKeyboard.instance.addHandler(_handleSaveFtpNextShortcut);
     HardwareKeyboard.instance.addHandler(_handlePastePreviousKeyEvent);
@@ -1249,6 +1255,31 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     final preferencesService = await PreferencesService.getInstance();
     final burst = await preferencesService.getBurstDetectionEnabled();
     if (mounted) setState(() => _burstDetectionEnabled = burst);
+  }
+
+  /// Shows [UpdateNotesDialog] once per install when build number increases.
+  Future<void> _maybeShowUpdateNotes() async {
+    if (!mounted) return;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final build = int.tryParse(info.buildNumber) ?? 0;
+      final prefs = await PreferencesService.getInstance();
+      final last = await prefs.getLastAcknowledgedAppBuild();
+      if (build <= last) return;
+      if (kAppUpdateNotesBody.trim().isEmpty) {
+        await prefs.setLastAcknowledgedAppBuild(build);
+        return;
+      }
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: true,
+        builder: (ctx) => UpdateNotesDialog(
+          versionLabel: '${info.version} (build ${info.buildNumber})',
+        ),
+      );
+      await prefs.setLastAcknowledgedAppBuild(build);
+    } catch (_) {}
   }
 
   Future<void> _initializeServices() async {

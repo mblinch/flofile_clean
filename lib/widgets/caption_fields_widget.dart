@@ -672,6 +672,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     'Favorites',
   ];
 
+  /// Saved verb order from prefs (Keyboard Fire only; main caption grid uses default order).
+  Map<String, List<String>> _verbOrderSnapshot = {};
+
   // Get category order based on current sport
   List<String> get categoryOrder {
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
@@ -848,6 +851,37 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
   };
 
+  /// Deep copy of static verb maps for [sport] (no user ordering).
+  Map<String, List<String>> _staticVerbMapForSport(String sport) {
+    Map<String, List<String>> src;
+    switch (sport) {
+      case 'hockey':
+        src = hockeyVerbCategories;
+        break;
+      case 'basketball':
+        src = basketballVerbCategories;
+        break;
+      case 'baseball':
+      default:
+        src = baseballVerbCategories;
+    }
+    return src.map((k, v) => MapEntry(k, List<String>.from(v)));
+  }
+
+  /// Merges [saved] order onto [defaults]: keeps saved order for known verbs, appends new defaults at end.
+  List<String> _mergeVerbOrderList(List<String> defaults, List<String>? saved) {
+    if (saved == null || saved.isEmpty) return List<String>.from(defaults);
+    final defSet = defaults.toSet();
+    final out = <String>[];
+    for (final v in saved) {
+      if (defSet.contains(v) && !out.contains(v)) out.add(v);
+    }
+    for (final v in defaults) {
+      if (!out.contains(v)) out.add(v);
+    }
+    return out;
+  }
+
   // Get verb categories based on current sport, filtering out deleted verbs
   Map<String, List<String>> get verbCategories {
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
@@ -865,6 +899,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
     if (_deletedVerbs.isEmpty) return base;
     return base.map(
+      (cat, verbs) => MapEntry(
+        cat,
+        verbs.where((v) => v.isEmpty || !_deletedVerbs.contains(v)).toList(),
+      ),
+    );
+  }
+
+  /// Same as [verbCategories] but merges [_verbOrderSnapshot] for Keyboard Fire display only.
+  Map<String, List<String>> get _verbCategoriesForKeyboardFire {
+    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    final Map<String, List<String>> base = _staticVerbMapForSport(sport);
+    final Map<String, List<String>> lists;
+    if (_verbOrderSnapshot.isEmpty) {
+      lists = base.map((k, v) => MapEntry(k, List<String>.from(v)));
+    } else {
+      lists = {};
+      for (final e in base.entries) {
+        lists[e.key] = _mergeVerbOrderList(e.value, _verbOrderSnapshot[e.key]);
+      }
+    }
+    if (_deletedVerbs.isEmpty) return lists;
+    return lists.map(
       (cat, verbs) => MapEntry(
         cat,
         verbs.where((v) => v.isEmpty || !_deletedVerbs.contains(v)).toList(),
@@ -2586,6 +2642,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _ftpProfiles = await _preferencesService.getFtpProfiles();
     _currentFtpProfile = await _preferencesService.getCurrentFtpProfile();
 
+    _verbOrderSnapshot =
+        await _preferencesService.getVerbOrder(sport: _currentSport);
+
     if (mounted) {
       setState(() {
         _preferencesLoaded = true;
@@ -2786,6 +2845,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (oldWidget.sport != widget.sport) {
       // Show correct category order immediately for the new sport (e.g. hockey -> 1. Offense, 2. Defense, 3. Goalie...)
       _categoryOrder = List.from(categoryOrder);
+      _verbOrderSnapshot = {};
       _loadPreferences();
     }
 
@@ -9513,12 +9573,50 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final catNum = i + 1;
       final rawVerbs = cat == 'Favorites'
           ? _favoriteVerbs.toList()
-          : (verbCategories[cat] ?? <String>[]);
+          : (_verbCategoriesForKeyboardFire[cat] ?? <String>[]);
       final verbs = rawVerbs.map(_verbDisplayLabel).toList();
-      list.add(
-          <String, dynamic>{'number': catNum, 'name': cat, 'verbs': verbs});
+      list.add(<String, dynamic>{
+        'number': catNum,
+        'name': cat,
+        'verbs': verbs,
+        'verbsCanonical': rawVerbs,
+      });
     }
     return list;
+  }
+
+  /// Persists verb order for Keyboard Fire; main caption grid order is unchanged.
+  Future<void> swapVerbsInCategoryForKeyboardFire(
+      String categoryName, String verbA, String verbB) async {
+    if (verbA.isEmpty || verbB.isEmpty || verbA == verbB) return;
+    if (categoryName == 'Favorites') return;
+    final lists = _verbCategoriesForKeyboardFire;
+    final list = lists[categoryName];
+    if (list == null) return;
+    final i = list.indexOf(verbA);
+    final j = list.indexOf(verbB);
+    if (i < 0 || j < 0) return;
+    final newFullMap = <String, List<String>>{};
+    for (final e in lists.entries) {
+      if (e.key == categoryName) {
+        final n = List<String>.from(e.value);
+        final t = n[i];
+        n[i] = n[j];
+        n[j] = t;
+        newFullMap[e.key] = n;
+      } else {
+        newFullMap[e.key] = List<String>.from(e.value);
+      }
+    }
+    await _preferencesService.saveVerbOrder(
+      newFullMap,
+      sport: _currentSport,
+    );
+    if (mounted) {
+      setState(() {
+        _verbOrderSnapshot = newFullMap;
+      });
+    }
   }
 
   // ── Public helpers for KeyboardFirePanel action bar ──────────────────────

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -169,8 +170,51 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   int? _dragToCatIndex;
   Timer? _catLongPressTimer;
   final Map<int, GlobalKey> _catRowKeys = {};
+  /// Stack that owns the category list + drag ghost (for coordinate conversion).
+  final GlobalKey _categoryReorderStackKey = GlobalKey();
+  /// Pointer position in [_categoryReorderStackKey] space while dragging a category.
+  Offset? _categoryDragGhostLocal;
+  /// Latest pointer position (global) during category row interaction — seeds ghost at long-press.
+  Offset? _categoryDragLastGlobal;
+
+  // Verb drag-to-reorder (same model as category: long-press, ghost, swap on release).
+  int? _dragFromVerbCatIndex;
+  int? _dragFromVerbIndex;
+  int? _dragToVerbCatIndex;
+  int? _dragToVerbIndex;
+  Timer? _verbLongPressTimer;
+  final Map<String, GlobalKey> _verbRowKeys = {};
+  Offset? _verbDragGhostLocal;
+  Offset? _verbDragLastGlobal;
+  /// After a verb drag session, ignore the synthetic [InkWell.onTap] on pointer up.
+  bool _suppressVerbTapAfterVerbDrag = false;
 
   GlobalKey _catKey(int i) => _catRowKeys.putIfAbsent(i, () => GlobalKey());
+
+  GlobalKey _verbRowKey(int ci, int vi) =>
+      _verbRowKeys.putIfAbsent('${ci}_$vi', () => GlobalKey());
+
+  MapEntry<int, int>? _verbRowAtGlobal(Offset global) {
+    for (final entry in _verbRowKeys.entries) {
+      final parts = entry.key.split('_');
+      if (parts.length != 2) continue;
+      final ci = int.tryParse(parts[0]);
+      final vi = int.tryParse(parts[1]);
+      if (ci == null || vi == null) continue;
+      final ctx = entry.value.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) continue;
+      final pos = box.localToGlobal(Offset.zero);
+      if (global.dx >= pos.dx &&
+          global.dx < pos.dx + box.size.width &&
+          global.dy >= pos.dy &&
+          global.dy < pos.dy + box.size.height) {
+        return MapEntry(ci, vi);
+      }
+    }
+    return null;
+  }
 
   int? _catIndexAtGlobalY(double y) {
     for (final entry in _catRowKeys.entries) {
@@ -182,6 +226,302 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       if (y >= pos.dy && y < pos.dy + box.size.height) return entry.key;
     }
     return null;
+  }
+
+  /// Floating preview card that follows the pointer while reordering categories.
+  Widget _buildCategoryReorderGhost(double maxStackWidth) {
+    final from = _dragFromCatIndex;
+    final local = _categoryDragGhostLocal;
+    if (from == null || local == null) return const SizedBox.shrink();
+    final cats = _verbList;
+    if (from < 0 || from >= cats.length) return const SizedBox.shrink();
+    final cat = cats[from];
+    final catNum = cat['number'] as int? ?? (from + 1);
+    final name = cat['name'] as String? ?? '';
+    final isFavs = name == 'Favorites';
+    final ghostW = math.min(260.0, math.max(80.0, maxStackWidth - 8));
+    final left = math.max(
+      4.0,
+      math.min(local.dx - ghostW * 0.2, maxStackWidth - ghostW - 4),
+    );
+    final top = local.dy - 24;
+    return Positioned(
+      left: left,
+      top: top,
+      width: ghostW,
+      child: IgnorePointer(
+        child: Material(
+          color: Colors.transparent,
+          elevation: 12,
+          shadowColor: Colors.black38,
+          borderRadius: BorderRadius.circular(5),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            decoration: BoxDecoration(
+              color: (isFavs ? Colors.amber.shade50 : Colors.white)
+                  .withOpacity(0.97),
+              border: Border.all(
+                color: isFavs ? Colors.amber.shade400 : Colors.blue.shade300,
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.drag_indicator,
+                    size: 14, color: Colors.grey.shade700),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 20,
+                  child: Text(
+                    '$catNum',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.grey.shade900,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    name,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.grey.shade900,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Floating preview while reordering verbs (same interaction as category reorder).
+  Widget _buildVerbReorderGhost(double maxStackWidth) {
+    final fCi = _dragFromVerbCatIndex;
+    final fVi = _dragFromVerbIndex;
+    final local = _verbDragGhostLocal;
+    if (fCi == null || fVi == null || local == null) {
+      return const SizedBox.shrink();
+    }
+    final cats = _verbList;
+    if (fCi < 0 || fCi >= cats.length) return const SizedBox.shrink();
+    final cat = cats[fCi];
+    final verbs = (cat['verbs'] as List<dynamic>?)?.cast<String>() ?? [];
+    if (fVi < 0 || fVi >= verbs.length) return const SizedBox.shrink();
+    final label = verbs[fVi];
+    final catNum = cat['number'] as int? ?? (fCi + 1);
+    final verbNum = fVi + 1;
+    final ghostW = math.min(260.0, math.max(80.0, maxStackWidth - 8));
+    final left = math.max(
+      4.0,
+      math.min(local.dx - ghostW * 0.2, maxStackWidth - ghostW - 4),
+    );
+    final top = local.dy - 24;
+    return Positioned(
+      left: left,
+      top: top,
+      width: ghostW,
+      child: IgnorePointer(
+        child: Material(
+          color: Colors.transparent,
+          elevation: 12,
+          shadowColor: Colors.black38,
+          borderRadius: BorderRadius.circular(5),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.97),
+              border: Border.all(
+                color: Colors.blue.shade300,
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(5),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 6,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.drag_indicator,
+                    size: 14, color: Colors.grey.shade700),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 24,
+                  child: Text(
+                    '$verbNum',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.grey.shade900,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade900,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    '($catNum)',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _swapVerbsKeyboardFire(
+      String categoryName, String verbA, String verbB) {
+    if (verbA.isEmpty || verbB.isEmpty || verbA == verbB) return;
+    final state = widget.captionState;
+    if (state == null) return;
+    try {
+      (state as dynamic).swapVerbsInCategoryForKeyboardFire(
+          categoryName, verbA, verbB);
+    } catch (_) {}
+  }
+
+  /// Long-press ~500ms then drag; ghost follows pointer; release on another verb to swap.
+  Widget _wrapVerbRowForReorder({
+    required int ci,
+    required int vi,
+    required Widget child,
+  }) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (e) {
+        _verbDragLastGlobal = e.position;
+        _catLongPressTimer?.cancel();
+        _verbLongPressTimer?.cancel();
+        if (_dragFromCatIndex != null) {
+          setState(() {
+            _dragFromCatIndex = null;
+            _dragToCatIndex = null;
+            _categoryDragGhostLocal = null;
+          });
+        }
+        _verbLongPressTimer = Timer(const Duration(milliseconds: 500), () {
+          if (!mounted) return;
+          setState(() {
+            _dragFromVerbCatIndex = ci;
+            _dragFromVerbIndex = vi;
+            _dragToVerbCatIndex = ci;
+            _dragToVerbIndex = vi;
+            final box = _categoryReorderStackKey.currentContext
+                ?.findRenderObject() as RenderBox?;
+            if (box != null && box.hasSize && _verbDragLastGlobal != null) {
+              _verbDragGhostLocal = box.globalToLocal(_verbDragLastGlobal!);
+            }
+          });
+        });
+      },
+      onPointerMove: (e) {
+        _verbDragLastGlobal = e.position;
+        if (_dragFromVerbCatIndex == null) return;
+        final box = _categoryReorderStackKey.currentContext
+            ?.findRenderObject() as RenderBox?;
+        final hit = _verbRowAtGlobal(e.position);
+        setState(() {
+          if (box != null && box.hasSize) {
+            _verbDragGhostLocal = box.globalToLocal(e.position);
+          }
+          if (hit != null && hit.key == _dragFromVerbCatIndex) {
+            _dragToVerbCatIndex = hit.key;
+            _dragToVerbIndex = hit.value;
+          } else {
+            _dragToVerbCatIndex = _dragFromVerbCatIndex;
+            _dragToVerbIndex = _dragFromVerbIndex;
+          }
+        });
+      },
+      onPointerUp: (e) {
+        _verbLongPressTimer?.cancel();
+        final hadSession = _dragFromVerbCatIndex != null;
+        if (hadSession &&
+            _dragFromVerbCatIndex != null &&
+            _dragToVerbCatIndex != null &&
+            _dragFromVerbIndex != null &&
+            _dragToVerbIndex != null &&
+            _dragFromVerbCatIndex == _dragToVerbCatIndex &&
+            _dragFromVerbIndex != _dragToVerbIndex) {
+          final cats = _verbList;
+          final fc = _dragFromVerbCatIndex!;
+          if (fc >= 0 && fc < cats.length) {
+            final cat = cats[fc];
+            final cname = cat['name'] as String? ?? '';
+            final canon = (cat['verbsCanonical'] as List<dynamic>?)
+                ?.cast<String>();
+            if (canon != null &&
+                _dragFromVerbIndex! < canon.length &&
+                _dragToVerbIndex! < canon.length) {
+              _swapVerbsKeyboardFire(
+                cname,
+                canon[_dragFromVerbIndex!],
+                canon[_dragToVerbIndex!],
+              );
+            }
+          }
+        }
+        setState(() {
+          _dragFromVerbCatIndex = null;
+          _dragFromVerbIndex = null;
+          _dragToVerbCatIndex = null;
+          _dragToVerbIndex = null;
+          _verbDragGhostLocal = null;
+        });
+        if (hadSession) {
+          _suppressVerbTapAfterVerbDrag = true;
+        }
+      },
+      onPointerCancel: (_) {
+        _verbLongPressTimer?.cancel();
+        setState(() {
+          _dragFromVerbCatIndex = null;
+          _dragFromVerbIndex = null;
+          _dragToVerbCatIndex = null;
+          _dragToVerbIndex = null;
+          _verbDragGhostLocal = null;
+        });
+      },
+      child: child,
+    );
   }
 
   /// Baseball Keyboard Fire: 0 = innings 1–9, 1 = 10–18, 2 = 19–27.
@@ -2222,9 +2562,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 ),
               ),
               child: Opacity(
-                opacity: isDragging ? 0.5 : 1.0,
+                opacity: isDragging ? 0.35 : 1.0,
                 child: Row(
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 2),
+                      child: Icon(
+                        Icons.drag_indicator,
+                        size: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
                     SizedBox(
                       width: 18,
                       child: Text(
@@ -2287,14 +2635,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     // +1 for the custom verb input at the end of the list
     final customVerbIndex = totalCount;
     totalCount += 1;
-    return Scrollbar(
-      controller: _categoriesScrollController,
-      thumbVisibility: true,
-      child: ListView.builder(
-        controller: _categoriesScrollController,
-        padding: const EdgeInsets.only(top: 6),
-        itemCount: totalCount,
-        itemBuilder: (context, flatIndex) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          key: _categoryReorderStackKey,
+          clipBehavior: Clip.none,
+          children: [
+            Scrollbar(
+              controller: _categoriesScrollController,
+              thumbVisibility: true,
+              child: ListView.builder(
+                controller: _categoriesScrollController,
+                padding: const EdgeInsets.only(top: 6),
+                itemCount: totalCount,
+                itemBuilder: (context, flatIndex) {
           // Custom verb input — last item in the list
           if (flatIndex == customVerbIndex) {
             return Padding(
@@ -2365,6 +2719,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             final name = cat['name'] as String? ?? '';
             final verbs =
                 (cat['verbs'] as List<dynamic>?)?.cast<String>() ?? [];
+            final verbsCanon =
+                (cat['verbsCanonical'] as List<dynamic>?)?.cast<String>();
             final headerIndex = offset;
             offset += 1;
             if (flatIndex == headerIndex) {
@@ -2375,21 +2731,54 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               return Listener(
                 behavior: HitTestBehavior.opaque,
                 onPointerDown: (e) {
+                  _categoryDragLastGlobal = e.position;
+                  _verbLongPressTimer?.cancel();
+                  if (_dragFromVerbCatIndex != null) {
+                    setState(() {
+                      _dragFromVerbCatIndex = null;
+                      _dragFromVerbIndex = null;
+                      _dragToVerbCatIndex = null;
+                      _dragToVerbIndex = null;
+                      _verbDragGhostLocal = null;
+                    });
+                  }
                   _catLongPressTimer?.cancel();
                   _catLongPressTimer =
                       Timer(const Duration(milliseconds: 500), () {
+                    _verbLongPressTimer?.cancel();
                     setState(() {
+                      _dragFromVerbCatIndex = null;
+                      _dragFromVerbIndex = null;
+                      _dragToVerbCatIndex = null;
+                      _dragToVerbIndex = null;
+                      _verbDragGhostLocal = null;
                       _dragFromCatIndex = ci;
                       _dragToCatIndex = ci;
+                      final box = _categoryReorderStackKey.currentContext
+                          ?.findRenderObject() as RenderBox?;
+                      if (box != null &&
+                          box.hasSize &&
+                          _categoryDragLastGlobal != null) {
+                        _categoryDragGhostLocal =
+                            box.globalToLocal(_categoryDragLastGlobal!);
+                      }
                     });
                   });
                 },
                 onPointerMove: (e) {
+                  _categoryDragLastGlobal = e.position;
                   if (_dragFromCatIndex != null) {
-                    final target = _catIndexAtGlobalY(e.position.dy);
-                    if (target != null && target != _dragToCatIndex) {
-                      setState(() => _dragToCatIndex = target);
-                    }
+                    final box = _categoryReorderStackKey.currentContext
+                        ?.findRenderObject() as RenderBox?;
+                    setState(() {
+                      if (box != null && box.hasSize) {
+                        _categoryDragGhostLocal = box.globalToLocal(e.position);
+                      }
+                      final target = _catIndexAtGlobalY(e.position.dy);
+                      if (target != null && target != _dragToCatIndex) {
+                        _dragToCatIndex = target;
+                      }
+                    });
                   }
                 },
                 onPointerUp: (e) {
@@ -2407,6 +2796,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     setState(() {
                       _dragFromCatIndex = null;
                       _dragToCatIndex = null;
+                      _categoryDragGhostLocal = null;
                     });
                   } else if (_dragFromCatIndex == null) {
                     setState(() {
@@ -2420,6 +2810,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     setState(() {
                       _dragFromCatIndex = null;
                       _dragToCatIndex = null;
+                      _categoryDragGhostLocal = null;
                     });
                   }
                 },
@@ -2428,6 +2819,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   setState(() {
                     _dragFromCatIndex = null;
                     _dragToCatIndex = null;
+                    _categoryDragGhostLocal = null;
                   });
                 },
                 child: MouseRegion(
@@ -2453,9 +2845,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       ),
                     ),
                     child: Opacity(
-                      opacity: isDragging ? 0.5 : 1.0,
+                      opacity: isDragging ? 0.35 : 1.0,
                       child: Row(
                         children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 2),
+                            child: Icon(
+                              Icons.drag_indicator,
+                              size: 12,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
                           SizedBox(
                             width: 18,
                             child: Text(
@@ -2496,6 +2896,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               for (int vi = 0; vi < verbs.length; vi++) {
                 if (flatIndex == offset) {
                   final verb = verbs[vi];
+                  final canonVerb = (verbsCanon != null &&
+                          vi < verbsCanon.length)
+                      ? verbsCanon[vi]
+                      : verb;
                   final verbNum = vi + 1;
                   if (verb.trim().isEmpty) {
                     return const SizedBox(height: 12);
@@ -2527,7 +2931,26 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   final showRbiMenu = isActive && isHitVerb;
                   final showBaseMenu = isActive && isRunningVerb;
 
-                  final verbRow = MouseRegion(
+                  final allowVerbReorder =
+                      name != 'Favorites' && canonVerb.trim().isNotEmpty;
+                  final isVerbDragging = allowVerbReorder &&
+                      _dragFromVerbCatIndex == ci &&
+                      _dragFromVerbIndex == vi;
+                  final isVerbDragOver = allowVerbReorder &&
+                      _dragFromVerbCatIndex != null &&
+                      _dragToVerbCatIndex == ci &&
+                      _dragToVerbIndex == vi &&
+                      !(_dragFromVerbCatIndex == ci &&
+                          _dragFromVerbIndex == vi);
+
+                  Widget verbRow = MouseRegion(
+                    cursor: (allowVerbReorder &&
+                            _dragFromVerbCatIndex == ci &&
+                            _dragFromVerbIndex == vi)
+                        ? SystemMouseCursors.grabbing
+                        : (allowVerbReorder
+                            ? SystemMouseCursors.grab
+                            : SystemMouseCursors.basic),
                     onEnter: (_) => setState(() => _hoveredVerbKey = verbKey),
                     onExit: (_) => setState(() => _hoveredVerbKey = null),
                     child: GestureDetector(
@@ -2547,6 +2970,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           }
                         },
                         onTap: () {
+                          if (_suppressVerbTapAfterVerbDrag) {
+                            _suppressVerbTapAfterVerbDrag = false;
+                            return;
+                          }
                           if (_verbRowTapConsumedByCmd) {
                             _verbRowTapConsumedByCmd = false;
                             return;
@@ -2556,8 +2983,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           }
                         },
                         child: Container(
-                          padding: const EdgeInsets.only(
-                              left: 20, right: 6, top: 4, bottom: 4),
+                          key: allowVerbReorder
+                              ? _verbRowKey(ci, vi)
+                              : null,
+                          padding: EdgeInsets.only(
+                              left: allowVerbReorder ? 8 : 20,
+                              right: 6,
+                              top: 4,
+                              bottom: 4),
                           decoration: BoxDecoration(
                             color: isPinned
                                 ? const Color(0xFFFFF8E1)
@@ -2566,32 +2999,50 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     : (isHovered
                                         ? Colors.grey.shade200
                                         : null)),
-                            border: isPinned
+                            border: isVerbDragOver
                                 ? Border(
-                                    left: const BorderSide(
-                                        color: Color(0xFFF59E0B), width: 3),
+                                    top: BorderSide(
+                                        color: Colors.blue.shade400, width: 2),
                                     bottom: BorderSide(
                                         color: Colors.grey.shade100,
                                         width: 0.5),
                                   )
-                                : (isPicked
+                                : (isPinned
                                     ? Border(
                                         left: const BorderSide(
-                                            color: Color(0xFF4A90E2), width: 3),
+                                            color: Color(0xFFF59E0B), width: 3),
                                         bottom: BorderSide(
                                             color: Colors.grey.shade100,
                                             width: 0.5),
                                       )
-                                    : Border(
-                                        bottom: BorderSide(
-                                            color: Colors.grey.shade100,
-                                            width: 0.5),
-                                      )),
+                                    : (isPicked
+                                        ? Border(
+                                            left: const BorderSide(
+                                                color: Color(0xFF4A90E2),
+                                                width: 3),
+                                            bottom: BorderSide(
+                                                color: Colors.grey.shade100,
+                                                width: 0.5),
+                                          )
+                                        : Border(
+                                            bottom: BorderSide(
+                                                color: Colors.grey.shade100,
+                                                width: 0.5),
+                                          ))),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.baseline,
                             textBaseline: TextBaseline.alphabetic,
                             children: [
+                              if (allowVerbReorder)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 4),
+                                  child: Icon(
+                                    Icons.drag_indicator,
+                                    size: 12,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
                               SizedBox(
                                 width: 24,
                                 child: Text(
@@ -2654,7 +3105,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     ),
                   );
 
-                  if (!showRbiMenu && !showBaseMenu) return verbRow;
+                  if (isVerbDragging) {
+                    verbRow = Opacity(opacity: 0.35, child: verbRow);
+                  }
+
+                  final Widget wrappedVerbRow = allowVerbReorder
+                      ? _wrapVerbRowForReorder(ci: ci, vi: vi, child: verbRow)
+                      : verbRow;
+
+                  if (!showRbiMenu && !showBaseMenu) return wrappedVerbRow;
 
                   if (showBaseMenu) {
                     final currentBase =
@@ -2662,7 +3121,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        verbRow,
+                        wrappedVerbRow,
                         _buildBaseSubMenu(state, verb, currentBase),
                       ],
                     );
@@ -2677,7 +3136,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      verbRow,
+                      wrappedVerbRow,
                       if (isHomeRun)
                         _buildHomeRunTypeSubMenu(state, currentHrType)
                       else
@@ -2690,8 +3149,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             }
           }
           return const SizedBox.shrink();
-        },
-      ),
+                },
+              ),
+            ),
+            _buildCategoryReorderGhost(constraints.maxWidth),
+            _buildVerbReorderGhost(constraints.maxWidth),
+          ],
+        );
+      },
     );
   }
 
