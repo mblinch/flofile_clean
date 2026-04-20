@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_styled_dialogs.dart';
 import 'package:extended_image/extended_image.dart';
 import 'dart:io';
 import 'dart:convert';
@@ -32,6 +33,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final Function(String, String)? onImageRenamed;
   final Function(String)? onEditInPhotoshop;
   final Set<String>? uploadedImages;
+  final Set<String>? savedImages;
   final Set<String>? queuedUploads;
   final Set<String>? currentlyUploading;
   final Map<String, double>? uploadProgress;
@@ -62,6 +64,7 @@ class PicturePreviewWidget extends StatefulWidget {
     this.onImageRenamed,
     this.onEditInPhotoshop,
     this.uploadedImages,
+    this.savedImages,
     this.queuedUploads,
     this.currentlyUploading,
     this.uploadProgress,

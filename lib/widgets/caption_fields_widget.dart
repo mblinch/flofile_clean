@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_styled_dialogs.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
@@ -15,6 +16,7 @@ import 'package:collection/collection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/exiftool_helper.dart';
 import '../utils/default_verb_keywords.dart';
+import '../utils/home_run_type_ui.dart';
 import '../services/preferences_service.dart';
 import 'ftp_settings_panel.dart';
 
@@ -243,6 +245,13 @@ String _dedupeKeywordsForDisplay(dynamic keywordsRaw) {
   return out.join(', ');
 }
 
+/// Keyboard Fire baseball coach token: legacy `Name #HC` or `Name Manager` (title after name).
+class _KbCoachParts {
+  const _KbCoachParts(this.name, this.rolePhrase);
+  final String name;
+  final String rolePhrase;
+}
+
 class CaptionFieldsWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
   final Function(Map<String, dynamic>?)? onMetadataUpdated;
@@ -353,7 +362,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _homeSearchText = '';
   String _awaySearchText = '';
   String _unifiedSearchText = '';
-  String _managerName = '';
   String? _originalCaptionFromMetadata;
   String? _originalPersonalityFromMetadata;
 
@@ -666,6 +674,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   List<String> _categoryOrder = [
     'Offense',
     'Defense',
+    'Pitching',
     'Running',
     'Reactions',
     'Non Game-Action',
@@ -711,6 +720,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return [
           'Offense',
           'Defense',
+          'Pitching',
           'Running',
           'Reactions',
           'Non Game-Action',
@@ -733,7 +743,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Hit by Pitch',
     ],
     'Defense': [
-      'Pitching',
       'Catches',
       'Throws',
       'Tags',
@@ -741,6 +750,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Fielding Position',
       'Double Play',
       'Triple Play',
+      '',
+      '',
+    ],
+    'Pitching': [
+      'Pitching',
+      'Pitching Change',
+      'Mound Visit',
+      '',
+      '',
+      '',
+      '',
+      '',
       '',
     ],
     'Running': ['Steals', 'Slides', 'Runs', 'Rounds', '', '', '', '', ''],
@@ -764,7 +785,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'National Anthem',
       'Stretching',
       'Warm Ups',
-      'Pitching Change',
+      '',
     ],
   };
 
@@ -820,12 +841,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     'Offense': [
       'Dribbles',
       'Shoots',
-      'Crosses',
-      'Passes',
-      'Chips',
-      'Volleys',
-      'Headers On Goal',
-      'Takes On Defender',
+      'Kicks',
+      'Controls',
+      'Battles',
+      'Scores a Goal',
+      'Celebrates a Goal',
     ],
     'Defense': [
       'Tackles',
@@ -1636,6 +1656,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       );
                     }
 
+                    if (_hasDuplicateJerseyNumbersInList(updated)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Two players cannot share the same jersey number on this team.',
+                          ),
+                        ),
+                      );
+                      return;
+                    }
+
                     setState(() {
                       if (isHome) {
                         selectedHomeTeam = tempSelectedTeam;
@@ -1986,6 +2017,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           [
                             'pitches, pitch, pitching → Pitching',
                             'pitchingchange, pitchchange → Pitching Change',
+                            'moundvisit, mound → Mound Visit',
                           ],
                         ),
                         _buildFirebarSection(
@@ -2080,6 +2112,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return 'takes an at bat in his batting stance';
       case 'Pitching':
         return 'delivers a pitch';
+      case 'Mound Visit':
+        return 'mound visit';
       case 'Swings':
         return 'swings';
       case 'Bunts':
@@ -2818,9 +2852,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Future<void> _loadTeamRosters() async {
     if (selectedHomeTeam == null || selectedAwayTeam == null) return;
 
-    // Check if we have preloaded roster data
+    // Check if we have preloaded roster data (empty lists still need API fetch)
     if (widget.preloadedHomeRoster != null &&
-        widget.preloadedAwayRoster != null) {
+        widget.preloadedAwayRoster != null &&
+        widget.preloadedHomeRoster!.isNotEmpty &&
+        widget.preloadedAwayRoster!.isNotEmpty) {
       setState(() {
         _homeRoster = widget.preloadedHomeRoster!;
         _awayRoster = widget.preloadedAwayRoster!;
@@ -6481,6 +6517,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ? _buildBothTeamsList()
                                 : _buildBothTeamsListView(),
           ),
+          _buildStickyRosterAddPlayerBar(),
           const SizedBox(height: 12),
         ],
       ),
@@ -6771,74 +6808,77 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Do not switch view; search should filter within the existing two grids
 
-    return Column(
-      children: [
-        // Home team section
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Home team section
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.home, size: 12, color: Colors.grey.shade700),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'HOME',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.home, size: 12, color: Colors.grey.shade700),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'HOME',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+
+          // Home team grid
+          _buildSingleTeamGrid(homeRoster, selectedHomePlayers, true),
+
+          const SizedBox(height: 8),
+
+          // Away team section
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.shade300, width: 1),
               ),
-            ],
-          ),
-        ),
-
-        // Home team grid
-        _buildSingleTeamGrid(homeRoster, selectedHomePlayers, true),
-
-        const SizedBox(height: 8),
-
-        // Away team section
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            border: Border(
-              bottom: BorderSide(color: Colors.grey.shade300, width: 1),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.flight, size: 12, color: Colors.grey.shade700),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    _getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'AWAY',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade700,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Row(
-            children: [
-              Icon(Icons.flight, size: 12, color: Colors.grey.shade700),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'AWAY',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
 
-        // Away team grid
-        _buildSingleTeamGrid(awayRoster, selectedAwayPlayers, false),
-      ],
+          // Away team grid
+          _buildSingleTeamGrid(awayRoster, selectedAwayPlayers, false),
+        ],
+      ),
     );
   }
 
@@ -6909,6 +6949,370 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  String _playerDisplayNameFrom(String fullName, String jersey) {
+    final j = jersey.trim();
+    return j.isEmpty ? fullName.trim() : '${fullName.trim()} #$j';
+  }
+
+  /// Always-visible add controls below the roster panel (roster content scrolls/clips inside [Expanded] above).
+  Widget _buildStickyRosterAddPlayerBar() {
+    if (_isLoadingRosters) return const SizedBox.shrink();
+    final showHome = selectedHomeTeam != null;
+    final showAway = selectedAwayTeam != null;
+    if (!showHome && !showAway) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+      child: Row(
+        children: [
+          if (showHome)
+            Expanded(child: _buildRosterAddPlayerRow(true)),
+          if (showHome && showAway) const SizedBox(width: 6),
+          if (showAway) Expanded(child: _buildRosterAddPlayerRow(false)),
+        ],
+      ),
+    );
+  }
+
+  /// Compact “Add player” control at the bottom of a team roster (uses existing custom-player dialog).
+  Widget _buildRosterAddPlayerRow(bool isHome) {
+    final teamSelected =
+        isHome ? selectedHomeTeam != null : selectedAwayTeam != null;
+    if (!teamSelected) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _isLoadingRosters
+              ? null
+              : () {
+                  _showPlayerEditDialog(isHome: isHome);
+                },
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              border: Border.all(color: Colors.blue.shade200),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.person_add_alt_1,
+                    size: 12, color: Colors.blue.shade700),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    'Add player (${isHome ? (_getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'Home') : (_getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'Away')})',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showPlayerEditDialog({
+    required bool isHome,
+    Player? existing,
+  }) async {
+    final numberController = TextEditingController(
+        text: (existing?.jerseyNumber ?? '').trim());
+    final fullNameController =
+        TextEditingController(text: (existing?.fullName ?? '').trim());
+
+    String? dialogError;
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Dialog(
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            backgroundColor: Colors.transparent,
+            child: Container(
+              width: 360,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.shade300),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    existing == null ? 'Add Custom Player' : 'Edit Player',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Number',
+                      style:
+                          TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Container(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: numberController,
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 11),
+                      onChanged: (_) =>
+                          setDialogState(() => dialogError = null),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 7),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Player Name',
+                      style:
+                          TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Container(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: fullNameController,
+                      style: const TextStyle(fontSize: 11),
+                      onChanged: (_) =>
+                          setDialogState(() => dialogError = null),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 7),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 40,
+                    width: double.infinity,
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: dialogError == null
+                          ? const SizedBox.shrink()
+                          : Text(
+                              dialogError!,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.red.shade800,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 9),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero),
+                        ),
+                        child: Text('Cancel',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade700)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          final number = numberController.text.trim();
+                          final fullName = fullNameController.text.trim();
+                          if (fullName.isEmpty || number.isEmpty) {
+                            setDialogState(() {
+                              dialogError =
+                                  'Please enter both player number and name.';
+                            });
+                            return;
+                          }
+                          final conflict = jerseyConflictMessageForPlayerEdit(
+                            isHome: isHome,
+                            existing: existing,
+                            jerseyNumber: number,
+                          );
+                          if (conflict != null) {
+                            setDialogState(() => dialogError = conflict);
+                            return;
+                          }
+                          Navigator.of(ctx).pop({
+                            'fullName': fullName,
+                            'jersey': number,
+                          });
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0052CC),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero),
+                        ),
+                        child:
+                            const Text('Save', style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    if (!mounted || result == null) return;
+
+    final fullName = (result['fullName'] ?? '').trim();
+    final jersey = (result['jersey'] ?? '').trim();
+    if (fullName.isEmpty || jersey.isEmpty) return;
+
+    final replacement = Player(
+      fullName: fullName,
+      firstName: fullName.split(' ').first,
+      jerseyNumber: jersey,
+      displayName: _playerDisplayNameFrom(fullName, jersey),
+    );
+
+    applyPlayerRosterEdit(
+      isHome: isHome,
+      existing: existing,
+      replacement: replacement,
+    );
+  }
+
+  Future<void> _showPlayerContextMenu({
+    required TapDownDetails details,
+    required Player player,
+    required bool isHome,
+  }) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(details.globalPosition, details.globalPosition),
+      Offset.zero & overlay.size,
+    );
+
+    final action = await showAppContextMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        const PopupMenuItem<String>(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit, size: 16),
+              SizedBox(width: 8),
+              Text('Edit player'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'add',
+          child: Row(
+            children: [
+              const Icon(Icons.person_add, size: 16),
+              const SizedBox(width: 8),
+              Text('Add custom player to ${isHome ? 'Home' : 'Away'}'),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (action == 'edit') {
+      await _showPlayerEditDialog(isHome: isHome, existing: player);
+    } else if (action == 'add') {
+      await _showPlayerEditDialog(isHome: isHome);
+    }
+  }
+
   Widget _buildSingleTeamSquareGrid(
       List<Player> players, Set<String> selectedPlayers, bool isHome) {
     if (players.isEmpty) {
@@ -6933,6 +7337,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ? player.fullName.split(' ').sublist(1).join(' ').trim()
             : player.fullName;
         return GestureDetector(
+          onSecondaryTapDown: (details) {
+            _showPlayerContextMenu(
+              details: details,
+              player: player,
+              isHome: isHome,
+            );
+          },
           onTap: () {
             setState(() {
               if (isSelected) {
@@ -7541,6 +7952,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     );
 
                     return GestureDetector(
+                      onSecondaryTapDown: (details) {
+                        _showPlayerContextMenu(
+                          details: details,
+                          player: player,
+                          isHome: true,
+                        );
+                      },
                       onTap: () {
                         setState(() {
                           if (isSelected) {
@@ -7679,6 +8097,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     );
 
                     return GestureDetector(
+                      onSecondaryTapDown: (details) {
+                        _showPlayerContextMenu(
+                          details: details,
+                          player: player,
+                          isHome: false,
+                        );
+                      },
                       onTap: () {
                         setState(() {
                           if (isSelected) {
@@ -8105,6 +8530,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? _buildGroundballSubOptions()
                                       : (_selectedVerb == 'At Bat' ||
                                               _selectedVerb == 'Pitching' ||
+                                              _selectedVerb == 'Mound Visit' ||
                                               _selectedVerb == 'Swings' ||
                                               _selectedVerb == 'Throws' ||
                                               _selectedVerb ==
@@ -8407,7 +8833,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                           1),
 
                                                                                     // Inning only (when simple verbs are selected)
-                                                                                    if (_selectedVerb == 'At Bat' || _selectedVerb == 'Pitching' || _selectedVerb == 'Swings' || _selectedVerb == 'Catches' || _selectedVerb == 'Throws' || _selectedVerb == 'Groundball' || _selectedVerb == 'Fielding Position') ...[
+                                                                                    if (_selectedVerb == 'At Bat' || _selectedVerb == 'Pitching' || _selectedVerb == 'Mound Visit' || _selectedVerb == 'Swings' || _selectedVerb == 'Catches' || _selectedVerb == 'Throws' || _selectedVerb == 'Groundball' || _selectedVerb == 'Fielding Position') ...[
                                                                                       const SizedBox(height: 1),
                                                                                       Container(
                                                                                         decoration: BoxDecoration(
@@ -8886,6 +9312,141 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _pendingPinnedVerbIndex = verb1Based;
   }
 
+  /// True if [jersey] is already used by another roster row (not [replaceIndex]).
+  bool _jerseyNumberTakenOnTeam(
+    List<Player> roster,
+    String? jersey, {
+    int? replaceIndex,
+  }) {
+    for (int i = 0; i < roster.length; i++) {
+      if (replaceIndex != null && i == replaceIndex) continue;
+      if (_sameJerseyNumber(roster[i].jerseyNumber, jersey)) return true;
+    }
+    return false;
+  }
+
+  /// Same jersey string, or same integer (e.g. "01" vs "1").
+  bool _sameJerseyNumber(String? a, String? b) {
+    final ta = (a ?? '').trim();
+    final tb = (b ?? '').trim();
+    if (ta.isEmpty && tb.isEmpty) return false;
+    if (ta == tb) return true;
+    final ia = int.tryParse(ta);
+    final ib = int.tryParse(tb);
+    return ia != null && ib != null && ia == ib;
+  }
+
+  /// Message if [jerseyNumber] is already taken (for add/edit player dialog).
+  /// Returns null when the number is available for this team.
+  String? jerseyConflictMessageForPlayerEdit({
+    required bool isHome,
+    Player? existing,
+    required String? jerseyNumber,
+  }) {
+    final roster = isHome ? _homeRoster : _awayRoster;
+    final skipIdx = _skipIndexWhenEditingRoster(roster, existing);
+    if (_jerseyNumberTakenOnTeam(
+      roster,
+      jerseyNumber,
+      replaceIndex: skipIdx,
+    )) {
+      final j = (jerseyNumber ?? '').trim();
+      return j.isEmpty
+          ? 'That jersey number is already on this team.'
+          : 'Jersey #$j is already on this team.';
+    }
+    return null;
+  }
+
+  /// Merge a custom player add/edit into the canonical rosters and selection
+  /// sets (classic grid and Keyboard Fire share the same [_homeRoster]/[_awayRoster]).
+  /// Returns false if the jersey number conflicts (caller should show dialog UI).
+  bool applyPlayerRosterEdit({
+    required bool isHome,
+    Player? existing,
+    required Player replacement,
+  }) {
+    final msg = jerseyConflictMessageForPlayerEdit(
+      isHome: isHome,
+      existing: existing,
+      jerseyNumber: replacement.jerseyNumber,
+    );
+    if (msg != null) {
+      return false;
+    }
+
+    setState(() {
+      final roster = isHome ? _homeRoster : _awayRoster;
+      final selected = isHome ? selectedHomePlayers : selectedAwayPlayers;
+
+      if (existing != null) {
+        final idx = _rosterIndexForPlayerEdit(roster, existing);
+        if (idx >= 0) {
+          final old = roster[idx];
+          roster[idx] = replacement;
+          if (selected.remove(old.displayName)) {
+            selected.add(replacement.displayName);
+          }
+          final oldNorm = _removeJerseyNumberFromName(old.displayName);
+          if (_firstPlayerSelected == oldNorm) {
+            _firstPlayerSelected =
+                _removeJerseyNumberFromName(replacement.displayName);
+          }
+        } else {
+          roster.add(replacement);
+        }
+      } else {
+        roster.add(replacement);
+      }
+    });
+    _updateCaption().then((_) {
+      if (mounted) {
+        _keyboardFireCaptionNotifier.value = captionController.text;
+      }
+    });
+    _reapplyVerbKeywordsIfEnabled();
+    return true;
+  }
+
+  int _rosterIndexForPlayerEdit(List<Player> roster, Player existing) {
+    final ej = (existing.jerseyNumber ?? '').trim();
+    if (ej.isNotEmpty) {
+      final byJersey = roster.indexWhere(
+        (p) => _sameJerseyNumber(p.jerseyNumber, existing.jerseyNumber),
+      );
+      if (byJersey >= 0) return byJersey;
+    }
+    return roster.indexWhere(
+      (p) =>
+          p.displayName == existing.displayName &&
+          p.fullName == existing.fullName,
+    );
+  }
+
+  /// Index of the row being replaced (skip in duplicate scan). Uses [displayName]
+  /// if jersey lookup fails so name-only edits still exclude the correct row.
+  int? _skipIndexWhenEditingRoster(List<Player> roster, Player? existing) {
+    if (existing == null) return null;
+    final idx = _rosterIndexForPlayerEdit(roster, existing);
+    if (idx >= 0) return idx;
+    final byDisplay =
+        roster.indexWhere((p) => p.displayName == existing.displayName);
+    if (byDisplay >= 0) return byDisplay;
+    return null;
+  }
+
+  /// Two or more players share a jersey (for bulk roster save).
+  bool _hasDuplicateJerseyNumbersInList(List<Player> players) {
+    for (int i = 0; i < players.length; i++) {
+      final a = players[i].jerseyNumber;
+      if ((a ?? '').trim().isEmpty) continue;
+      for (int j = i + 1; j < players.length; j++) {
+        if (_sameJerseyNumber(a, players[j].jerseyNumber)) return true;
+      }
+    }
+    return false;
+  }
+
   /// Keyboard fire mode: clear player selection for a fresh start.
   void clearPlayersForKeyboardFire() {
     setState(() {
@@ -8896,6 +9457,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _autoSelectedHomeJersey = null;
       _autoSelectedAwayJersey = null;
     });
+  }
+
+  /// Opens the custom add-player dialog while Keyboard Fire is the visible UI ([CaptionFieldsWidget] may be offstage).
+  Future<void> showAddCustomPlayerFromKeyboardFire(
+      {required bool isHome}) async {
+    await _showPlayerEditDialog(isHome: isHome);
   }
 
   /// Keyboard fire mode: add one player by jersey number.
@@ -8914,6 +9481,38 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       isHomeTeam: isHomeTeam,
       jerseyNumber: jerseyNumber.trim(),
     );
+  }
+
+  /// Keyboard Fire: toggle a staff line for captions using a roster token
+  /// (`Full Name Manager`, `Full Name Pitching Coach`, …), same selection sets as players.
+  void toggleCoachFromKeyboardFire({
+    required bool isHomeTeam,
+    required String coachSyntheticDisplayName,
+  }) {
+    final token = coachSyntheticDisplayName.trim();
+    if (token.isEmpty) return;
+    final set = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
+    if (set.contains(token)) {
+      set.remove(token);
+    } else {
+      set.add(token);
+      if (_firstTeamSelected == null) {
+        _firstTeamSelected = isHomeTeam;
+      }
+      _firstPlayerSelected ??= _removeJerseyNumberFromName(token);
+      if (_applyPlayerNamesToKeywordsEnabled && _showKeywordsField) {
+        final kwName = _removeDiacritics(_removeJerseyNumberFromName(token));
+        if (kwName.isNotEmpty) {
+          final merged =
+              mergeVerbKeywordFieldText(keywordsController.text, [kwName]);
+          keywordsController.text = merged;
+          keywordsController.selection =
+              TextSelection.collapsed(offset: merged.length);
+        }
+      }
+    }
+    setState(() {});
+    _reapplyVerbKeywordsIfEnabled();
   }
 
   /// Keyboard fire mode: set RBI count and refresh caption.
@@ -9642,6 +10241,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (!effective.contains('Favorites')) {
       effective = [...effective, 'Favorites'];
     }
+    // Users with an older saved order: insert new baseball "Pitching" after Defense.
+    if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball' &&
+        verbCategories.containsKey('Pitching') &&
+        !effective.contains('Pitching')) {
+      final di = effective.indexOf('Defense');
+      if (di >= 0) {
+        effective.insert(di + 1, 'Pitching');
+      } else {
+        final fi = effective.indexOf('Favorites');
+        if (fi >= 0) {
+          effective.insert(fi, 'Pitching');
+        } else {
+          effective.add('Pitching');
+        }
+      }
+    }
     return effective;
   }
 
@@ -9929,7 +10544,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           Offset.zero & overlay.size,
         );
 
-        showMenu<String>(
+        showAppContextMenu<String>(
           context: context,
           position: position,
           items: [
@@ -10749,7 +11364,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                   width: 0.5),
                                                             ),
                                                             child: Text(
-                                                              hrType,
+                                                              shortHomeRunTypeLabel(
+                                                                  hrType),
                                                               style: TextStyle(
                                                                 fontSize: 10,
                                                                 fontWeight:
@@ -10826,7 +11442,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                   width: 0.5),
                                                             ),
                                                             child: Text(
-                                                              hrType,
+                                                              shortHomeRunTypeLabel(
+                                                                  hrType),
                                                               style: TextStyle(
                                                                 fontSize: 10,
                                                                 fontWeight:
@@ -12431,10 +13048,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           spacing: 4,
           runSpacing: 4,
           children: [
-            _buildHomeRunTypeChip('Solo', 'Solo HR'),
-            _buildHomeRunTypeChip('Two-Run', '2-Run HR'),
-            _buildHomeRunTypeChip('Three-Run', '3-Run HR'),
-            _buildHomeRunTypeChip('Grand Slam', 'Grand Slam'),
+            _buildHomeRunTypeChip('Solo', shortHomeRunTypeLabel('Solo')),
+            _buildHomeRunTypeChip('Two-Run', shortHomeRunTypeLabel('Two-Run')),
+            _buildHomeRunTypeChip(
+                'Three-Run', shortHomeRunTypeLabel('Three-Run')),
+            _buildHomeRunTypeChip(
+                'Grand Slam', shortHomeRunTypeLabel('Grand Slam')),
           ],
         ),
       ],
@@ -13849,6 +14468,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'anthem',
       'pitchingchange',
       'pitchchange',
+      'moundvisit',
+      'mound',
       'postgamewin',
       'win',
       'postgameloss',
@@ -14215,6 +14836,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'pitch':
         case 'pitching':
           action = 'Pitching';
+          break;
+        case 'moundvisit':
+        case 'mound':
+          action = 'Mound Visit';
           break;
         case 'swings':
         case 'swing':
@@ -14878,6 +15503,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'pitching':
           action = 'Pitching';
           break;
+        case 'moundvisit':
+        case 'mound':
+          action = 'Mound Visit';
+          break;
         case 'swings':
         case 'swing':
           action = 'Swings';
@@ -15187,6 +15816,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         case 'pitch':
         case 'pitching':
           action = 'Pitching';
+          break;
+        case 'moundvisit':
+        case 'mound':
+          action = 'Mound Visit';
           break;
         case 'swings':
         case 'swing':
@@ -15885,7 +16518,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 orElse: () => _firstPlayerSelected!,
               );
 
-        playerName = '$mainPlayerFullName of the $mainPlayerTeam';
+        if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball' &&
+            _isKeyboardFireBaseballStaffToken(mainPlayerFullName)) {
+          playerName = _baseballStaffRoleOfTeamCaptionPhrase(
+            displayToken: mainPlayerFullName,
+            teamName: mainPlayerTeam,
+          );
+        } else {
+          playerName =
+              '${_stripCoachOnlyTagForCaption(mainPlayerFullName)} of the $mainPlayerTeam';
+        }
       } else {
         // If "with teammates" is NOT selected and not a multi-player hit interface, use all active players
         playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
@@ -15933,6 +16575,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _selectedHittingAction == 'trots_the_bases' ||
         verbToUse == 'At Bat' ||
         verbToUse == 'Pitching' ||
+        verbToUse == 'Mound Visit' ||
         verbToUse == 'Swings' ||
         verbToUse == 'Fielding Position' ||
         verbToUse == 'Catches' ||
@@ -16134,8 +16777,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     } else if (sport == 'basketball') {
       gamePart = 'in their NBA game';
     } else if (sport == 'soccer') {
-      // Joins after half/quarter phrase: "...during the first half of their MLS soccer match at..."
-      gamePart = 'of their MLS soccer match';
+      // In-game joins after period text: "...during the first half of their MLS soccer match..."
+      // Pre/Post-game reads better as "...ahead of playing against X in their MLS soccer match..."
+      gamePart = (_isPriorToGame || _isPostGame)
+          ? 'in their MLS soccer match'
+          : 'of their MLS soccer match';
     } else {
       gamePart = 'in their MLB game';
     }
@@ -17086,15 +17732,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return;
     }
 
-    // Remove jersey numbers and # symbols from player names
-    final cleanPlayerNames = allSelectedPlayers.map((playerName) {
-      // Remove numbers, # symbols, and extra spaces, keep only the name
-      return playerName.replaceAll(RegExp(r'\s*[#\d]+\s*'), '').trim();
-    }).toList();
+    // Plain names only (jersey #99; coach roster lines strip title after name)
+    final cleanPlayerNames = allSelectedPlayers
+        .map((playerName) => _removeJerseyNumberFromName(playerName.trim()))
+        .where((s) => s.isNotEmpty)
+        .toList();
 
-    // Add manager name if available and Pitching Change is selected
-    if (_selectedVerb == 'Pitching Change' && _managerName.isNotEmpty) {
-      cleanPlayerNames.add(_managerName);
+    // Manager for Pitching Change: typed field or Manager line from roster
+    if (_selectedVerb == 'Pitching Change') {
+      final m = _pitchingChangeManagerNameResolved();
+      if (m.isNotEmpty && !cleanPlayerNames.contains(m)) {
+        cleanPlayerNames.add(m);
+      }
     }
 
     // Join players with semicolons, no semicolon after the last player
@@ -19771,8 +20420,35 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _combinePlayersWithSingleTeam(List<String> players) {
     if (players.isEmpty) return '';
 
-    // Get full player names
-    final playerNames = players.toList();
+    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    if (sport == 'baseball' &&
+        players.isNotEmpty &&
+        players.every((p) => _isKeyboardFireBaseballStaffToken(p))) {
+      final isHomeTeamPlayer = selectedHomePlayers.contains(players.first);
+      final teamName = isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
+      if (players.length == 1) {
+        return _baseballStaffRoleOfTeamCaptionPhrase(
+          displayToken: players.first,
+          teamName: teamName,
+        );
+      }
+      return _combineBaseballKeyboardFireStaffForCaption(players, teamName);
+    }
+
+    // Baseball: mix of roster players (keep `Name #99`) and staff (use role like a “number”).
+    if (sport == 'baseball' &&
+        players.any((p) => _isKeyboardFireBaseballStaffToken(p)) &&
+        !players.every((p) => _isKeyboardFireBaseballStaffToken(p))) {
+      final isHomeTeamPlayer = selectedHomePlayers.contains(players.first);
+      final teamName = isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
+      return _combineBaseballMixedPlayersAndStaffForCaption(players, teamName);
+    }
+
+    // Get full player names (strip Keyboard Fire coach titles / legacy `#HC` for caption text)
+    final playerNames = players
+        .map((p) => _stripCoachOnlyTagForCaption(p.trim()))
+        .where((s) => s.isNotEmpty)
+        .toList();
 
     // Determine the team from the first player's selection context
     final isHomeTeamPlayer = selectedHomePlayers.contains(players.first);
@@ -19982,6 +20658,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return hasResolvedVerbPhrase
             ? '$resolvedVerbPhrase against the ${_getOpposingTeamName()}'
             : 'delivers a pitch against the ${_getOpposingTeamName()}';
+      case 'Mound Visit':
+        return hasResolvedVerbPhrase
+            ? '$resolvedVerbPhrase against the ${_getOpposingTeamName()}'
+            : 'participates in a mound visit against the ${_getOpposingTeamName()}';
       case 'Swings':
         return hasResolvedVerbPhrase
             ? '$resolvedVerbPhrase against the ${_getOpposingTeamName()}'
@@ -20130,6 +20810,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }
         }
       case 'Pitching Change':
+        final mgrPc = _pitchingChangeManagerNameResolved();
         String inningText = '';
         if (_selectedRbiInning != null) {
           inningText =
@@ -20143,37 +20824,66 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
         if (selectedPlayers.isNotEmpty) {
           final firstPlayer = selectedPlayers.first;
-          // Get team name for the first player
           final isHomeTeamPlayer = selectedHomePlayers.contains(firstPlayer);
           final teamName =
               isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
-          final firstPlayerName = '$firstPlayer of the $teamName';
 
-          // Get remaining players for "stand on the mound" part
+          // Manager selected first: "Name manager of the Team takes Pitcher out of the game …"
+          final firstCoach = _parseKeyboardFireCoachToken(firstPlayer.trim());
+          final firstIsManager = (widget.sport?.toLowerCase() ?? 'baseball') ==
+                  'baseball' &&
+              firstCoach != null &&
+              firstCoach.rolePhrase == 'manager';
+          if (firstIsManager) {
+            final mgrLead =
+                _pitchingChangeLeadSubject(firstPlayer, teamName);
+            final afterMgr = selectedPlayers.skip(1).toList();
+            if (afterMgr.isEmpty) {
+              const breakPlay = ' in a break in play';
+              return '$mgrLead takes a pitcher out of the game$breakPlay$inningText against the ${_getOpposingTeamName()}';
+            }
+            final pitcherToken = afterMgr.first;
+            final pitcherName =
+                _pitchingChangeLeadSubject(pitcherToken, teamName);
+            final onlookerCandidates = afterMgr.skip(1).toList();
+            final onlookers =
+                _pitchingChangeOnlookerTokens(onlookerCandidates, mgrPc);
+            final lookOnClause = _pitchingChangeLookOnClause(onlookers);
+            final breakPlay =
+                lookOnClause.isEmpty ? ' in a break in play' : '';
+            if (lookOnClause.isNotEmpty) {
+              return '$mgrLead takes $pitcherName out of the game $lookOnClause$inningText against the ${_getOpposingTeamName()}';
+            }
+            return '$mgrLead takes $pitcherName out of the game$breakPlay$inningText against the ${_getOpposingTeamName()}';
+          }
+
+          final firstPlayerName =
+              _pitchingChangeLeadSubject(firstPlayer, teamName);
+
+          // Others selected after the pitcher; drop the manager so they are not named twice
+          // ("by manager X" vs "as X manager look on").
           final remainingPlayers = selectedPlayers.skip(1).toList();
+          final onlookers =
+              _pitchingChangeOnlookerTokens(remainingPlayers, mgrPc);
+          final lookOnClause = _pitchingChangeLookOnClause(onlookers);
+          final breakPlay =
+              lookOnClause.isEmpty ? ' in a break in play' : '';
 
-          if (_managerName.isNotEmpty) {
-            if (remainingPlayers.isNotEmpty) {
-              final remainingPlayerNames = remainingPlayers.length == 1
-                  ? remainingPlayers.first
-                  : '${remainingPlayers.take(remainingPlayers.length - 1).join(', ')}, and ${remainingPlayers.last}';
-              return '$firstPlayerName is taken out of the game by manager $_managerName as $remainingPlayerNames stand on the mound in a break in play$inningText against the ${_getOpposingTeamName()}';
-            } else {
-              return '$firstPlayerName is taken out of the game by manager $_managerName in a break in play$inningText against the ${_getOpposingTeamName()}';
+          if (mgrPc.isNotEmpty) {
+            final byMgr = ' by manager $mgrPc';
+            if (lookOnClause.isNotEmpty) {
+              return '$firstPlayerName is taken out of the game$byMgr $lookOnClause$inningText against the ${_getOpposingTeamName()}';
             }
+            return '$firstPlayerName is taken out of the game$byMgr$breakPlay$inningText against the ${_getOpposingTeamName()}';
           } else {
-            if (remainingPlayers.isNotEmpty) {
-              final remainingPlayerNames = remainingPlayers.length == 1
-                  ? remainingPlayers.first
-                  : '${remainingPlayers.take(remainingPlayers.length - 1).join(', ')}, and ${remainingPlayers.last}';
-              return '$firstPlayerName is taken out of the game as $remainingPlayerNames stand on the mound in a break in play$inningText against the ${_getOpposingTeamName()}';
-            } else {
-              return '$firstPlayerName is taken out of the game in a break in play$inningText against the ${_getOpposingTeamName()}';
+            if (lookOnClause.isNotEmpty) {
+              return '$firstPlayerName is taken out of the game $lookOnClause$inningText against the ${_getOpposingTeamName()}';
             }
+            return '$firstPlayerName is taken out of the game$breakPlay$inningText against the ${_getOpposingTeamName()}';
           }
         } else {
-          if (_managerName.isNotEmpty) {
-            return 'pitcher taken out of the game by manager $_managerName$inningText against the ${_getOpposingTeamName()}';
+          if (mgrPc.isNotEmpty) {
+            return 'pitcher taken out of the game by manager $mgrPc$inningText against the ${_getOpposingTeamName()}';
           } else {
             return 'pitcher taken out of the game$inningText against the ${_getOpposingTeamName()}';
           }
@@ -20670,6 +21380,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return '$scoresPhrase$againstText $playerNames';
         }
         return '$scoresPhrase$againstText the ${_getOpposingTeamName()}';
+      case 'Scores a Goal':
+        final opposingPlayers = _getOpposingPlayers();
+        final scoresGoalPhrase = resolvedVerbPhrase ?? 'scores a goal';
+        final omitAgainst = _shouldOmitAgainst(originalVerb);
+        final againstText = omitAgainst ? '' : ' against';
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return '$scoresGoalPhrase$againstText $playerNames';
+        }
+        return '$scoresGoalPhrase$againstText the ${_getOpposingTeamName()}';
       case 'Passes':
         final opposingPlayers = _getOpposingPlayers();
         final omitAgainst = _shouldOmitAgainst(originalVerb);
@@ -20706,8 +21426,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$goesNetPhrase$againstText the ${_getOpposingTeamName()}';
       case 'Battles':
         final opposingPlayers2 = _getOpposingPlayers();
-        // Use overridden phrase if available, then custom wording, then default
-        final battlesPhrase = resolvedVerbPhrase ?? 'battles';
+        final isSoccer = widget.sport?.toLowerCase() == 'soccer';
+        // Soccer default is more explicit; other sports keep existing default.
+        final battlesPhrase =
+            resolvedVerbPhrase ?? (isSoccer ? 'battles for the ball' : 'battles');
         final omitAgainst = _shouldOmitAgainst(originalVerb);
         final againstText = omitAgainst ? '' : ' against';
         if (opposingPlayers2.isNotEmpty) {
@@ -20976,6 +21698,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return '$reboundPhrase$reboundAgainst ${_formatPlayersWithTeam(reboundOpp)}';
         }
         return '$reboundPhrase$reboundAgainst the ${_getOpposingTeamName()}';
+
+      // ── Soccer verbs ───────────────────────────────────────────────────
+      case 'Kicks':
+        return hasResolvedVerbPhrase
+            ? resolvedVerbPhrase!
+            : 'kicks the ball';
+      case 'Controls':
+        return hasResolvedVerbPhrase
+            ? resolvedVerbPhrase!
+            : 'controls the ball';
 
       case 'Takes the Court':
         if (activePlayerCount >= 2) {
@@ -21565,7 +22297,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             borderRadius: BorderRadius.circular(3),
           ),
           child: Text(
-            _selectedHomeRunType ?? 'Home Run',
+            _selectedHomeRunType != null
+                ? shortHomeRunTypeLabel(_selectedHomeRunType!)
+                : 'Home Run',
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -21634,41 +22368,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             child: Builder(
                               builder: (context) {
+                                final displayLabel =
+                                    shortHomeRunTypeLabel(hrType);
                                 final String typed = _magicBarVerbInput;
                                 final RegExpMatch? lettersMatch = RegExp(
-                                  r'([a-zA-Z]+)$',
+                                  r'([a-zA-Z0-9]+)$',
                                 ).firstMatch(typed);
                                 final String typedLetters =
                                     lettersMatch?.group(1)?.toLowerCase() ?? '';
 
-                                // Build shortcut: multi-word -> acronym, single-word -> first 2-3
-                                List<String> words = RegExp(r'[A-Za-z]+')
-                                    .allMatches(hrType)
-                                    .map((m) => m.group(0)!)
-                                    .toList();
-                                String shortcut;
-                                if (words.length > 1) {
-                                  shortcut = words
-                                      .map((w) => w[0].toLowerCase())
-                                      .join();
-                                } else {
-                                  final w = words.first.toLowerCase();
-                                  shortcut =
-                                      w.length >= 2 ? w.substring(0, 2) : w;
-                                }
+                                final shortcut = displayLabel.toLowerCase();
 
                                 String boldPart = '';
                                 if (_magicBarFocusNode.hasFocus &&
                                     typedLetters.isNotEmpty &&
                                     shortcut.startsWith(typedLetters)) {
-                                  boldPart = hrType.substring(
+                                  boldPart = displayLabel.substring(
                                     0,
-                                    typedLetters.length.clamp(0, hrType.length),
+                                    typedLetters.length
+                                        .clamp(0, displayLabel.length),
                                   );
                                 } else if (_magicBarFocusNode.hasFocus) {
-                                  boldPart = hrType.substring(
+                                  boldPart = displayLabel.substring(
                                     0,
-                                    shortcut.length.clamp(0, hrType.length),
+                                    shortcut.length.clamp(0, displayLabel.length),
                                   );
                                 }
 
@@ -21687,7 +22410,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           ),
                                         ),
                                       TextSpan(
-                                        text: hrType.substring(boldPart.length),
+                                        text: displayLabel
+                                            .substring(boldPart.length),
                                         style: TextStyle(
                                           fontSize: 10,
                                           fontWeight: FontWeight.w500,
@@ -23123,8 +23847,270 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   String _removeJerseyNumberFromName(String playerName) {
-    // Remove jersey number patterns like "#23" or " #23" from the end of the name
-    return playerName.replaceAll(RegExp(r'\s*#\d+\s*$'), '').trim();
+    final trimmed = playerName.trim();
+    final coach = _parseKeyboardFireCoachToken(trimmed);
+    if (coach != null) return coach.name;
+    // Jersey numbers (#23) and legacy coach codes (#HC, …).
+    return trimmed
+        .replaceAll(RegExp(r'\s*#\d+\s*$'), '')
+        .replaceAll(
+            RegExp(r'\s*#(?:HC|PC|1BC|3BC)\s*$', caseSensitive: false), '')
+        .trim();
+  }
+
+  static const List<String> _kKeyboardFireCoachTitleSuffixes = [
+    'Third Base Coach',
+    'First Base Coach',
+    'Pitching Coach',
+    'Head Coach',
+    'Manager',
+  ];
+
+  /// Role phrase for captions (lowercase), from the title word(s) after the name.
+  String? _rolePhraseFromKeyboardFireStaffTitle(String title) {
+    switch (title) {
+      case 'Manager':
+        return 'manager';
+      case 'Head Coach':
+        return 'head coach';
+      case 'Pitching Coach':
+        return 'pitching coach';
+      case 'First Base Coach':
+        return 'first base coach';
+      case 'Third Base Coach':
+        return 'third base coach';
+      default:
+        return null;
+    }
+  }
+
+  /// Role words for legacy Keyboard Fire codes (`#HC`, …).
+  String _keyboardFireStaffRoleWords(String code) {
+    switch (code) {
+      case 'HC':
+        return 'manager';
+      case 'PC':
+        return 'pitching coach';
+      case '1BC':
+        return 'first base coach';
+      case '3BC':
+        return 'third base coach';
+      default:
+        return '';
+    }
+  }
+
+  /// Legacy `Name #HC` or `Name Manager` / `Name Pitching Coach`, etc.
+  _KbCoachParts? _parseKeyboardFireCoachToken(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return null;
+
+    final legacy = RegExp(
+      r'^(.+?)\s*#(HC|PC|1BC|3BC)\s*$',
+      caseSensitive: false,
+    ).firstMatch(t);
+    if (legacy != null) {
+      final name = legacy.group(1)!.trim();
+      final code = legacy.group(2)!.toUpperCase();
+      if (name.isEmpty) return null;
+      final role = _keyboardFireStaffRoleWords(code);
+      if (role.isEmpty) return null;
+      return _KbCoachParts(name, role);
+    }
+
+    for (final suffix in _kKeyboardFireCoachTitleSuffixes) {
+      final trailer = ' $suffix';
+      if (t.endsWith(trailer)) {
+        final name = t.substring(0, t.length - trailer.length).trim();
+        if (name.isEmpty) continue;
+        final role = _rolePhraseFromKeyboardFireStaffTitle(suffix);
+        if (role == null) continue;
+        return _KbCoachParts(name, role);
+      }
+    }
+    return null;
+  }
+
+  bool _isKeyboardFireBaseballStaffToken(String raw) =>
+      _parseKeyboardFireCoachToken(raw) != null;
+
+  /// Plain name only (strips legacy `#HC` and ` Manager` / ` Pitching Coach`, etc.).
+  String _stripCoachOnlyTagForCaption(String raw) {
+    final p = _parseKeyboardFireCoachToken(raw.trim());
+    if (p != null) return p.name;
+    return raw
+        .replaceFirst(
+            RegExp(r'\s*#(?:HC|PC|1BC|3BC)\s*$', caseSensitive: false), '')
+        .trim();
+  }
+
+  /// `Aaron Boone manager`, `Pat Murphy pitching coach`, … (no team suffix).
+  String _baseballStaffNameRoleFragment(String displayToken) {
+    final p = _parseKeyboardFireCoachToken(displayToken);
+    if (p == null) return displayToken.trim();
+    return '${p.name} ${p.rolePhrase}';
+  }
+
+  /// Staff → role fragment; player → full roster display token (`Name #99` kept like a jersey).
+  String _baseballCaptionFragmentForRosterToken(String token) {
+    final t = token.trim();
+    if (t.isEmpty) return '';
+    if (_isKeyboardFireBaseballStaffToken(t)) {
+      return _baseballStaffNameRoleFragment(t);
+    }
+    return t;
+  }
+
+  /// `A #12 and B manager of the Team` — one shared ` of the ` team suffix.
+  String _joinBaseballCaptionFragmentsWithTeam(
+    List<String> fragments,
+    String? teamName,
+  ) {
+    if (fragments.isEmpty) return '';
+    final t = teamName?.trim() ?? '';
+    String joined;
+    if (fragments.length == 1) {
+      joined = fragments.first;
+    } else if (fragments.length == 2) {
+      joined = '${fragments[0]} and ${fragments[1]}';
+    } else {
+      final copy = List<String>.from(fragments);
+      final last = copy.removeLast();
+      joined = '${copy.join(', ')}, and $last';
+    }
+    if (t.isEmpty) return joined;
+    return '$joined of the $t';
+  }
+
+  /// Player(s) + coach(es): jersey numbers on players, titles on coaches.
+  String _combineBaseballMixedPlayersAndStaffForCaption(
+    List<String> players,
+    String? teamName,
+  ) {
+    final fragments = players
+        .map(_baseballCaptionFragmentForRosterToken)
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return _joinBaseballCaptionFragmentsWithTeam(fragments, teamName);
+  }
+
+  /// Two+ staff: `Name manager and Name pitching coach of the Team`.
+  String _combineBaseballKeyboardFireStaffForCaption(
+    List<String> tokens,
+    String? teamName,
+  ) {
+    final fragments = tokens
+        .map(_baseballStaffNameRoleFragment)
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return _joinBaseballCaptionFragmentsWithTeam(fragments, teamName);
+  }
+
+  /// Baseball Keyboard Fire: `Name manager of the Team`, `Name pitching coach of the Team`, etc.
+  String _baseballStaffRoleOfTeamCaptionPhrase({
+    required String displayToken,
+    required String? teamName,
+  }) {
+    final p = _parseKeyboardFireCoachToken(displayToken);
+    final t = teamName?.trim() ?? '';
+    final hasTeam = t.isNotEmpty;
+    if (p == null) {
+      final name = displayToken.trim();
+      return hasTeam ? '$name of the $t' : name;
+    }
+    if (!hasTeam) {
+      return '${p.name} ${p.rolePhrase}';
+    }
+    return '${p.name} ${p.rolePhrase} of the $t';
+  }
+
+  /// Typed manager name, or the **Manager** line selected on the roster (`Name Manager`).
+  String _pitchingChangeManagerNameResolved() {
+    final typed = _managerNameController.text.trim();
+    if (typed.isNotEmpty) return typed;
+    for (final token in selectedHomePlayers) {
+      final p = _parseKeyboardFireCoachToken(token);
+      if (p != null && p.rolePhrase == 'manager') return p.name;
+    }
+    for (final token in selectedAwayPlayers) {
+      final p = _parseKeyboardFireCoachToken(token);
+      if (p != null && p.rolePhrase == 'manager') return p.name;
+    }
+    return '';
+  }
+
+  /// First subject in Pitching Change: `Name #99 of the Team` or coach `Name role of the Team`.
+  String _pitchingChangeLeadSubject(String token, String? teamName) {
+    final t = token.trim();
+    if (t.isEmpty) return '';
+    if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball' &&
+        _isKeyboardFireBaseballStaffToken(t)) {
+      return _baseballStaffRoleOfTeamCaptionPhrase(
+          displayToken: t, teamName: teamName);
+    }
+    final tn = teamName?.trim() ?? '';
+    if (tn.isEmpty) return t;
+    return '$t of the $tn';
+  }
+
+  String _pitchingChangeMoundSubjectFragment(String token) {
+    final t = token.trim();
+    if (t.isEmpty) return '';
+    if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball' &&
+        _isKeyboardFireBaseballStaffToken(t)) {
+      return _baseballStaffNameRoleFragment(t);
+    }
+    return t;
+  }
+
+  String _joinPitchingChangeMoundSubjects(List<String> tokens) {
+    final parts = tokens
+        .map(_pitchingChangeMoundSubjectFragment)
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '';
+    if (parts.length == 1) return parts.first;
+    if (parts.length == 2) return '${parts[0]} and ${parts[1]}';
+    final copy = List<String>.from(parts);
+    final last = copy.removeLast();
+    return '${copy.join(', ')}, and $last';
+  }
+
+  /// Others on the play besides the pitcher — omit the **Manager** line if it matches [mgrResolved]
+  /// (already covered by "by manager …").
+  List<String> _pitchingChangeOnlookerTokens(
+    List<String> remaining,
+    String mgrResolved,
+  ) {
+    final m = mgrResolved.trim();
+    if (m.isEmpty) return List<String>.from(remaining);
+    final out = <String>[];
+    final mLower = m.toLowerCase();
+    for (final raw in remaining) {
+      final t = raw.trim();
+      if (t.isEmpty) continue;
+      final coach = _parseKeyboardFireCoachToken(t);
+      if (coach != null &&
+          coach.rolePhrase == 'manager' &&
+          coach.name.trim().toLowerCase() == mLower) {
+        continue;
+      }
+      out.add(raw);
+    }
+    return out;
+  }
+
+  /// `as Name1 and Name2 look on` / `as Name looks on` when extra players/coaches are selected.
+  String _pitchingChangeLookOnClause(List<String> tokens) {
+    final parts = tokens
+        .map(_pitchingChangeMoundSubjectFragment)
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return '';
+    final joined = _joinPitchingChangeMoundSubjects(tokens);
+    if (joined.isEmpty) return '';
+    final verb = parts.length == 1 ? 'looks' : 'look';
+    return 'as $joined $verb on';
   }
 
   void _ensureMainPlayerStillSelected() {
@@ -24855,9 +25841,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                         ),
                         onChanged: (value) {
-                          setState(() {
-                            _managerName = value;
-                          });
+                          setState(() {});
                           _updateCaption();
                         },
                       ),
@@ -24880,7 +25864,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             ),
                             TextSpan(
                               text:
-                                  'Select other players that are on the mound',
+                                  'Pitcher first, or manager first (then pitcher). Optional: more selections add as … look on',
                               style: TextStyle(
                                 fontSize: 11,
                                 color: Colors.grey.shade600,

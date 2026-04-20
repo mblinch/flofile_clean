@@ -95,6 +95,8 @@ class _StartupDialogState extends State<StartupDialog> {
   String? _favoriteAwayTeam;
   bool _useBallDontLieApi = false;
   String? _goTimeWarningText;
+  String? _homeCoachLabel;
+  String? _awayCoachLabel;
 
   final List<String> questions = [
     'Where is your images folder?',
@@ -319,6 +321,12 @@ class _StartupDialogState extends State<StartupDialog> {
         }
         isLoadingTeams = false;
       });
+      if (selectedHomeTeam != null) {
+        _refreshCoachLabelForTeam(isHome: true);
+      }
+      if (selectedAwayTeam != null) {
+        _refreshCoachLabelForTeam(isHome: false);
+      }
     } catch (e) {
       print('Error loading teams: $e');
       if (!mounted) return;
@@ -745,6 +753,57 @@ class _StartupDialogState extends State<StartupDialog> {
     await _preferencesService.saveFavoriteTeams(_favoriteTeams, sport: sport);
   }
 
+
+  Future<void> _refreshCoachLabelForTeam({required bool isHome}) async {
+    final teamName = isHome ? selectedHomeTeam : selectedAwayTeam;
+    if (teamName == null || teamName.trim().isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        if (isHome) {
+          _homeCoachLabel = null;
+        } else {
+          _awayCoachLabel = null;
+        }
+      });
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        if (isHome) {
+          _homeCoachLabel = 'Coach: loading...';
+        } else {
+          _awayCoachLabel = 'Coach: loading...';
+        }
+      });
+    }
+
+    try {
+      final staff = await _apiManager.fetchTeamStaff(teamName);
+      final headCoach = (staff['headCoach'] ?? '').trim();
+      final label = headCoach.isNotEmpty
+          ? 'Coach: $headCoach'
+          : 'Coach: data missing';
+      if (!mounted) return;
+      setState(() {
+        if (isHome) {
+          _homeCoachLabel = label;
+        } else {
+          _awayCoachLabel = label;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (isHome) {
+          _homeCoachLabel = 'Coach: data missing';
+        } else {
+          _awayCoachLabel = 'Coach: data missing';
+        }
+      });
+    }
+  }
+
   Widget _buildStyledTeamDropdown({
     required bool isHome,
     required String hintText,
@@ -810,6 +869,7 @@ class _StartupDialogState extends State<StartupDialog> {
                       selectedAwayTeam = team;
                     }
                   });
+                  _refreshCoachLabelForTeam(isHome: isHome);
                   await _toggleFavoriteTeam(isHome: isHome);
                 },
                 child: Padding(
@@ -839,6 +899,7 @@ class _StartupDialogState extends State<StartupDialog> {
           }
           _goTimeWarningText = null;
         });
+        _refreshCoachLabelForTeam(isHome: isHome);
       },
     );
   }
@@ -1318,10 +1379,73 @@ class _StartupDialogState extends State<StartupDialog> {
                                 ),
                               ],
                             ),
+
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _awayCoachLabel ?? '',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade600,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 28),
+                                Expanded(
+                                  child: Text(
+                                    _homeCoachLabel ?? '',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.grey.shade600,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
-                      if (selectedAwayTeam != null) ...[
+                          if (selectedAwayTeam != null) ...[
+                        const SizedBox(height: 6),
+                        // API source badge
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (_useBallDontLieApi && widget.sport?.toLowerCase() == 'basketball')
+                                    ? Colors.blue.shade50
+                                    : Colors.green.shade50,
+                                border: Border.all(
+                                  color: (_useBallDontLieApi && widget.sport?.toLowerCase() == 'basketball')
+                                      ? Colors.blue.shade200
+                                      : Colors.green.shade200,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                (_useBallDontLieApi && widget.sport?.toLowerCase() == 'basketball')
+                                    ? '📡 Roster source: BallDontLie'
+                                    : '📡 Roster source: ${widget.sport == 'baseball' ? 'MLB Official' : widget.sport == 'hockey' ? 'NHL Official' : widget.sport == 'basketball' ? 'ESPN NBA' : 'ESPN MLS'}',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w500,
+                                  color: (_useBallDontLieApi && widget.sport?.toLowerCase() == 'basketball')
+                                      ? Colors.blue.shade700
+                                      : Colors.green.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                         const SizedBox(height: 6),
                         Container(
                           width: double.infinity,
@@ -1510,7 +1634,7 @@ class _StartupDialogState extends State<StartupDialog> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Optional: metadata preset, then BallDontLie (baseball/basketball)
+                      // Optional: metadata preset, then BallDontLie toggle (basketball only)
                       const Text('Optional:',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
@@ -1583,8 +1707,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                 ),
                               ],
                             ),
-                            if (widget.sport?.toLowerCase() == 'baseball' ||
-                                widget.sport?.toLowerCase() ==
+                            if (widget.sport?.toLowerCase() ==
                                     'basketball') ...[
                               const SizedBox(height: 10),
                               Row(
@@ -1603,7 +1726,7 @@ class _StartupDialogState extends State<StartupDialog> {
                                           ),
                                         ),
                                         Text(
-                                          'Use balldontlie.io for teams/rosters instead of official/ESPN APIs.',
+                                          'Use balldontlie.io for NBA teams/rosters instead of ESPN.',
                                           style: TextStyle(
                                             fontSize: 8,
                                             color: Colors.grey.shade600,

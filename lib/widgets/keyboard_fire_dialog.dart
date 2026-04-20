@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'app_styled_dialogs.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_switch/flutter_switch.dart';
 import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
+import '../services/api_manager.dart';
 import '../utils/default_verb_keywords.dart';
+import '../utils/home_run_type_ui.dart';
 import 'verb_keyword_quick_bar.dart';
 
 /// Intents for global H/V firebar shortcut (only when not in a text field).
@@ -60,6 +63,7 @@ class KeyboardFirePanel extends StatefulWidget {
   final String? homeTeamName;
   final String? awayTeamName;
   final dynamic captionState;
+  final String? apiSource;
 
   /// When true, show Cancel/Done buttons (e.g. in dialog). When false, caption updates live (inline).
   final bool showDialogActions;
@@ -91,6 +95,7 @@ class KeyboardFirePanel extends StatefulWidget {
     this.homeTeamName,
     this.awayTeamName,
     required this.captionState,
+    this.apiSource,
     this.showDialogActions = false,
     this.onDone,
     this.onPreviousImage,
@@ -143,6 +148,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   String _homeSummary = '';
   String _awaySummary = '';
   String _verbSummary = '';
+  final ApiManager _apiManager = ApiManager();
+  List<Player> _homeRosterView = [];
+  List<Player> _awayRosterView = [];
+  /// In-scroll coaching block: each map has `title` (e.g. Manager) and `name`.
+  List<Map<String, String>> _homeStaffDisplay = [];
+  List<Map<String, String>> _awayStaffDisplay = [];
   bool _waitingForVerb = true;
   // Cascading verb picker state
   int? _selectedCategoryIndex; // index into _verbList
@@ -680,9 +691,150 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     });
   }
 
+
+  List<Map<String, String>> _computeStaffDisplayLines(
+      Map<String, String?> staff, String sport) {
+    final out = <Map<String, String>>[];
+    void push(String title, String key) {
+      final n = (staff[key] ?? '').trim();
+      if (n.isEmpty) return;
+      out.add({'title': title, 'name': n});
+    }
+
+    final headTitle = sport == 'baseball' ? 'Manager' : 'Head Coach';
+    push(headTitle, 'headCoach');
+    if (sport == 'baseball') {
+      push('Pitching Coach', 'pitchingCoach');
+      push('First Base Coach', 'firstBaseCoach');
+      push('Third Base Coach', 'thirdBaseCoach');
+    }
+    if (out.isEmpty) {
+      return [
+        {'title': headTitle, 'name': 'data missing'},
+      ];
+    }
+    return out;
+  }
+
+  Future<void> _refreshCoachLabel({required bool isHome}) async {
+    final teamName = isHome ? widget.homeTeamName : widget.awayTeamName;
+    if (teamName == null || teamName.trim().isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        if (isHome) {
+          _homeStaffDisplay = [];
+        } else {
+          _awayStaffDisplay = [];
+        }
+      });
+      return;
+    }
+
+    try {
+      final sport = (() {
+        try {
+          return (widget.captionState as dynamic).currentSportName as String? ??
+              'baseball';
+        } catch (_) {
+          return 'baseball';
+        }
+      })();
+      _apiManager.setSport(sport);
+      final staff = await _apiManager.fetchTeamStaff(teamName);
+      final lines = _computeStaffDisplayLines(staff, sport);
+      if (!mounted) return;
+      setState(() {
+        if (isHome) {
+          _homeStaffDisplay = lines;
+        } else {
+          _awayStaffDisplay = lines;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      final sport = (() {
+        try {
+          return (widget.captionState as dynamic).currentSportName as String? ??
+              'baseball';
+        } catch (_) {
+          return 'baseball';
+        }
+      })();
+      final headTitle = sport == 'baseball' ? 'Manager' : 'Head Coach';
+      setState(() {
+        if (isHome) {
+          _homeStaffDisplay = [
+            {'title': headTitle, 'name': 'data missing'},
+          ];
+        } else {
+          _awayStaffDisplay = [
+            {'title': headTitle, 'name': 'data missing'},
+          ];
+        }
+      });
+    }
+  }
+
+  void _syncRostersFromWidget() {
+    _homeRosterView = List<Player>.from(widget.homeRoster);
+    _awayRosterView = List<Player>.from(widget.awayRoster);
+  }
+
+  Future<void> _openAddPlayerFromKeyboardFire(bool isHome) async {
+    final cs = widget.captionState;
+    if (cs == null) return;
+    try {
+      await (cs as dynamic)
+          .showAddCustomPlayerFromKeyboardFire(isHome: isHome);
+    } catch (_) {}
+    if (mounted) {
+      setState(_syncRostersFromWidget);
+    }
+  }
+
+  /// Compact “+ Add player” above the roster; opens the same add-player dialog as classic mode.
+  Widget _buildKbAddPlayerIconButton(bool isHome) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _openAddPlayerFromKeyboardFire(isHome),
+          borderRadius: BorderRadius.circular(3),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(2, 7, 2, 7),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.add_rounded,
+                  size: 9,
+                  color: Colors.black87,
+                ),
+                const SizedBox(width: 3),
+                Text(
+                  'Add player',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.normal,
+                    color: Colors.black87,
+                    height: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    _syncRostersFromWidget();
+    _refreshCoachLabel(isHome: true);
+    _refreshCoachLabel(isHome: false);
     PreferencesService.getInstance().then((p) {
       if (!mounted) return;
       _prefsService = p;
@@ -742,7 +894,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   }
 
   void _showKeywordShortcutContextMenu(int index, Offset position) async {
-    final result = await showMenu<String>(
+    final result = await showAppContextMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
           position.dx, position.dy, position.dx + 1, position.dy + 1),
@@ -806,6 +958,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   @override
   void didUpdateWidget(covariant KeyboardFirePanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // Parent may mutate the same roster list instance in place; always mirror
+    // latest widget rosters so Keyboard Fire never shows stale/empty lists.
+    if (!listEquals(_homeRosterView, widget.homeRoster) ||
+        !listEquals(_awayRosterView, widget.awayRoster) ||
+        oldWidget.homeRoster == widget.homeRoster ||
+        oldWidget.awayRoster == widget.awayRoster) {
+      _syncRostersFromWidget();
+    }
+    if (oldWidget.homeTeamName != widget.homeTeamName) {
+      _refreshCoachLabel(isHome: true);
+    }
+    if (oldWidget.awayTeamName != widget.awayTeamName) {
+      _refreshCoachLabel(isHome: false);
+    }
     // When image changes (next/previous), deselect verb and show "(last used)" beside it; reset firebar
     if (oldWidget.currentIndex != widget.currentIndex) {
       final cat = _pickedVerbCategory;
@@ -995,7 +1161,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final query = _homeBarController.text.trim();
     if (!_applyPlayerSearchSelection(
       isHomeTeam: true,
-      roster: widget.homeRoster,
+      roster: _homeRosterView,
       query: query,
     )) {
       return;
@@ -1043,7 +1209,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final rawQuery = _awayBarController.text.trim();
     final matched = _applyPlayerSearchSelection(
       isHomeTeam: false,
-      roster: widget.awayRoster,
+      roster: _awayRosterView,
       query: rawQuery,
     );
     if (!matched) return;
@@ -1625,6 +1791,31 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     });
   }
 
+  Widget _buildApiSourceBadge(String apiSource) {
+    final isBdl = apiSource.toLowerCase().contains('balldontlie');
+    final label = isBdl ? 'BDL' : apiSource.replaceAll(' API', '').replaceAll(' (testing)', '');
+    final bgColor = isBdl ? Colors.blue.shade50 : Colors.green.shade50;
+    final borderColor = isBdl ? Colors.blue.shade200 : Colors.green.shade200;
+    final textColor = isBdl ? Colors.blue.shade700 : Colors.green.shade700;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 8,
+          fontWeight: FontWeight.w600,
+          color: textColor,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
+
   /// Caption with optional Personality/Headline/Keywords stacked vertically.
   Widget _buildKeyboardFireCaptionStrip() {
     final hasSecondary =
@@ -1672,6 +1863,313 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     );
   }
 
+  String _displayNameForPlayer(String fullName, String jersey) {
+    final j = jersey.trim();
+    return j.isEmpty ? fullName.trim() : '${fullName.trim()} #$j';
+  }
+
+  Future<void> _showPlayerEditDialog({
+    required bool isHome,
+    Player? existing,
+  }) async {
+    final numberController =
+        TextEditingController(text: (existing?.jerseyNumber ?? '').trim());
+    final fullNameController =
+        TextEditingController(text: (existing?.fullName ?? '').trim());
+
+    final captionState = widget.captionState;
+    String? dialogError;
+    final result = await showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Dialog(
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            backgroundColor: Colors.transparent,
+            child: Container(
+              width: 360,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.grey.shade300),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    existing == null ? 'Add Custom Player' : 'Edit Player',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Number',
+                      style:
+                          TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Container(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: numberController,
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 11),
+                      onChanged: (_) =>
+                          setDialogState(() => dialogError = null),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 7),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'Player Name',
+                      style:
+                          TextStyle(fontSize: 10, color: Colors.grey.shade700),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Container(
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: TextField(
+                      controller: fullNameController,
+                      style: const TextStyle(fontSize: 11),
+                      onChanged: (_) =>
+                          setDialogState(() => dialogError = null),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 7),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 40,
+                    width: double.infinity,
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: dialogError == null
+                          ? const SizedBox.shrink()
+                          : Text(
+                              dialogError!,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.red.shade800,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 9),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero),
+                        ),
+                        child: Text('Cancel',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade700)),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          final jersey = numberController.text.trim();
+                          final name = fullNameController.text.trim();
+                          if (jersey.isEmpty || name.isEmpty) {
+                            setDialogState(() {
+                              dialogError =
+                                  'Please enter both player number and name.';
+                            });
+                            return;
+                          }
+                          if (captionState != null) {
+                            final conflict = (captionState as dynamic)
+                                .jerseyConflictMessageForPlayerEdit(
+                              isHome: isHome,
+                              existing: existing,
+                              jerseyNumber: jersey,
+                            ) as String?;
+                            if (conflict != null) {
+                              setDialogState(() => dialogError = conflict);
+                              return;
+                            }
+                          }
+                          Navigator.of(ctx)
+                              .pop({'jersey': jersey, 'fullName': name});
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0052CC),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero),
+                        ),
+                        child:
+                            const Text('Save', style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    if (!mounted || result == null) return;
+    final jersey = (result['jersey'] ?? '').trim();
+    final fullName = (result['fullName'] ?? '').trim();
+    if (jersey.isEmpty || fullName.isEmpty) return;
+
+    final replacement = Player(
+      fullName: fullName,
+      firstName: fullName.split(' ').first,
+      jerseyNumber: jersey,
+      displayName: _displayNameForPlayer(fullName, jersey),
+    );
+
+    if (captionState != null) {
+      try {
+        (captionState as dynamic).applyPlayerRosterEdit(
+          isHome: isHome,
+          existing: existing,
+          replacement: replacement,
+        );
+      } catch (_) {}
+    }
+
+    if (mounted) {
+      setState(_syncRostersFromWidget);
+    }
+
+    if (captionState != null) {
+      try {
+        captionState.updateCaptionFromKeyboardFire();
+      } catch (_) {}
+    }
+    _refreshCaptionPreviewLater();
+  }
+
+  Future<void> _showPlayerContextMenu({
+    required TapDownDetails details,
+    required Player player,
+    required bool isHome,
+  }) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(details.globalPosition, details.globalPosition),
+      Offset.zero & overlay.size,
+    );
+    final action = await showAppContextMenu<String>(
+      context: context,
+      position: position,
+      items: [
+        const PopupMenuItem<String>(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit, size: 16),
+              SizedBox(width: 8),
+              Text('Edit player'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'add',
+          child: Row(
+            children: [
+              const Icon(Icons.person_add, size: 16),
+              const SizedBox(width: 8),
+              Text('Add custom player to ${isHome ? 'Home' : 'Away'}'),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    if (action == 'edit') {
+      await _showPlayerEditDialog(isHome: isHome, existing: player);
+    } else if (action == 'add') {
+      await _showPlayerEditDialog(isHome: isHome);
+    }
+  }
+
   List<Widget> _buildRosterRows(List<Player> roster, bool isHomeTeam,
       {String? barText}) {
     if (roster.isEmpty) return [];
@@ -1707,6 +2205,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             ? (_) => setState(() => _hoveredRosterKey = null)
             : null,
         child: InkWell(
+          onSecondaryTapDown: (details) =>
+              _showPlayerContextMenu(details: details, player: p, isHome: isHomeTeam),
           onTap: jersey.isNotEmpty
               ? () {
                   final state = widget.captionState;
@@ -1769,6 +2269,166 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }).toList();
   }
 
+  /// Roster token for a coaching row: full name then role title (e.g. `John Schneider Manager`),
+  /// parallel to players’ `Name #99` but without a `#` code.
+  String? _syntheticDisplayTokenForStaffLine(String title, String name) {
+    final n = name.trim();
+    if (n.isEmpty || n == 'data missing') return null;
+    final t = title.trim();
+    if (t.isEmpty) return null;
+    return '$n $t';
+  }
+
+  /// Horizontal rule + **Coaching** title + staff lines, inside the roster scroll view.
+  Widget _buildRosterCoachScrollSuffix(bool isHomeTeam) {
+    final lines =
+        isHomeTeam ? _homeStaffDisplay : _awayStaffDisplay;
+    final teamName =
+        isHomeTeam ? widget.homeTeamName : widget.awayTeamName;
+    final children = <Widget>[
+      const SizedBox(height: 8),
+      Container(
+        height: 1,
+        color: Colors.grey.shade300,
+      ),
+      const SizedBox(height: 6),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          'Coaching',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: Colors.black87,
+            height: 1.2,
+          ),
+        ),
+      ),
+      const SizedBox(height: 4),
+    ];
+
+    if (lines.isEmpty &&
+        teamName != null &&
+        teamName.trim().isNotEmpty) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+          child: Text(
+            'Loading…',
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ),
+      );
+    } else {
+      for (final e in lines) {
+        children.add(
+          _buildStaffLineRow(
+            isHomeTeam: isHomeTeam,
+            title: e['title'] ?? '',
+            name: e['name'] ?? '',
+          ),
+        );
+      }
+      children.add(const SizedBox(height: 4));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+
+  /// One coaching line: name then role title (like jersey `99` then name). Tappable rows add that staff member to the caption.
+  Widget _buildStaffLineRow({
+    required bool isHomeTeam,
+    required String title,
+    required String name,
+  }) {
+    final synthetic = _syntheticDisplayTokenForStaffLine(title, name);
+    final selectedNames = _getSelectedPlayerNames(isHomeTeam);
+    final isPicked = synthetic != null && selectedNames.contains(synthetic);
+    final rosterKey =
+        '${isHomeTeam}_staff_${title.replaceAll(RegExp(r'\s+'), '_')}';
+    final isHovered = synthetic != null && _hoveredRosterKey == rosterKey;
+    final canToggle = synthetic != null;
+    final lineColor = isPicked
+        ? const Color(0xFF0052CC)
+        : (name == 'data missing'
+            ? Colors.grey.shade500
+            : Colors.black87);
+    final bgColor = isPicked
+        ? const Color(0xFFDBEAFF)
+        : (isHovered ? Colors.grey.shade200 : null);
+
+    final rich = Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: name == 'data missing' ? '$title — data missing' : '$name $title',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isPicked ? FontWeight.w600 : FontWeight.normal,
+              color: lineColor,
+              height: 1.25,
+            ),
+          ),
+        ],
+      ),
+      maxLines: 2,
+      overflow: TextOverflow.ellipsis,
+    );
+
+    final padded = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: rich,
+    );
+
+    if (!canToggle) {
+      return Container(
+        width: double.infinity,
+        color: bgColor,
+        child: padded,
+      );
+    }
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hoveredRosterKey = rosterKey),
+      onExit: (_) => setState(() => _hoveredRosterKey = null),
+      child: InkWell(
+        onTap: () {
+          final state = widget.captionState;
+          if (state == null) return;
+          try {
+            (state as dynamic).toggleCoachFromKeyboardFire(
+              isHomeTeam: isHomeTeam,
+              coachSyntheticDisplayName: synthetic,
+            );
+          } catch (_) {}
+          state.updateCaptionFromKeyboardFire();
+          setState(() {});
+          _refreshCaptionPreviewLater();
+        },
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: bgColor,
+            border: isPicked
+                ? const Border(
+                    left: BorderSide(color: Color(0xFF4A90E2), width: 3),
+                  )
+                : null,
+          ),
+          child: padded,
+        ),
+      ),
+    );
+  }
+
   /// One cell in the number grid (jersey + last name) or empty decade slot.
   Widget _buildRosterSquareGridCell({
     required Player? player,
@@ -1799,6 +2459,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         message: player.fullName,
         waitDuration: const Duration(milliseconds: 250),
         child: GestureDetector(
+          onSecondaryTapDown: (details) {
+            _showPlayerContextMenu(
+                details: details, player: player, isHome: isHomeTeam);
+          },
           onTap: () {
             final state = widget.captionState;
             if (state == null) return;
@@ -1860,9 +2524,22 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// player cells are rendered (no empty placeholder squares).
   Widget _buildRosterSquareGrid(List<Player> roster, bool isHomeTeam) {
     if (roster.isEmpty) {
-      return Center(
-        child: Text('No players',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text('No players',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade600)),
+              ),
+            ),
+            _buildRosterCoachScrollSuffix(isHomeTeam),
+          ],
+        ),
       );
     }
     final selectedNames = _getSelectedPlayerNames(isHomeTeam);
@@ -1877,15 +2554,29 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       }
     }
     if (byNum.isEmpty && nonNumeric.isEmpty) {
-      return Center(
-        child: Text('No players',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+      return SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text('No players',
+                    style: TextStyle(
+                        fontSize: 11, color: Colors.grey.shade600)),
+              ),
+            ),
+            _buildRosterCoachScrollSuffix(isHomeTeam),
+          ],
+        ),
       );
     }
 
     final buckets = byNum.keys.map((j) => j ~/ 10).toSet().toList()..sort();
 
     return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1993,6 +2684,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               }).toList(),
             ),
           ],
+          _buildRosterCoachScrollSuffix(isHomeTeam),
         ],
       ),
     );
@@ -2434,12 +3126,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 height: 12,
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: const Color(0xFF1976D2),
+                    color: Colors.black87,
                     width: 1.2,
                   ),
                   borderRadius: BorderRadius.circular(2),
                   color: _applyPlayerNamesToKeywordsEnabledKb
-                      ? const Color(0xFF1976D2)
+                      ? Colors.black87
                       : Colors.white,
                 ),
                 child: _applyPlayerNamesToKeywordsEnabledKb
@@ -2495,7 +3187,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: _buildRosterRows(roster, isHomeTeam, barText: barText),
+        children: [
+          ..._buildRosterRows(roster, isHomeTeam, barText: barText),
+          _buildRosterCoachScrollSuffix(isHomeTeam),
+        ],
       ),
     );
   }
@@ -3148,6 +3843,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: InkWell(
                         onTapDown: (TapDownDetails d) {
                           _verbRowTapConsumedByCmd = false;
+                          if (HardwareKeyboard.instance.isControlPressed) {
+                            _verbRowTapConsumedByCmd = true;
+                            _showVerbContextMenu(
+                                context, d.globalPosition, verb, isFavorite,
+                                catNum: catNum,
+                                verbNum: verbNum,
+                                isPinned: isPinned);
+                            return;
+                          }
                           if (HardwareKeyboard.instance.isMetaPressed) {
                             _verbRowTapConsumedByCmd = true;
                             _onVerbTapped(catNum, verbNum, cmdHeld: true);
@@ -3162,7 +3866,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             _verbRowTapConsumedByCmd = false;
                             return;
                           }
-                          if (!HardwareKeyboard.instance.isMetaPressed) {
+                          if (!HardwareKeyboard.instance.isMetaPressed &&
+                              !HardwareKeyboard.instance.isControlPressed) {
                             _onVerbTapped(catNum, verbNum);
                           }
                         },
@@ -3422,47 +4127,42 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
         ),
       ),
-      child: Row(
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Text('HR:',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600)),
-          const SizedBox(width: 6),
           ...types.map((type) {
             final isSelected = currentType == type;
-            return Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(3),
-                onTap: () {
-                  try {
-                    (captionState as dynamic).setHomeRunTypeFromKeyboardFire(
-                        isSelected ? null : type);
-                  } catch (_) {}
-                  setState(() {});
-                  _refreshCaptionPreviewLater();
-                },
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF4A90E2) : Colors.white,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFF4A90E2)
-                          : Colors.grey.shade300,
-                    ),
+            final label = shortHomeRunTypeLabel(type);
+            return InkWell(
+              borderRadius: BorderRadius.circular(3),
+              onTap: () {
+                try {
+                  (captionState as dynamic).setHomeRunTypeFromKeyboardFire(
+                      isSelected ? null : type);
+                } catch (_) {}
+                setState(() {});
+                _refreshCaptionPreviewLater();
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF4A90E2) : Colors.white,
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF4A90E2)
+                        : Colors.grey.shade300,
                   ),
-                  child: Text(
-                    type,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white : Colors.grey.shade800,
-                    ),
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isSelected ? Colors.white : Colors.grey.shade800,
                   ),
                 ),
               ),
@@ -3635,7 +4335,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       ),
     ];
 
-    showMenu<String>(
+    showAppContextMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         position.dx,
@@ -3732,6 +4432,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: InkWell(
                     onTapDown: (TapDownDetails d) {
                       _verbRowTapConsumedByCmd = false;
+                      if (HardwareKeyboard.instance.isControlPressed) {
+                        _verbRowTapConsumedByCmd = true;
+                        _showVerbContextMenu(
+                            context, d.globalPosition, verb, isFavorite);
+                        return;
+                      }
                       if (HardwareKeyboard.instance.isMetaPressed) {
                         _verbRowTapConsumedByCmd = true;
                         _onVerbTapped(selectedCatNum!, verbNum, cmdHeld: true);
@@ -3742,7 +4448,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         _verbRowTapConsumedByCmd = false;
                         return;
                       }
-                      if (!HardwareKeyboard.instance.isMetaPressed) {
+                      if (!HardwareKeyboard.instance.isMetaPressed &&
+                          !HardwareKeyboard.instance.isControlPressed) {
                         _onVerbTapped(selectedCatNum!, verbNum);
                       }
                     },
@@ -3879,7 +4586,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       child: GestureDetector(
         onSecondaryTapDown: widget.onFtpSettings != null
             ? (TapDownDetails details) {
-                showMenu<String>(
+                showAppContextMenu<String>(
                   context: context,
                   position: RelativeRect.fromLTRB(
                     details.globalPosition.dx,
@@ -4807,11 +5514,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             return const SizedBox.shrink();
                           final roster = _firebarStep == 1
                               ? (_firebarHv == 'H'
-                                  ? widget.homeRoster
-                                  : widget.awayRoster)
+                                  ? _homeRosterView
+                                  : _awayRosterView)
                               : (_firebarHv == 'H'
-                                  ? widget.awayRoster
-                                  : widget.homeRoster);
+                                  ? _awayRosterView
+                                  : _homeRosterView);
                           final names =
                               _playerNamesForNumbers(value.text, roster);
                           if (names.isEmpty) return const SizedBox.shrink();
@@ -4902,15 +5609,31 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           ),
                         ],
                       ),
-                      child: Text(
-                        homeName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  homeName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                              if (widget.apiSource != null) ...[
+                                const SizedBox(width: 4),
+                                _buildApiSourceBadge(widget.apiSource!),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -4941,7 +5664,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 controller: _homeBarController,
                                 focusNode: _homeBarFocus,
                                 onSubmitted: _onHomeBarSubmit,
-                                rosterForGhostNames: widget.homeRoster,
+                                rosterForGhostNames: _homeRosterView,
                               ),
                               const SizedBox(height: 4),
                               Row(
@@ -4966,20 +5689,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 3),
+                              _buildKbAddPlayerIconButton(true),
+                              const SizedBox(height: 1),
                               Expanded(
                                 child: _useSquarePlayerView
-                                    ? Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 6),
-                                        child: _buildRosterSquareGrid(
-                                            widget.homeRoster, true),
-                                      )
-                                    : ValueListenableBuilder<TextEditingValue>(
+                                    ? _buildRosterSquareGrid(
+                                        _homeRosterView, true)
+                                    : ValueListenableBuilder<
+                                        TextEditingValue>(
                                         valueListenable: _homeBarController,
                                         builder: (_, value, __) =>
                                             _buildRosterColumnContent(
-                                                widget.homeRoster, true,
+                                                _homeRosterView, true,
                                                 barText: value.text),
                                       ),
                               ),
@@ -5117,15 +5839,31 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           ),
                         ],
                       ),
-                      child: Text(
-                        awayName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade700,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  awayName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ),
+                              if (widget.apiSource != null) ...[
+                                const SizedBox(width: 4),
+                                _buildApiSourceBadge(widget.apiSource!),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                     Expanded(
@@ -5156,7 +5894,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 controller: _awayBarController,
                                 focusNode: _awayBarFocus,
                                 onSubmitted: _onAwayBarSubmit,
-                                rosterForGhostNames: widget.awayRoster,
+                                rosterForGhostNames: _awayRosterView,
                               ),
                               const SizedBox(height: 4),
                               Row(
@@ -5181,20 +5919,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 3),
+                              _buildKbAddPlayerIconButton(false),
+                              const SizedBox(height: 1),
                               Expanded(
                                 child: _useSquarePlayerView
-                                    ? Padding(
-                                        padding:
-                                            const EdgeInsets.only(bottom: 6),
-                                        child: _buildRosterSquareGrid(
-                                            widget.awayRoster, false),
-                                      )
-                                    : ValueListenableBuilder<TextEditingValue>(
+                                    ? _buildRosterSquareGrid(
+                                        _awayRosterView, false)
+                                    : ValueListenableBuilder<
+                                        TextEditingValue>(
                                         valueListenable: _awayBarController,
                                         builder: (_, value, __) =>
                                             _buildRosterColumnContent(
-                                                widget.awayRoster, false,
+                                                _awayRosterView, false,
                                                 barText: value.text),
                                       ),
                               ),
@@ -5547,6 +6284,7 @@ class KeyboardFireDialog extends StatelessWidget {
   final String? awayTeamName;
   final dynamic captionState;
   final int? bulkSaveCount;
+  final String? apiSource;
 
   const KeyboardFireDialog({
     super.key,
@@ -5556,6 +6294,7 @@ class KeyboardFireDialog extends StatelessWidget {
     this.awayTeamName,
     required this.captionState,
     this.bulkSaveCount,
+    this.apiSource,
   });
 
   @override
@@ -5567,6 +6306,7 @@ class KeyboardFireDialog extends StatelessWidget {
       awayTeamName: awayTeamName,
       captionState: captionState,
       bulkSaveCount: bulkSaveCount,
+      apiSource: apiSource,
       showDialogActions: true,
       onDone: () => Navigator.of(context).pop(),
     );

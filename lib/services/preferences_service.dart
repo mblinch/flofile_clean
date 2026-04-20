@@ -255,6 +255,7 @@ class PreferencesService {
         defaultOrder = [
           'Offense',
           'Defense',
+          'Pitching',
           'Running',
           'Reactions',
           'Non Game-Action',

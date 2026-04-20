@@ -127,4 +127,43 @@ class MlbApiService {
     }
     return fetchTeamRoster(team.id);
   }
+
+  /// Fetches key coaching/staff names for a team.
+  /// Returns keys: headCoach, pitchingCoach, firstBaseCoach, thirdBaseCoach.
+  Future<Map<String, String?>> fetchKeyStaffByTeamName(String teamName) async {
+    final team = await findTeamByName(teamName);
+    if (team == null) {
+      throw Exception('Team "$teamName" not found');
+    }
+
+    final url = Uri.https(_baseUrl, '/api/v1/teams/${team.id}/coaches');
+    final response = await http.get(url);
+    if (response.statusCode != 200) {
+      throw Exception('Coach fetch failed: ${response.statusCode}');
+    }
+
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final roster = (data['roster'] as List<dynamic>? ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .toList();
+
+    String? nameForJob(String job) {
+      final hit = roster.firstWhere(
+        (c) => (c['job']?.toString() ?? '').toLowerCase() == job.toLowerCase(),
+        orElse: () => <String, dynamic>{},
+      );
+      if (hit.isEmpty) return null;
+      final person = hit['person'] as Map<String, dynamic>?;
+      final name = person?['fullName']?.toString().trim();
+      return (name == null || name.isEmpty) ? null : name;
+    }
+
+    final manager = nameForJob('Manager');
+    return {
+      'headCoach': manager,
+      'pitchingCoach': nameForJob('Pitching Coach'),
+      'firstBaseCoach': nameForJob('First Base Coach'),
+      'thirdBaseCoach': nameForJob('Third Base Coach'),
+    };
+  }
 }

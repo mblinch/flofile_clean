@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_styled_dialogs.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io';
 
@@ -7,6 +8,8 @@ class ThumbnailPopupDialog extends StatefulWidget {
   final int currentIndex;
   final Function(int) onImageSelected;
   final VoidCallback? onEditMetadata;
+  /// Images that have had IPTC saved successfully in this session (or restored from prefs).
+  final Set<String> savedImages;
   final Set<String> uploadedImages;
   final Set<String> queuedUploads;
   final Set<String> currentlyUploading;
@@ -22,6 +25,7 @@ class ThumbnailPopupDialog extends StatefulWidget {
     required this.currentIndex,
     required this.onImageSelected,
     this.onEditMetadata,
+    this.savedImages = const {},
     required this.uploadedImages,
     required this.queuedUploads,
     required this.currentlyUploading,
@@ -81,7 +85,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
     final Offset anchor = _lastSecondaryTapPosition ??
         Offset(screenSize.width / 2, screenSize.height / 2);
 
-    showMenu(
+    showAppContextMenu(
       context: context,
       position: RelativeRect.fromLTRB(
         anchor.dx,
@@ -277,6 +281,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                 itemBuilder: (context, index) {
                   final imagePath = widget.imagePaths[index];
                   final isSelected = index == widget.currentIndex;
+                  final isSaved = widget.savedImages.contains(imagePath);
                   final isUploaded = widget.uploadedImages.contains(imagePath);
                   final isQueued = widget.queuedUploads.contains(imagePath);
                   final isUploading =
@@ -363,22 +368,27 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                               ),
                             ),
 
-                            // Upload status indicators
+                            // IPTC saved (disk icon — bottom-right)
+                            if (isSaved)
+                              Positioned(
+                                bottom: 4,
+                                right: 4,
+                                child: Icon(
+                                  Icons.save,
+                                  color: Colors.green.shade700,
+                                  size: 20,
+                                ),
+                              ),
+
+                            // FTPd / uploaded — cloud upload icon (top-right)
                             if (isUploaded)
                               Positioned(
                                 top: 4,
                                 right: 4,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.green.shade600,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: const Icon(
-                                    Icons.check,
-                                    color: Colors.white,
-                                    size: 14,
-                                  ),
+                                child: Icon(
+                                  Icons.cloud_upload,
+                                  color: Colors.blue.shade700,
+                                  size: 18,
                                 ),
                               ),
 
@@ -447,11 +457,11 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                 ),
                               ),
 
-                            // Color label indicator
+                            // Color label (inset so it does not cover save icon)
                             if (label.isNotEmpty)
                               Positioned(
                                 bottom: 4,
-                                right: 4,
+                                right: 28,
                                 child: Container(
                                   width: 16,
                                   height: 16,

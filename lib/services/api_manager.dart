@@ -6,7 +6,7 @@ import 'balldontlie_api_service.dart';
 import 'preferences_service.dart';
 
 /// Routes team and roster requests by sport. When "Use BallDontLie API (testing)" is on,
-/// Baseball and Basketball use BallDontLie; Hockey always uses official NHL API.
+/// Basketball uses BallDontLie; Baseball always uses MLB official API; Hockey always uses official NHL API.
 /// Default: Baseball = MLB API, Hockey = NHL API, Basketball = ESPN API, Soccer (MLS) = ESPN usa.1.
 class ApiManager {
   final MlbApiService _mlbService = MlbApiService();
@@ -39,7 +39,7 @@ class ApiManager {
   bool get _useBallDontLie => _useBallDontLieCache == true;
 
   String _apiDisplayName() {
-    if (_useBallDontLie && (_currentSport == 'baseball' || _currentSport == 'basketball')) {
+    if (_useBallDontLie && _currentSport == 'basketball') {
       return 'BallDontLie API (testing)';
     }
     switch (_currentSport) {
@@ -61,18 +61,6 @@ class ApiManager {
     await _ensurePrefsLoaded();
     print('API Manager: Fetching $_currentSport teams from ${_apiDisplayName()}');
     try {
-      if (_useBallDontLie && _currentSport == 'baseball') {
-        final teams = await _bdlService.fetchAllTeams();
-        return teams
-            .map((t) => TeamInfo(
-                  id: t.id,
-                  name: t.displayName,
-                  locationName: t.location,
-                  venueName: t.venue,
-                ))
-            .toList()
-          ..sort((a, b) => a.name.compareTo(b.name));
-      }
       if (_useBallDontLie && _currentSport == 'basketball') {
         final teams = await _bdlService.fetchAllNbaTeams();
         return teams
@@ -109,19 +97,6 @@ class ApiManager {
     print(
         'API Manager: Fetching $_currentSport roster for "$teamName" from ${_apiDisplayName()}');
     try {
-      if (_useBallDontLie && _currentSport == 'baseball') {
-        final team = await _bdlService.findTeamByName(teamName);
-        if (team == null) throw Exception('BallDontLie MLB team not found: "$teamName"');
-        final players = await _bdlService.fetchTeamActivePlayers(team.id);
-        return players
-            .map((p) => Player(
-                  fullName: p.fullName,
-                  firstName: p.firstName,
-                  jerseyNumber: p.jerseyNumber,
-                  displayName: p.displayName,
-                ))
-            .toList();
-      }
       if (_useBallDontLie && _currentSport == 'basketball') {
         final players = await _bdlService.fetchNbaRosterByTeamName(teamName);
         return players
@@ -157,11 +132,10 @@ class ApiManager {
 
   bool get isConnected => true;
 
-  /// Venue info — MLB and BallDontLie (MLB) can expose it; NHL/ESPN return null.
+  /// Venue info — MLB official API; NHL/ESPN/BallDontLie return null.
   Future<String?> fetchVenueForTeam(String teamName) async {
     await _ensurePrefsLoaded();
     if (_currentSport != 'baseball') return null;
-    if (_useBallDontLie) return await _bdlService.fetchVenueForTeam(teamName);
     final team = await _mlbService.findTeamByName(teamName);
     return team?.venueName;
   }
@@ -170,10 +144,32 @@ class ApiManager {
       String homeTeam, String awayTeam, DateTime gameDate) async {
     await _ensurePrefsLoaded();
     if (_currentSport != 'baseball') return null;
-    if (_useBallDontLie) {
-      return await _bdlService.fetchVenueForGame(homeTeam, awayTeam, gameDate);
-    }
     return null;
+  }
+
+  /// Fetch key staff names for a team. Keys may be null depending on sport/API.
+  /// - baseball: headCoach(manager), pitchingCoach, firstBaseCoach, thirdBaseCoach
+  /// - soccer: headCoach (best-effort from ESPN payload)
+  Future<Map<String, String?>> fetchTeamStaff(String teamName) async {
+    await _ensurePrefsLoaded();
+    switch (_currentSport) {
+      case 'baseball':
+        return await _mlbService.fetchKeyStaffByTeamName(teamName);
+      case 'soccer':
+        return {
+          'headCoach': await _mlsService.fetchHeadCoachByTeamName(teamName),
+          'pitchingCoach': null,
+          'firstBaseCoach': null,
+          'thirdBaseCoach': null,
+        };
+      default:
+        return {
+          'headCoach': null,
+          'pitchingCoach': null,
+          'firstBaseCoach': null,
+          'thirdBaseCoach': null,
+        };
+    }
   }
 
   String getConnectionStatusMessage() => 'Connected to ${_apiDisplayName()}';

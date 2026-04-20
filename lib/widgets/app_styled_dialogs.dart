@@ -92,3 +92,25 @@ Future<bool?> showAppConfirmDialog({
     },
   );
 }
+
+
+/// App-wide right-click context menu style used across panels.
+Future<T?> showAppContextMenu<T>({
+  required BuildContext context,
+  required RelativeRect position,
+  required List<PopupMenuEntry<T>> items,
+  Color? color,
+  double? elevation,
+}) {
+  return showMenu<T>(
+    context: context,
+    position: position,
+    items: items,
+    color: color ?? Colors.grey.shade50,
+    elevation: elevation ?? 3,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(4),
+      side: BorderSide(color: Colors.grey.shade300),
+    ),
+  );
+}

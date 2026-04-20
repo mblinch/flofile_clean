@@ -16,6 +16,7 @@ class ThumbnailGridWidget extends StatefulWidget {
   final double? loadingProgress; // Add loading progress parameter
   final Map<String, String>? exifTimes; // Optional precomputed EXIF times
   final Set<String> uploadedImages; // Track uploaded images
+  final Set<String> savedImages; // Track saved images
   final Set<String> queuedUploads; // Track queued uploads
   final Set<String> currentlyUploading; // Track currently uploading images
   final Map<String, int>? xmpRatings; // Optional XMP ratings (0-5)
@@ -54,6 +55,7 @@ class ThumbnailGridWidget extends StatefulWidget {
     this.loadingProgress,
     this.exifTimes,
     required this.uploadedImages,
+    required this.savedImages,
     required this.queuedUploads,
     required this.currentlyUploading,
     this.xmpRatings,
@@ -85,7 +87,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   int _lastComputedColumns = 4;
   int _lastReportedColumns = 4;
   int _lastCenterRequestId = 0;
-  String? _ftpFilterMode; // null, 'hide_ftpd', 'show_ftpd'
+  bool _hideFtpdImages = false;
+  bool _hideSavedImages = false;
   List<String> _visiblePaths = [];
   String _tagFilterMode = 'all'; // 'all', 'tagged', 'untagged'
   String? _selectedLabel; // null -> any
@@ -111,11 +114,153 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     });
   }
 
-  /// Compact label for the FTP filter bar trigger (team-picker style).
-  String _ftpFilterBarLabel() {
-    if (_ftpFilterMode == null) return 'All images';
-    if (_ftpFilterMode == 'hide_ftpd') return 'Hide FTPd';
-    return 'Show FTPd';
+  /// If the current image is hidden by active filters, move selection to a visible image.
+  void _advanceSelectionIfCurrentHidden() {
+    if (!(_hideFtpdImages || _hideSavedImages)) return;
+    if (widget.currentIndex < 0 ||
+        widget.currentIndex >= widget.imagePaths.length) {
+      return;
+    }
+    final path = widget.imagePaths[widget.currentIndex];
+    final hiddenByFtp =
+        _hideFtpdImages && widget.uploadedImages.contains(path);
+    final hiddenBySaved =
+        _hideSavedImages && widget.savedImages.contains(path);
+    if (!hiddenByFtp && !hiddenBySaved) return;
+
+    int nextIndex = widget.currentIndex + 1;
+    while (nextIndex < widget.imagePaths.length) {
+      final p = widget.imagePaths[nextIndex];
+      final hFtp = _hideFtpdImages && widget.uploadedImages.contains(p);
+      final hSav = _hideSavedImages && widget.savedImages.contains(p);
+      if (!hFtp && !hSav) break;
+      nextIndex++;
+    }
+    if (nextIndex >= widget.imagePaths.length) {
+      nextIndex = widget.currentIndex - 1;
+      while (nextIndex >= 0) {
+        final p = widget.imagePaths[nextIndex];
+        final hFtp = _hideFtpdImages && widget.uploadedImages.contains(p);
+        final hSav = _hideSavedImages && widget.savedImages.contains(p);
+        if (!hFtp && !hSav) break;
+        nextIndex--;
+      }
+    }
+    if (nextIndex >= 0 && nextIndex < widget.imagePaths.length) {
+      widget.onImageSelected(nextIndex);
+    }
+  }
+
+  /// Attached strip: `Hide:` | `FTPd` | `Saved`. Default: both off (show all);
+  /// tap **FTPd** or **Saved** to hide thumbnails with that status (segment highlights).
+  Widget _buildHideAttachedStrip() {
+    const h = 18.0;
+    const borderColor = Color(0xFFE0E0E0);
+    const fs = 8.5;
+    final labelStyle = TextStyle(
+      fontSize: fs,
+      fontWeight: FontWeight.w600,
+      color: Colors.grey.shade800,
+      height: 1.0,
+    );
+
+    Widget cell({
+      required Widget child,
+      required bool showRightBorder,
+      Color? background,
+      VoidCallback? onTap,
+    }) {
+      final inner = onTap == null
+          ? Container(
+              color: background ?? Colors.grey.shade100,
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: child,
+            )
+          : Material(
+              color: background ?? Colors.white,
+              child: InkWell(
+                onTap: onTap,
+                splashFactory: NoSplash.splashFactory,
+                child: Center(child: child),
+              ),
+            );
+      return Expanded(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: showRightBorder
+                ? const Border(
+                    right: BorderSide(color: borderColor, width: 1),
+                  )
+                : null,
+          ),
+          child: inner,
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: 148,
+      height: h,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(color: Colors.grey.shade300, width: 1),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(2),
+          child: Row(
+            children: [
+              cell(
+                showRightBorder: true,
+                background: Colors.grey.shade100,
+                onTap: null,
+                child: Text('Hide:', style: labelStyle),
+              ),
+              cell(
+                showRightBorder: true,
+                background: _hideFtpdImages
+                    ? const Color(0xFFE8F0FE)
+                    : Colors.white,
+                onTap: () {
+                  setState(() => _hideFtpdImages = !_hideFtpdImages);
+                  _advanceSelectionIfCurrentHidden();
+                  _ensureVisibleAfterLayout();
+                },
+                child: Text(
+                  'FTPd',
+                  style: labelStyle.copyWith(
+                    color: _hideFtpdImages
+                        ? const Color(0xFF0052CC)
+                        : Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              cell(
+                showRightBorder: false,
+                background: _hideSavedImages
+                    ? const Color(0xFFE8F0FE)
+                    : Colors.white,
+                onTap: () {
+                  setState(() => _hideSavedImages = !_hideSavedImages);
+                  _advanceSelectionIfCurrentHidden();
+                  _ensureVisibleAfterLayout();
+                },
+                child: Text(
+                  'Saved',
+                  style: labelStyle.copyWith(
+                    color: _hideSavedImages
+                        ? const Color(0xFF0052CC)
+                        : Colors.grey.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _handleThumbnailTap(String imagePath) {
@@ -196,16 +341,13 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   }
 
   List<String> _getVisiblePaths() {
-    // Start with FTP filter
+    // Start with image visibility filters
     Iterable<String> paths;
-    if (_ftpFilterMode == 'hide_ftpd') {
-      paths =
-          widget.imagePaths.where((p) => !widget.uploadedImages.contains(p));
-    } else if (_ftpFilterMode == 'show_ftpd') {
-      paths = widget.imagePaths.where((p) => widget.uploadedImages.contains(p));
-    } else {
-      paths = widget.imagePaths;
-    }
+    paths = widget.imagePaths.where((p) {
+      if (_hideFtpdImages && widget.uploadedImages.contains(p)) return false;
+      if (_hideSavedImages && widget.savedImages.contains(p)) return false;
+      return true;
+    });
 
     // Apply tagged/untagged filter
     paths = paths.where((p) {
@@ -562,124 +704,17 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Left — FTP filter (same chrome as team picker: Material + bordered white box)
+                  // Left — Hide: | FTPd | Saved (attached toggles; default = show all)
                   Expanded(
                     flex: 1,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         Material(
-                          elevation: 2,
+                          elevation: 0,
                           color: Colors.transparent,
-                          borderRadius: BorderRadius.circular(4),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                  color: Colors.grey.shade300, width: 1),
-                            ),
-                            child: PopupMenuButton<String>(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 0),
-                              // Do not set [constraints] on PopupMenuButton — it is applied to
-                              // the *popup menu* (showMenu), not the trigger. A small maxHeight
-                              // here was clipping the menu to ~22px so labels looked empty.
-                              onSelected: (value) {
-                                setState(() {
-                                  if (value == 'all') {
-                                    _ftpFilterMode = null;
-                                  } else if (value == 'hide') {
-                                    _ftpFilterMode = 'hide_ftpd';
-                                  } else {
-                                    _ftpFilterMode = 'show_ftpd';
-                                  }
-                                  if (_ftpFilterMode == 'hide_ftpd' &&
-                                      widget.currentIndex <
-                                          widget.imagePaths.length &&
-                                      widget.uploadedImages.contains(widget
-                                          .imagePaths[widget.currentIndex])) {
-                                    int nextIndex = widget.currentIndex + 1;
-                                    while (nextIndex <
-                                            widget.imagePaths.length &&
-                                        widget.uploadedImages.contains(
-                                            widget.imagePaths[nextIndex])) {
-                                      nextIndex++;
-                                    }
-                                    if (nextIndex >= widget.imagePaths.length) {
-                                      nextIndex = widget.currentIndex - 1;
-                                      while (nextIndex >= 0 &&
-                                          widget.uploadedImages.contains(
-                                              widget.imagePaths[nextIndex])) {
-                                        nextIndex--;
-                                      }
-                                    }
-                                    if (nextIndex >= 0 &&
-                                        nextIndex < widget.imagePaths.length) {
-                                      widget.onImageSelected(nextIndex);
-                                    }
-                                  }
-                                });
-                                _ensureVisibleAfterLayout();
-                              },
-                              itemBuilder: (context) => [
-                                PopupMenuItem<String>(
-                                  value: 'all',
-                                  child: Text(
-                                    'Show All Images',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade900,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                PopupMenuItem<String>(
-                                  value: 'hide',
-                                  child: Text(
-                                    'Hide FTPd Images',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade900,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                                PopupMenuItem<String>(
-                                  value: 'show',
-                                  child: Text(
-                                    'Show FTPd Images',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade900,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              child: SizedBox(
-                                height: 24,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      _ftpFilterBarLabel(),
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.grey.shade800,
-                                        height: 1.0,
-                                      ),
-                                    ),
-                                    Icon(Icons.arrow_drop_down,
-                                        size: 12,
-                                        color: Colors.grey.shade700),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
+                          borderRadius: BorderRadius.circular(3),
+                          child: _buildHideAttachedStrip(),
                         ),
                       ],
                     ),
@@ -872,21 +907,6 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       ),
                       child: Stack(
                         children: [
-                          // Background FTP watermark (only for uploaded images)
-                          if (widget.uploadedImages.contains(imagePath))
-                            Positioned.fill(
-                              child: Center(
-                                child: Text(
-                                  'FTP',
-                                  style: TextStyle(
-                                    fontSize: _thumbSize * 0.4,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade200,
-                                    letterSpacing: 2.0,
-                                  ),
-                                ),
-                              ),
-                            ),
                           // Color label badge (top-left)
                           Positioned(
                             top: 4,
@@ -907,7 +927,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               );
                             }),
                           ),
-                          // Selection checkmark for multi-selected images
+                          // Multi-select check (top-right)
                           if (isMultiSelected)
                             Positioned(
                               top: 4,
@@ -918,8 +938,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 decoration: BoxDecoration(
                                   color: Colors.blue,
                                   shape: BoxShape.circle,
-                                  border:
-                                      Border.all(color: Colors.white, width: 2),
+                                  border: Border.all(
+                                      color: Colors.white, width: 2),
                                 ),
                                 child: const Icon(
                                   Icons.check,
@@ -928,59 +948,76 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 ),
                               ),
                             ),
-                          // Current preview marker
-                          if (isCurrent && !isMultiSelected)
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 5, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                                child: const Text(
-                                  'CURRENT',
-                                  style: TextStyle(
-                                    fontSize: 8,
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          // Rocket with checkmark for uploaded images
-                          if (widget.uploadedImages.contains(imagePath))
+                          // Saved (IPTC written) — floppy-disk style
+                          if (widget.savedImages.contains(imagePath))
                             Positioned(
                               bottom: 4,
-                              left: 4,
+                              right: 4,
                               child: Icon(
-                                Icons.rocket_launch,
-                                size: _thumbSize * 0.09,
-                                color: Colors.blue.shade700,
+                                Icons.save,
+                                size: (_thumbSize * 0.09).clamp(11.0, 18.0),
+                                color: Colors.green.shade700,
                               ),
                             ),
-                          // Lock icon for locked images
+                          // Lock — bottom-left
                           if ((widget.lockedPaths ?? const {})
                               .contains(imagePath))
                             const Positioned(
-                              top: 4,
-                              right: 4,
+                              bottom: 4,
+                              left: 4,
                               child: Icon(Icons.lock,
                                   size: 12, color: Colors.black54),
                             ),
                           // Main content on top
                           Column(
                             children: [
-                              // Image thumbnail
+                              // Image thumbnail (+ FTP watermark over image only)
                               Expanded(
                                 child: Container(
                                   padding: const EdgeInsets.all(4),
-                                  child: Opacity(
-                                    opacity: widget.uploadedImages.contains(imagePath) ? 0.5 : 1.0,
-                                    child: _buildThumbnail(imagePath),
+                                  child: Stack(
+                                    fit: StackFit.expand,
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      Opacity(
+                                        opacity: widget.uploadedImages
+                                                .contains(imagePath)
+                                            ? 0.54
+                                            : 1.0,
+                                        child: _buildThumbnail(imagePath),
+                                      ),
+                                      if (widget.uploadedImages
+                                          .contains(imagePath))
+                                        Positioned(
+                                          left: 0,
+                                          right: 0,
+                                          top: 2,
+                                          child: Center(
+                                            child: Text(
+                                              'FTP',
+                                              style: TextStyle(
+                                                fontSize: _thumbSize * 0.42,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.grey.shade600
+                                                    .withValues(alpha: 0.72),
+                                                letterSpacing: 2.0,
+                                                shadows: const [
+                                                  Shadow(
+                                                    offset: Offset(0, 0),
+                                                    blurRadius: 3,
+                                                    color: Color(0xE6FFFFFF),
+                                                  ),
+                                                  Shadow(
+                                                    offset: Offset(0, 1),
+                                                    blurRadius: 2,
+                                                    color: Color(0x66000000),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
                               ),
@@ -1250,7 +1287,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             _buildMenuItem(
                                 'ftp_images',
                                 'FTP Images ($selectedCount)',
-                                Icons.rocket_launch,
+                                Icons.cloud_upload,
                                 imagePath,
                                 tapPosition),
                             const Divider(height: 1),
@@ -1287,10 +1324,10 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             const Divider(height: 1),
                             if (widget.uploadedImages.contains(imagePath))
                               _buildMenuItem('remove_ftp', 'Remove FTP Status',
-                                  Icons.rocket_launch, imagePath, tapPosition),
+                                  Icons.cloud_upload, imagePath, tapPosition),
                             if (!widget.uploadedImages.contains(imagePath))
                               _buildMenuItem('ftp_image', 'FTP Image',
-                                  Icons.rocket_launch, imagePath, tapPosition),
+                                  Icons.cloud_upload, imagePath, tapPosition),
                             const Divider(height: 1),
                             _buildMenuItem('open', 'Open in Finder',
                                 Icons.open_in_new, imagePath, tapPosition),
@@ -1912,6 +1949,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             Navigator.of(context).pop();
           },
           onEditMetadata: widget.onEditMetadata,
+          savedImages: widget.savedImages,
           uploadedImages: widget.uploadedImages,
           queuedUploads: widget.queuedUploads,
           currentlyUploading: widget.currentlyUploading,

@@ -94,6 +94,7 @@ final Map<String, List<String>> _defaults = {
   'Hit by Pitch': ['hbp', 'hit by pitch', 'plunked'],
   // Baseball — Defense
   'Pitching': ['pitch', 'pitcher', 'pitching', 'mound'],
+  'Mound Visit': ['mound visit', 'mound', 'visit', 'coach visit'],
   'Catches': ['catch', 'catches', 'catching', 'receiver'],
   'Throws': ['throw', 'throws', 'throwing', 'arm'],
   'Tags': ['tag', 'tags', 'tagging', 'out'],

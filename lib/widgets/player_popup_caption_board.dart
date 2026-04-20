@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'app_styled_dialogs.dart';
 import '../utils/default_verb_keywords.dart';
 import 'package:flutter/services.dart';
 import '../services/mlb_api_service.dart';
@@ -2504,7 +2505,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       BuildContext context, Offset position, VerbOption verb) {
     final isFavorite = _favoriteVerbs.contains(verb.label);
 
-    showMenu<String>(
+    showAppContextMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         position.dx,

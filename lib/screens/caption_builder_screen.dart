@@ -214,6 +214,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Track uploaded images
   final Set<String> _uploadedImages = {};
+  // Track images successfully saved via IPTC save actions (also persisted per folder)
+  final Set<String> _savedImages = {};
   // Track upload progress for thumbnails
   final Map<String, double> _uploadProgress = {};
   // Track queued uploads
@@ -800,6 +802,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         });
       }
 
+      // Brief pause before the second request to avoid rate-limiting (e.g. BallDontLie 429)
+      if (selectedHomeTeam != null && selectedAwayTeam != null) {
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+
       // Load away team players
       if (selectedAwayTeam != null) {
         print('Loading away team roster for: $selectedAwayTeam');
@@ -852,6 +859,44 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     print('Images loaded: ${imagePaths.length} - going straight to app');
   }
 
+  String _savedImagesPrefsKey(String folderPath) =>
+      'caption_saved_paths_v1_${p.normalize(folderPath).hashCode}';
+
+  Future<void> _persistSavedImages() async {
+    if (_selectedFolderPath == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(
+        _savedImagesPrefsKey(_selectedFolderPath!),
+        _savedImages.toList(),
+      );
+    } catch (e) {
+      print('Persist saved images: $e');
+    }
+  }
+
+  Future<void> _restoreSavedImagesForCurrentFolder() async {
+    if (_selectedFolderPath == null || !mounted) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final stored =
+          prefs.getStringList(_savedImagesPrefsKey(_selectedFolderPath!));
+      if (!mounted) return;
+      if (stored == null || stored.isEmpty) {
+        setState(() => _savedImages.clear());
+        return;
+      }
+      final valid = stored.where((s) => imagePaths.contains(s)).toSet();
+      setState(() {
+        _savedImages
+          ..clear()
+          ..addAll(valid);
+      });
+    } catch (e) {
+      print('Restore saved images: $e');
+    }
+  }
+
   Future<void> _loadImagesFromFolder(String folderPath) async {
     try {
       // Preserve currently selected image path (if any) to avoid jumps on reloads
@@ -902,6 +947,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Set images after sorting to ensure the first image is chronologically first
       setState(() {
         imagePaths = List.from(imageFiles);
+        _savedImages.clear();
         if (previouslySelectedPath != null) {
           final idx = imageFiles.indexOf(previouslySelectedPath);
           currentIndex = idx >= 0 ? idx : 0;
@@ -909,6 +955,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           currentIndex = 0;
         }
       });
+
+      await _restoreSavedImagesForCurrentFolder();
 
       // Clean up any temporary files that might have been loaded
       _removeTemporaryFiles();
@@ -1536,14 +1584,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // One exiftool run per file so only [targets] are written (burst “skip” cannot pick up strays).
       print('Saving caption to ${targets.length} images (one process per file)...');
       int ok = 0;
+      final succeeded = <String>[];
       for (final target in targets) {
         final args = [...tagAndFlags, target];
         final proc = await ExiftoolHelper.run(args);
         if (proc.exitCode == 0) {
           ok++;
+          succeeded.add(target);
         } else {
           print('Exiftool error for $target: ${proc.stderrText}');
         }
+      }
+      if (succeeded.isNotEmpty && mounted) {
+        setState(() => _savedImages.addAll(succeeded));
+        unawaited(_persistSavedImages());
       }
 
       if (mounted) {
@@ -1936,6 +1990,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
         if (proc.exitCode == 0) {
           print('IPTC metadata saved successfully');
+          if (mounted) {
+            setState(() => _savedImages.add(imagePath));
+            unawaited(_persistSavedImages());
+          }
 
           // Debug: Verify caption was actually written
           final verifyProc =
@@ -2099,6 +2157,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         final proc = await ExiftoolHelper.run(args);
         if (proc.exitCode == 0) {
           print('DEBUG: Background IPTC metadata saved successfully');
+          if (mounted) {
+            setState(() => _savedImages.add(imagePath));
+            unawaited(_persistSavedImages());
+          }
         } else {
           print('DEBUG: Background exiftool error: ${proc.stderrText}');
         }
@@ -2398,6 +2460,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         awayTeamName: selectedAwayTeam,
         captionState: state,
         bulkSaveCount: _bulkSaveCount,
+        apiSource: _apiManager.currentApi,
       ),
     );
   }
@@ -2575,6 +2638,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       // Remove from uploaded images set
       _uploadedImages.remove(imagePath);
+      // Remove from saved images set
+      _savedImages.remove(imagePath);
 
       // Remove from upload progress
       _uploadProgress.remove(imagePath);
@@ -2600,6 +2665,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         _loadMetadata();
       }
     });
+    unawaited(_persistSavedImages());
   }
 
   // Keyboard-fire-specific copy: copies current UI caption + personality (not stale file metadata)
@@ -3597,6 +3663,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           _uploadedImages.remove(oldPath);
           _uploadedImages.add(newPath);
         }
+        // Update saved images set if it was there
+        if (_savedImages.contains(oldPath)) {
+          _savedImages.remove(oldPath);
+          _savedImages.add(newPath);
+        }
 
         // Update upload progress if it was there
         if (_uploadProgress.containsKey(oldPath)) {
@@ -3656,6 +3727,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       }
     });
+    unawaited(_persistSavedImages());
   }
 
   @override
@@ -4137,6 +4209,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           homeTeamName: selectedHomeTeam,
           awayTeamName: selectedAwayTeam,
           captionState: cs,
+          apiSource: _apiManager.currentApi,
           showDialogActions: false,
           currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
           totalImages: imagePaths.length,
@@ -4266,6 +4339,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     onImageDeleted: _onImageDeleted,
                     onImageRenamed: _onImageRenamed,
                     uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                     queuedUploads: _queuedUploads,
                     currentlyUploading: _currentlyUploading,
                     uploadProgress: _uploadProgress,
@@ -4286,6 +4360,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     currentIndex: currentIndex,
                     onImageSelected: _onImageSelected,
                     uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                     queuedUploads: _queuedUploads,
                     currentlyUploading: _currentlyUploading,
                     uploadProgress: _uploadProgress,
@@ -4530,6 +4605,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onImageDeleted: _onImageDeleted,
                   onImageRenamed: _onImageRenamed,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -4550,6 +4626,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -4720,6 +4797,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         onImageDeleted: _onImageDeleted,
                         onImageRenamed: _onImageRenamed,
                         uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                         queuedUploads: _queuedUploads,
                         currentlyUploading: _currentlyUploading,
                         uploadProgress: _uploadProgress,
@@ -4751,6 +4829,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -4847,6 +4926,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         onImageDeleted: _onImageDeleted,
                         onImageRenamed: _onImageRenamed,
                         uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                         queuedUploads: _queuedUploads,
                         currentlyUploading: _currentlyUploading,
                         uploadProgress: _uploadProgress,
@@ -4878,6 +4958,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -5047,6 +5128,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onImageDeleted: _onImageDeleted,
                   onImageRenamed: _onImageRenamed,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -5067,6 +5149,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -5284,6 +5367,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onImageDeleted: _onImageDeleted,
                   onImageRenamed: _onImageRenamed,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -5311,6 +5395,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -5509,6 +5594,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   onImageDeleted: _onImageDeleted,
                   onImageRenamed: _onImageRenamed,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -5529,6 +5615,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                   currentIndex: currentIndex,
                   onImageSelected: _onImageSelected,
                   uploadedImages: _uploadedImages,
+                    savedImages: _savedImages,
                   queuedUploads: _queuedUploads,
                   currentlyUploading: _currentlyUploading,
                   uploadProgress: _uploadProgress,
@@ -5582,8 +5669,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           onNextImage: () {},
                           onPreviousImage: () {},
                           onReset: _handleReset,
-                          preloadedHomeRoster: _cachedHomeRoster,
-                          preloadedAwayRoster: _cachedAwayRoster,
+                          preloadedHomeRoster: _cachedHomeRoster.isNotEmpty
+                              ? _cachedHomeRoster
+                              : null,
+                          preloadedAwayRoster: _cachedAwayRoster.isNotEmpty
+                              ? _cachedAwayRoster
+                              : null,
                           hidePlayerPicker: true,
                           onSaveIptc: _saveIptcMetadata,
                           bulkSaveCount: _bulkSaveCount,
@@ -5600,6 +5691,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         homeTeamName: selectedHomeTeam,
                         awayTeamName: selectedAwayTeam,
                         captionState: cs,
+                        apiSource: _apiManager.currentApi,
                         showDialogActions: false,
                         currentIndex:
                             imagePaths.isNotEmpty ? currentIndex : null,
@@ -5717,8 +5809,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                             currentIndex = 0;
                           });
                         },
-                        preloadedHomeRoster: _cachedHomeRoster,
-                        preloadedAwayRoster: _cachedAwayRoster,
+                        preloadedHomeRoster: _cachedHomeRoster.isNotEmpty
+                            ? _cachedHomeRoster
+                            : null,
+                        preloadedAwayRoster: _cachedAwayRoster.isNotEmpty
+                            ? _cachedAwayRoster
+                            : null,
                         hidePlayerPicker:
                             true, // Hide old player picker for this layout
                         onSaveIptc: _saveIptcMetadata,

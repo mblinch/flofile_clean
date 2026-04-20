@@ -25,11 +25,12 @@ class BalldontliePlayer {
       jerseyNumber != null ? '$fullName #$jerseyNumber' : fullName;
 
   factory BalldontliePlayer.fromJson(Map<String, dynamic> json) {
+    final jersey = json['jersey'] ?? json['jersey_number'];
     return BalldontliePlayer(
       id: json['id'].toString(),
       firstName: json['first_name'] as String,
       lastName: json['last_name'] as String,
-      jerseyNumber: json['jersey']?.toString(),
+      jerseyNumber: jersey?.toString(),
       position: json['position'] as String?,
       teamName: json['team']?['name'] as String?,
       teamId: json['team']?['id']?.toString(),
@@ -63,18 +64,29 @@ class BalldontlieTeam {
   });
 
   factory BalldontlieTeam.fromJson(Map<String, dynamic> json) {
-    return BalldontlieTeam(
-      id: json['id'].toString(),
-      slug: json['slug'] as String,
-      abbreviation: json['abbreviation'] as String,
-      displayName: json['display_name'] as String,
-      shortDisplayName: json['short_display_name'] as String,
-      name: json['name'] as String,
-      location: json['location'] as String,
-      league: json['league'] as String,
-      division: json['division'] as String,
-      venue: json['venue'] as String?,
-    );
+    // MLB (`/mlb/v1/teams`): display_name, slug, location, league, …
+    // NBA (`/nba/v1/teams`): full_name, city, name, abbreviation, conference, …
+    final displayNameField = json['display_name'] ?? json['full_name'];
+    if (displayNameField != null) {
+      final abbr = (json['abbreviation'] as String?) ?? '';
+      final slug = (json['slug'] as String?) ??
+          (abbr.isNotEmpty ? abbr.toLowerCase() : json['id'].toString());
+      return BalldontlieTeam(
+        id: json['id'].toString(),
+        slug: slug,
+        abbreviation: abbr,
+        displayName: displayNameField as String,
+        shortDisplayName: (json['short_display_name'] ?? json['name'])
+            as String,
+        name: json['name'] as String,
+        location: (json['location'] ?? json['city']) as String,
+        league: (json['league'] ?? json['conference'] ?? '') as String,
+        division: (json['division'] as String?) ?? '',
+        venue: json['venue'] as String?,
+      );
+    }
+    throw FormatException(
+        'BalldontlieTeam.fromJson: missing display_name/full_name: $json');
   }
 }
 
@@ -115,7 +127,17 @@ class BalldontlieApiService {
   /// Fetches active players for a specific NBA team ID
   Future<List<BalldontliePlayer>> fetchNbaTeamActivePlayers(
       String teamId) async {
-    return _fetchTeamPlayers('/nba/v1/players/active', teamId);
+    // `/players/active` often returns 401 or an empty list on some plans; the
+    // roster lives on `/nba/v1/players` with cursor pagination.
+    try {
+      final active =
+          await _fetchTeamPlayers('/nba/v1/players/active', teamId);
+      if (active.isNotEmpty) return active;
+    } catch (e) {
+      print(
+          'NBA /players/active failed for team $teamId, using /nba/v1/players: $e');
+    }
+    return _fetchNbaTeamPlayersPaged(teamId);
   }
 
   /// Finds an NBA team by name and returns its active roster.
@@ -175,10 +197,63 @@ class BalldontlieApiService {
     }
   }
 
+  /// NBA `/nba/v1/players` uses cursor pagination; accumulate all pages.
+  Future<List<BalldontliePlayer>> _fetchNbaTeamPlayersPaged(String teamId) async {
+    final all = <BalldontliePlayer>[];
+    String? cursor;
+    const maxPages = 50;
+    for (var page = 0; page < maxPages; page++) {
+      final query = <String, String>{
+        'team_ids[]': teamId,
+        'per_page': '100',
+      };
+      if (cursor != null && cursor.isNotEmpty) {
+        query['cursor'] = cursor;
+      }
+      final url = Uri.https(_baseUrl, '/nba/v1/players', query);
+      http.Response response = await http.get(
+        url,
+        headers: {'Authorization': _apiKey},
+      ).timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 429 && page < maxPages - 1) {
+        await Future<void>.delayed(Duration(milliseconds: 400 + page * 200));
+        response = await http.get(
+          url,
+          headers: {'Authorization': _apiKey},
+        ).timeout(const Duration(seconds: 20));
+      }
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'NBA team players lookup failed: ${response.statusCode}');
+      }
+
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final playersData = data['data'] as List<dynamic>? ?? const [];
+      for (final raw in playersData) {
+        all.add(BalldontliePlayer.fromJson(raw as Map<String, dynamic>));
+      }
+
+      final meta = data['meta'] as Map<String, dynamic>?;
+      final next = meta?['next_cursor'];
+      if (next == null) break;
+      cursor = next.toString();
+    }
+    return all;
+  }
+
   Future<List<BalldontliePlayer>> _fetchTeamPlayers(
-      String path, String teamId) async {
+    String path,
+    String teamId, {
+    String? perPage,
+  }) async {
     try {
-      final url = Uri.https(_baseUrl, path, {'team_ids[]': teamId});
+      final query = <String, String>{'team_ids[]': teamId};
+      if (perPage != null && perPage.isNotEmpty) {
+        query['per_page'] = perPage;
+      }
+      final url = Uri.https(_baseUrl, path, query);
       final response = await http.get(
         url,
         headers: {'Authorization': _apiKey},
