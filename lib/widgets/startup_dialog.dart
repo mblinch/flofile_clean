@@ -395,6 +395,39 @@ class _StartupDialogState extends State<StartupDialog> {
             'Utah Jazz',
             'Washington Wizards'
           ];
+        } else if (sport == 'soccer') {
+          availableTeams = [
+            'Atlanta United FC',
+            'Austin FC',
+            'CF Montréal',
+            'Charlotte FC',
+            'Chicago Fire FC',
+            'Colorado Rapids',
+            'Columbus Crew',
+            'D.C. United',
+            'FC Cincinnati',
+            'FC Dallas',
+            'Houston Dynamo FC',
+            'Inter Miami CF',
+            'LA Galaxy',
+            'LAFC',
+            'Minnesota United FC',
+            'Nashville SC',
+            'New England Revolution',
+            'New York City FC',
+            'Orlando City SC',
+            'Philadelphia Union',
+            'Portland Timbers',
+            'Real Salt Lake',
+            'Red Bull New York',
+            'San Diego FC',
+            'San Jose Earthquakes',
+            'Seattle Sounders FC',
+            'Sporting Kansas City',
+            'St. Louis CITY SC',
+            'Toronto FC',
+            'Vancouver Whitecaps',
+          ];
         } else {
           // Default to MLB teams
           availableTeams = [

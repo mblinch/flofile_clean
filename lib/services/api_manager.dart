@@ -1,16 +1,18 @@
 import 'mlb_api_service.dart'; // TeamInfo, Player
 import 'nhl_api_service.dart';
 import 'nba_api_service.dart';
+import 'mls_api_service.dart';
 import 'balldontlie_api_service.dart';
 import 'preferences_service.dart';
 
 /// Routes team and roster requests by sport. When "Use BallDontLie API (testing)" is on,
 /// Baseball and Basketball use BallDontLie; Hockey always uses official NHL API.
-/// Default: Baseball = MLB API, Hockey = NHL API, Basketball = ESPN API.
+/// Default: Baseball = MLB API, Hockey = NHL API, Basketball = ESPN API, Soccer (MLS) = ESPN usa.1.
 class ApiManager {
   final MlbApiService _mlbService = MlbApiService();
   final NhlApiService _nhlService = NhlApiService();
   final NbaApiService _nbaService = NbaApiService();
+  final MlsApiService _mlsService = MlsApiService();
   final BalldontlieApiService _bdlService = BalldontlieApiService();
 
   String _currentSport = 'baseball';
@@ -47,6 +49,8 @@ class ApiManager {
         return 'NHL API';
       case 'basketball':
         return 'ESPN API';
+      case 'soccer':
+        return 'MLS (ESPN)';
       default:
         return 'ESPN API';
     }
@@ -88,6 +92,8 @@ class ApiManager {
           return await _nhlService.fetchAllTeams();
         case 'basketball':
           return await _nbaService.fetchAllTeams();
+        case 'soccer':
+          return await _mlsService.fetchAllTeams();
         default:
           return await _nbaService.fetchAllTeams();
       }
@@ -136,6 +142,8 @@ class ApiManager {
           return await _nhlService.fetchTeamRoster(teamName);
         case 'basketball':
           return await _nbaService.fetchTeamRoster(teamName);
+        case 'soccer':
+          return await _mlsService.fetchTeamRoster(teamName);
         default:
           return await _nbaService.fetchTeamRoster(teamName);
       }

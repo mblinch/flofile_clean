@@ -154,6 +154,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   // Pinned verb: Cmd+click to pin; auto-applies to every subsequent image
   int? _pinnedVerbCategory;
   int? _pinnedVerbIndex;
+  String? _pinnedCustomVerb;
+  String? _lastCustomVerb;
 
   /// Set in Reset Caption [InkWell.onTapDown] so the confirm dialog can anchor near the tap.
   Offset? _resetCaptionTapAnchor;
@@ -576,6 +578,43 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   final GlobalKey _verbColumnKey = GlobalKey();
 
+  void _applyCustomVerb(String rawText, {bool pin = false}) {
+    final text = rawText.trim();
+    _customVerbController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    widget.captionState?.updateCustomVerbFromPopup(text);
+    setState(() {
+      if (text.isNotEmpty) {
+        _lastCustomVerb = text;
+        _pickedVerbCategory = null;
+        _pickedVerbIndex = null;
+      }
+      if (pin) {
+        _pinnedCustomVerb = text.isEmpty ? null : text;
+        _pinnedVerbCategory = null;
+        _pinnedVerbIndex = null;
+      }
+    });
+    _refreshCaptionPreviewLater();
+  }
+
+  /// List-verb selection overrides custom text: clear the field and any custom pin.
+  /// The next [selectVerbByCategoryAndIndexFromKeyboardFire] clears the popup custom phrase; do not call
+  /// `updateCustomVerbFromPopup('')` here first — that method awaits prefs and could clear the verb after selection.
+  void _discardCustomVerbFieldForListSelection() {
+    final hasField = _customVerbController.text.trim().isNotEmpty;
+    final hadPinnedCustom = _pinnedCustomVerb != null;
+    if (!hasField && !hadPinnedCustom) return;
+    if (hasField) {
+      _customVerbController.clear();
+    }
+    if (hadPinnedCustom) {
+      setState(() => _pinnedCustomVerb = null);
+    }
+  }
+
   void _onVerbTapped(int selectedCatNum, int verbNum, {bool cmdHeld = false}) {
     if (cmdHeld) {
       // Cmd+click: toggle pin on this verb
@@ -588,12 +627,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         } else {
           _pinnedVerbCategory = selectedCatNum;
           _pinnedVerbIndex = verbNum;
+          _pinnedCustomVerb = null;
           // Also select it immediately
           _pickedVerbCategory = selectedCatNum;
           _pickedVerbIndex = verbNum;
         }
       });
       if (!alreadyPinned) {
+        _discardCustomVerbFieldForListSelection();
         widget.captionState?.selectVerbByCategoryAndIndexFromKeyboardFire(
             selectedCatNum, verbNum, forceSelect: true);
         widget.captionState?.updateCaptionFromKeyboardFire();
@@ -601,6 +642,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       }
       return;
     }
+    _discardCustomVerbFieldForListSelection();
     widget.captionState
         ?.selectVerbByCategoryAndIndexFromKeyboardFire(selectedCatNum, verbNum);
     widget.captionState?.updateCaptionFromKeyboardFire();
@@ -615,9 +657,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   /// Pin a verb by category+index (from context menu).
   void _setPinnedVerb(int catNum, int verbNum) {
+    _discardCustomVerbFieldForListSelection();
     setState(() {
       _pinnedVerbCategory = catNum;
       _pinnedVerbIndex = verbNum;
+      _pinnedCustomVerb = null;
       _pickedVerbCategory = catNum;
       _pickedVerbIndex = verbNum;
     });
@@ -632,6 +676,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     setState(() {
       _pinnedVerbCategory = null;
       _pinnedVerbIndex = null;
+      _pinnedCustomVerb = null;
     });
   }
 
@@ -783,7 +828,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         _pickedVerbIndex = _pinnedVerbIndex;
         widget.captionState
             ?.setPendingPinnedVerb(_pinnedVerbCategory!, _pinnedVerbIndex!);
-        if (mounted) setState(() {});
       } else {
         _pickedVerbCategory = null;
         _pickedVerbIndex = null;
@@ -797,8 +841,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _firebarCategoryValue = '';
       _firebarVerbValue = '';
       _firebarController.clear();
-      _customVerbController.clear();
-      widget.captionState?.updateCustomVerbFromPopup('');
+
+      // Custom verb behavior on image change:
+      // - pinned custom: keep applying it
+      // - otherwise clear custom verb
+      final pinnedCustom = _pinnedCustomVerb?.trim() ?? '';
+      if (_pinnedVerbCategory == null &&
+          _pinnedVerbIndex == null &&
+          pinnedCustom.isNotEmpty) {
+        _applyCustomVerb(pinnedCustom);
+      } else {
+        _customVerbController.clear();
+        widget.captionState?.updateCustomVerbFromPopup('');
+      }
       if (mounted) setState(() {});
     }
   }
@@ -1141,6 +1196,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       verbNum = text == '0' ? 10 : (int.tryParse(text) ?? 0);
       if (verbNum < 1) return;
     }
+    _discardCustomVerbFieldForListSelection();
     widget.captionState
         ?.selectVerbByCategoryAndIndexFromKeyboardFire(catNum, verbNum);
     widget.captionState?.updateCaptionFromKeyboardFire();
@@ -2651,8 +2707,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 itemBuilder: (context, flatIndex) {
           // Custom verb input — last item in the list
           if (flatIndex == customVerbIndex) {
+            final customVerbPinned = _pinnedCustomVerb != null;
             return Padding(
-              padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+              padding: const EdgeInsets.fromLTRB(6, 8, 6, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -2662,51 +2719,178 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     height: 1,
                     color: Colors.grey.shade300,
                   ),
-                  const SizedBox(height: 6),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 1),
-                    child: Text(
-                      'Custom Verb',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
-                      ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Custom Verb',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.grey.shade600,
                     ),
                   ),
+                  const SizedBox(height: 8),
                   TextField(
                     controller: _customVerbController,
-                    cursorHeight: 14,
-                    cursorColor: Colors.black87,
-                    style: const TextStyle(fontSize: 12),
+                    readOnly: customVerbPinned,
+                    cursorHeight: 13,
+                    cursorColor:
+                        customVerbPinned ? Colors.transparent : Colors.black87,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.25,
+                      color: customVerbPinned
+                          ? Colors.grey.shade600
+                          : Colors.black87,
+                    ),
                     decoration: InputDecoration(
                       hintText: '',
                       isDense: true,
+                      filled: customVerbPinned,
+                      fillColor: customVerbPinned
+                          ? Colors.grey.shade100
+                          : null,
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 3),
+                          horizontal: 7, vertical: 7),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(3),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(
+                          color: customVerbPinned
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade300,
+                        ),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(3),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(
+                          color: customVerbPinned
+                              ? Colors.grey.shade400
+                              : Colors.grey.shade300,
+                        ),
                       ),
-                      focusedBorder: const OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(3)),
-                        borderSide: BorderSide(color: Colors.black87, width: 1),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: const BorderRadius.all(Radius.circular(3)),
+                        borderSide: BorderSide(
+                          color: customVerbPinned
+                              ? Colors.grey.shade400
+                              : Colors.black87,
+                          width: 1,
+                        ),
                       ),
                     ),
                     onChanged: (value) {
-                      widget.captionState
-                          ?.updateCustomVerbFromPopup(value.trim());
-                      if (value.trim().isNotEmpty) {
-                        setState(() {
+                      final t = value.trim();
+                      widget.captionState?.updateCustomVerbFromPopup(t);
+                      setState(() {
+                        if (t.isNotEmpty) {
+                          _lastCustomVerb = t;
                           _pickedVerbCategory = null;
                           _pickedVerbIndex = null;
-                        });
-                      }
+                          if (_pinnedCustomVerb != null) _pinnedCustomVerb = t;
+                        } else if (_pinnedCustomVerb != null) {
+                          _pinnedCustomVerb = null;
+                        }
+                      });
                     },
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: (_lastCustomVerb == null ||
+                                  _lastCustomVerb!.trim().isEmpty)
+                              ? null
+                              : () {
+                                  _applyCustomVerb(_lastCustomVerb!);
+                                },
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            alignment: Alignment.centerLeft,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.history,
+                                size: 12,
+                                color: (_lastCustomVerb == null ||
+                                        _lastCustomVerb!.trim().isEmpty)
+                                    ? Colors.grey.shade400
+                                    : Theme.of(context).colorScheme.primary,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Use last custom verb',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  height: 1.0,
+                                  color: (_lastCustomVerb == null ||
+                                          _lastCustomVerb!.trim().isEmpty)
+                                      ? Colors.grey.shade500
+                                      : Theme.of(context).colorScheme.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      TextButton(
+                        onPressed: () {
+                          final t = _customVerbController.text.trim();
+                          if (t.isEmpty && _pinnedCustomVerb == null) return;
+                          setState(() {
+                            if (_pinnedCustomVerb != null) {
+                              _pinnedCustomVerb = null;
+                            } else {
+                              _pinnedCustomVerb = t;
+                              _lastCustomVerb = t;
+                              _pinnedVerbCategory = null;
+                              _pinnedVerbIndex = null;
+                            }
+                          });
+                        },
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 8),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          alignment: Alignment.centerRight,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _pinnedCustomVerb != null
+                                  ? Icons.push_pin
+                                  : Icons.push_pin_outlined,
+                              size: 12,
+                              color: _pinnedCustomVerb != null
+                                  ? const Color(0xFFF59E0B)
+                                  : Colors.grey.shade600,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              _pinnedCustomVerb != null
+                                  ? 'Unpin custom'
+                                  : 'Pin custom',
+                              style: TextStyle(
+                                fontSize: 11,
+                                height: 1.0,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -4057,13 +4241,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final anchor = _resetCaptionTapAnchor;
     _resetCaptionTapAnchor = null;
 
-    final pinned =
+    final pinnedClassic =
         _pinnedVerbCategory != null && _pinnedVerbIndex != null;
-    if (pinned) {
-      final verbLabel = _verbLabelForCategoryAndVerb(
-            _pinnedVerbCategory!, _pinnedVerbIndex!,
-          ) ??
-          'verb';
+    final pinnedCustom = (_pinnedCustomVerb?.trim().isNotEmpty ?? false);
+    if (pinnedClassic || pinnedCustom) {
+      final verbLabel = pinnedClassic
+          ? (_verbLabelForCategoryAndVerb(
+                _pinnedVerbCategory!, _pinnedVerbIndex!,
+              ) ??
+              'verb')
+          : (_pinnedCustomVerb!.trim());
       final a = anchor ??
           Offset(
             MediaQuery.of(context).size.width / 2,
@@ -4094,6 +4281,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _lastUsedVerbLabel = null;
       _pinnedVerbCategory = null;
       _pinnedVerbIndex = null;
+      _pinnedCustomVerb = null;
     });
     _firebarController.clear();
     _customVerbController.clear();
@@ -4140,6 +4328,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     })();
     final isBasketball = sport == 'basketball';
     final isBaseball = sport == 'baseball';
+    final isSoccer = sport == 'soccer';
     final periodLabels = isBasketball
         ? (_showPlayoffOvertimes
             ? ['Pre-Game', '2OT', '3OT', '4OT', '5OT', 'Post Game']
@@ -4268,8 +4457,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       );
     }
 
-    final String headerLabel =
-        isBasketball ? 'Quarter' : (isBaseball ? 'Inning' : 'Period');
+    final String headerLabel = isBasketball
+        ? 'Quarter'
+        : (isBaseball ? 'Inning' : (isSoccer ? 'Half' : 'Period'));
 
     if (isBaseball) {
       final page = _baseballInningPage.clamp(0, 2);
@@ -4333,6 +4523,56 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 })
                             : null,
                       ),
+                      periodButton('Post Game'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (isSoccer) {
+      const soccerLabels = ['Pre-Game', '1H', '2H', 'ET', 'Pens'];
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Container(
+          decoration: BoxDecoration(
+            color: _panelBackgroundLight,
+            borderRadius: BorderRadius.zero,
+            border: Border.all(color: Colors.grey.shade300, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                headerLabel,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      ...soccerLabels.map(periodButton),
+                      const SizedBox(width: 3),
                       periodButton('Post Game'),
                     ],
                   ),

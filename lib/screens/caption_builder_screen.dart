@@ -5210,7 +5210,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               gameDate: _getPhotoDate(),
               period: _selectedSport?.toLowerCase() == 'baseball'
                   ? 'the first inning'
-                  : 'the first period',
+                  : (_selectedSport?.toLowerCase() == 'soccer'
+                      ? 'the first half'
+                      : 'the first period'),
               metadata: currentMetadata,
               onCaptionGenerated: (caption) {
                 // Update caption in metadata
@@ -5774,7 +5776,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         gameDate: _getPhotoDate(),
                         period: _selectedSport?.toLowerCase() == 'baseball'
                             ? 'the first inning'
-                            : 'the first period',
+                            : (_selectedSport?.toLowerCase() == 'soccer'
+                                ? 'the first half'
+                                : 'the first period'),
                         metadata: currentMetadata,
                         onCaptionGenerated:
                             (Player player, String verb, bool isHome) {

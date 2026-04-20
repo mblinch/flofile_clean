@@ -75,8 +75,8 @@ class SportSelectionDialog extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: 480,
-            constraints: const BoxConstraints(maxHeight: 340),
+            width: 520,
+            constraints: const BoxConstraints(maxHeight: 420),
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             color: Colors.white,
             child: Column(
@@ -111,9 +111,11 @@ class SportSelectionDialog extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
 
-                // Sport cards
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                // Sport cards (MLS uses ESPN usa.1 in app; same pattern as other ESPN sports)
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.center,
                   children: [
                     _buildSportCard(
                       context,
@@ -121,19 +123,23 @@ class SportSelectionDialog extends StatelessWidget {
                       Icons.sports_baseball,
                       const Color(0xFF0052CC),
                     ),
-                    const SizedBox(width: 10),
                     _buildSportCard(
                       context,
                       'Hockey',
                       Icons.sports_hockey,
                       const Color(0xFFD32F2F),
                     ),
-                    const SizedBox(width: 10),
                     _buildSportCard(
                       context,
                       'Basketball',
                       Icons.sports_basketball,
                       const Color(0xFFFF6F00),
+                    ),
+                    _buildSportCard(
+                      context,
+                      'Soccer',
+                      Icons.sports_soccer,
+                      const Color(0xFF1B5E20),
                     ),
                   ],
                 ),

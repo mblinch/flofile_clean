@@ -696,6 +696,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'Non Game-Action',
           'Favorites',
         ];
+      case 'soccer':
+        return [
+          'Offense',
+          'Defense',
+          'Goalkeeper',
+          'Set Pieces',
+          'Non Game-Action',
+          'Reactions',
+          'Favorites',
+        ];
       case 'baseball':
       default:
         return [
@@ -805,6 +815,71 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     ],
   };
 
+  // Soccer (MLS) verb categories — tuned for match & sideline captions
+  final Map<String, List<String>> soccerVerbCategories = {
+    'Offense': [
+      'Dribbles',
+      'Shoots',
+      'Crosses',
+      'Passes',
+      'Chips',
+      'Volleys',
+      'Headers On Goal',
+      'Takes On Defender',
+    ],
+    'Defense': [
+      'Tackles',
+      'Blocks Shot',
+      'Clears',
+      'Intercepts',
+      'Marks',
+      'Headers Away',
+      '',
+      '',
+    ],
+    'Goalkeeper': [
+      'Saves',
+      'Punches',
+      'Catches Cross',
+      'Distribution',
+      'Comes Off Line',
+      'Smothers',
+      '',
+      '',
+    ],
+    'Set Pieces': [
+      'Corner Kick',
+      'Free Kick',
+      'Penalty Kick',
+      'Throw-In',
+      'Wall Defense',
+      '',
+      '',
+      '',
+    ],
+    'Non Game-Action': [
+      'Looks On',
+      'Warm Ups',
+      'Walkout',
+      'National Anthem',
+      'Stretching',
+      'Bench',
+      'Post Game Win',
+      'Post Game Loss',
+      'Dejection',
+    ],
+    'Reactions': [
+      'Celebrates',
+      'Celebrates a Goal',
+      'Dejection',
+      'Frustration',
+      'Post Game Win',
+      'Post Game Loss',
+      '',
+      '',
+    ],
+  };
+
   // Hockey verb categories (aligned with classic verb list / player popup)
   final Map<String, List<String>> hockeyVerbCategories = {
     'Offense': [
@@ -861,6 +936,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'basketball':
         src = basketballVerbCategories;
         break;
+      case 'soccer':
+        src = soccerVerbCategories;
+        break;
       case 'baseball':
       default:
         src = baseballVerbCategories;
@@ -892,6 +970,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         break;
       case 'basketball':
         base = basketballVerbCategories;
+        break;
+      case 'soccer':
+        base = soccerVerbCategories;
         break;
       case 'baseball':
       default:
@@ -8763,9 +8844,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final order = effectiveCategoryOrder;
     if (category1Based < 1 || category1Based > order.length) return;
     final categoryName = order[category1Based - 1];
+    // Must match [keyboardFireVerbList] row order (saved verb order), not [verbCategories].
     final List<String> verbList = categoryName == 'Favorites'
         ? _favoriteVerbs.toList()
-        : (verbCategories[categoryName] ?? []);
+        : (_verbCategoriesForKeyboardFire[categoryName] ?? []);
     final verbIndex = verb1Based == 0 ? 9 : verb1Based - 1;
     if (verbIndex < 0 || verbIndex >= verbList.length) return;
     final verb = verbList[verbIndex];
@@ -8780,6 +8862,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _selectedBase = null;
         _rbiCount = null;
         _selectedRbiInning = null;
+        _popupCustomVerb = null;
       });
       if (!suppressCaptionUpdate) _updateCaption();
     } else {
@@ -8789,6 +8872,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _selectedBase = null;
         _selectedHomeRunType = null;
         _rbiCount = null;
+        _popupCustomVerb = null;
       });
       _mergeVerbKeywordsIntoFieldIfEnabled(verb);
       if (!suppressCaptionUpdate) _updateCaption();
@@ -13538,6 +13622,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
+  String _getSoccerPeriodText(String period) {
+    switch (period) {
+      case '1H':
+        return ' during the first half';
+      case '2H':
+        return ' during the second half';
+      case 'ET':
+        return ' during extra time';
+      case 'Pens':
+        return ' during the penalty shootout';
+      case 'Pre-Game':
+      case 'Post Game':
+        return '';
+      default:
+        return '';
+    }
+  }
+
   // Handle multiple player numbers input (e.g., "27 23")
   void _handleMultiplePlayerInput(String value) {
     final trimmed = value.trim();
@@ -15901,6 +16003,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         } else if (_isPriorToGame) {
           inningPart = ' prior to the game';
         }
+      } else if (widget.sport?.toLowerCase() == 'soccer') {
+        if (_selectedPeriod != null) {
+          inningPart = _getSoccerPeriodText(_selectedPeriod!);
+        } else if (_isPriorToGame) {
+          inningPart = ' prior to the game';
+        }
       } else {
         // Baseball mode: use innings
         if (_selectedRbiInning != null) {
@@ -16025,6 +16133,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       gamePart = 'in their NHL game';
     } else if (sport == 'basketball') {
       gamePart = 'in their NBA game';
+    } else if (sport == 'soccer') {
+      // Joins after half/quarter phrase: "...during the first half of their MLS soccer match at..."
+      gamePart = 'of their MLS soccer match';
     } else {
       gamePart = 'in their MLB game';
     }

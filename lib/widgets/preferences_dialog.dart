@@ -547,7 +547,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 width: 220,
                 child: DropdownFlutter<String>(
                   hintText: 'Select sport',
-                  items: const ['None', 'Baseball', 'Hockey', 'Basketball'],
+                  items: const ['None', 'Baseball', 'Hockey', 'Basketball', 'Soccer'],
                   initialItem: _sportForDefault.isEmpty
                       ? 'None'
                       : _sportForDefault[0].toUpperCase() + _sportForDefault.substring(1),
@@ -592,6 +592,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                       'Baseball': 'baseball',
                       'Hockey': 'hockey',
                       'Basketball': 'basketball',
+                      'Soccer': 'soccer',
                     };
                     final v = map[label] ?? '';
                     setState(() => _sportForDefault = v);

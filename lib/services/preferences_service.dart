@@ -239,6 +239,17 @@ class PreferencesService {
           'Favorites',
         ];
         break;
+      case 'soccer':
+        defaultOrder = [
+          'Offense',
+          'Defense',
+          'Goalkeeper',
+          'Set Pieces',
+          'Non Game-Action',
+          'Reactions',
+          'Favorites',
+        ];
+        break;
       case 'baseball':
       default:
         defaultOrder = [
@@ -851,7 +862,7 @@ class PreferencesService {
 
   /// Exports all preferences as JSON, including per-sport verb settings so they can be saved and passed on.
   Future<Map<String, dynamic>> exportAllPreferences() async {
-    const sports = ['baseball', 'hockey', 'basketball'];
+    const sports = ['baseball', 'hockey', 'basketball', 'soccer'];
     final verbSettingsBySport = <String, Map<String, dynamic>>{};
     for (final sport in sports) {
       verbSettingsBySport[sport] = {
