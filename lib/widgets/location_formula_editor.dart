@@ -113,7 +113,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
   void _emit() {
     final out = <LocationChip>[];
     for (var i = 0; i < _fields.length; i++) {
-      final sep = _separators[i];
+      final sep = i == 0 ? '' : _separators[i];
       if (sep.isNotEmpty) {
         out.add(LocationChip(
           id: _newId('lit'),
@@ -131,14 +131,6 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
         regionVariant: _fields[i].kind == LocationChipKind.region
             ? _fields[i].regionVariant
             : LocationRegionVariant.fullName,
-      ));
-    }
-    final trail = _separators.last;
-    if (trail.isNotEmpty) {
-      out.add(LocationChip(
-        id: _newId('lit'),
-        kind: LocationChipKind.literal,
-        literal: trail,
       ));
     }
     widget.onChanged(widget.options.copyWith(
@@ -195,8 +187,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     _emit();
   }
 
-  bool _hasField(LocationChipKind kind) =>
-      _fields.any((f) => f.kind == kind);
+  bool _hasField(LocationChipKind kind) => _fields.any((f) => f.kind == kind);
 
   void _reorder(int fromIndex, int targetIndex) {
     if (fromIndex == targetIndex) return;
@@ -232,17 +223,17 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
   Widget _tokenRow() {
     final children = <Widget>[];
     for (var i = 0; i < _fields.length; i++) {
-      children.add(_separatorInput(i));
       children.add(_fieldChip(i));
+      if (i < _fields.length - 1) {
+        children.add(_separatorInput(i + 1));
+      }
     }
-    children.add(_separatorInput(_fields.length));
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: _chipBorder),
         borderRadius: BorderRadius.circular(6),
       ),
       child: SingleChildScrollView(
@@ -578,8 +569,7 @@ class _CountryVariantGearButtonState extends State<_CountryVariantGearButton> {
     return CompositedTransformTarget(
       link: _link,
       child: Tooltip(
-        message:
-            'Country: ${locationCountryVariantLabel(widget.current)}',
+        message: 'Country: ${locationCountryVariantLabel(widget.current)}',
         child: SizedBox(
           width: 18,
           height: 18,
@@ -902,11 +892,11 @@ class _RegionVariantOptionsCard extends StatelessWidget {
 String _locationFieldLabel(LocationChipKind k) {
   switch (k) {
     case LocationChipKind.city:
-      return 'City';
+      return 'IPTC:City';
     case LocationChipKind.region:
-      return 'State/Province';
+      return 'IPTC:ProvinceState';
     case LocationChipKind.country:
-      return 'Country';
+      return 'IPTC:Country';
     case LocationChipKind.literal:
       return 'Literal';
   }
@@ -954,8 +944,7 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor =
-        _focused ? _editorBlue : Colors.grey.shade300;
+    final borderColor = _focused ? _editorBlue : Colors.grey.shade300;
     final borderWidth = _focused ? 1.5 : 1.0;
 
     return Padding(

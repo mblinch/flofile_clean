@@ -458,15 +458,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildCaptionFieldVisibilityRow(
-                  label: 'Headline',
-                  isOn: _currentPreferences?['showHeadlineField'] == true,
-                  onChanged: (on) async {
-                    await _preferencesService.saveShowHeadlineField(on);
-                    await _loadCurrentPreferences();
-                  },
-                ),
-                const SizedBox(height: 10),
-                _buildCaptionFieldVisibilityRow(
                   label: 'Keywords',
                   isOn: _currentPreferences?['showKeywordsField'] == true,
                   onChanged: (on) async {
@@ -485,7 +476,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Show or hide optional fields below the caption. The layout uses the full width for the fields that remain visible.',
+                  'Show or hide optional Personality and Keywords beside the main caption. '
+                  'They stack in a column to the right; Keywords is the field after Personality.',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 10),
@@ -597,8 +589,13 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        SizedBox(
-          width: 88,
+        AppCompactCheckbox(
+          value: isOn,
+          accentColor: _prefsBlue,
+          onChanged: (v) => onChanged(v),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => onChanged(!isOn),
@@ -607,11 +604,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
             ),
           ),
-        ),
-        AppCompactCheckbox(
-          value: isOn,
-          accentColor: _prefsBlue,
-          onChanged: (v) => onChanged(v),
         ),
       ],
     );

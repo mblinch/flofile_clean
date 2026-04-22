@@ -43,7 +43,7 @@ class PreferencesService {
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
   static const String _keySyncServerUrl = 'sync_server_url';
   static const String _keySyncAccountId = 'sync_account_id';
-  /// Optional caption entry strip: headline / keywords / personality visibility
+  /// Legacy prefs key; optional headline strip under the caption is no longer offered.
   static const String _keyShowHeadlineField = 'show_headline_field';
   static const String _keyShowKeywordsField = 'show_keywords_field';
   static const String _keyShowPersonalityField = 'show_personality_field';
@@ -62,6 +62,31 @@ class PreferencesService {
   /// `getty` or `imagn` — legacy; superseded by [CaptionTemplate] JSON.
   static const String _keyCaptionLayoutFlavor = 'caption_layout_flavor';
   static const String _keyCaptionTemplateJson = 'caption_template_json';
+  /// Optional per-wire layout baselines (Getty / Imagn / AP) for [CaptionLayoutBuilderDialog].
+  static const String _keyCaptionTemplateDefaultGettyJson =
+      'caption_template_default_getty_json';
+  static const String _keyCaptionTemplateDefaultImagnJson =
+      'caption_template_default_imagn_json';
+  static const String _keyCaptionTemplateDefaultApJson =
+      'caption_template_default_ap_json';
+  static const String _keyCaptionTemplateDefaultGettyInternationalJson =
+      'caption_template_default_getty_international_json';
+  /// Named snapshots from “Save new caption style” in the layout builder.
+  static const String _keyCaptionStyleLibraryJson = 'caption_style_library_json';
+  /// User-chosen labels shown in the Caption Style menu for the built-in wires.
+  /// Null / absent → fall back to the factory name (Getty / Imagn / AP /
+  /// Getty International).
+  static const String _keyCaptionWireLabelGetty =
+      'caption_wire_label_getty';
+  static const String _keyCaptionWireLabelImagn =
+      'caption_wire_label_imagn';
+  static const String _keyCaptionWireLabelAp = 'caption_wire_label_ap';
+  static const String _keyCaptionWireLabelGettyInternational =
+      'caption_wire_label_getty_international';
+  /// One-time migration flag — true once the legacy "Getty International"
+  /// library entry has been promoted to the new built-in wire.
+  static const String _keyGettyInternationalMigrationDone =
+      'getty_international_migration_done';
   static const String _keyCaptionGameInfoJson = 'caption_game_info_json';
   /// `gettyImages` | `imagn` | `ap` for sample credit line in caption layout preview.
   static const String _keyCaptionCreditSampleAgency = 'caption_credit_sample_agency';
@@ -121,7 +146,7 @@ class PreferencesService {
     await prefs.setInt(_keyLastAcknowledgedAppBuild, buildNumber);
   }
 
-  /// Bumped when headline/keywords/personality visibility toggles — caption UI listens to reflow.
+  /// Bumped when keywords/personality visibility toggles — caption UI listens to reflow.
   final ValueNotifier<int> captionFieldVisibilityRevision =
       ValueNotifier<int>(0);
 
@@ -130,13 +155,12 @@ class PreferencesService {
   }
 
   Future<bool> getShowHeadlineField() async {
-    final prefs = await _getPrefs();
-    return prefs.getBool(_keyShowHeadlineField) ?? false;
+    return false;
   }
 
   Future<void> saveShowHeadlineField(bool show) async {
     final prefs = await _getPrefs();
-    await prefs.setBool(_keyShowHeadlineField, show);
+    await prefs.setBool(_keyShowHeadlineField, false);
     _notifyCaptionFieldVisibilityChanged();
   }
 
@@ -164,8 +188,7 @@ class PreferencesService {
 
   /// Immediate read after [getInstance]; matches on-disk values right after each
   /// `saveShow*Field` call (avoids async lag when [captionFieldVisibilityRevision] fires).
-  bool get captionFieldHeadlineVisibleSync =>
-      _prefs?.getBool(_keyShowHeadlineField) ?? false;
+  bool get captionFieldHeadlineVisibleSync => false;
   bool get captionFieldKeywordsVisibleSync =>
       _prefs?.getBool(_keyShowKeywordsField) ?? false;
   bool get captionFieldPersonalityVisibleSync =>
@@ -877,6 +900,14 @@ class PreferencesService {
         'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
       };
     }
+    final captionWireDefaultGetty =
+        await getCaptionTemplateWireDefault(WireStyle.getty);
+    final captionWireDefaultImagn =
+        await getCaptionTemplateWireDefault(WireStyle.imagn);
+    final captionWireDefaultAp =
+        await getCaptionTemplateWireDefault(WireStyle.ap);
+    final captionWireDefaultGettyIntl =
+        await getCaptionTemplateWireDefault(WireStyle.gettyInternational);
     return {
       'version': 2,
       'currentSport': await getCurrentSport(),
@@ -899,6 +930,17 @@ class PreferencesService {
       'captionLayoutOrder': await getCaptionLayoutOrder(),
       'captionLayoutFlavor': await getCaptionLayoutFlavor(),
       'captionTemplate': (await getCaptionTemplate()).toJson(),
+      'captionStyleLibrary':
+          (await getCaptionStyleLibrary()).map((e) => e.toJson()).toList(),
+      'captionTemplateWireDefaults': <String, dynamic>{
+        if (captionWireDefaultGetty != null)
+          'getty': captionWireDefaultGetty.toJson(),
+        if (captionWireDefaultImagn != null)
+          'imagn': captionWireDefaultImagn.toJson(),
+        if (captionWireDefaultAp != null) 'ap': captionWireDefaultAp.toJson(),
+        if (captionWireDefaultGettyIntl != null)
+          'gettyInternational': captionWireDefaultGettyIntl.toJson(),
+      },
       'captionGameInfo': (await getCaptionGameInfo()).toJson(),
       'captionCreditSampleAgency': await getCaptionCreditSampleAgency(),
     };
@@ -1068,6 +1110,40 @@ class PreferencesService {
         preferences['captionCreditSampleAgency'] as String? ?? 'gettyImages',
       );
     }
+    if (preferences.containsKey('captionTemplateWireDefaults')) {
+      final raw = preferences['captionTemplateWireDefaults'];
+      if (raw is Map<String, dynamic>) {
+        for (final name in [
+          'getty',
+          'imagn',
+          'ap',
+          'gettyInternational',
+        ]) {
+          final entry = raw[name];
+          if (entry is Map<String, dynamic>) {
+            await saveCaptionTemplateWireDefault(
+              WireStyle.values.firstWhere((e) => e.name == name),
+              CaptionTemplate.fromJson(Map<String, dynamic>.from(entry)),
+            );
+          }
+        }
+      }
+    }
+    if (preferences.containsKey('captionStyleLibrary')) {
+      final raw = preferences['captionStyleLibrary'];
+      if (raw is List) {
+        final list = <CaptionStyleLibraryEntry>[];
+        for (final e in raw) {
+          if (e is! Map) continue;
+          try {
+            list.add(CaptionStyleLibraryEntry.fromJson(
+              Map<String, dynamic>.from(e),
+            ));
+          } catch (_) {}
+        }
+        await _saveCaptionStyleLibrary(list);
+      }
+    }
   }
 
   Future<List<String>> getCaptionLayoutOrder() async {
@@ -1133,6 +1209,219 @@ class PreferencesService {
     await prefs.remove(_keyCaptionLayoutFlavor);
   }
 
+  static String? _captionTemplateWireDefaultKey(WireStyle wire) {
+    switch (wire) {
+      case WireStyle.getty:
+        return _keyCaptionTemplateDefaultGettyJson;
+      case WireStyle.imagn:
+        return _keyCaptionTemplateDefaultImagnJson;
+      case WireStyle.ap:
+        return _keyCaptionTemplateDefaultApJson;
+      case WireStyle.gettyInternational:
+        return _keyCaptionTemplateDefaultGettyInternationalJson;
+      case WireStyle.custom:
+        return null;
+    }
+  }
+
+  /// User-saved baseline for a wire (used when switching to that wire in the layout builder).
+  Future<CaptionTemplate?> getCaptionTemplateWireDefault(WireStyle wire) async {
+    final key = _captionTemplateWireDefaultKey(wire);
+    if (key == null) return null;
+    final prefs = await _getPrefs();
+    return CaptionTemplate.tryDecode(prefs.getString(key));
+  }
+
+  Future<void> saveCaptionTemplateWireDefault(
+    WireStyle wire,
+    CaptionTemplate template,
+  ) async {
+    final key = _captionTemplateWireDefaultKey(wire);
+    if (key == null) return;
+    final prefs = await _getPrefs();
+    final normalized = template.copyWith(wireStyle: wire);
+    await prefs.setString(key, normalized.encode());
+  }
+
+  Future<void> clearCaptionTemplateWireDefault(WireStyle wire) async {
+    final key = _captionTemplateWireDefaultKey(wire);
+    if (key == null) return;
+    final prefs = await _getPrefs();
+    await prefs.remove(key);
+  }
+
+  static String? _captionWireLabelKey(WireStyle wire) {
+    switch (wire) {
+      case WireStyle.getty:
+        return _keyCaptionWireLabelGetty;
+      case WireStyle.imagn:
+        return _keyCaptionWireLabelImagn;
+      case WireStyle.ap:
+        return _keyCaptionWireLabelAp;
+      case WireStyle.gettyInternational:
+        return _keyCaptionWireLabelGettyInternational;
+      case WireStyle.custom:
+        return null;
+    }
+  }
+
+  /// User's custom label for a built-in wire in the Caption Style menu,
+  /// or `null` if the factory name (Getty / Imagn / AP) should be shown.
+  Future<String?> getCaptionWireLabel(WireStyle wire) async {
+    final key = _captionWireLabelKey(wire);
+    if (key == null) return null;
+    final prefs = await _getPrefs();
+    final v = prefs.getString(key);
+    if (v == null) return null;
+    final trimmed = v.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  /// Pass [label] = null or empty to restore the factory wire name.
+  Future<void> saveCaptionWireLabel(WireStyle wire, String? label) async {
+    final key = _captionWireLabelKey(wire);
+    if (key == null) return;
+    final prefs = await _getPrefs();
+    final trimmed = label?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, trimmed);
+    }
+  }
+
+  /// One-time migration: if the user had saved a library entry called
+  /// "Getty International" before it became a built-in wire, promote it to
+  /// [WireStyle.gettyInternational]'s wire default and drop it from the
+  /// library so the Caption Style menu doesn't double up.
+  ///
+  /// Safe to call repeatedly — [_keyGettyInternationalMigrationDone] short-
+  /// circuits subsequent runs.
+  Future<void> migrateGettyInternationalLibraryEntry() async {
+    final prefs = await _getPrefs();
+    if (prefs.getBool(_keyGettyInternationalMigrationDone) == true) return;
+    final lib = await getCaptionStyleLibrary();
+    final matches = lib
+        .where((e) =>
+            e.displayName.trim().toLowerCase() == 'getty international')
+        .toList();
+    if (matches.isEmpty) {
+      await prefs.setBool(_keyGettyInternationalMigrationDone, true);
+      return;
+    }
+    final first = matches.first;
+    final existingWireDefault =
+        await getCaptionTemplateWireDefault(WireStyle.gettyInternational);
+    if (existingWireDefault == null) {
+      await saveCaptionTemplateWireDefault(
+        WireStyle.gettyInternational,
+        first.template.copyWith(wireStyle: WireStyle.gettyInternational),
+      );
+    }
+    final remaining =
+        lib.where((e) => !matches.any((m) => m.id == e.id)).toList();
+    await _saveCaptionStyleLibrary(remaining);
+    await prefs.setBool(_keyGettyInternationalMigrationDone, true);
+  }
+
+  /// User-named layouts saved from the caption layout builder (not the active template).
+  Future<List<CaptionStyleLibraryEntry>> getCaptionStyleLibrary() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyCaptionStyleLibraryJson);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! List) return const [];
+      final out = <CaptionStyleLibraryEntry>[];
+      for (final e in decoded) {
+        if (e is! Map) continue;
+        try {
+          out.add(CaptionStyleLibraryEntry.fromJson(
+            Map<String, dynamic>.from(e),
+          ));
+        } catch (_) {}
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> _saveCaptionStyleLibrary(
+    List<CaptionStyleLibraryEntry> entries,
+  ) async {
+    final prefs = await _getPrefs();
+    final encoded = json.encode(entries.map((e) => e.toJson()).toList());
+    final ok = await prefs.setString(_keyCaptionStyleLibraryJson, encoded);
+    if (!ok) {
+      throw StateError(
+        'Could not write caption style library (preferences storage rejected the write).',
+      );
+    }
+  }
+
+  /// Appends a deep copy of [template] with a stable library [id] and [displayName].
+  /// Returns the new entry’s [CaptionStyleLibraryEntry.id].
+  Future<String> addCaptionStyleToLibrary({
+    required String displayName,
+    required CaptionTemplate template,
+  }) async {
+    final name = displayName.trim();
+    if (name.isEmpty) {
+      throw ArgumentError.value(displayName, 'displayName', 'must be non-empty');
+    }
+    final id = 'saved_${DateTime.now().millisecondsSinceEpoch}';
+    final raw = json.decode(json.encode(template.toJson())) as Map<String, dynamic>;
+    final stored = CaptionTemplate.fromJson(raw).copyWith(id: id, name: name);
+    final entry = CaptionStyleLibraryEntry(
+      id: id,
+      displayName: name,
+      template: stored,
+    );
+    final list = [...await getCaptionStyleLibrary(), entry];
+    await _saveCaptionStyleLibrary(list);
+    return id;
+  }
+
+  /// Removes one entry from the saved caption style library by [id].
+  Future<void> removeCaptionStyleFromLibrary(String id) async {
+    if (id.isEmpty) return;
+    final list =
+        (await getCaptionStyleLibrary()).where((e) => e.id != id).toList();
+    await _saveCaptionStyleLibrary(list);
+  }
+
+  /// Updates the display name (and template [CaptionTemplate.name]) for one library entry.
+  Future<void> renameCaptionStyleInLibrary({
+    required String id,
+    required String newDisplayName,
+  }) async {
+    final name = newDisplayName.trim();
+    if (name.isEmpty) {
+      throw ArgumentError.value(newDisplayName, 'newDisplayName', 'must be non-empty');
+    }
+    final list = await getCaptionStyleLibrary();
+    final out = <CaptionStyleLibraryEntry>[];
+    var found = false;
+    for (final e in list) {
+      if (e.id == id) {
+        found = true;
+        final t = e.template.copyWith(name: name);
+        out.add(CaptionStyleLibraryEntry(
+          id: e.id,
+          displayName: name,
+          template: t,
+        ));
+      } else {
+        out.add(e);
+      }
+    }
+    if (!found) {
+      throw StateError('No saved caption style with id "$id".');
+    }
+    await _saveCaptionStyleLibrary(out);
+  }
+
   Future<GameInfo> getCaptionGameInfo() async {
     final prefs = await _getPrefs();
     return GameInfo.tryDecode(prefs.getString(_keyCaptionGameInfoJson)) ??
@@ -1192,5 +1481,39 @@ class PreferencesService {
   Future<SharedPreferences> _getPrefs() async {
     _prefs ??= await SharedPreferences.getInstance();
     return _prefs!;
+  }
+}
+
+/// One named caption layout stored in [PreferencesService] (library, not active template).
+class CaptionStyleLibraryEntry {
+  const CaptionStyleLibraryEntry({
+    required this.id,
+    required this.displayName,
+    required this.template,
+  });
+
+  final String id;
+  final String displayName;
+  final CaptionTemplate template;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'displayName': displayName,
+        'template': template.toJson(),
+      };
+
+  factory CaptionStyleLibraryEntry.fromJson(Map<String, dynamic> j) {
+    final templateRaw = j['template'];
+    if (templateRaw is! Map) {
+      throw FormatException('CaptionStyleLibraryEntry missing template map');
+    }
+    return CaptionStyleLibraryEntry(
+      id: j['id']?.toString() ?? 'saved_unknown',
+      displayName:
+          (j['displayName'] ?? j['name'] ?? 'Saved style').toString(),
+      template: CaptionTemplate.fromJson(
+        Map<String, dynamic>.from(templateRaw),
+      ),
+    );
   }
 }

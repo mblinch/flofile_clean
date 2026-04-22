@@ -3,7 +3,12 @@ import 'dart:convert';
 import 'date_formula.dart';
 
 /// Wire service preset or fully custom formula.
-enum WireStyle { getty, imagn, ap, custom }
+///
+/// Enum order doubles as the display order in the Caption Style dropdown.
+/// Added values (like [gettyInternational]) are appended at the end so
+/// previously-serialised templates — which round-trip via `.name` — still
+/// decode correctly.
+enum WireStyle { getty, imagn, ap, custom, gettyInternational }
 
 /// Legacy enum — migrated into [LocationLineOptions] when reading old JSON.
 enum LocationFormat {
@@ -71,14 +76,18 @@ class LocationChip {
 
   final String id;
   final LocationChipKind kind;
+
   /// When [kind] is [LocationChipKind.literal], text inserted as-is (e.g. `", "`, `" - "`).
   final String literal;
+
   /// Per-chip ALL CAPS toggle. Applies only to geo chips during rendering; the
   /// legacy global [LocationLineOptions.uppercase] still forces caps on every
   /// chip for backward compatibility with old templates.
   final bool caps;
+
   /// When [kind] is [LocationChipKind.country]: use [GameInfo.country] vs [GameInfo.countryCode].
   final LocationCountryVariant countryVariant;
+
   /// When [kind] is [LocationChipKind.region]: full name vs short ([GameInfo.resolvedRegionShort]).
   final LocationRegionVariant regionVariant;
 
@@ -107,7 +116,9 @@ class LocationChip {
     return LocationChip(
       id: j['id'] as String? ?? 'chip',
       kind: kind,
-      literal: kind == LocationChipKind.literal ? (j['literal'] as String? ?? '') : '',
+      literal: kind == LocationChipKind.literal
+          ? (j['literal'] as String? ?? '')
+          : '',
       caps: j['caps'] as bool? ?? false,
       countryVariant: kind == LocationChipKind.country
           ? locationCountryVariantFromJson(j['countryVariant']?.toString())
@@ -155,6 +166,12 @@ class LocationLineOptions {
         chips: chips ?? List<LocationChip>.from(this.chips),
       );
 
+  /// Deep copy for per–geo-chip templates (duplicate Geographical segments).
+  LocationLineOptions clone() => LocationLineOptions(
+        uppercase: uppercase,
+        chips: chips.map((c) => c.copyWith()).toList(),
+      );
+
   Map<String, dynamic> toJson() => {
         'uppercase': uppercase,
         'locationChips': chips.map((e) => e.toJson()).toList(),
@@ -164,7 +181,8 @@ class LocationLineOptions {
     if (j['locationChips'] is List) {
       final raw = j['locationChips'] as List<dynamic>;
       final parsed = raw
-          .map((e) => LocationChip.fromJson(Map<String, dynamic>.from(e as Map)))
+          .map(
+              (e) => LocationChip.fromJson(Map<String, dynamic>.from(e as Map)))
           .toList();
       final uppercase = j['uppercase'] as bool? ?? false;
       if (parsed.isEmpty) {
@@ -178,9 +196,8 @@ class LocationLineOptions {
       final anyChipCaps = parsed.any((c) => c.caps);
       if (uppercase && !anyChipCaps) {
         final migrated = parsed
-            .map((c) => c.kind == LocationChipKind.literal
-                ? c
-                : c.copyWith(caps: true))
+            .map((c) =>
+                c.kind == LocationChipKind.literal ? c : c.copyWith(caps: true))
             .toList();
         return LocationLineOptions(uppercase: false, chips: migrated);
       }
@@ -211,12 +228,14 @@ class LocationLineOptions {
     for (var i = 0; i < geo.length; i++) {
       if (i > 0) {
         final sep = i == 1 ? j1 : j2;
-        chips.add(LocationChip(id: nid('lit'), kind: LocationChipKind.literal, literal: sep));
+        chips.add(LocationChip(
+            id: nid('lit'), kind: LocationChipKind.literal, literal: sep));
       }
       chips.add(LocationChip(id: nid(geo[i].name), kind: geo[i], literal: ''));
     }
     if (chips.isEmpty) {
-      chips.add(LocationChip(id: nid('city'), kind: LocationChipKind.city, literal: ''));
+      chips.add(LocationChip(
+          id: nid('city'), kind: LocationChipKind.city, literal: ''));
     }
     return LocationLineOptions(uppercase: uppercase, chips: chips);
   }
@@ -236,9 +255,12 @@ class LocationLineOptions {
   static LocationLineOptions gettyDefault() => LocationLineOptions(
         uppercase: false,
         chips: [
-          const LocationChip(id: 'g_city', kind: LocationChipKind.city, caps: true),
-          const LocationChip(id: 'g_lit1', kind: LocationChipKind.literal, literal: ', '),
-          const LocationChip(id: 'g_reg', kind: LocationChipKind.region, caps: true),
+          const LocationChip(
+              id: 'g_city', kind: LocationChipKind.city, caps: true),
+          const LocationChip(
+              id: 'g_lit1', kind: LocationChipKind.literal, literal: ', '),
+          const LocationChip(
+              id: 'g_reg', kind: LocationChipKind.region, caps: true),
         ],
       );
 
@@ -246,9 +268,11 @@ class LocationLineOptions {
         uppercase: false,
         chips: [
           const LocationChip(id: 'i_city', kind: LocationChipKind.city),
-          const LocationChip(id: 'i_lit1', kind: LocationChipKind.literal, literal: ', '),
+          const LocationChip(
+              id: 'i_lit1', kind: LocationChipKind.literal, literal: ', '),
           const LocationChip(id: 'i_reg', kind: LocationChipKind.region),
-          const LocationChip(id: 'i_lit2', kind: LocationChipKind.literal, literal: ', '),
+          const LocationChip(
+              id: 'i_lit2', kind: LocationChipKind.literal, literal: ', '),
           const LocationChip(id: 'i_ctr', kind: LocationChipKind.country),
         ],
       );
@@ -257,7 +281,8 @@ class LocationLineOptions {
         uppercase: false,
         chips: [
           const LocationChip(id: 'a_city', kind: LocationChipKind.city),
-          const LocationChip(id: 'a_lit1', kind: LocationChipKind.literal, literal: ', '),
+          const LocationChip(
+              id: 'a_lit1', kind: LocationChipKind.literal, literal: ', '),
           const LocationChip(id: 'a_reg', kind: LocationChipKind.region),
         ],
       );
@@ -266,8 +291,157 @@ class LocationLineOptions {
 /// Jersey / roster number style in the dynamic caption sample.
 enum NumberFormatStyle { hash, parens }
 
+/// Whether the club appears before or after the player in the dynamic caption
+/// sentence (preview + default caption slot when no override is supplied).
+enum CaptionTeamOrder {
+  /// `Team position Name …` with number from [NumberFormatStyle].
+  teamBefore,
+  /// `Name … of Team position` with number from [NumberFormatStyle].
+  teamAfter,
+}
+
 /// How the closing credit is phrased.
 enum CreditFormat { photo_by, mandatory_credit }
+
+/// Which IPTC field drives the byline organization segment.
+enum BylineOrganizationSource { credit, copyright }
+
+enum BylineFieldKind { name, credit, copyright }
+
+class BylineOptions {
+  const BylineOptions({
+    required this.prefix,
+    required this.between,
+    required this.suffix,
+    required this.organizationSource,
+    this.nameCaps = false,
+    this.organizationCaps = false,
+    this.creditCaps = false,
+    this.copyrightCaps = false,
+    this.fieldOrder = const [BylineFieldKind.name, BylineFieldKind.credit],
+  });
+
+  final String prefix;
+  final String between;
+  final String suffix;
+  final BylineOrganizationSource organizationSource;
+  final bool nameCaps;
+  final bool organizationCaps;
+  final bool creditCaps;
+  final bool copyrightCaps;
+  final List<BylineFieldKind> fieldOrder;
+
+  BylineOptions copyWith({
+    String? prefix,
+    String? between,
+    String? suffix,
+    BylineOrganizationSource? organizationSource,
+    bool? nameCaps,
+    bool? organizationCaps,
+    bool? creditCaps,
+    bool? copyrightCaps,
+    List<BylineFieldKind>? fieldOrder,
+  }) =>
+      BylineOptions(
+        prefix: prefix ?? this.prefix,
+        between: between ?? this.between,
+        suffix: suffix ?? this.suffix,
+        organizationSource: organizationSource ?? this.organizationSource,
+        nameCaps: nameCaps ?? this.nameCaps,
+        organizationCaps: organizationCaps ?? this.organizationCaps,
+        creditCaps: creditCaps ?? this.creditCaps,
+        copyrightCaps: copyrightCaps ?? this.copyrightCaps,
+        fieldOrder: fieldOrder ?? List<BylineFieldKind>.from(this.fieldOrder),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'prefix': prefix,
+        'between': between,
+        'suffix': suffix,
+        'organizationSource': organizationSource.name,
+        if (nameCaps) 'nameCaps': true,
+        if (organizationCaps) 'organizationCaps': true,
+        if (creditCaps) 'creditCaps': true,
+        if (copyrightCaps) 'copyrightCaps': true,
+        'fieldOrder': fieldOrder.map((e) => e.name).toList(),
+      };
+
+  factory BylineOptions.fromJson(Map<String, dynamic> j) {
+    final sourceRaw = j['organizationSource']?.toString();
+    final source = BylineOrganizationSource.values.firstWhere(
+      (e) => e.name == sourceRaw,
+      orElse: () => BylineOrganizationSource.credit,
+    );
+    List<BylineFieldKind> orderFromRaw(dynamic raw) {
+      if (raw is List) {
+        final out = <BylineFieldKind>[];
+        for (final v in raw) {
+          final s = v.toString();
+          for (final k in BylineFieldKind.values) {
+            if (k.name == s) out.add(k);
+          }
+        }
+        if (out.isNotEmpty) return out;
+      }
+      return source == BylineOrganizationSource.copyright
+          ? const [BylineFieldKind.name, BylineFieldKind.copyright]
+          : const [BylineFieldKind.name, BylineFieldKind.credit];
+    }
+
+    return BylineOptions(
+      prefix: j['prefix'] as String? ?? '',
+      between: j['between'] as String? ?? '/',
+      suffix: j['suffix'] as String? ?? '',
+      organizationSource: source,
+      nameCaps: j['nameCaps'] as bool? ?? false,
+      organizationCaps: j['organizationCaps'] as bool? ?? false,
+      creditCaps:
+          j['creditCaps'] as bool? ?? (j['organizationCaps'] as bool? ?? false),
+      copyrightCaps: j['copyrightCaps'] as bool? ?? false,
+      fieldOrder: orderFromRaw(j['fieldOrder']),
+    );
+  }
+
+  static BylineOptions getty() => const BylineOptions(
+        prefix: '(Photo by ',
+        between: '/',
+        suffix: ')',
+        organizationSource: BylineOrganizationSource.credit,
+      );
+
+  static BylineOptions imagn() => const BylineOptions(
+        prefix: 'Mandatory Credit: ',
+        between: '-',
+        suffix: '',
+        organizationSource: BylineOrganizationSource.credit,
+      );
+
+  static BylineOptions ap() => const BylineOptions(
+        prefix: '(',
+        between: '/',
+        suffix: ')',
+        organizationSource: BylineOrganizationSource.credit,
+      );
+
+  static BylineOptions fromLegacyFormat(CreditFormat format) {
+    switch (format) {
+      case CreditFormat.photo_by:
+        return const BylineOptions(
+          prefix: '(Photo by ',
+          between: '/',
+          suffix: ')',
+          organizationSource: BylineOrganizationSource.credit,
+        );
+      case CreditFormat.mandatory_credit:
+        return const BylineOptions(
+          prefix: 'Mandatory Credit: ',
+          between: '-',
+          suffix: '',
+          organizationSource: BylineOrganizationSource.credit,
+        );
+    }
+  }
+}
 
 /// Ordered segments: static frame + dynamic caption slot + static tail.
 enum CaptionSegment { location, date, caption, venue, credit }
@@ -286,36 +460,72 @@ class CaptionTemplate {
     this.dateFormulaSource = DateFormulaSource.photo,
     required this.locationOptions,
     required this.numberFormat,
+    required this.captionTeamOrder,
+    this.includePlayerPosition = true,
+    this.removeDiacritics = true,
     required this.separator,
     required this.creditFormat,
+    required this.bylineOptions,
     required this.segmentOrder,
     this.customSeparators,
+    this.locationOptionsByOccurrence,
+    this.dateFormulasByOccurrence,
   });
 
   final String id;
   final String name;
   final WireStyle wireStyle;
+
   /// ICU-style pattern for [intl.DateFormat], e.g. `MMMM d, yyyy`, `MMM d, yyyy`.
   /// Used when [dateExpression] is empty (legacy) and as the default game pattern in the UI.
   final String dateFormat;
+
   /// Optional template mixing literals and `{{game:…}}` / `{{iptc:…}}` variables (IPTC from file metadata).
   /// When empty, [dateFormat] is applied to the game date only.
   final String dateExpression;
+
   /// Structured date formula (built by [DateFormulaEditor]). When non-null it
   /// takes precedence over [dateExpression] during rendering.
   final DateFormula? dateFormula;
-  /// Which [DateTime] feeds [dateFormula]: embedded photo EXIF vs template date.
+
+  /// Legacy JSON field; structured [dateFormula] rendering no longer uses this
+  /// toggle. Dates resolve from photo EXIF when available, else [GameInfo.gameDate].
   final DateFormulaSource dateFormulaSource;
+
   /// Which location fields appear and whether the line is uppercased.
   final LocationLineOptions locationOptions;
   final NumberFormatStyle numberFormat;
+
+  /// Club vs player order in the dynamic caption (player) segment.
+  final CaptionTeamOrder captionTeamOrder;
+
+  /// Whether the player's position label (e.g. `forward`, `guard`) appears in
+  /// the dynamic caption segment.
+  final bool includePlayerPosition;
+
+  /// When true, Latin accents in generated captions are folded to ASCII
+  /// (player names, opponent names, etc.).
+  final bool removeDiacritics;
+
   /// Primary joiner used in [WireStyle.custom] between segments.
   final String separator;
   final CreditFormat creditFormat;
+  final BylineOptions bylineOptions;
   final List<CaptionSegment> segmentOrder;
-  /// When [wireStyle] is [WireStyle.custom]: text between consecutive segments;
-  /// length must be [segmentOrder.length - 1] when set.
+
+  /// Text between consecutive [segmentOrder] entries. When set, length must be
+  /// [segmentOrder.length - 1]. When null or wrong length, rendering falls
+  /// back to [CaptionFormulaRenderer.defaultCustomGaps] for presets (Getty /
+  /// Imagn / AP) or [separator] between each pair for [WireStyle.custom].
   final List<String>? customSeparators;
+
+  /// One [LocationLineOptions] per [CaptionSegment.location] in [segmentOrder]
+  /// (left-to-right). When null, every location segment uses [locationOptions].
+  final List<LocationLineOptions>? locationOptionsByOccurrence;
+
+  /// One [DateFormula] per [CaptionSegment.date] in [segmentOrder] (left-to-right).
+  /// When null, every date segment uses [dateFormula].
+  final List<DateFormula>? dateFormulasByOccurrence;
 
   static const List<CaptionSegment> defaultSegmentOrder = [
     CaptionSegment.location,
@@ -331,10 +541,15 @@ class CaptionTemplate {
         wireStyle: WireStyle.getty,
         dateFormat: 'MMMM d, yyyy',
         dateExpression: '',
-        locationOptions: LocationLineOptions.fromLegacyFormat(LocationFormat.city_state_country),
+        locationOptions: LocationLineOptions.fromLegacyFormat(
+            LocationFormat.city_state_country),
         numberFormat: NumberFormatStyle.hash,
+        captionTeamOrder: CaptionTeamOrder.teamAfter,
+        includePlayerPosition: true,
+        removeDiacritics: true,
         separator: ' - ',
         creditFormat: CreditFormat.photo_by,
+        bylineOptions: BylineOptions.getty(),
         segmentOrder: const [
           CaptionSegment.location,
           CaptionSegment.date,
@@ -342,6 +557,8 @@ class CaptionTemplate {
           CaptionSegment.venue,
           CaptionSegment.credit,
         ],
+        locationOptionsByOccurrence: null,
+        dateFormulasByOccurrence: null,
       );
 
   factory CaptionTemplate.imagn() => CaptionTemplate(
@@ -350,10 +567,15 @@ class CaptionTemplate {
         wireStyle: WireStyle.imagn,
         dateFormat: 'MMM d, yyyy',
         dateExpression: '',
-        locationOptions: LocationLineOptions.fromLegacyFormat(LocationFormat.city_region_country),
+        locationOptions: LocationLineOptions.fromLegacyFormat(
+            LocationFormat.city_region_country),
         numberFormat: NumberFormatStyle.parens,
+        captionTeamOrder: CaptionTeamOrder.teamBefore,
+        includePlayerPosition: true,
+        removeDiacritics: true,
         separator: '; ',
         creditFormat: CreditFormat.mandatory_credit,
+        bylineOptions: BylineOptions.imagn(),
         segmentOrder: const [
           CaptionSegment.date,
           CaptionSegment.location,
@@ -361,6 +583,38 @@ class CaptionTemplate {
           CaptionSegment.venue,
           CaptionSegment.credit,
         ],
+        locationOptionsByOccurrence: null,
+        dateFormulasByOccurrence: null,
+      );
+
+  /// Getty variant tuned for international assignments: same field order /
+  /// team order / credit conventions as [WireStyle.getty], but the default
+  /// location format uses City · Region · Country so wire editors outside
+  /// North America don't have to retype it every caption.
+  factory CaptionTemplate.gettyInternational() => CaptionTemplate(
+        id: 'preset_getty_international',
+        name: 'Getty International',
+        wireStyle: WireStyle.gettyInternational,
+        dateFormat: 'MMMM d, yyyy',
+        dateExpression: '',
+        locationOptions: LocationLineOptions.fromLegacyFormat(
+            LocationFormat.city_region_country),
+        numberFormat: NumberFormatStyle.hash,
+        captionTeamOrder: CaptionTeamOrder.teamAfter,
+        includePlayerPosition: true,
+        removeDiacritics: true,
+        separator: ' - ',
+        creditFormat: CreditFormat.photo_by,
+        bylineOptions: BylineOptions.getty(),
+        segmentOrder: const [
+          CaptionSegment.location,
+          CaptionSegment.date,
+          CaptionSegment.caption,
+          CaptionSegment.venue,
+          CaptionSegment.credit,
+        ],
+        locationOptionsByOccurrence: null,
+        dateFormulasByOccurrence: null,
       );
 
   factory CaptionTemplate.ap() => CaptionTemplate(
@@ -369,10 +623,15 @@ class CaptionTemplate {
         wireStyle: WireStyle.ap,
         dateFormat: 'MMM d, yyyy',
         dateExpression: '',
-        locationOptions: LocationLineOptions.fromLegacyFormat(LocationFormat.city_region),
+        locationOptions:
+            LocationLineOptions.fromLegacyFormat(LocationFormat.city_region),
         numberFormat: NumberFormatStyle.parens,
+        captionTeamOrder: CaptionTeamOrder.teamBefore,
+        includePlayerPosition: true,
+        removeDiacritics: true,
         separator: ' — ',
         creditFormat: CreditFormat.photo_by,
+        bylineOptions: BylineOptions.ap(),
         segmentOrder: const [
           CaptionSegment.location,
           CaptionSegment.date,
@@ -380,6 +639,8 @@ class CaptionTemplate {
           CaptionSegment.venue,
           CaptionSegment.credit,
         ],
+        locationOptionsByOccurrence: null,
+        dateFormulasByOccurrence: null,
       );
 
   factory CaptionTemplate.custom({
@@ -389,10 +650,17 @@ class CaptionTemplate {
     String dateExpression = '',
     LocationLineOptions? locationOptions,
     NumberFormatStyle numberFormat = NumberFormatStyle.parens,
+    CaptionTeamOrder captionTeamOrder = CaptionTeamOrder.teamBefore,
+    bool includePlayerPosition = true,
+    bool removeDiacritics = true,
     String separator = '; ',
     CreditFormat creditFormat = CreditFormat.mandatory_credit,
+    BylineOptions? bylineOptions,
     List<CaptionSegment>? segmentOrder,
     List<String>? customSeparators,
+    DateFormula? dateFormula,
+    List<DateFormula>? dateFormulasByOccurrence,
+    List<LocationLineOptions>? locationOptionsByOccurrence,
   }) =>
       CaptionTemplate(
         id: id,
@@ -400,14 +668,24 @@ class CaptionTemplate {
         wireStyle: WireStyle.custom,
         dateFormat: dateFormat,
         dateExpression: dateExpression,
+        dateFormula: dateFormula,
         locationOptions: locationOptions ??
-            LocationLineOptions.fromLegacyFormat(LocationFormat.city_region_country),
+            LocationLineOptions.fromLegacyFormat(
+                LocationFormat.city_region_country),
         numberFormat: numberFormat,
+        captionTeamOrder: captionTeamOrder,
+        includePlayerPosition: includePlayerPosition,
+        removeDiacritics: removeDiacritics,
         separator: separator,
         creditFormat: creditFormat,
-        segmentOrder: segmentOrder ?? List<CaptionSegment>.from(defaultSegmentOrder),
+        bylineOptions:
+            bylineOptions ?? BylineOptions.fromLegacyFormat(creditFormat),
+        segmentOrder:
+            segmentOrder ?? List<CaptionSegment>.from(defaultSegmentOrder),
         customSeparators: customSeparators,
-      );
+        locationOptionsByOccurrence: locationOptionsByOccurrence,
+        dateFormulasByOccurrence: dateFormulasByOccurrence,
+      ).normalizePerOccurrenceLists();
 
   CaptionTemplate copyWith({
     String? id,
@@ -419,10 +697,16 @@ class CaptionTemplate {
     DateFormulaSource? dateFormulaSource,
     LocationLineOptions? locationOptions,
     NumberFormatStyle? numberFormat,
+    CaptionTeamOrder? captionTeamOrder,
+    bool? includePlayerPosition,
+    bool? removeDiacritics,
     String? separator,
     CreditFormat? creditFormat,
+    BylineOptions? bylineOptions,
     List<CaptionSegment>? segmentOrder,
     List<String>? customSeparators,
+    Object? locationOptionsByOccurrence = _unset,
+    Object? dateFormulasByOccurrence = _unset,
   }) =>
       CaptionTemplate(
         id: id ?? this.id,
@@ -436,11 +720,80 @@ class CaptionTemplate {
         dateFormulaSource: dateFormulaSource ?? this.dateFormulaSource,
         locationOptions: locationOptions ?? this.locationOptions,
         numberFormat: numberFormat ?? this.numberFormat,
+        captionTeamOrder: captionTeamOrder ?? this.captionTeamOrder,
+        includePlayerPosition: includePlayerPosition ?? this.includePlayerPosition,
+        removeDiacritics: removeDiacritics ?? this.removeDiacritics,
         separator: separator ?? this.separator,
         creditFormat: creditFormat ?? this.creditFormat,
-        segmentOrder: segmentOrder ?? List<CaptionSegment>.from(this.segmentOrder),
+        bylineOptions: bylineOptions ?? this.bylineOptions,
+        segmentOrder:
+            segmentOrder ?? List<CaptionSegment>.from(this.segmentOrder),
         customSeparators: customSeparators ?? this.customSeparators,
+        locationOptionsByOccurrence: identical(locationOptionsByOccurrence, _unset)
+            ? this.locationOptionsByOccurrence
+            : locationOptionsByOccurrence as List<LocationLineOptions>?,
+        dateFormulasByOccurrence: identical(dateFormulasByOccurrence, _unset)
+            ? this.dateFormulasByOccurrence
+            : dateFormulasByOccurrence as List<DateFormula>?,
       );
+
+  /// Ensures [locationOptionsByOccurrence] / [dateFormulasByOccurrence] have one
+  /// entry per [CaptionSegment.location] / [CaptionSegment.date] when duplicates
+  /// exist. Otherwise the renderer falls back to [locationOptions] / [dateFormula]
+  /// for every occurrence and in-place editor edits are shared across chips.
+  CaptionTemplate normalizePerOccurrenceLists() {
+    final locCount =
+        segmentOrder.where((s) => s == CaptionSegment.location).length;
+    final dateCount = segmentOrder.where((s) => s == CaptionSegment.date).length;
+
+    var r = this;
+
+    if (locCount > 1) {
+      final by = r.locationOptionsByOccurrence;
+      if (by == null || by.length < locCount) {
+        final list = <LocationLineOptions>[];
+        for (var i = 0; i < locCount; i++) {
+          if (by != null && i < by.length) {
+            list.add(by[i]);
+          } else if (list.isEmpty) {
+            list.add(r.locationOptions);
+          } else {
+            list.add(list.last.clone());
+          }
+        }
+        r = r.copyWith(
+          locationOptions: list[0],
+          locationOptionsByOccurrence: list,
+        );
+      }
+    }
+
+    if (dateCount > 1) {
+      final by = r.dateFormulasByOccurrence;
+      if (by == null || by.length < dateCount) {
+        final seed = r.dateFormula ??
+            (by != null && by.isNotEmpty ? by.first : null);
+        if (seed != null) {
+          final list = <DateFormula>[];
+          for (var i = 0; i < dateCount; i++) {
+            if (by != null && i < by.length) {
+              list.add(by[i]);
+            } else if (list.isEmpty) {
+              list.add(seed);
+            } else {
+              list.add(list.last.clone());
+            }
+          }
+          r = r.copyWith(
+            dateFormula: list[0],
+            dateFormulasByOccurrence: list,
+          );
+        }
+      }
+    }
+
+    return r;
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -452,11 +805,44 @@ class CaptionTemplate {
         'dateFormulaSource': dateFormulaSourceToString(dateFormulaSource),
         'locationOptions': locationOptions.toJson(),
         'numberFormat': numberFormat.name,
+        'captionTeamOrder': captionTeamOrder.name,
+        if (!includePlayerPosition) 'includePlayerPosition': false,
+        if (!removeDiacritics) 'removeDiacritics': false,
         'separator': separator,
         'creditFormat': creditFormat.name,
+        'bylineOptions': bylineOptions.toJson(),
         'segmentOrder': segmentOrder.map((e) => e.name).toList(),
         if (customSeparators != null) 'customSeparators': customSeparators,
+        if (locationOptionsByOccurrence != null)
+          'locationOptionsByOccurrence': locationOptionsByOccurrence!
+              .map((e) => e.toJson())
+              .toList(),
+        if (dateFormulasByOccurrence != null)
+          'dateFormulasByOccurrence': dateFormulasByOccurrence!
+              .map((e) => e.toJson())
+              .toList(),
       };
+
+  static CaptionTeamOrder _parseCaptionTeamOrder(Map<String, dynamic> json) {
+    final co = json['captionTeamOrder']?.toString();
+    if (co != null) {
+      for (final e in CaptionTeamOrder.values) {
+        if (e.name == co) return e;
+      }
+    }
+    // Migrate from older `rosterCaptionStyle` (removed).
+    final legacy = json['rosterCaptionStyle']?.toString();
+    switch (legacy) {
+      case 'gettyNameNumberOfTeam':
+        return CaptionTeamOrder.teamAfter;
+      case 'teamFirst':
+      case 'apExtended':
+        return CaptionTeamOrder.teamBefore;
+    }
+    final w = json['wireStyle']?.toString();
+    if (w == 'getty') return CaptionTeamOrder.teamAfter;
+    return CaptionTeamOrder.teamBefore;
+  }
 
   static CaptionTemplate fromJson(Map<String, dynamic> json) {
     return CaptionTemplate(
@@ -469,24 +855,47 @@ class CaptionTemplate {
       dateFormat: json['dateFormat'] as String? ?? 'MMMM d, yyyy',
       dateExpression: json['dateExpression'] as String? ?? '',
       dateFormula: json['dateFormula'] is Map<String, dynamic>
-          ? DateFormula.fromJson(Map<String, dynamic>.from(json['dateFormula'] as Map))
+          ? DateFormula.fromJson(
+              Map<String, dynamic>.from(json['dateFormula'] as Map))
           : null,
-      dateFormulaSource: dateFormulaSourceFromString(json['dateFormulaSource'] as String?),
+      dateFormulaSource:
+          dateFormulaSourceFromString(json['dateFormulaSource'] as String?),
       locationOptions: _parseLocationOptions(json),
       numberFormat: NumberFormatStyle.values.firstWhere(
         (e) => e.name == json['numberFormat'],
         orElse: () => NumberFormatStyle.parens,
       ),
+      captionTeamOrder: _parseCaptionTeamOrder(json),
+      includePlayerPosition: json['includePlayerPosition'] as bool? ?? true,
+      removeDiacritics: json['removeDiacritics'] as bool? ?? true,
       separator: json['separator'] as String? ?? '; ',
       creditFormat: CreditFormat.values.firstWhere(
         (e) => e.name == json['creditFormat'],
         orElse: () => CreditFormat.mandatory_credit,
       ),
+      bylineOptions: json['bylineOptions'] is Map<String, dynamic>
+          ? BylineOptions.fromJson(
+              Map<String, dynamic>.from(json['bylineOptions'] as Map))
+          : BylineOptions.fromLegacyFormat(
+              CreditFormat.values.firstWhere(
+                (e) => e.name == json['creditFormat'],
+                orElse: () => CreditFormat.mandatory_credit,
+              ),
+            ),
       segmentOrder: _parseSegmentOrder(json['segmentOrder']),
       customSeparators: (json['customSeparators'] as List<dynamic>?)
           ?.map((e) => e.toString())
           .toList(),
-    );
+      locationOptionsByOccurrence:
+          (json['locationOptionsByOccurrence'] as List<dynamic>?)
+              ?.map((e) => LocationLineOptions.fromJson(
+                  Map<String, dynamic>.from(e as Map)))
+              .toList(),
+      dateFormulasByOccurrence: (json['dateFormulasByOccurrence'] as List<dynamic>?)
+          ?.map((e) => DateFormula.fromJson(
+              Map<String, dynamic>.from(e as Map)))
+          .toList(),
+    ).normalizePerOccurrenceLists();
   }
 
   static LocationLineOptions _parseLocationOptions(Map<String, dynamic> json) {
@@ -502,7 +911,8 @@ class CaptionTemplate {
       );
       return LocationLineOptions.fromLegacyFormat(f);
     }
-    return LocationLineOptions.fromLegacyFormat(LocationFormat.city_region_country);
+    return LocationLineOptions.fromLegacyFormat(
+        LocationFormat.city_region_country);
   }
 
   static List<CaptionSegment> _parseSegmentOrder(dynamic raw) {
@@ -521,10 +931,7 @@ class CaptionTemplate {
       final seg = parseSeg(e.toString());
       if (seg != null) out.add(seg);
     }
-    if (out.length != CaptionSegment.values.length) {
-      return List<CaptionSegment>.from(defaultSegmentOrder);
-    }
-    if (out.toSet().length != CaptionSegment.values.length) {
+    if (out.isEmpty) {
       return List<CaptionSegment>.from(defaultSegmentOrder);
     }
     return out;
@@ -549,8 +956,12 @@ class CaptionTemplate {
   ) {
     final segments = _parseSegmentOrder(legacyIds);
     if (flavor == 'imagn') {
-      return CaptionTemplate.imagn().copyWith(segmentOrder: segments);
+      return CaptionTemplate.imagn()
+          .copyWith(segmentOrder: segments)
+          .normalizePerOccurrenceLists();
     }
-    return CaptionTemplate.getty().copyWith(segmentOrder: segments);
+    return CaptionTemplate.getty()
+        .copyWith(segmentOrder: segments)
+        .normalizePerOccurrenceLists();
   }
 }

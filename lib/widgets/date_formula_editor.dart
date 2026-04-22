@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../caption_style/date_formula.dart';
-import 'app_compact_checkbox.dart';
 
 /// Matches the caption layout dialog's accent blue.
 const Color _editorBlue = Color(0xFF0052CC);
@@ -23,14 +22,10 @@ class DateFormulaEditor extends StatefulWidget {
     super.key,
     required this.formula,
     required this.onChanged,
-    required this.source,
-    required this.onSourceChanged,
   });
 
   final DateFormula formula;
   final ValueChanged<DateFormula> onChanged;
-  final DateFormulaSource source;
-  final ValueChanged<DateFormulaSource> onSourceChanged;
 
   @override
   State<DateFormulaEditor> createState() => _DateFormulaEditorState();
@@ -43,19 +38,32 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
   DateFormula get _f => widget.formula;
 
   void _emit(DateFormula next) {
-    widget.onChanged(next);
+    final fields = List<DateFieldToken>.from(next.fields);
+    final seps = List<String>.from(next.separators);
+    if (seps.length != fields.length + 1) {
+      widget.onChanged(next);
+      return;
+    }
+    // Leading/trailing separator boxes are hidden in UI; force them empty.
+    if (seps.isNotEmpty) {
+      seps[0] = '';
+      seps[seps.length - 1] = '';
+    }
+    widget.onChanged(DateFormula(fields: fields, separators: seps));
   }
 
   void _setField(int i, DateFieldToken updated) {
     final fields = List<DateFieldToken>.from(_f.fields);
     fields[i] = updated;
-    _emit(DateFormula(fields: fields, separators: List<String>.from(_f.separators)));
+    _emit(DateFormula(
+        fields: fields, separators: List<String>.from(_f.separators)));
   }
 
   void _setSeparator(int i, String value) {
     final seps = List<String>.from(_f.separators);
     seps[i] = value;
-    _emit(DateFormula(fields: List<DateFieldToken>.from(_f.fields), separators: seps));
+    _emit(DateFormula(
+        fields: List<DateFieldToken>.from(_f.fields), separators: seps));
   }
 
   void _removeField(int i) {
@@ -110,8 +118,6 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
         _tokenRow(),
         const SizedBox(height: 6),
         _addFieldsRow(),
-        const SizedBox(height: 8),
-        _dateSourceSection(),
       ],
     );
   }
@@ -121,17 +127,17 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
   Widget _tokenRow() {
     final children = <Widget>[];
     for (var i = 0; i < _f.fields.length; i++) {
-      children.add(_separatorInput(i));
       children.add(_fieldChip(i));
+      if (i < _f.fields.length - 1) {
+        children.add(_separatorInput(i + 1));
+      }
     }
-    children.add(_separatorInput(_f.fields.length));
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: _chipBorder),
         borderRadius: BorderRadius.circular(6),
       ),
       child: SingleChildScrollView(
@@ -160,6 +166,7 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
     final token = _f.fields[index];
     final isCaps = token.caps;
     final isHovered = _hoverIndex == index;
+    final showCaps = _dateFieldKindShowsCapsToggle(token.kind);
 
     final chipCore = MouseRegion(
       onEnter: (_) => setState(() => _hoverIndex = index),
@@ -189,7 +196,7 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
             ),
             const SizedBox(width: 2),
             Text(
-              dateFieldKindLabel(token.kind),
+              _dateIptcChipLabel(token.kind),
               style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -220,30 +227,32 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
                 );
               },
             ),
-            const SizedBox(width: 2),
-            _chipIconButton(
-              tooltip: 'ALL CAPS',
-              onTap: () {
-                _setField(
-                  index,
-                  DateFieldToken(
-                    kind: token.kind,
-                    optionIndex: token.optionIndex,
-                    caps: !token.caps,
+            if (showCaps) ...[
+              const SizedBox(width: 2),
+              _chipIconButton(
+                tooltip: 'ALL CAPS',
+                onTap: () {
+                  _setField(
+                    index,
+                    DateFieldToken(
+                      kind: token.kind,
+                      optionIndex: token.optionIndex,
+                      caps: !token.caps,
+                    ),
+                  );
+                },
+                background: isCaps ? _capsButtonBg : Colors.white,
+                child: const Text(
+                  'Aa',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: _fieldText,
+                    height: 1,
                   ),
-                );
-              },
-              background: isCaps ? _capsButtonBg : Colors.white,
-              child: const Text(
-                'Aa',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: _fieldText,
-                  height: 1,
                 ),
               ),
-            ),
+            ],
             const SizedBox(width: 2),
             AnimatedOpacity(
               duration: const Duration(milliseconds: 120),
@@ -389,80 +398,31 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
     );
   }
 
-  // -- Date source -----------------------------------------------------------
+}
 
-  Widget _dateSourceSection() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: _chipBorder),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Date source',
-            style: TextStyle(
-              fontSize: 8,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade600,
-              letterSpacing: 0.3,
-            ),
-          ),
-          const SizedBox(height: 3),
-          _sourceRow(
-            selected: widget.source == DateFormulaSource.photo,
-            label: 'From photo EXIF (DateTimeOriginal)',
-            onSelect: () => widget.onSourceChanged(DateFormulaSource.photo),
-          ),
-          _sourceRow(
-            selected: widget.source == DateFormulaSource.template,
-            label: 'From game / session date (template)',
-            onSelect: () => widget.onSourceChanged(DateFormulaSource.template),
-          ),
-        ],
-      ),
-    );
+/// ALL CAPS (Aa) in the editor only for month and weekday; day/year are numeric.
+bool _dateFieldKindShowsCapsToggle(DateFieldKind kind) {
+  switch (kind) {
+    case DateFieldKind.month:
+    case DateFieldKind.weekday:
+      return true;
+    case DateFieldKind.day:
+    case DateFieldKind.year:
+      return false;
   }
+}
 
-  Widget _sourceRow({
-    required bool selected,
-    required String label,
-    required VoidCallback onSelect,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          AppCompactCheckbox(
-            value: selected,
-            onChanged: (_) {
-              if (!selected) onSelect();
-            },
-            accentColor: _editorBlue,
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () {
-                if (!selected) onSelect();
-              },
-              child: Text(
-                label,
-                style: TextStyle(fontSize: 10, color: Colors.grey.shade900),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+String _dateIptcChipLabel(DateFieldKind k) {
+  switch (k) {
+    case DateFieldKind.weekday:
+      return 'IPTC:Weekday';
+    case DateFieldKind.month:
+      return 'IPTC:Month';
+    case DateFieldKind.day:
+      return 'IPTC:Day';
+    case DateFieldKind.year:
+      return 'IPTC:Year';
   }
-
 }
 
 /// Inline separator editor. Empty separators render as a small, subtle slot so
@@ -509,8 +469,7 @@ class _SeparatorInputState extends State<_SeparatorInput> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor =
-        _focused ? _editorBlue : Colors.grey.shade300;
+    final borderColor = _focused ? _editorBlue : Colors.grey.shade300;
     final borderWidth = _focused ? 1.5 : 1.0;
 
     return Padding(
@@ -718,7 +677,8 @@ class _OptionsCard extends StatelessWidget {
     );
   }
 
-  Widget _optionRow(int index, DateFieldFormatOption opt, {required bool selected}) {
+  Widget _optionRow(int index, DateFieldFormatOption opt,
+      {required bool selected}) {
     return InkWell(
       onTap: () => onSelect(index),
       child: Container(

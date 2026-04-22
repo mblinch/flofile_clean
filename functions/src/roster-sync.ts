@@ -30,6 +30,7 @@ const PLAYER_FIELDS = [
   "fullName",
   "firstName",
   "jerseyNumber",
+  "position",
   "displayName",
 ] as const;
 
@@ -37,6 +38,7 @@ export interface Player {
   fullName: string;
   firstName: string;
   jerseyNumber: string | null;
+  position: string | null;
   displayName: string;
   playerId: string | null;
 }
@@ -130,11 +132,25 @@ async function fetchMlbRoster(teamId: string): Promise<Player[]> {
     const firstName = fullName.split(" ")[0] ?? fullName;
     const jerseyNumber =
       row.jerseyNumber != null ? String(row.jerseyNumber) : null;
+    const positionRaw =
+      row.position?.abbreviation ??
+      row.position?.name ??
+      row.position?.type ??
+      null;
+    const position =
+      positionRaw != null ? String(positionRaw).trim() || null : null;
     const displayName = jerseyNumber
       ? `${fullName} #${jerseyNumber}`
       : fullName;
     const playerId = person.id != null ? String(person.id) : null;
-    return { fullName, firstName, jerseyNumber, displayName, playerId };
+    return {
+      fullName,
+      firstName,
+      jerseyNumber,
+      position,
+      displayName,
+      playerId,
+    };
   });
 }
 
@@ -163,10 +179,17 @@ function nhlParsePlayer(playerJson: any): Player {
   const lastName: string = playerJson.lastName?.default ?? "";
   const jerseyNumber =
     playerJson.sweaterNumber != null ? String(playerJson.sweaterNumber) : null;
+  const positionRaw =
+    playerJson.positionCode ??
+    playerJson.position ??
+    playerJson.primaryPosition?.abbreviation ??
+    null;
+  const position =
+    positionRaw != null ? String(positionRaw).trim() || null : null;
   const fullName = `${firstName} ${lastName}`.trim();
   const displayName = jerseyNumber ? `${fullName} #${jerseyNumber}` : fullName;
   const playerId = playerJson.id != null ? String(playerJson.id) : null;
-  return { fullName, firstName, jerseyNumber, displayName, playerId };
+  return { fullName, firstName, jerseyNumber, position, displayName, playerId };
 }
 
 async function fetchNhlRoster(triCode: string): Promise<Player[]> {
@@ -236,6 +259,13 @@ async function fetchEspnNhlHeadCoachByTriCode(
 function parseEspnAthlete(map: any): Player {
   const fullName: string = map.fullName ?? "";
   const jersey = map.jersey != null ? String(map.jersey) : null;
+  const positionRaw =
+    map.position?.abbreviation ??
+    map.position?.displayName ??
+    map.position?.name ??
+    null;
+  const position =
+    positionRaw != null ? String(positionRaw).trim() || null : null;
   const firstName =
     (map.firstName as string | undefined) ?? fullName.split(" ")[0] ?? fullName;
   const displayName = jersey ? `${fullName} #${jersey}` : fullName;
@@ -244,6 +274,7 @@ function parseEspnAthlete(map: any): Player {
     fullName,
     firstName,
     jerseyNumber: jersey,
+    position,
     displayName,
     playerId,
   };
@@ -441,6 +472,7 @@ export async function reconcilePlayers(
             fullName: op.p.fullName,
             firstName: op.p.firstName,
             jerseyNumber: op.p.jerseyNumber ?? null,
+            position: op.p.position ?? null,
             displayName: op.p.displayName,
             playerId: op.p.playerId != null ? String(op.p.playerId) : op.id,
             updatedAt: FieldValue.serverTimestamp(),

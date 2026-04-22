@@ -18,6 +18,7 @@ import '../utils/exiftool_helper.dart';
 import '../utils/default_verb_keywords.dart';
 import '../utils/home_run_type_ui.dart';
 import '../services/preferences_service.dart';
+import '../caption_style/caption_text_normalize.dart';
 import 'app_compact_checkbox.dart';
 import 'ftp_settings_panel.dart';
 import '../flo_layout_constants.dart';
@@ -433,7 +434,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool _isBatterRunning = false;
   bool _isSliding = false;
   bool _showFieldingOptions = false;
-  bool _removeAccent = true; // Toggle for diacritic removal
   /// When true, verb keyword presets merge into the keywords field on verb selection.
   bool _applyVerbKeywordsEnabled = true;
   bool _applyPlayerNamesToKeywordsEnabled = true;
@@ -3849,7 +3849,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // _reapplyVerbKeywordsIfEnabled (below) only fires when a verb is already
     // selected; this ensures names appear as soon as the player is clicked.
     if (_applyPlayerNamesToKeywordsEnabled && _showKeywordsField) {
-      final kwName = _removeDiacritics(_removeJerseyNumberFromName(name));
+      final kwName = CaptionTextNormalize.stripDiacritics(
+          _removeJerseyNumberFromName(name));
       if (kwName.isNotEmpty) {
         final merged =
             mergeVerbKeywordFieldText(keywordsController.text, [kwName]);
@@ -4062,44 +4063,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   ),
                                                 ],
                                               ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            // Remove Diacritics checkbox
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                AppCompactCheckbox(
-                                                  value: _removeAccent,
-                                                  onChanged: (value) {
-                                                    setState(() {
-                                                      _removeAccent = value;
-                                                    });
-                                                    _updateCaption();
-                                                  },
-                                                ),
-                                                const SizedBox(width: 4),
-                                                GestureDetector(
-                                                  behavior:
-                                                      HitTestBehavior.opaque,
-                                                  onTap: () {
-                                                    setState(() {
-                                                      _removeAccent =
-                                                          !_removeAccent;
-                                                    });
-                                                    _updateCaption();
-                                                  },
-                                                  child: Text(
-                                                    'Remove Diacritics',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: Colors
-                                                          .grey.shade700,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
                                             ),
                                           ],
                                         ),
@@ -9522,7 +9485,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
       _firstPlayerSelected ??= _removeJerseyNumberFromName(token);
       if (_applyPlayerNamesToKeywordsEnabled && _showKeywordsField) {
-        final kwName = _removeDiacritics(_removeJerseyNumberFromName(token));
+        final kwName = CaptionTextNormalize.stripDiacritics(
+            _removeJerseyNumberFromName(token));
         if (kwName.isNotEmpty) {
           final merged =
               mergeVerbKeywordFieldText(keywordsController.text, [kwName]);
@@ -16805,9 +16769,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${skipInningPart ? '' : inningPart} '
         '$gamePart at $stadium on $formattedDate $locationSuffix.$disclaimerPart$bylineSuffix';
 
-    // Apply diacritic removal if checkbox is checked
-    if (_removeAccent) {
-      caption = _removeDiacritics(caption);
+    final captionTemplate = await _preferencesService.getCaptionTemplate();
+    if (captionTemplate.removeDiacritics) {
+      caption = CaptionTextNormalize.stripDiacritics(caption);
     }
 
     captionController.text = caption;
@@ -17197,78 +17161,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     });
     _updateCaption();
-  }
-
-  // Helper function to remove diacritics (accents) from text
-  String _removeDiacritics(String text) {
-    const diacritics = {
-      'á': 'a',
-      'à': 'a',
-      'ä': 'a',
-      'â': 'a',
-      'ã': 'a',
-      'å': 'a',
-      'Á': 'A',
-      'À': 'A',
-      'Ä': 'A',
-      'Â': 'A',
-      'Ã': 'A',
-      'Å': 'A',
-      'é': 'e',
-      'è': 'e',
-      'ë': 'e',
-      'ê': 'e',
-      'É': 'E',
-      'È': 'E',
-      'Ë': 'E',
-      'Ê': 'E',
-      'í': 'i',
-      'ì': 'i',
-      'ï': 'i',
-      'î': 'i',
-      'Í': 'I',
-      'Ì': 'I',
-      'Ï': 'I',
-      'Î': 'I',
-      'ó': 'o',
-      'ò': 'o',
-      'ö': 'o',
-      'ô': 'o',
-      'õ': 'o',
-      'ø': 'o',
-      'Ó': 'O',
-      'Ò': 'O',
-      'Ö': 'O',
-      'Ô': 'O',
-      'Õ': 'O',
-      'Ø': 'O',
-      'ú': 'u',
-      'ù': 'u',
-      'ü': 'u',
-      'û': 'u',
-      'Ú': 'U',
-      'Ù': 'U',
-      'Ü': 'U',
-      'Û': 'U',
-      'ñ': 'n',
-      'Ñ': 'N',
-      'ç': 'c',
-      'Ç': 'C',
-      'ý': 'y',
-      'ÿ': 'y',
-      'Ý': 'Y',
-      'ß': 'ss',
-      'æ': 'ae',
-      'Æ': 'AE',
-      'œ': 'oe',
-      'Œ': 'OE',
-    };
-
-    String result = text;
-    diacritics.forEach((key, value) {
-      result = result.replaceAll(key, value);
-    });
-    return result;
   }
 
   // Public method to upload any image via FTP (called from thumbnail grid)
@@ -24100,12 +23992,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// diacritics removed; home then away, each group sorted for stable keyword order.
   List<String> _keywordStringsForSelectedPlayers() {
     final home = selectedHomePlayers
-        .map((s) => _removeDiacritics(_removeJerseyNumberFromName(s.trim())))
+        .map((s) => CaptionTextNormalize.stripDiacritics(
+            _removeJerseyNumberFromName(s.trim())))
         .where((s) => s.isNotEmpty)
         .toList()
       ..sort();
     final away = selectedAwayPlayers
-        .map((s) => _removeDiacritics(_removeJerseyNumberFromName(s.trim())))
+        .map((s) => CaptionTextNormalize.stripDiacritics(
+            _removeJerseyNumberFromName(s.trim())))
         .where((s) => s.isNotEmpty)
         .toList()
       ..sort();

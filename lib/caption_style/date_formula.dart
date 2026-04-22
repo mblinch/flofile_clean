@@ -77,7 +77,11 @@ class DateFieldToken {
 
   String render(DateTime date) {
     final raw = DateFormat(option.icuToken).format(date);
-    return caps ? raw.toUpperCase() : raw;
+    // Day/year are numeric in all format options; caps is ignored (no Aa in UI).
+    final useCaps = caps &&
+        kind != DateFieldKind.day &&
+        kind != DateFieldKind.year;
+    return useCaps ? raw.toUpperCase() : raw;
   }
 
   DateFieldToken copy() =>

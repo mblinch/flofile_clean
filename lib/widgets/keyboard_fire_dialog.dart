@@ -543,7 +543,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// ten columns per row. When false, list view with names.
   bool _useSquarePlayerView = false;
 
-  /// Mirrors Preferences → Application → Caption fields (same as CaptionFieldsWidget).
+  /// Mirrors Preferences → Application → Caption fields (Keywords / Personality; headline strip removed).
   PreferencesService? _prefsService;
   bool _showHeadlineField = false;
   bool _showKeywordsField = false;
