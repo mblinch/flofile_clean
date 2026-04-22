@@ -104,11 +104,13 @@ class EspnApiService {
           (map['firstName'] as String?) ?? fullName.split(' ').first;
       final displayName =
           jersey != null && jersey.isNotEmpty ? '$fullName #$jersey' : fullName;
+      final playerId = map['id']?.toString();
       return Player(
         fullName: fullName,
         firstName: firstName,
         jerseyNumber: jersey,
         displayName: displayName,
+        playerId: playerId,
       );
     }).toList();
   }
@@ -136,5 +138,41 @@ class EspnApiService {
     }
 
     return null;
+  }
+
+  /// Head coach from ESPN roster `coach` (same shape as NBA). [sport] must be
+  /// a key of [_sportPath] with roster coach data (e.g. `hockey`, `basketball`).
+  Future<String?> fetchHeadCoachByTeamName(String sport, String teamName) async {
+    try {
+      final path = _pathFor(sport);
+      final teams = await fetchAllTeams(sport);
+      final team = _findTeam(teams, teamName);
+      if (team == null) return null;
+      final url = Uri.https(_baseUrl, '$path/teams/${team.id}/roster');
+      final response = await http.get(url).timeout(
+        _timeout,
+        onTimeout: () =>
+            throw Exception('ESPN $sport coach roster request timed out'),
+      );
+      if (response.statusCode != 200) return null;
+      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      return parseHeadCoachFromEspnRoster(data['coach']);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Shared by NBA/NHL ESPN roster payloads (`coach` array).
+  static String? parseHeadCoachFromEspnRoster(dynamic coachField) {
+    if (coachField is! List || coachField.isEmpty) return null;
+    final first = coachField.first;
+    if (first is! Map) return null;
+    final m = Map<String, dynamic>.from(first);
+    final full = (m['fullName'] as String?)?.trim();
+    if (full != null && full.isNotEmpty) return full;
+    final fn = (m['firstName'] as String?)?.trim() ?? '';
+    final ln = (m['lastName'] as String?)?.trim() ?? '';
+    final combined = '$fn $ln'.trim();
+    return combined.isEmpty ? null : combined;
   }
 }

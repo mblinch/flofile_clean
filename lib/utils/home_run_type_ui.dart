@@ -3,11 +3,11 @@
 String shortHomeRunTypeLabel(String type) {
   switch (type) {
     case 'Solo':
-      return '1r';
+      return '1R';
     case 'Two-Run':
-      return '2r';
+      return '2R';
     case 'Three-Run':
-      return '3r';
+      return '3R';
     case 'Grand Slam':
       return 'GS';
     default:

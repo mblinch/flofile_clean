@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../services/balldontlie_api_service.dart';
+import '../services/mlb_api_service.dart' show Player;
+import '../services/nba_api_service.dart';
 
+/// Dev helper: hit ESPN NBA JSON (same paths as [NbaApiService]).
 class ApiTestWidget extends StatefulWidget {
   const ApiTestWidget({super.key});
 
@@ -9,21 +11,24 @@ class ApiTestWidget extends StatefulWidget {
 }
 
 class _ApiTestWidgetState extends State<ApiTestWidget> {
-  final BalldontlieApiService _apiService = BalldontlieApiService();
+  final NbaApiService _api = NbaApiService();
   String _testResults = '';
   bool _isLoading = false;
 
   Future<void> _runApiTest() async {
     setState(() {
       _isLoading = true;
-      _testResults = 'Running API test...\n';
+      _testResults = 'Running ESPN NBA smoke test...\n';
     });
 
     try {
-      // Capture console output by redirecting print statements
-      final results = await _apiService.testApiComparison();
+      final teams = await _api.fetchAllTeams();
+      final first = teams.isNotEmpty ? teams.first.name : null;
+      final List<Player> roster =
+          first != null ? await _api.fetchTeamRoster(first) : <Player>[];
       setState(() {
-        _testResults += '\nTest completed successfully!';
+        _testResults +=
+            '${teams.length} teams; sample roster ($first): ${roster.length} players\nDone.\n';
         _isLoading = false;
       });
     } catch (e) {
@@ -37,15 +42,15 @@ class _ApiTestWidgetState extends State<ApiTestWidget> {
   Future<void> _testTeams() async {
     setState(() {
       _isLoading = true;
-      _testResults = 'Testing teams...\n';
+      _testResults = 'Loading teams...\n';
     });
 
     try {
-      final teams = await _apiService.fetchAllTeams();
+      final teams = await _api.fetchAllTeams();
       setState(() {
         _testResults += 'Found ${teams.length} teams:\n';
         for (final team in teams.take(10)) {
-          _testResults += '  - ${team.displayName} (${team.location})\n';
+          _testResults += '  - ${team.name} (id ${team.id})\n';
         }
         _isLoading = false;
       });
@@ -57,19 +62,18 @@ class _ApiTestWidgetState extends State<ApiTestWidget> {
     }
   }
 
-  Future<void> _testPlayers() async {
+  Future<void> _testRoster() async {
     setState(() {
       _isLoading = true;
-      _testResults = 'Testing active players...\n';
+      _testResults = 'Loading Lakers roster...\n';
     });
 
     try {
-      final players = await _apiService.fetchAllActivePlayers();
+      final players = await _api.fetchTeamRoster('Los Angeles Lakers');
       setState(() {
-        _testResults += 'Found ${players.length} active players:\n';
-        for (final player in players.take(10)) {
-          _testResults +=
-              '  - ${player.displayName} (${player.position ?? 'N/A'}) - ${player.teamName ?? 'No Team'}\n';
+        _testResults += '${players.length} players (first 10):\n';
+        for (final p in players.take(10)) {
+          _testResults += '  - ${p.displayName}\n';
         }
         _isLoading = false;
       });
@@ -85,7 +89,7 @@ class _ApiTestWidgetState extends State<ApiTestWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Balldontlie.io API Test'),
+        title: const Text('ESPN NBA API Test'),
         backgroundColor: Colors.blue.shade700,
         foregroundColor: Colors.white,
       ),
@@ -94,42 +98,33 @@ class _ApiTestWidgetState extends State<ApiTestWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Test buttons
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _runApiTest,
-                    child: const Text('Run Full Test'),
+                    child: const Text('Smoke test'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _testTeams,
-                    child: const Text('Test Teams'),
+                    child: const Text('Teams'),
                   ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _testPlayers,
-                    child: const Text('Test Players'),
+                    onPressed: _isLoading ? null : _testRoster,
+                    child: const Text('Lakers roster'),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-
-            // Loading indicator
-            if (_isLoading)
-              const Center(
-                child: CircularProgressIndicator(),
-              ),
-
+            if (_isLoading) const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 16),
-
-            // Results display
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(12),

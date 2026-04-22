@@ -8,8 +8,9 @@ import '../services/api_manager.dart';
 import '../services/preferences_service.dart';
 import 'preferences_dialog.dart';
 import '../services/camera_serial_service.dart';
+import 'app_compact_checkbox.dart';
 
-/// Same On/Off control as Preferences → Application (`preferences_dialog.dart`).
+/// Accent for compact checkboxes (matches Preferences / FTP blue).
 const Color _kHeaderPrefsBlue = Color(0xFF0052CC);
 
 class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
@@ -206,42 +207,6 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     widget.onBurstDetectionChanged?.call(enabled);
   }
 
-  Widget _headerOnOffSegment(
-    String label,
-    bool selected,
-    VoidCallback onTap, {
-    bool isFirst = false,
-    bool isLast = false,
-  }) {
-    const radius = 2.0;
-    final borderRadius = BorderRadius.only(
-      topLeft: Radius.circular(isFirst ? radius : 0),
-      bottomLeft: Radius.circular(isFirst ? radius : 0),
-      topRight: Radius.circular(isLast ? radius : 0),
-      bottomRight: Radius.circular(isLast ? radius : 0),
-    );
-    return Material(
-      color: selected ? _kHeaderPrefsBlue : Colors.transparent,
-      borderRadius: borderRadius,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: borderRadius,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 8,
-              fontWeight: FontWeight.w600,
-              height: 1.0,
-              color: selected ? Colors.white : Colors.grey.shade500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   static const String _kTooltipSerialBylines =
       'When on, the app uses camera serial numbers from image EXIF,\n'
       'and your serial list in Preferences, to fill photographer\n'
@@ -267,7 +232,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       child: MouseRegion(
         cursor: SystemMouseCursors.help,
         child: Padding(
-          padding: const EdgeInsets.only(left: 3),
+          padding: const EdgeInsets.only(right: 3),
           child: Icon(
             Icons.help_outline,
             size: 11,
@@ -278,37 +243,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     );
   }
 
-  Widget _headerPrefsOnOff({
+  Widget _headerPrefsCheckbox({
     required bool isOn,
-    required ValueChanged<bool> onChanged,
+    required Future<void> Function(bool enabled) onApply,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(3),
-        border: Border.all(color: Colors.grey.shade400, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _headerOnOffSegment(
-            'Off',
-            !isOn,
-            () {
-              if (isOn) onChanged(false);
-            },
-            isFirst: true,
-          ),
-          _headerOnOffSegment(
-            'On',
-            isOn,
-            () {
-              if (!isOn) onChanged(true);
-            },
-            isLast: true,
-          ),
-        ],
-      ),
+    return AppCompactCheckbox(
+      value: isOn,
+      accentColor: _kHeaderPrefsBlue,
+      onChanged: (v) => onApply(v),
     );
   }
 
@@ -404,6 +346,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  _headerHelpHint(context, _kTooltipSerialBylines),
                   const Text(
                     'Serial bylines',
                     style: TextStyle(
@@ -413,19 +356,19 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                       color: Colors.black87,
                     ),
                   ),
-                  _headerHelpHint(context, _kTooltipSerialBylines),
                 ],
               ),
-              const SizedBox(width: 6),
-              _headerPrefsOnOff(
+              const SizedBox(width: 4),
+              _headerPrefsCheckbox(
                 isOn: _serialNumberBylinesEnabled,
-                onChanged: _applySerialNumberBylines,
+                onApply: _applySerialNumberBylines,
               ),
               const SizedBox(width: 14),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  _headerHelpHint(context, _kTooltipBurstDetection),
                   const Text(
                     'Burst detection',
                     style: TextStyle(
@@ -435,13 +378,12 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                       color: Colors.black87,
                     ),
                   ),
-                  _headerHelpHint(context, _kTooltipBurstDetection),
                 ],
               ),
-              const SizedBox(width: 6),
-              _headerPrefsOnOff(
+              const SizedBox(width: 4),
+              _headerPrefsCheckbox(
                 isOn: _burstDetectionEnabled,
-                onChanged: _applyBurstDetection,
+                onApply: _applyBurstDetection,
               ),
             ],
           ),

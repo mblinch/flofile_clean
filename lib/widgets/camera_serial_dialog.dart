@@ -1,8 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
 import '../services/camera_serial_service.dart';
+import 'app_compact_checkbox.dart';
 
 class CameraSerialDialog extends StatefulWidget {
   final CameraSerialService cameraService;
@@ -389,16 +390,16 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Switch(
+                    const SizedBox(width: 4),
+                    AppCompactCheckbox(
                       value: _serialNumberMode,
+                      accentColor: Colors.blue.shade700,
                       onChanged: (value) {
                         setState(() {
                           _serialNumberMode = value;
                           _updateFilteredMappings();
                         });
                       },
-                      activeColor: Colors.blue,
                     ),
                     const SizedBox(width: 8),
                     IconButton(

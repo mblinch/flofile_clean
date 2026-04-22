@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 import '../utils/default_verb_keywords.dart';
 import 'package:flutter/services.dart';
@@ -2789,11 +2790,9 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey.shade700),
                           ),
-                          const SizedBox(width: 6),
-                          Switch(
+                          const SizedBox(width: 4),
+                          AppCompactCheckbox(
                             value: usePluralPhrase,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
                             onChanged: (v) {
                               setDialogState(() => usePluralPhrase = v);
                             },
@@ -2975,19 +2974,15 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: Checkbox(
-                              value: omitAgainst,
-                              onChanged: (value) {
-                                setDialogState(() {
-                                  omitAgainst = value ?? false;
-                                });
-                              },
-                            ),
+                          AppCompactCheckbox(
+                            value: omitAgainst,
+                            onChanged: (value) {
+                              setDialogState(() {
+                                omitAgainst = value;
+                              });
+                            },
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               'Omit "against" (e.g., "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} player" instead of "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} against player")',
@@ -3003,19 +2998,15 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: Checkbox(
-                              value: removePlayerFromExample,
-                              onChanged: (value) {
-                                setDialogState(() {
-                                  removePlayerFromExample = value ?? false;
-                                });
-                              },
-                            ),
+                          AppCompactCheckbox(
+                            value: removePlayerFromExample,
+                            onChanged: (value) {
+                              setDialogState(() {
+                                removePlayerFromExample = value;
+                              });
+                            },
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               'Remove opposing player from caption',

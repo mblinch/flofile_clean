@@ -5,9 +5,9 @@ import 'dart:io';
 import '../services/api_manager.dart';
 import 'dart:convert'; // Added for jsonDecode
 import 'package:dropdown_flutter/custom_dropdown.dart';
-import 'package:flutter_switch/flutter_switch.dart';
 import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_compact_checkbox.dart';
 import 'metadata_preset_dialog.dart';
 import '../services/preferences_service.dart';
 
@@ -93,10 +93,13 @@ class _StartupDialogState extends State<StartupDialog> {
   Set<String> _favoriteTeams = {};
   String? _favoriteHomeTeam;
   String? _favoriteAwayTeam;
-  bool _useBallDontLieApi = false;
   String? _goTimeWarningText;
-  String? _homeCoachLabel;
-  String? _awayCoachLabel;
+  String? _homeCoachRole;
+  String? _awayCoachRole;
+  bool _homeCoachLoading = false;
+  bool _awayCoachLoading = false;
+  String _homeCoachName = '';
+  String _awayCoachName = '';
 
   final List<String> questions = [
     'Where is your images folder?',
@@ -157,8 +160,6 @@ class _StartupDialogState extends State<StartupDialog> {
       print(
           'DEBUG _initializePreferences: Set selectedAwayTeam=$selectedAwayTeam');
     }
-
-    _useBallDontLieApi = await _preferencesService.getUseBallDontLieApi();
 
     _burstDetectionEnabled =
         await _preferencesService.getBurstDetectionEnabled();
@@ -760,20 +761,33 @@ class _StartupDialogState extends State<StartupDialog> {
       if (!mounted) return;
       setState(() {
         if (isHome) {
-          _homeCoachLabel = null;
+          _homeCoachRole = null;
+          _homeCoachLoading = false;
+          _homeCoachName = '';
         } else {
-          _awayCoachLabel = null;
+          _awayCoachRole = null;
+          _awayCoachLoading = false;
+          _awayCoachName = '';
         }
       });
       return;
     }
 
+    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    final String headTitle = (sport == 'baseball' || sport == 'soccer')
+        ? 'Manager'
+        : 'Head Coach';
+
     if (mounted) {
       setState(() {
         if (isHome) {
-          _homeCoachLabel = 'Coach: loading...';
+          _homeCoachRole = headTitle;
+          _homeCoachLoading = true;
+          _homeCoachName = '';
         } else {
-          _awayCoachLabel = 'Coach: loading...';
+          _awayCoachRole = headTitle;
+          _awayCoachLoading = true;
+          _awayCoachName = '';
         }
       });
     }
@@ -781,27 +795,76 @@ class _StartupDialogState extends State<StartupDialog> {
     try {
       final staff = await _apiManager.fetchTeamStaff(teamName);
       final headCoach = (staff['headCoach'] ?? '').trim();
-      final label = headCoach.isNotEmpty
-          ? 'Coach: $headCoach'
-          : 'Coach: data missing';
+      final name =
+          headCoach.isNotEmpty ? headCoach : 'data missing';
       if (!mounted) return;
       setState(() {
         if (isHome) {
-          _homeCoachLabel = label;
+          _homeCoachRole = headTitle;
+          _homeCoachLoading = false;
+          _homeCoachName = name;
         } else {
-          _awayCoachLabel = label;
+          _awayCoachRole = headTitle;
+          _awayCoachLoading = false;
+          _awayCoachName = name;
         }
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         if (isHome) {
-          _homeCoachLabel = 'Coach: data missing';
+          _homeCoachRole = headTitle;
+          _homeCoachLoading = false;
+          _homeCoachName = 'data missing';
         } else {
-          _awayCoachLabel = 'Coach: data missing';
+          _awayCoachRole = headTitle;
+          _awayCoachLoading = false;
+          _awayCoachName = 'data missing';
         }
       });
     }
+  }
+
+  /// Same typography as Keyboard Fire roster rows (jersey-style role + name).
+  Widget _buildStartupCoachRichText({
+    required String? role,
+    required bool loading,
+    required String nameOrStatus,
+  }) {
+    if (role == null) return const SizedBox.shrink();
+    final titleStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: Colors.grey.shade800,
+    );
+    final suffix = loading ? 'loading…' : nameOrStatus;
+    final suffixStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.normal,
+      fontStyle: loading || nameOrStatus == 'data missing'
+          ? FontStyle.italic
+          : FontStyle.normal,
+      color: loading
+          ? Colors.grey.shade600
+          : (nameOrStatus == 'data missing'
+              ? Colors.grey.shade500
+              : Colors.black87),
+    );
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
+      children: [
+        Text(role, style: titleStyle),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            suffix,
+            style: suffixStyle,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildStyledTeamDropdown({
@@ -1385,26 +1448,18 @@ class _StartupDialogState extends State<StartupDialog> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Expanded(
-                                  child: Text(
-                                    _awayCoachLabel ?? '',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade600,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
+                                  child: _buildStartupCoachRichText(
+                                    role: _awayCoachRole,
+                                    loading: _awayCoachLoading,
+                                    nameOrStatus: _awayCoachName,
                                   ),
                                 ),
                                 const SizedBox(width: 28),
                                 Expanded(
-                                  child: Text(
-                                    _homeCoachLabel ?? '',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade600,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
+                                  child: _buildStartupCoachRichText(
+                                    role: _homeCoachRole,
+                                    loading: _homeCoachLoading,
+                                    nameOrStatus: _homeCoachName,
                                   ),
                                 ),
                               ],
@@ -1413,39 +1468,6 @@ class _StartupDialogState extends State<StartupDialog> {
                         ),
                       ),
                           if (selectedAwayTeam != null) ...[
-                        const SizedBox(height: 6),
-                        // API source badge
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: (_useBallDontLieApi && widget.sport?.toLowerCase() == 'basketball')
-                                    ? Colors.blue.shade50
-                                    : Colors.green.shade50,
-                                border: Border.all(
-                                  color: (_useBallDontLieApi && widget.sport?.toLowerCase() == 'basketball')
-                                      ? Colors.blue.shade200
-                                      : Colors.green.shade200,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                (_useBallDontLieApi && widget.sport?.toLowerCase() == 'basketball')
-                                    ? '📡 Roster source: BallDontLie'
-                                    : '📡 Roster source: ${widget.sport == 'baseball' ? 'MLB Official' : widget.sport == 'hockey' ? 'NHL Official' : widget.sport == 'basketball' ? 'ESPN NBA' : 'ESPN MLS'}',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w500,
-                                  color: (_useBallDontLieApi && widget.sport?.toLowerCase() == 'basketball')
-                                      ? Colors.blue.shade700
-                                      : Colors.green.shade700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                         const SizedBox(height: 6),
                         Container(
                           width: double.infinity,
@@ -1580,25 +1602,13 @@ class _StartupDialogState extends State<StartupDialog> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: Transform.scale(
-                                scale: 0.62,
-                                child: Checkbox(
-                                  value: _burstDetectionEnabled,
-                                  onChanged: (value) async {
-                                    final v = value ?? false;
-                                    await _preferencesService
-                                        .saveBurstDetectionEnabled(v);
-                                    setState(
-                                        () => _burstDetectionEnabled = v);
-                                  },
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
+                            AppCompactCheckbox(
+                              value: _burstDetectionEnabled,
+                              onChanged: (v) async {
+                                await _preferencesService
+                                    .saveBurstDetectionEnabled(v);
+                                setState(() => _burstDetectionEnabled = v);
+                              },
                             ),
                             const SizedBox(width: 6),
                             Expanded(
@@ -1634,7 +1644,7 @@ class _StartupDialogState extends State<StartupDialog> {
                       ),
                       const SizedBox(height: 14),
 
-                      // Optional: metadata preset, then BallDontLie toggle (basketball only)
+                      // Optional: metadata preset
                       const Text('Optional:',
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
@@ -1676,24 +1686,13 @@ class _StartupDialogState extends State<StartupDialog> {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: Transform.scale(
-                                    scale: 0.62,
-                                    child: Checkbox(
-                                      value: _applyPresetToAllImages,
-                                      onChanged: (value) {
-                                        setState(() {
-                                          _applyPresetToAllImages =
-                                              value ?? false;
-                                        });
-                                      },
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                      visualDensity: VisualDensity.compact,
-                                    ),
-                                  ),
+                                AppCompactCheckbox(
+                                  value: _applyPresetToAllImages,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _applyPresetToAllImages = v;
+                                    });
+                                  },
                                 ),
                                 const SizedBox(width: 6),
                                 Expanded(
@@ -1707,59 +1706,6 @@ class _StartupDialogState extends State<StartupDialog> {
                                 ),
                               ],
                             ),
-                            if (widget.sport?.toLowerCase() ==
-                                    'basketball') ...[
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'Use BallDontLie API (testing)',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.grey.shade800,
-                                          ),
-                                        ),
-                                        Text(
-                                          'Use balldontlie.io for NBA teams/rosters instead of ESPN.',
-                                          style: TextStyle(
-                                            fontSize: 8,
-                                            color: Colors.grey.shade600,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  SizedBox(
-                                    width: 36,
-                                    height: 18,
-                                    child: FlutterSwitch(
-                                      value: _useBallDontLieApi,
-                                      width: 36,
-                                      height: 18,
-                                      toggleSize: 14,
-                                      padding: 2,
-                                      activeColor: const Color(0xFF1976D2),
-                                      inactiveColor: Colors.grey.shade300,
-                                      toggleColor: Colors.white,
-                                      onToggle: (bool value) async {
-                                        await _preferencesService
-                                            .setUseBallDontLieApi(value);
-                                        setState(() =>
-                                            _useBallDontLieApi = value);
-                                        await _loadTeams();
-                                      },
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
                           ],
                         ),
                       ),

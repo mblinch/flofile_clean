@@ -4,13 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app_styled_dialogs.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_switch/flutter_switch.dart';
 import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
 import '../services/api_manager.dart';
 import '../utils/default_verb_keywords.dart';
 import '../utils/home_run_type_ui.dart';
 import 'verb_keyword_quick_bar.dart';
+import '../flo_layout_constants.dart';
+import 'app_compact_checkbox.dart';
 
 /// Intents for global H/V firebar shortcut (only when not in a text field).
 class _FirebarHIntent extends Intent {
@@ -63,7 +64,6 @@ class KeyboardFirePanel extends StatefulWidget {
   final String? homeTeamName;
   final String? awayTeamName;
   final dynamic captionState;
-  final String? apiSource;
 
   /// When true, show Cancel/Done buttons (e.g. in dialog). When false, caption updates live (inline).
   final bool showDialogActions;
@@ -95,7 +95,6 @@ class KeyboardFirePanel extends StatefulWidget {
     this.homeTeamName,
     this.awayTeamName,
     required this.captionState,
-    this.apiSource,
     this.showDialogActions = false,
     this.onDone,
     this.onPreviousImage,
@@ -269,7 +268,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           shadowColor: Colors.black38,
           borderRadius: BorderRadius.circular(5),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
             decoration: BoxDecoration(
               color: (isFavs ? Colors.amber.shade50 : Colors.white)
                   .withOpacity(0.97),
@@ -289,10 +288,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             child: Row(
               children: [
                 Icon(Icons.drag_indicator,
-                    size: 14, color: Colors.grey.shade700),
+                    size: 13, color: Colors.grey.shade700),
                 const SizedBox(width: 4),
                 SizedBox(
-                  width: 20,
+                  width: 19,
                   child: Text(
                     '$catNum',
                     textAlign: TextAlign.center,
@@ -303,7 +302,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     name,
@@ -356,7 +355,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           shadowColor: Colors.black38,
           borderRadius: BorderRadius.circular(5),
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.97),
               border: Border.all(
@@ -375,10 +374,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             child: Row(
               children: [
                 Icon(Icons.drag_indicator,
-                    size: 14, color: Colors.grey.shade700),
+                    size: 13, color: Colors.grey.shade700),
                 const SizedBox(width: 4),
                 SizedBox(
-                  width: 24,
+                  width: 23,
                   child: Text(
                     '$verbNum',
                     textAlign: TextAlign.center,
@@ -389,7 +388,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     label,
@@ -701,7 +700,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       out.add({'title': title, 'name': n});
     }
 
-    final headTitle = sport == 'baseball' ? 'Manager' : 'Head Coach';
+    final headTitle =
+        (sport == 'baseball' || sport == 'soccer') ? 'Manager' : 'Head Coach';
     push(headTitle, 'headCoach');
     if (sport == 'baseball') {
       push('Pitching Coach', 'pitchingCoach');
@@ -760,7 +760,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           return 'baseball';
         }
       })();
-      final headTitle = sport == 'baseball' ? 'Manager' : 'Head Coach';
+      final headTitle =
+          (sport == 'baseball' || sport == 'soccer') ? 'Manager' : 'Head Coach';
       setState(() {
         if (isHome) {
           _homeStaffDisplay = [
@@ -802,20 +803,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           onTap: () => _openAddPlayerFromKeyboardFire(isHome),
           borderRadius: BorderRadius.circular(3),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(2, 7, 2, 7),
+            padding: const EdgeInsets.fromLTRB(2, 5, 2, 5),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.add_rounded,
-                  size: 9,
+                  size: 10,
                   color: Colors.black87,
                 ),
                 const SizedBox(width: 3),
                 Text(
                   'Add player',
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: 10,
                     fontWeight: FontWeight.normal,
                     color: Colors.black87,
                     height: 1.0,
@@ -1582,7 +1583,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       children: [
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(4, 2, 4, 1),
+          height: kFloChromeHeaderHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+          alignment: Alignment.centerLeft,
           decoration: BoxDecoration(
             color: Colors.grey.shade50,
             borderRadius: BorderRadius.zero,
@@ -1601,13 +1604,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           ),
           child: trailingAction != null
               ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
                       label,
                       style: TextStyle(
-                        fontSize: 10,
+                        fontSize: 9,
                         fontWeight: FontWeight.w500,
                         color: Colors.grey.shade700,
+                        height: 1.0,
                       ),
                     ),
                     const Spacer(),
@@ -1617,9 +1622,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               : Text(
                   label,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 9,
                     fontWeight: FontWeight.w500,
                     color: Colors.grey.shade700,
+                    height: 1.0,
                   ),
                 ),
         ),
@@ -1791,31 +1797,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     });
   }
 
-  Widget _buildApiSourceBadge(String apiSource) {
-    final isBdl = apiSource.toLowerCase().contains('balldontlie');
-    final label = isBdl ? 'BDL' : apiSource.replaceAll(' API', '').replaceAll(' (testing)', '');
-    final bgColor = isBdl ? Colors.blue.shade50 : Colors.green.shade50;
-    final borderColor = isBdl ? Colors.blue.shade200 : Colors.green.shade200;
-    final textColor = isBdl ? Colors.blue.shade700 : Colors.green.shade700;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: bgColor,
-        border: Border.all(color: borderColor),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 8,
-          fontWeight: FontWeight.w600,
-          color: textColor,
-          height: 1.2,
-        ),
-      ),
-    );
-  }
-
   /// Caption with optional Personality/Headline/Keywords stacked vertically.
   Widget _buildKeyboardFireCaptionStrip() {
     final hasSecondary =
@@ -1839,7 +1820,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
     final rightChildren = <Widget>[];
     for (var i = 0; i < cards.length; i++) {
-      if (i > 0) rightChildren.add(const SizedBox(height: 6));
+      if (i > 0) rightChildren.add(const SizedBox(height: 4));
       rightChildren.add(Expanded(child: cards[i]));
     }
 
@@ -1847,13 +1828,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
-          flex: 5,
+          flex: 13,
           child: _buildKbLabeledBox('Caption', _buildCaptionField(),
               trailingAction: _buildBylineButton()),
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 4),
         Expanded(
-          flex: 5,
+          flex: 7,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: rightChildren,
@@ -2222,7 +2203,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 }
               : null,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
             decoration: BoxDecoration(
               color: bgColor,
               border: isPicked
@@ -2236,7 +2217,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               textBaseline: TextBaseline.alphabetic,
               children: [
                 SizedBox(
-                  width: 26,
+                  width: 24,
                   child: Text(
                     num,
                     style: TextStyle(
@@ -2286,25 +2267,25 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final teamName =
         isHomeTeam ? widget.homeTeamName : widget.awayTeamName;
     final children = <Widget>[
-      const SizedBox(height: 8),
+      const SizedBox(height: 6),
       Container(
         height: 1,
         color: Colors.grey.shade300,
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 5),
       Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 3),
         child: Text(
           'Coaching',
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: Colors.black87,
-            height: 1.2,
+            height: 1.15,
           ),
         ),
       ),
-      const SizedBox(height: 4),
+      const SizedBox(height: 3),
     ];
 
     if (lines.isEmpty &&
@@ -2312,7 +2293,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         teamName.trim().isNotEmpty) {
       children.add(
         Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+          padding: const EdgeInsets.fromLTRB(3, 0, 3, 3),
           child: Text(
             'Loading…',
             style: TextStyle(
@@ -2333,7 +2314,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           ),
         );
       }
-      children.add(const SizedBox(height: 4));
+      children.add(const SizedBox(height: 3));
     }
 
     return Column(
@@ -2343,7 +2324,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     );
   }
 
-  /// One coaching line: name then role title (like jersey `99` then name). Tappable rows add that staff member to the caption.
+  /// One coaching line: same [TextStyle]s / Row layout as [_buildRosterRows] (jersey column → role, name → name).
   Widget _buildStaffLineRow({
     required bool isHomeTeam,
     required String title,
@@ -2356,36 +2337,48 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         '${isHomeTeam}_staff_${title.replaceAll(RegExp(r'\s+'), '_')}';
     final isHovered = synthetic != null && _hoveredRosterKey == rosterKey;
     final canToggle = synthetic != null;
-    final lineColor = isPicked
-        ? const Color(0xFF0052CC)
-        : (name == 'data missing'
-            ? Colors.grey.shade500
-            : Colors.black87);
     final bgColor = isPicked
         ? const Color(0xFFDBEAFF)
         : (isHovered ? Colors.grey.shade200 : null);
 
-    final rich = Text.rich(
-      TextSpan(
+    final nameText = name == 'data missing' ? 'data missing' : name;
+    // Match _buildRosterRows jersey + display name styles (no letterSpacing / height overrides).
+    final titleStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: isPicked
+          ? const Color(0xFF0052CC)
+          : Colors.grey.shade800,
+    );
+    final nameStyle = TextStyle(
+      fontSize: 12,
+      color: isPicked
+          ? const Color(0xFF0052CC)
+          : (name == 'data missing'
+              ? Colors.grey.shade500
+              : Colors.black87),
+      fontWeight: isPicked ? FontWeight.w600 : FontWeight.normal,
+      fontStyle:
+          name == 'data missing' ? FontStyle.italic : FontStyle.normal,
+    );
+
+    final padded = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
         children: [
-          TextSpan(
-            text: name == 'data missing' ? '$title — data missing' : '$name $title',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: isPicked ? FontWeight.w600 : FontWeight.normal,
-              color: lineColor,
-              height: 1.25,
+          Text(title, style: titleStyle),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              nameText,
+              style: nameStyle,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
       ),
-      maxLines: 2,
-      overflow: TextOverflow.ellipsis,
-    );
-
-    final padded = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      child: rich,
     );
 
     if (!canToggle) {
@@ -2435,7 +2428,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     required bool isHomeTeam,
     required Set<String> selectedNames,
   }) {
-    const double gridCellHeight = 30;
+    const double gridCellHeight = 28;
     if (player == null) {
       return SizedBox(
         height: gridCellHeight,
@@ -2525,12 +2518,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   Widget _buildRosterSquareGrid(List<Player> roster, bool isHomeTeam) {
     if (roster.isEmpty) {
       return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+        padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
+              padding: const EdgeInsets.symmetric(vertical: 20),
               child: Center(
                 child: Text('No players',
                     style: TextStyle(
@@ -2555,12 +2548,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
     if (byNum.isEmpty && nonNumeric.isEmpty) {
       return SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+        padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
+              padding: const EdgeInsets.symmetric(vertical: 20),
               child: Center(
                 child: Text('No players',
                     style: TextStyle(
@@ -2576,13 +2569,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final buckets = byNum.keys.map((j) => j ~/ 10).toSet().toList()..sort();
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+      padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final b in buckets)
             Padding(
-              padding: const EdgeInsets.only(bottom: 3),
+              padding: const EdgeInsets.only(bottom: 2),
               child: Wrap(
                 spacing: 1,
                 runSpacing: 1,
@@ -2590,7 +2583,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   for (int d = 0; d < 10; d++)
                     if (byNum[b * 10 + d] != null)
                       SizedBox(
-                        width: 40,
+                        width: 38,
                         child: _buildRosterSquareGridCell(
                           player: byNum[b * 10 + d],
                           isHomeTeam: isHomeTeam,
@@ -2602,7 +2595,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             ),
           if (nonNumeric.isNotEmpty) ...[
             Padding(
-              padding: const EdgeInsets.only(top: 4),
+              padding: const EdgeInsets.only(top: 3),
               child: Text(
                 'Other',
                 style: TextStyle(
@@ -2612,7 +2605,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 ),
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 3),
             Wrap(
               spacing: 4,
               runSpacing: 4,
@@ -2636,9 +2629,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     _refreshCaptionPreviewLater();
                   },
                   child: Container(
-                    width: 56,
+                    width: 53,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 6),
+                        horizontal: 4, vertical: 5),
                     decoration: BoxDecoration(
                       color: isPicked ? const Color(0xFFDBEAFF) : Colors.white,
                       border: Border.all(
@@ -2698,7 +2691,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(4, 2, 4, 1),
+          padding: const EdgeInsets.fromLTRB(3, 2, 3, 1),
           child: Text(
             teamLabel,
             style: TextStyle(
@@ -3018,136 +3011,91 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
-  Widget _buildApplyKeywordsToggleKb() {
-    Future<void> syncKeywordsFieldVisibility({
-      required bool applyVerbKeywords,
-      required bool applyNameKeywords,
-    }) async {
-      final shouldShowKeywords = applyVerbKeywords || applyNameKeywords;
-      if (_showKeywordsField == shouldShowKeywords) return;
-      setState(() => _showKeywordsField = shouldShowKeywords);
+  Future<void> _persistShowKeywordsFieldFromToggles() async {
+    final shouldShow =
+        _applyVerbKeywordsEnabledKb || _applyPlayerNamesToKeywordsEnabledKb;
+    if (_showKeywordsField == shouldShow) return;
+    setState(() => _showKeywordsField = shouldShow);
+    try {
+      await _prefsService?.saveShowKeywordsField(shouldShow);
+    } catch (_) {}
+  }
+
+  Future<void> _setApplyVerbKeywordsKb(bool enabled) async {
+    if (_applyVerbKeywordsEnabledKb == enabled) return;
+    setState(() => _applyVerbKeywordsEnabledKb = enabled);
+    try {
+      await (widget.captionState as dynamic)
+          .setApplyVerbKeywordsEnabled(enabled);
+    } catch (_) {
       try {
-        await _prefsService?.saveShowKeywordsField(shouldShowKeywords);
+        await _prefsService?.saveApplyVerbKeywords(enabled);
       } catch (_) {}
     }
+    await _persistShowKeywordsFieldFromToggles();
+  }
 
+  Future<void> _setApplyPlayerNamesToKeywordsKb(bool enabled) async {
+    if (_applyPlayerNamesToKeywordsEnabledKb == enabled) return;
+    setState(() => _applyPlayerNamesToKeywordsEnabledKb = enabled);
+    try {
+      await (widget.captionState as dynamic)
+          .setApplyPlayerNamesToKeywordsEnabled(enabled);
+    } catch (_) {
+      try {
+        await _prefsService?.saveApplyPlayerNamesToKeywords(enabled);
+      } catch (_) {}
+    }
+    await _persistShowKeywordsFieldFromToggles();
+  }
+
+  /// Same compact [CustomCheckBox] styling as caption layout date source.
+  Widget _kbKeywordToggleRow({
+    required bool value,
+    required Future<void> Function(bool enabled) onSet,
+    required String label,
+    required String tooltipMessage,
+  }) {
     return Tooltip(
-      message:
-          'When On, choosing a verb adds its keyword presets to the Keywords field.',
+      message: tooltipMessage,
       waitDuration: const Duration(milliseconds: 400),
-      child: InkWell(
-        onTap: () async {
-          final v = !_applyVerbKeywordsEnabledKb;
-          setState(() => _applyVerbKeywordsEnabledKb = v);
-          try {
-            await (widget.captionState as dynamic)
-                .setApplyVerbKeywordsEnabled(v);
-          } catch (_) {
-            try {
-              await _prefsService?.saveApplyVerbKeywords(v);
-            } catch (_) {}
-          }
-          await syncKeywordsFieldVisibility(
-            applyVerbKeywords: v,
-            applyNameKeywords: _applyPlayerNamesToKeywordsEnabledKb,
-          );
-        },
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _buildKeywordToggleLabel('Keyword Verbs', fontSize: 9),
-            const SizedBox(width: 4),
-            Container(
-              width: 12,
-              height: 12,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: const Color(0xFF1976D2),
-                  width: 1.2,
-                ),
-                borderRadius: BorderRadius.circular(2),
-                color: _applyVerbKeywordsEnabledKb
-                    ? const Color(0xFF1976D2)
-                    : Colors.white,
-              ),
-              child: _applyVerbKeywordsEnabledKb
-                  ? const Center(
-                      child: Icon(
-                        Icons.check,
-                        size: 10,
-                        color: Colors.white,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 2),
-          ],
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onSet(!value),
+            child: _buildKeywordToggleLabel(label, fontSize: 9),
+          ),
+          const SizedBox(width: 2),
+          AppCompactCheckbox(
+            value: value,
+            onChanged: (v) => onSet(v),
+            accentColor: _ftpButtonBlue,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildPlayerNamesKeywordsToggleKb() {
-    Future<void> setKeywordNamesEnabled(bool v) async {
-      setState(() => _applyPlayerNamesToKeywordsEnabledKb = v);
-      try {
-        await (widget.captionState as dynamic)
-            .setApplyPlayerNamesToKeywordsEnabled(v);
-      } catch (_) {
-        try {
-          await _prefsService?.saveApplyPlayerNamesToKeywords(v);
-        } catch (_) {}
-      }
-      final shouldShowKeywords = _applyVerbKeywordsEnabledKb || v;
-      if (_showKeywordsField != shouldShowKeywords) {
-        setState(() => _showKeywordsField = shouldShowKeywords);
-        try {
-          await _prefsService?.saveShowKeywordsField(shouldShowKeywords);
-        } catch (_) {}
-      }
-    }
+  Widget _buildApplyKeywordsToggleKb() {
+    return _kbKeywordToggleRow(
+      value: _applyVerbKeywordsEnabledKb,
+      onSet: _setApplyVerbKeywordsKb,
+      label: 'Keyword Verbs',
+      tooltipMessage:
+          'When On, choosing a verb adds its keyword presets to the Keywords field.',
+    );
+  }
 
-    return Tooltip(
-      message:
+  Widget _buildPlayerNamesKeywordsToggleKb() {
+    return _kbKeywordToggleRow(
+      value: _applyPlayerNamesToKeywordsEnabledKb,
+      onSet: _setApplyPlayerNamesToKeywordsKb,
+      label: 'Keyword Names',
+      tooltipMessage:
           'When On, selected player names are added to Keywords when applying verb keywords.',
-      waitDuration: const Duration(milliseconds: 400),
-      child: InkWell(
-          onTap: () =>
-              setKeywordNamesEnabled(!_applyPlayerNamesToKeywordsEnabledKb),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _buildKeywordToggleLabel('Keyword Names', fontSize: 9),
-              const SizedBox(width: 4),
-              Container(
-                width: 12,
-                height: 12,
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Colors.black87,
-                    width: 1.2,
-                  ),
-                  borderRadius: BorderRadius.circular(2),
-                  color: _applyPlayerNamesToKeywordsEnabledKb
-                      ? Colors.black87
-                      : Colors.white,
-                ),
-                child: _applyPlayerNamesToKeywordsEnabledKb
-                    ? const Center(
-                        child: Icon(
-                          Icons.check,
-                          size: 10,
-                          color: Colors.white,
-                        ),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 2),
-            ],
-          ),
-        ),
     );
   }
 
@@ -3173,7 +3121,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         border: Border.all(color: Colors.grey.shade300),
       ),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+        padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
         child: _buildRosterSection(teamLabel, roster, isHomeTeam: isHomeTeam),
       ),
     );
@@ -3184,7 +3132,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   Widget _buildRosterColumnContent(List<Player> roster, bool isHomeTeam,
       {String? barText}) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(4, 2, 4, 4),
+      padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3213,7 +3161,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     if (cats.isEmpty) {
       return Center(
         child: Text('No categories',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
       );
     }
     final barCatNum = int.tryParse(barText?.trim() ?? '');
@@ -3302,7 +3250,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 : SystemMouseCursors.grab,
             child: Container(
               key: _catKey(i),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
               decoration: BoxDecoration(
                 color: bgColor,
                 border: Border(
@@ -3320,12 +3268,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       padding: const EdgeInsets.only(right: 2),
                       child: Icon(
                         Icons.drag_indicator,
-                        size: 12,
+                        size: 11,
                         color: Colors.grey.shade500,
                       ),
                     ),
                     SizedBox(
-                      width: 18,
+                      width: 17,
                       child: Text(
                         '$catNum',
                         textAlign: TextAlign.center,
@@ -3338,7 +3286,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Expanded(
                       child: Text(
                         name,
@@ -3352,7 +3300,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     ),
                     Icon(
                       Icons.chevron_right,
-                      size: 12,
+                      size: 11,
                       color: isSelected
                           ? Colors.grey.shade700
                           : Colors.grey.shade400,
@@ -3373,7 +3321,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     if (cats.isEmpty) {
       return Center(
         child: Text('No categories',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
       );
     }
     // Build flat list: for each category, one header then verb rows only if this one is expanded.
@@ -3397,37 +3345,109 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               thumbVisibility: true,
               child: ListView.builder(
                 controller: _categoriesScrollController,
-                padding: const EdgeInsets.only(top: 6),
+                padding: const EdgeInsets.only(top: 4),
                 itemCount: totalCount,
                 itemBuilder: (context, flatIndex) {
           // Custom verb input — last item in the list
           if (flatIndex == customVerbIndex) {
             final customVerbPinned = _pinnedCustomVerb != null;
             return Padding(
-              padding: const EdgeInsets.fromLTRB(6, 8, 6, 12),
+              padding: const EdgeInsets.fromLTRB(5, 6, 5, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
                     height: 1,
                     color: Colors.grey.shade300,
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Custom Verb',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.grey.shade600,
-                    ),
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Custom Verb',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const Spacer(),
+                      Builder(
+                        builder: (_) {
+                          final canPin = _customVerbController.text
+                                  .trim()
+                                  .isNotEmpty ||
+                              _pinnedCustomVerb != null;
+                          final fg =
+                              canPin ? Colors.black87 : Colors.grey.shade500;
+                          return TextButton(
+                            onPressed: canPin
+                                ? () {
+                                    final t =
+                                        _customVerbController.text.trim();
+                                    if (t.isEmpty &&
+                                        _pinnedCustomVerb == null) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      if (_pinnedCustomVerb != null) {
+                                        _pinnedCustomVerb = null;
+                                      } else {
+                                        _pinnedCustomVerb = t;
+                                        _lastCustomVerb = t;
+                                        _pinnedVerbCategory = null;
+                                        _pinnedVerbIndex = null;
+                                      }
+                                    });
+                                  }
+                                : null,
+                            style: TextButton.styleFrom(
+                              foregroundColor: fg,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 0),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              alignment: Alignment.centerRight,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Transform.translate(
+                                  offset: const Offset(0, 1.0),
+                                  child: Icon(
+                                    _pinnedCustomVerb != null
+                                        ? Icons.push_pin
+                                        : Icons.push_pin_outlined,
+                                    size: 9,
+                                    color: fg,
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  _pinnedCustomVerb != null ? 'Unpin' : 'Pin',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    height: 1.0,
+                                    fontWeight: FontWeight.w500,
+                                    color: fg,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 7),
                   TextField(
                     controller: _customVerbController,
                     readOnly: customVerbPinned,
-                    cursorHeight: 13,
+                    cursorHeight: 14,
                     cursorColor:
                         customVerbPinned ? Colors.transparent : Colors.black87,
                     style: TextStyle(
@@ -3487,105 +3507,50 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       });
                     },
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Align(
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: (_lastCustomVerb == null ||
+                              _lastCustomVerb!.trim().isEmpty)
+                          ? null
+                          : () {
+                              _applyCustomVerb(_lastCustomVerb!);
+                            },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 8),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         alignment: Alignment.centerLeft,
-                        child: TextButton(
-                          onPressed: (_lastCustomVerb == null ||
-                                  _lastCustomVerb!.trim().isEmpty)
-                              ? null
-                              : () {
-                                  _applyCustomVerb(_lastCustomVerb!);
-                                },
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 8),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            alignment: Alignment.centerLeft,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.history,
-                                size: 12,
-                                color: (_lastCustomVerb == null ||
-                                        _lastCustomVerb!.trim().isEmpty)
-                                    ? Colors.grey.shade400
-                                    : Theme.of(context).colorScheme.primary,
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                'Use last custom verb',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  height: 1.0,
-                                  color: (_lastCustomVerb == null ||
-                                          _lastCustomVerb!.trim().isEmpty)
-                                      ? Colors.grey.shade500
-                                      : Theme.of(context).colorScheme.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
                       ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () {
-                          final t = _customVerbController.text.trim();
-                          if (t.isEmpty && _pinnedCustomVerb == null) return;
-                          setState(() {
-                            if (_pinnedCustomVerb != null) {
-                              _pinnedCustomVerb = null;
-                            } else {
-                              _pinnedCustomVerb = t;
-                              _lastCustomVerb = t;
-                              _pinnedVerbCategory = null;
-                              _pinnedVerbIndex = null;
-                            }
-                          });
-                        },
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 8),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          alignment: Alignment.centerRight,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Icon(
-                              _pinnedCustomVerb != null
-                                  ? Icons.push_pin
-                                  : Icons.push_pin_outlined,
-                              size: 12,
-                              color: _pinnedCustomVerb != null
-                                  ? const Color(0xFFF59E0B)
-                                  : Colors.grey.shade600,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.history,
+                            size: 12,
+                            color: (_lastCustomVerb == null ||
+                                    _lastCustomVerb!.trim().isEmpty)
+                                ? Colors.grey.shade400
+                                : Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Use last custom verb',
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.0,
+                              color: (_lastCustomVerb == null ||
+                                      _lastCustomVerb!.trim().isEmpty)
+                                  ? Colors.grey.shade500
+                                  : Theme.of(context).colorScheme.primary,
                             ),
-                            const SizedBox(width: 5),
-                            Text(
-                              _pinnedCustomVerb != null
-                                  ? 'Unpin custom'
-                                  : 'Pin custom',
-                              style: TextStyle(
-                                fontSize: 11,
-                                height: 1.0,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -3708,7 +3673,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: Container(
                     key: _catKey(ci),
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
                     decoration: BoxDecoration(
                       color: isDragging
                           ? Colors.blue.shade100
@@ -3731,7 +3696,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             padding: const EdgeInsets.only(right: 2),
                             child: Icon(
                               Icons.drag_indicator,
-                              size: 12,
+                              size: 11,
                               color: Colors.grey.shade500,
                             ),
                           ),
@@ -3746,7 +3711,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   color: Colors.grey.shade800),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 5),
                           Expanded(
                             child: Text(
                               name,
@@ -3761,7 +3726,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             isExpanded
                                 ? Icons.expand_less
                                 : Icons.expand_more,
-                            size: 12,
+                            size: 11,
                             color: Colors.grey.shade600,
                           ),
                         ],
@@ -3781,7 +3746,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       : verb;
                   final verbNum = vi + 1;
                   if (verb.trim().isEmpty) {
-                    return const SizedBox(height: 12);
+                    return const SizedBox(height: 8);
                   }
                   final isLastUsed = _lastUsedVerbLabel == verb;
                   final dynamic state = widget.captionState;
@@ -3876,10 +3841,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               ? _verbRowKey(ci, vi)
                               : null,
                           padding: EdgeInsets.only(
-                              left: allowVerbReorder ? 8 : 20,
-                              right: 6,
-                              top: 4,
-                              bottom: 4),
+                              left: allowVerbReorder ? 7 : 18,
+                              right: 5,
+                              top: 3,
+                              bottom: 3),
                           decoration: BoxDecoration(
                             color: isPinned
                                 ? const Color(0xFFFFF8E1)
@@ -3925,10 +3890,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             children: [
                               if (allowVerbReorder)
                                 Padding(
-                                  padding: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.only(right: 3),
                                   child: Icon(
                                     Icons.drag_indicator,
-                                    size: 12,
+                                    size: 11,
                                     color: Colors.grey.shade500,
                                   ),
                                 ),
@@ -4065,11 +4030,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       ),
       child: Row(
         children: [
-          Text('RBI:',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600)),
+          Text(
+            'RBI:',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
           const SizedBox(width: 6),
           ...List.generate(maxRbi, (i) {
             final rbi = i + 1;
@@ -4119,7 +4087,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   Widget _buildHomeRunTypeSubMenu(dynamic captionState, String? currentType) {
     const types = ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam'];
     return Container(
-      padding: const EdgeInsets.only(left: 36, right: 8, top: 2, bottom: 3),
+      padding: const EdgeInsets.only(left: 8, right: 8, top: 2, bottom: 3),
       decoration: BoxDecoration(
         color: const Color(0xFFF0F4FF),
         border: Border(
@@ -4127,42 +4095,43 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
         ),
       ),
-      child: Wrap(
-        spacing: 4,
-        runSpacing: 4,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Row(
         children: [
           ...types.map((type) {
             final isSelected = currentType == type;
             final label = shortHomeRunTypeLabel(type);
-            return InkWell(
-              borderRadius: BorderRadius.circular(3),
-              onTap: () {
-                try {
-                  (captionState as dynamic).setHomeRunTypeFromKeyboardFire(
-                      isSelected ? null : type);
-                } catch (_) {}
-                setState(() {});
-                _refreshCaptionPreviewLater();
-              },
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF4A90E2) : Colors.white,
-                  borderRadius: BorderRadius.circular(3),
-                  border: Border.all(
-                    color: isSelected
-                        ? const Color(0xFF4A90E2)
-                        : Colors.grey.shade300,
+            return Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(3),
+                onTap: () {
+                  try {
+                    (captionState as dynamic).setHomeRunTypeFromKeyboardFire(
+                        isSelected ? null : type);
+                  } catch (_) {}
+                  setState(() {});
+                  _refreshCaptionPreviewLater();
+                },
+                child: Container(
+                  width: 22,
+                  height: 18,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFF4A90E2) : Colors.white,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF4A90E2)
+                          : Colors.grey.shade300,
+                    ),
                   ),
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : Colors.grey.shade800,
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.white : Colors.grey.shade800,
+                    ),
                   ),
                 ),
               ),
@@ -5627,10 +5596,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   ),
                                 ),
                               ),
-                              if (widget.apiSource != null) ...[
-                                const SizedBox(width: 4),
-                                _buildApiSourceBadge(widget.apiSource!),
-                              ],
                             ],
                           ),
                         ],
@@ -5666,7 +5631,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 onSubmitted: _onHomeBarSubmit,
                                 rosterForGhostNames: _homeRosterView,
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 3),
                               Row(
                                 children: [
                                   Expanded(
@@ -5770,7 +5735,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           ],
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(3),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -5784,7 +5749,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   }
                                 },
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 3),
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
@@ -5857,10 +5822,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   ),
                                 ),
                               ),
-                              if (widget.apiSource != null) ...[
-                                const SizedBox(width: 4),
-                                _buildApiSourceBadge(widget.apiSource!),
-                              ],
                             ],
                           ),
                         ],
@@ -5886,7 +5847,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           ],
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(3),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -5896,7 +5857,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 onSubmitted: _onAwayBarSubmit,
                                 rosterForGhostNames: _awayRosterView,
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 3),
                               Row(
                                 children: [
                                   Expanded(
@@ -6284,7 +6245,6 @@ class KeyboardFireDialog extends StatelessWidget {
   final String? awayTeamName;
   final dynamic captionState;
   final int? bulkSaveCount;
-  final String? apiSource;
 
   const KeyboardFireDialog({
     super.key,
@@ -6294,7 +6254,6 @@ class KeyboardFireDialog extends StatelessWidget {
     this.awayTeamName,
     required this.captionState,
     this.bulkSaveCount,
-    this.apiSource,
   });
 
   @override
@@ -6306,7 +6265,6 @@ class KeyboardFireDialog extends StatelessWidget {
       awayTeamName: awayTeamName,
       captionState: captionState,
       bulkSaveCount: bulkSaveCount,
-      apiSource: apiSource,
       showDialogActions: true,
       onDone: () => Navigator.of(context).pop(),
     );

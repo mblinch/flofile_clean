@@ -77,3 +77,9 @@ macos/build/
 *.dmg
 build_dmgs/
 .tmp.driveupload/
+
+# Node (nightly roster sync script)
+scripts/node_modules/
+
+# Local roster job list (copy from tool/roster_sync_initial.example.json)
+tool/roster_sync_initial.json

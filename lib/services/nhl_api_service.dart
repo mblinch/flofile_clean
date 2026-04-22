@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'espn_api_service.dart';
 import 'mlb_api_service.dart'; // Import to use shared Player and TeamInfo classes
 
 class NhlApiService {
+  static final EspnApiService _espnStaff = EspnApiService();
   static const String _baseUrl = 'api-web.nhle.com';
 
   // Map of team names to their tri-codes for roster lookups
@@ -171,14 +173,20 @@ class NhlApiService {
     final fullName = '$firstName $lastName';
     final displayName =
         jerseyNumber != null ? '$fullName #$jerseyNumber' : fullName;
+    final playerId = playerJson['id']?.toString();
 
     return Player(
       fullName: fullName,
       firstName: firstName,
       jerseyNumber: jerseyNumber,
       displayName: displayName,
+      playerId: playerId,
     );
   }
+
+  /// Head coach from ESPN NHL roster (`coach`); api-web.nhle.com roster has no staff.
+  Future<String?> fetchHeadCoachByTeamName(String teamName) =>
+      _espnStaff.fetchHeadCoachByTeamName('hockey', teamName);
 
   /// Fetches roster by team name (convenience method)
   Future<List<Player>> fetchRosterByTeamName(String teamName) async {

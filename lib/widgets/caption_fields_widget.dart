@@ -18,7 +18,9 @@ import '../utils/exiftool_helper.dart';
 import '../utils/default_verb_keywords.dart';
 import '../utils/home_run_type_ui.dart';
 import '../services/preferences_service.dart';
+import 'app_compact_checkbox.dart';
 import 'ftp_settings_panel.dart';
+import '../flo_layout_constants.dart';
 
 // TextEditingController that can render inline highlights accurately inside the
 // TextField by overriding buildTextSpan. This keeps caret/selection perfectly
@@ -2911,7 +2913,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final homeTeamInfo = futures[2] as TeamInfo?;
         final awayTeamInfo = futures[3] as TeamInfo?;
 
-        // Set stadium names from API (will be fetched separately for balldontlie)
+        // Set stadium names from API when available (e.g. baseball venue).
         homeTeamStadium = null; // Will be fetched separately
         awayTeamStadium = null; // Will be fetched separately
 
@@ -3898,11 +3900,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 2, bottom: 0),
+          padding: const EdgeInsets.only(left: 1, bottom: 0),
           child: Text(
             label,
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: FontWeight.w500,
               color: Colors.black87,
             ),
@@ -3912,31 +3914,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           controller: controller,
           minLines: 1,
           maxLines: 1,
-          style: const TextStyle(fontSize: 11),
+          style: const TextStyle(fontSize: 10),
           decoration: InputDecoration(
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: BorderRadius.zero,
               borderSide: BorderSide(
                 color: Colors.grey.shade400,
               ),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: BorderRadius.zero,
               borderSide: BorderSide(
                 color: Colors.grey.shade400,
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(5),
+              borderRadius: BorderRadius.zero,
               borderSide: BorderSide(
                 color: Colors.blue.shade400,
                 width: 2,
               ),
             ),
             contentPadding: const EdgeInsets.symmetric(
-              horizontal: 6,
-              vertical: 5,
+              horizontal: 4,
+              vertical: 3,
             ),
+            isDense: true,
             filled: true,
             fillColor: Colors.grey.shade50,
           ),
@@ -3964,7 +3967,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     final children = <Widget>[];
     for (var i = 0; i < cards.length; i++) {
-      if (i > 0) children.add(const SizedBox(height: 6));
+      if (i > 0) children.add(const SizedBox(height: 4));
       children.add(Expanded(child: cards[i]));
     }
     return Column(
@@ -3991,29 +3994,31 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   flex: 8,
                   child: Column(
                     children: [
-                      // Caption field with compact secondary panel on the right, then Quick Codes/firebar rows.
+                      // Caption ~65% width vs. Personality/Headline/Keywords stack ~35%.
                       Expanded(
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                                 Expanded(
-                                  flex: 5,
+                                  flex: 13,
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      // Caption title and Quick Codes button on same line
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          left: 2,
-                                          bottom: 0,
-                                        ),
-                                        child: Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.center,
-                                          children: [
-                                            const Text(
-                                              'CAPTION',
+                                      // Caption title row — height matches pic preview / thumb strip.
+                                      SizedBox(
+                                        height: kFloChromeHeaderHeight,
+                                        child: Padding(
+                                          padding: const EdgeInsets.only(
+                                            left: 2,
+                                            bottom: 0,
+                                          ),
+                                          child: Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              const Text(
+                                                'CAPTION',
                                               style: TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w500,
@@ -4060,164 +4065,180 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             ),
                                             const SizedBox(width: 8),
                                             // Remove Diacritics checkbox
-                                            GestureDetector(
-                                              onTap: () {
-                                                setState(() {
-                                                  _removeAccent =
-                                                      !_removeAccent;
-                                                });
-                                                // Re-update caption to apply/remove diacritics
-                                                _updateCaption();
-                                              },
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Transform.scale(
-                                                    scale: 0.6,
-                                                    child: Checkbox(
-                                                      value: _removeAccent,
-                                                      onChanged: (value) {
-                                                        setState(() {
-                                                          _removeAccent =
-                                                              value ?? false;
-                                                        });
-                                                        // Re-update caption to apply/remove diacritics
-                                                        _updateCaption();
-                                                      },
-                                                      materialTapTargetSize:
-                                                          MaterialTapTargetSize
-                                                              .shrinkWrap,
-                                                      visualDensity:
-                                                          VisualDensity.compact,
-                                                      splashRadius: 0,
-                                                      overlayColor:
-                                                          WidgetStateProperty
-                                                              .all(Colors
-                                                                  .transparent),
-                                                      side: BorderSide(
-                                                          color: Colors
-                                                              .grey.shade500,
-                                                          width: 1),
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                AppCompactCheckbox(
+                                                  value: _removeAccent,
+                                                  onChanged: (value) {
+                                                    setState(() {
+                                                      _removeAccent = value;
+                                                    });
+                                                    _updateCaption();
+                                                  },
+                                                ),
+                                                const SizedBox(width: 4),
+                                                GestureDetector(
+                                                  behavior:
+                                                      HitTestBehavior.opaque,
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _removeAccent =
+                                                          !_removeAccent;
+                                                    });
+                                                    _updateCaption();
+                                                  },
+                                                  child: Text(
+                                                    'Remove Diacritics',
+                                                    style: TextStyle(
+                                                      fontSize: 10,
+                                                      color: Colors
+                                                          .grey.shade700,
+                                                      fontWeight:
+                                                          FontWeight.w500,
                                                     ),
                                                   ),
-                                                  Transform.translate(
-                                                    offset: const Offset(-6, 0),
-                                                    child: Text(
-                                                      'Remove Diacritics',
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: Colors
-                                                            .grey.shade700,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
+                                                ),
+                                              ],
                                             ),
                                           ],
                                         ),
                                       ),
+                                    ),
                                       Expanded(
-                                        child: TextField(
-                                          controller: captionController,
-                                          expands: true,
-                                          maxLines: null,
-                                          textAlignVertical:
-                                              TextAlignVertical.top,
-                                          onChanged: _onCaptionChanged,
-                                          style: const TextStyle(fontSize: 11),
-                                          decoration: InputDecoration(
-                                            border: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              borderSide: BorderSide(
-                                                color: Colors.grey.shade400,
-                                              ),
-                                            ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              borderSide: BorderSide(
-                                                color: Colors.grey.shade400,
-                                              ),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(6),
-                                              borderSide: BorderSide(
-                                                color: Colors.blue.shade400,
-                                                width: 2,
-                                              ),
-                                            ),
-                                            contentPadding:
-                                                const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 5,
-                                            ),
-                                            filled: true,
-                                            fillColor: Colors.grey.shade50,
-                                          ),
-                                          inputFormatters: [
-                                            HighlightedTokenDeletionFormatter(
-                                              getRanges: () =>
-                                                  _highlightedRanges,
-                                              onTokenDeleted:
-                                                  (deletedRange, tokenText) {
-                                                // Update personality if this was a player expansion
-                                                final playerName =
-                                                    _tokenToPlayerName[
-                                                        tokenText.trim()];
-                                                if (playerName != null) {
-                                                  _removePlayerFromPersonality(
-                                                    playerName,
-                                                  );
-                                                  // Remove mapping for this exact token text
-                                                  _tokenToPlayerName.remove(
-                                                    tokenText.trim(),
-                                                  );
-                                                }
-
-                                                // Rebuild highlight ranges after deletion
-                                                final int removedLen =
-                                                    deletedRange.end -
-                                                        deletedRange.start;
-                                                final List<TextRange> updated =
-                                                    [];
-                                                for (final r
-                                                    in _highlightedRanges) {
-                                                  // Skip the deleted range itself
-                                                  if (r.start >=
-                                                          deletedRange.start &&
-                                                      r.end <=
-                                                          deletedRange.end) {
-                                                    continue;
-                                                  }
-                                                  if (r.start >=
-                                                      deletedRange.end) {
-                                                    updated.add(
-                                                      TextRange(
-                                                        start: r.start -
-                                                            removedLen,
-                                                        end: r.end - removedLen,
+                                        child: LayoutBuilder(
+                                          builder: (context, c) {
+                                            // ~2 lines at 11px + field padding (main caption box).
+                                            const shrinkPx = 40.0;
+                                            final maxH = c.maxHeight;
+                                            final h =
+                                                (maxH - shrinkPx).clamp(
+                                                    24.0, maxH);
+                                            return Align(
+                                              alignment: Alignment.topCenter,
+                                              child: SizedBox(
+                                                height: h,
+                                                child: TextField(
+                                                  controller: captionController,
+                                                  expands: true,
+                                                  maxLines: null,
+                                                  textAlignVertical:
+                                                      TextAlignVertical.top,
+                                                  onChanged: _onCaptionChanged,
+                                                  style: const TextStyle(
+                                                      fontSize: 11),
+                                                  decoration: InputDecoration(
+                                                    border: OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.zero,
+                                                      borderSide: BorderSide(
+                                                        color: Colors
+                                                            .grey.shade400,
                                                       ),
-                                                    );
-                                                  } else {
-                                                    updated.add(r);
-                                                  }
-                                                }
-                                                _highlightedRanges = updated;
-                                                (captionController
-                                                        as HighlightingTextEditingController)
-                                                    .highlightedRanges = updated;
-                                                (captionController
-                                                        as HighlightingTextEditingController)
-                                                    .invalidRanges = [];
-                                                setState(() {});
-                                              },
-                                            ),
-                                          ],
+                                                    ),
+                                                    enabledBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.zero,
+                                                      borderSide: BorderSide(
+                                                        color: Colors
+                                                            .grey.shade400,
+                                                      ),
+                                                    ),
+                                                    focusedBorder:
+                                                        OutlineInputBorder(
+                                                      borderRadius:
+                                                          BorderRadius.zero,
+                                                      borderSide: BorderSide(
+                                                        color: Colors
+                                                            .blue.shade400,
+                                                        width: 2,
+                                                      ),
+                                                    ),
+                                                    contentPadding:
+                                                        const EdgeInsets
+                                                            .symmetric(
+                                                      horizontal: 5,
+                                                      vertical: 4,
+                                                    ),
+                                                    isDense: true,
+                                                    filled: true,
+                                                    fillColor:
+                                                        Colors.grey.shade50,
+                                                  ),
+                                                  inputFormatters: [
+                                                    HighlightedTokenDeletionFormatter(
+                                                      getRanges: () =>
+                                                          _highlightedRanges,
+                                                      onTokenDeleted:
+                                                          (deletedRange,
+                                                              tokenText) {
+                                                        // Update personality if this was a player expansion
+                                                        final playerName =
+                                                            _tokenToPlayerName[
+                                                                tokenText
+                                                                    .trim()];
+                                                        if (playerName !=
+                                                            null) {
+                                                          _removePlayerFromPersonality(
+                                                            playerName,
+                                                          );
+                                                          // Remove mapping for this exact token text
+                                                          _tokenToPlayerName
+                                                              .remove(tokenText
+                                                                  .trim());
+                                                        }
+
+                                                        // Rebuild highlight ranges after deletion
+                                                        final int removedLen =
+                                                            deletedRange.end -
+                                                                deletedRange
+                                                                    .start;
+                                                        final List<TextRange>
+                                                            updated = [];
+                                                        for (final r
+                                                            in _highlightedRanges) {
+                                                          // Skip the deleted range itself
+                                                          if (r.start >=
+                                                                  deletedRange
+                                                                      .start &&
+                                                              r.end <=
+                                                                  deletedRange
+                                                                      .end) {
+                                                            continue;
+                                                          }
+                                                          if (r.start >=
+                                                              deletedRange
+                                                                  .end) {
+                                                            updated.add(
+                                                              TextRange(
+                                                                start: r.start -
+                                                                    removedLen,
+                                                                end: r.end -
+                                                                    removedLen,
+                                                              ),
+                                                            );
+                                                          } else {
+                                                            updated.add(r);
+                                                          }
+                                                        }
+                                                        _highlightedRanges =
+                                                            updated;
+                                                        (captionController
+                                                                as HighlightingTextEditingController)
+                                                            .highlightedRanges =
+                                                            updated;
+                                                        (captionController
+                                                                as HighlightingTextEditingController)
+                                                            .invalidRanges = [];
+                                                        setState(() {});
+                                                      },
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
                                         ),
                                       ),
                                     ],
@@ -4226,9 +4247,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 if (_showHeadlineField ||
                                     _showKeywordsField ||
                                     _showPersonalityField) ...[
-                                  const SizedBox(width: 6),
+                                  const SizedBox(width: 4),
                                   Expanded(
-                                    flex: 5,
+                                    flex: 7,
                                     child: _buildCaptionSecondaryFieldsRow(),
                                   ),
                                 ],
@@ -9869,11 +9890,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           Text('Use plural',
                               style: TextStyle(
                                   fontSize: 11, color: Colors.grey.shade700)),
-                          const SizedBox(width: 6),
-                          Switch(
+                          const SizedBox(width: 4),
+                          AppCompactCheckbox(
                             value: usePluralPhrase,
-                            materialTapTargetSize:
-                                MaterialTapTargetSize.shrinkWrap,
                             onChanged: (v) =>
                                 setDialogState(() => usePluralPhrase = v),
                           ),
@@ -10040,16 +10059,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: Checkbox(
-                              value: omitAgainst,
-                              onChanged: (v) => setDialogState(
-                                  () => omitAgainst = v ?? false),
-                            ),
+                          AppCompactCheckbox(
+                            value: omitAgainst,
+                            onChanged: (v) => setDialogState(
+                                () => omitAgainst = v),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               'Omit "against" in caption',
@@ -10063,16 +10078,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: Checkbox(
-                              value: wantsOpponent,
-                              onChanged: (v) => setDialogState(
-                                  () => wantsOpponent = v ?? false),
-                            ),
+                          AppCompactCheckbox(
+                            value: wantsOpponent,
+                            onChanged: (v) => setDialogState(
+                                () => wantsOpponent = v),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               'Include opposing player in caption',
@@ -11719,30 +11730,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             mainAxisAlignment:
                                                 MainAxisAlignment.center,
                                             children: [
-                                              Transform.scale(
-                                                scale: 0.7,
-                                                child: Checkbox(
-                                                  value: _disableFtp,
-                                                  onChanged: (bool? value) {
-                                                    setState(() {
-                                                      _disableFtp =
-                                                          value ?? false;
-                                                    });
-                                                    setDialogState(() {});
-                                                  },
-                                                  materialTapTargetSize:
-                                                      MaterialTapTargetSize
-                                                          .shrinkWrap,
-                                                ),
+                                              AppCompactCheckbox(
+                                                value: _disableFtp,
+                                                onChanged: (value) {
+                                                  setState(() {
+                                                    _disableFtp = value;
+                                                  });
+                                                  setDialogState(() {});
+                                                },
                                               ),
-                                              Transform.translate(
-                                                offset: const Offset(0, 0),
-                                                child: const Text(
-                                                  'Disable FTP Button',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    color: Colors.grey,
-                                                  ),
+                                              const SizedBox(width: 6),
+                                              const Text(
+                                                'Disable FTP Button',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey,
                                                 ),
                                               ),
                                             ],
@@ -12249,28 +12251,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Transform.scale(
-                                    scale: 0.7,
-                                    child: Checkbox(
-                                      value: _disableFtp,
-                                      onChanged: (bool? value) {
-                                        setState(() {
-                                          _disableFtp = value ?? false;
-                                        });
-                                        setDialogState(() {});
-                                      },
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
+                                  AppCompactCheckbox(
+                                    value: _disableFtp,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _disableFtp = value;
+                                      });
+                                      setDialogState(() {});
+                                    },
                                   ),
-                                  Transform.translate(
-                                    offset: const Offset(-8, 0),
-                                    child: const Text(
-                                      'Disable FTP Button',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey,
-                                      ),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'Disable FTP Button',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey,
                                     ),
                                   ),
                                 ],
@@ -12809,30 +12804,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
                                           children: [
-                                            Transform.scale(
-                                              scale: 0.7,
-                                              child: Checkbox(
-                                                value: _disableFtp,
-                                                onChanged: (bool? value) {
-                                                  setState(() {
-                                                    _disableFtp =
-                                                        value ?? false;
-                                                  });
-                                                  setDialogState(() {});
-                                                },
-                                                materialTapTargetSize:
-                                                    MaterialTapTargetSize
-                                                        .shrinkWrap,
-                                              ),
+                                            AppCompactCheckbox(
+                                              value: _disableFtp,
+                                              onChanged: (value) {
+                                                setState(() {
+                                                  _disableFtp = value;
+                                                });
+                                                setDialogState(() {});
+                                              },
                                             ),
-                                            Transform.translate(
-                                              offset: const Offset(-8, 0),
-                                              child: const Text(
-                                                'Disable FTP Button',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey,
-                                                ),
+                                            const SizedBox(width: 6),
+                                            const Text(
+                                              'Disable FTP Button',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey,
                                               ),
                                             ),
                                           ],
@@ -13642,50 +13628,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 mainAxisAlignment:
                                                     MainAxisAlignment.center,
                                                 children: [
-                                                  Transform.scale(
-                                                    scale: 0.7,
-                                                    child: Checkbox(
-                                                      value: _isFtpDisabled,
-                                                      onChanged: (value) {
-                                                        setState(() {
-                                                          _isFtpDisabled =
-                                                              value ?? false;
-                                                        });
-                                                        setDialogState(() {});
-                                                      },
-                                                      materialTapTargetSize:
-                                                          MaterialTapTargetSize
-                                                              .shrinkWrap,
-                                                      visualDensity:
-                                                          VisualDensity.compact,
-                                                      splashRadius: 0,
-                                                      overlayColor:
-                                                          WidgetStateProperty
-                                                              .all(Colors
-                                                                  .transparent),
-                                                      side: BorderSide(
-                                                          color: Colors
-                                                              .grey.shade500,
-                                                          width: 1),
-                                                    ),
+                                                  AppCompactCheckbox(
+                                                    value: _isFtpDisabled,
+                                                    onChanged: (value) {
+                                                      setState(() {
+                                                        _isFtpDisabled = value;
+                                                      });
+                                                      setDialogState(() {});
+                                                    },
                                                   ),
-                                                  Transform.translate(
-                                                    offset: const Offset(-6, 0),
-                                                    child: GestureDetector(
-                                                      onTap: () {
-                                                        setState(() {
-                                                          _isFtpDisabled =
-                                                              !_isFtpDisabled;
-                                                        });
-                                                        setDialogState(() {});
-                                                      },
-                                                      child: Text(
-                                                        'Disable FTP Button',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          color: Colors
-                                                              .grey.shade700,
-                                                        ),
+                                                  const SizedBox(width: 6),
+                                                  GestureDetector(
+                                                    behavior:
+                                                        HitTestBehavior.opaque,
+                                                    onTap: () {
+                                                      setState(() {
+                                                        _isFtpDisabled =
+                                                            !_isFtpDisabled;
+                                                      });
+                                                      setDialogState(() {});
+                                                    },
+                                                    child: Text(
+                                                      'Disable FTP Button',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: Colors
+                                                            .grey.shade700,
                                                       ),
                                                     ),
                                                   ),
@@ -17919,7 +17887,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       player.displayName,
                     );
 
-                    return CheckboxListTile(
+                    return ListTile(
+                      dense: true,
                       title: Text(
                         player.displayName,
                         style: const TextStyle(fontSize: 14),
@@ -17931,40 +17900,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           color: Colors.grey.shade600,
                         ),
                       ),
-                      value: isSelected,
-                      onChanged: (bool? value) {
-                        setState(() {
-                          if (value == true) {
-                            // Track which team was selected first
-                            if (_firstTeamSelected == null) {
-                              _firstTeamSelected = isHome;
-                              _firstPlayerSelected =
-                                  _removeJerseyNumberFromName(
-                                player.displayName,
-                              );
-                              // print(
-                              //     'DEBUG: First team selected (dialog): ${isHome ? "HOME" : "AWAY"}');
-                              // print(
-                              //     'DEBUG: First player selected (dialog): ${player.displayName}');
-                            } else {}
-                            if (isHome) {
-                              selectedHomePlayers.add(player.displayName);
+                      trailing: AppCompactCheckbox(
+                        value: isSelected,
+                        onChanged: (value) {
+                          setState(() {
+                            if (value) {
+                              if (_firstTeamSelected == null) {
+                                _firstTeamSelected = isHome;
+                                _firstPlayerSelected =
+                                    _removeJerseyNumberFromName(
+                                  player.displayName,
+                                );
+                              } else {}
+                              if (isHome) {
+                                selectedHomePlayers.add(player.displayName);
+                              } else {
+                                selectedAwayPlayers.add(player.displayName);
+                              }
                             } else {
-                              selectedAwayPlayers.add(player.displayName);
+                              if (isHome) {
+                                selectedHomePlayers.remove(player.displayName);
+                              } else {
+                                selectedAwayPlayers.remove(player.displayName);
+                              }
                             }
-                          } else {
-                            if (isHome) {
-                              selectedHomePlayers.remove(player.displayName);
-                            } else {
-                              selectedAwayPlayers.remove(player.displayName);
-                            }
-                          }
-                        });
-                        _updateCaption();
-                        _reapplyVerbKeywordsIfEnabled();
-                        Navigator.of(context).pop();
-                      },
-                      controlAffinity: ListTileControlAffinity.trailing,
+                          });
+                          _updateCaption();
+                          _reapplyVerbKeywordsIfEnabled();
+                          Navigator.of(context).pop();
+                        },
+                      ),
                     );
                   },
                 ),
@@ -19464,26 +19429,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       // Passive mode checkbox
                       Row(
                         children: [
-                          SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: Transform.scale(
-                              scale: 0.8,
-                              child: Checkbox(
-                                value: profile['passiveMode'] ?? true,
-                                onChanged: (value) {
-                                  setDialogState(() {
-                                    // Update the profile's passive mode
-                                  });
-                                },
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                activeColor: Colors.grey.shade600,
-                                checkColor: Colors.white,
-                              ),
-                            ),
+                          AppCompactCheckbox(
+                            value: profile['passiveMode'] ?? true,
+                            onChanged: (value) {
+                              setDialogState(() {
+                                profile['passiveMode'] = value;
+                              });
+                            },
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 6),
                           Text(
                             'Use Passive Mode',
                             style: TextStyle(
@@ -19971,29 +19925,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         const SizedBox(height: 8),
 
-                        // Enable duplicate checkbox
+                        // Enable duplicate checkbox (placeholder — not wired yet)
                         Row(
                           children: [
-                            SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: Transform.scale(
-                                scale: 0.8,
-                                child: Checkbox(
-                                  value: false, // Placeholder value
-                                  onChanged: (value) {
-                                    setDialogState(() {
-                                      // Placeholder functionality
-                                    });
-                                  },
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  activeColor: Colors.grey.shade600,
-                                  checkColor: Colors.white,
-                                ),
-                              ),
+                            AppCompactCheckbox(
+                              value: false,
+                              onChanged: null,
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 6),
                             Text(
                               'Enable duplicate file saving',
                               style: TextStyle(
@@ -26876,41 +26815,28 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
     required bool value,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: value
-                    ? const Color(0xFF1976D2)
-                    : Colors.grey.shade400,
-                width: 1.2,
-              ),
-              borderRadius: BorderRadius.circular(2),
-              color: value ? const Color(0xFF1976D2) : Colors.white,
-            ),
-            child: value
-                ? const Center(
-                    child: Icon(Icons.check, size: 9, color: Colors.white),
-                  )
-                : null,
-          ),
-          const SizedBox(width: 4),
-          Text(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        AppCompactCheckbox(
+          value: value,
+          accentColor: const Color(0xFF1976D2),
+          onChanged: (_) => onTap(),
+        ),
+        const SizedBox(width: 4),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Text(
             label,
             style: TextStyle(
               fontSize: 10,
               color: value ? Colors.black87 : Colors.grey.shade500,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

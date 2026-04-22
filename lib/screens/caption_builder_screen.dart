@@ -25,6 +25,7 @@ import '../app_update_notes.dart';
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
+import '../caption_style/game_info.dart';
 import '../services/preferences_service.dart';
 import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
@@ -802,7 +803,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         });
       }
 
-      // Brief pause before the second request to avoid rate-limiting (e.g. BallDontLie 429)
+      // Brief pause before the second request to avoid rate-limiting
       if (selectedHomeTeam != null && selectedAwayTeam != null) {
         await Future<void>.delayed(const Duration(milliseconds: 300));
       }
@@ -994,6 +995,33 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Begin watching a folder and debounce reloads when image files change
   // Folder watching methods removed to prevent image jumping
 
+  /// Sets session [GameInfo.gameDate] (calendar day) and sample IPTC date strings from the
+  /// chronologically first imported image so Caption layout preview matches the folder.
+  Future<void> _updateCaptionGameInfoFromImportedImages(
+    List<String> sortedPaths,
+    Map<String, DateTime> times,
+    Map<String, String> rawDateTimeOriginalByPath,
+  ) async {
+    if (sortedPaths.isEmpty) return;
+    final first = sortedPaths.first;
+    final dt = times[first];
+    if (dt == null) return;
+    final gameDay = DateTime(dt.year, dt.month, dt.day);
+    final prefs = await PreferencesService.getInstance();
+    final existing = await prefs.getCaptionGameInfo();
+    final meta = Map<String, String>.from(existing.iptcMetadata);
+    final raw = rawDateTimeOriginalByPath[first];
+    if (raw != null && raw.isNotEmpty) {
+      meta['DateTimeOriginal'] = raw;
+    }
+    await prefs.saveCaptionGameInfo(
+      existing.copyWith(
+        gameDate: gameDay,
+        iptcMetadata: meta,
+      ),
+    );
+  }
+
   Future<void> _loadExifTimesAndSort(List<String> imageFiles) async {
     try {
       if (imageFiles.isEmpty) return;
@@ -1011,6 +1039,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       args.addAll(imageFiles);
       final proc = await ExiftoolHelper.run(args);
       final Map<String, DateTime> times = {};
+      /// Raw EXIF `DateTimeOriginal` string per file (for caption date prefs / IPTC preview).
+      final Map<String, String> rawDateTimeOriginalByPath = {};
       final Map<String, String> formatted = {};
       final Map<String, int> ratings = {};
       final Map<String, String> labels = {};
@@ -1030,6 +1060,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               final keepVal = item['PMKeep'];
               if (sourceFile != null && dateStr != null) {
                 try {
+                  rawDateTimeOriginalByPath[sourceFile] = dateStr;
                   final subSecTime = item['SubSecTimeOriginal']?.toString();
                   final dt = _parseExifDateTime(dateStr, subSecTime);
                   times[sourceFile] = dt;
@@ -1093,6 +1124,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final sorted = List<String>.from(imageFiles)
         ..sort((a, b) => (times[a]!).compareTo(times[b]!));
 
+      if (!mounted) return;
+
+      await _updateCaptionGameInfoFromImportedImages(
+        sorted,
+        times,
+        rawDateTimeOriginalByPath,
+      );
       if (!mounted) return;
 
       // Preserve current image if possible
@@ -2460,7 +2498,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         awayTeamName: selectedAwayTeam,
         captionState: state,
         bulkSaveCount: _bulkSaveCount,
-        apiSource: _apiManager.currentApi,
       ),
     );
   }
@@ -4187,7 +4224,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   /// Wraps caption UI: when [Keyboard Fire] is default, shows panel with classic widget offstage for state; otherwise shows classic only.
   /// Uses StackFit.expand so the Stack expands to fill whatever space it is given.
   Widget _buildCaptionEntryWidget(Widget captionWidget) {
-    if (!_useKeyboardFireAsDefault) return captionWidget;
+    late final Widget entry;
+    if (!_useKeyboardFireAsDefault) {
+      entry = captionWidget;
+    } else {
     final cs = _captionFieldsKey2.currentState;
     // If the CaptionFieldsWidget hasn't mounted yet (first frame), schedule a
     // rebuild so KeyboardFirePanel receives a non-null captionState immediately
@@ -4199,7 +4239,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       });
     }
     final dynamic state = cs;
-    return Stack(
+    entry = Stack(
       fit: StackFit.expand,
       children: [
         Offstage(offstage: true, child: captionWidget),
@@ -4209,7 +4249,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           homeTeamName: selectedHomeTeam,
           awayTeamName: selectedAwayTeam,
           captionState: cs,
-          apiSource: _apiManager.currentApi,
           showDialogActions: false,
           currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
           totalImages: imagePaths.length,
@@ -4271,6 +4310,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               : null,
         ),
       ],
+    );
+    }
+    return ColoredBox(
+      color: Colors.grey.shade50,
+      child: entry,
     );
   }
 
@@ -5648,8 +5692,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         // RIGHT COLUMN - Caption Fields and Player Picker
         Expanded(
           flex: 6,
-          child: _useKeyboardFireAsDefault
-              ? Stack(
+          child: ColoredBox(
+            color: Colors.grey.shade50,
+            child: _useKeyboardFireAsDefault
+                ? Stack(
                   fit: StackFit.expand,
                   children: [
                     // Keep CaptionFieldsWidget alive offstage so its state is preserved
@@ -5691,7 +5737,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                         homeTeamName: selectedHomeTeam,
                         awayTeamName: selectedAwayTeam,
                         captionState: cs,
-                        apiSource: _apiManager.currentApi,
                         showDialogActions: false,
                         currentIndex:
                             imagePaths.isNotEmpty ? currentIndex : null,
@@ -5756,7 +5801,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     }),
                   ],
                 )
-              : Column(
+                : Column(
                   children: [
                     // Caption area: tall enough for caption + optional Headline/Keywords/Personality row
                     SizedBox(
@@ -6003,7 +6048,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     ),
                   ], // end classic Column children
                 ), // end classic Column
-        ), // end Expanded(flex:6) / ternary
+            ), // end ColoredBox
+        ), // end Expanded(flex:6)
       ],
     );
   }

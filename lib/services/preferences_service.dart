@@ -2,6 +2,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:convert';
 
+import '../caption_style/caption_template.dart';
+import '../caption_style/game_info.dart';
+
 class PreferencesService {
   static const String _keyCategoryOrder = 'category_order';
   static const String _keyCategoryOrderBaseball = 'category_order_baseball';
@@ -40,7 +43,6 @@ class PreferencesService {
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
   static const String _keySyncServerUrl = 'sync_server_url';
   static const String _keySyncAccountId = 'sync_account_id';
-  static const String _keyUseBallDontLieApi = 'use_balldontlie_api';
   /// Optional caption entry strip: headline / keywords / personality visibility
   static const String _keyShowHeadlineField = 'show_headline_field';
   static const String _keyShowKeywordsField = 'show_keywords_field';
@@ -55,6 +57,14 @@ class PreferencesService {
   /// [package_info_plus] build number for which “What’s new” was dismissed.
   static const String _keyLastAcknowledgedAppBuild =
       'last_acknowledged_app_build';
+  /// JSON array of segment ids for caption wire order (game_date, location, body, venue, credit).
+  static const String _keyCaptionLayoutOrder = 'caption_layout_order';
+  /// `getty` or `imagn` — legacy; superseded by [CaptionTemplate] JSON.
+  static const String _keyCaptionLayoutFlavor = 'caption_layout_flavor';
+  static const String _keyCaptionTemplateJson = 'caption_template_json';
+  static const String _keyCaptionGameInfoJson = 'caption_game_info_json';
+  /// `gettyImages` | `imagn` | `ap` for sample credit line in caption layout preview.
+  static const String _keyCaptionCreditSampleAgency = 'caption_credit_sample_agency';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -840,16 +850,6 @@ class PreferencesService {
     return prefs.getString(_keySyncAccountId) ?? '';
   }
 
-  Future<bool> getUseBallDontLieApi() async {
-    final prefs = await _getPrefs();
-    return prefs.getBool(_keyUseBallDontLieApi) ?? false;
-  }
-
-  Future<void> setUseBallDontLieApi(bool use) async {
-    final prefs = await _getPrefs();
-    await prefs.setBool(_keyUseBallDontLieApi, use);
-  }
-
   Future<void> setSyncAccountId(String id) async {
     final prefs = await _getPrefs();
     if (id.isEmpty) {
@@ -886,7 +886,6 @@ class PreferencesService {
       'favoriteTeams': (await getFavoriteTeams()).toList(),
       'syncServerUrl': await getSyncServerUrl(),
       'syncAccountId': await getSyncAccountId(),
-      'useBallDontLieApi': await getUseBallDontLieApi(),
       'ftpProfiles': await getFtpProfiles(),
       'currentFtpProfile': await getCurrentFtpProfile(),
       'placeFirebarOnRight': await getPlaceFirebarOnRight(),
@@ -897,6 +896,11 @@ class PreferencesService {
       'showKeywordsField': await getShowKeywordsField(),
       'showPersonalityField': await getShowPersonalityField(),
       'burstDetectionEnabled': await getBurstDetectionEnabled(),
+      'captionLayoutOrder': await getCaptionLayoutOrder(),
+      'captionLayoutFlavor': await getCaptionLayoutFlavor(),
+      'captionTemplate': (await getCaptionTemplate()).toJson(),
+      'captionGameInfo': (await getCaptionGameInfo()).toJson(),
+      'captionCreditSampleAgency': await getCaptionCreditSampleAgency(),
     };
   }
 
@@ -987,7 +991,8 @@ class PreferencesService {
       await setSyncAccountId(preferences['syncAccountId'] as String? ?? '');
     }
     if (preferences.containsKey('useBallDontLieApi')) {
-      await setUseBallDontLieApi(preferences['useBallDontLieApi'] as bool? ?? false);
+      final prefs = await _getPrefs();
+      await prefs.remove('use_balldontlie_api');
     }
     if (preferences.containsKey('categoryOrder')) {
       await saveCategoryOrder(List<String>.from(preferences['categoryOrder']));
@@ -1033,6 +1038,127 @@ class PreferencesService {
       await saveBurstDetectionEnabled(
           preferences['burstDetectionEnabled'] as bool);
     }
+    if (preferences.containsKey('captionLayoutOrder')) {
+      await saveCaptionLayoutOrder(
+        List<String>.from(preferences['captionLayoutOrder'] as List<dynamic>),
+      );
+    }
+    if (preferences.containsKey('captionLayoutFlavor')) {
+      await saveCaptionLayoutFlavor(
+        preferences['captionLayoutFlavor'] as String,
+      );
+    }
+    if (preferences.containsKey('captionTemplate')) {
+      final raw = preferences['captionTemplate'];
+      if (raw is Map<String, dynamic>) {
+        await saveCaptionTemplate(CaptionTemplate.fromJson(raw));
+      } else if (raw is String && raw.isNotEmpty) {
+        final t = CaptionTemplate.tryDecode(raw);
+        if (t != null) await saveCaptionTemplate(t);
+      }
+    }
+    if (preferences.containsKey('captionGameInfo')) {
+      final raw = preferences['captionGameInfo'];
+      if (raw is Map<String, dynamic>) {
+        await saveCaptionGameInfo(GameInfo.fromJson(raw));
+      }
+    }
+    if (preferences.containsKey('captionCreditSampleAgency')) {
+      await saveCaptionCreditSampleAgency(
+        preferences['captionCreditSampleAgency'] as String? ?? 'gettyImages',
+      );
+    }
+  }
+
+  Future<List<String>> getCaptionLayoutOrder() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyCaptionLayoutOrder);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! List) return const [];
+      return decoded.map((e) => e.toString()).toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveCaptionLayoutOrder(List<String> order) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyCaptionLayoutOrder, json.encode(order));
+  }
+
+  /// Returns `getty` or `imagn`.
+  Future<String> getCaptionLayoutFlavor() async {
+    final prefs = await _getPrefs();
+    final v = prefs.getString(_keyCaptionLayoutFlavor);
+    if (v == 'imagn') return 'imagn';
+    if (v == 'getty') return 'getty';
+    return 'getty';
+  }
+
+  Future<void> saveCaptionLayoutFlavor(String flavor) async {
+    final prefs = await _getPrefs();
+    final v = flavor == 'imagn' ? 'imagn' : 'getty';
+    await prefs.setString(_keyCaptionLayoutFlavor, v);
+  }
+
+  /// Full caption wire template (presets + custom). Migrates legacy order/flavor once if needed.
+  Future<CaptionTemplate> getCaptionTemplate() async {
+    final prefs = await _getPrefs();
+    final decoded = CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
+    if (decoded != null) return decoded;
+    final migrated = await _migrateCaptionTemplateFromLegacy();
+    return migrated ?? CaptionTemplate.getty();
+  }
+
+  Future<CaptionTemplate?> _migrateCaptionTemplateFromLegacy() async {
+    final prefs = await _getPrefs();
+    if (!prefs.containsKey(_keyCaptionLayoutOrder) &&
+        !prefs.containsKey(_keyCaptionLayoutFlavor)) {
+      return null;
+    }
+    final order = await getCaptionLayoutOrder();
+    final flavor = await getCaptionLayoutFlavor();
+    if (order.isEmpty) {
+      return flavor == 'imagn' ? CaptionTemplate.imagn() : CaptionTemplate.getty();
+    }
+    return CaptionTemplate.fromLegacySegmentOrder(order, flavor);
+  }
+
+  Future<void> saveCaptionTemplate(CaptionTemplate template) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyCaptionTemplateJson, template.encode());
+    await prefs.remove(_keyCaptionLayoutOrder);
+    await prefs.remove(_keyCaptionLayoutFlavor);
+  }
+
+  Future<GameInfo> getCaptionGameInfo() async {
+    final prefs = await _getPrefs();
+    return GameInfo.tryDecode(prefs.getString(_keyCaptionGameInfoJson)) ??
+        const GameInfo();
+  }
+
+  Future<void> saveCaptionGameInfo(GameInfo info) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyCaptionGameInfoJson, info.encode());
+  }
+
+  /// One of `gettyImages`, `imagn`, `ap`.
+  Future<String> getCaptionCreditSampleAgency() async {
+    final prefs = await _getPrefs();
+    final v = prefs.getString(_keyCaptionCreditSampleAgency);
+    if (v == 'imagn') return 'imagn';
+    if (v == 'ap') return 'ap';
+    if (v == 'gettyImages') return 'gettyImages';
+    return 'gettyImages';
+  }
+
+  Future<void> saveCaptionCreditSampleAgency(String value) async {
+    final prefs = await _getPrefs();
+    final v =
+        value == 'imagn' || value == 'ap' || value == 'gettyImages' ? value : 'gettyImages';
+    await prefs.setString(_keyCaptionCreditSampleAgency, v);
   }
 
   // Clear all preferences

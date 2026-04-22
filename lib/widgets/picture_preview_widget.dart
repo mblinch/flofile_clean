@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
+import '../flo_layout_constants.dart';
 
 // Public interface for the picture preview widget state
 abstract class PicturePreviewWidgetState {
@@ -635,16 +636,20 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           const double _imageVerticalPadding = 6;
+          final showExifBars = _exifData != null || _isLoadingExif;
+          final double chromeBarsH =
+              showExifBars ? (2 * kFloChromeHeaderHeight) : 0;
           final double _mainImageHeight = constraints.maxHeight -
-              44 - (_imageVerticalPadding * 2); // Bars (22px each) + top/bottom padding
+              chromeBarsH -
+              (_imageVerticalPadding * 2);
           return Column(
             children: [
               // Top bar: Filename, pixel size, date and time
               if (_exifData != null || _isLoadingExif)
                 Container(
-                  height: 22, // Top info bar (filename + resolution)
+                  height: kFloChromeHeaderHeight,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade50,
                     borderRadius: BorderRadius.zero,
@@ -741,11 +746,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                     icon: Icon(
                                       Icons.chevron_left,
                                       color: Colors.black87,
-                                      size: 14,
+                                      size: 12,
                                     ),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(
-                                        minWidth: 20, minHeight: 20),
+                                        minWidth: 16, minHeight: 16),
                                   ),
 
                                   // Image counter between arrows
@@ -793,11 +798,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                     icon: Icon(
                                       Icons.chevron_right,
                                       color: Colors.black87,
-                                      size: 14,
+                                      size: 12,
                                     ),
                                     padding: EdgeInsets.zero,
                                     constraints: const BoxConstraints(
-                                        minWidth: 20, minHeight: 20),
+                                        minWidth: 16, minHeight: 16),
                                   ),
                                 ],
                               ),
@@ -944,9 +949,9 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
               // Bottom bar: Camera model, shutter speed, focal length, and navigation
               if (_exifData != null || _isLoadingExif)
                 Container(
-                  height: 22, // Bottom info bar (camera + date)
+                  height: kFloChromeHeaderHeight,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade50,
                     borderRadius: BorderRadius.zero,

@@ -7,11 +7,17 @@ class Player {
   final String? jerseyNumber;
   final String displayName;
 
+  /// Stable league-provided player id (MLB personId, NHL player id, ESPN
+  /// athlete id). Used as the Firestore doc id so the nightly reconcile keeps
+  /// the same record across jersey / name changes and trades.
+  final String? playerId;
+
   Player({
     required this.fullName,
     required this.firstName,
     this.jerseyNumber,
     required this.displayName,
+    this.playerId,
   });
 
   factory Player.fromJson(Map<String, dynamic> json, String? jerseyNumber) {
@@ -19,12 +25,14 @@ class Player {
     final firstName = fullName.split(' ').first;
     final displayName =
         jerseyNumber != null ? '$fullName #$jerseyNumber' : fullName;
+    final playerId = json['id']?.toString();
 
     return Player(
       fullName: fullName,
       firstName: firstName,
       jerseyNumber: jerseyNumber,
       displayName: displayName,
+      playerId: playerId,
     );
   }
 }
@@ -128,15 +136,10 @@ class MlbApiService {
     return fetchTeamRoster(team.id);
   }
 
-  /// Fetches key coaching/staff names for a team.
-  /// Returns keys: headCoach, pitchingCoach, firstBaseCoach, thirdBaseCoach.
-  Future<Map<String, String?>> fetchKeyStaffByTeamName(String teamName) async {
-    final team = await findTeamByName(teamName);
-    if (team == null) {
-      throw Exception('Team "$teamName" not found');
-    }
-
-    final url = Uri.https(_baseUrl, '/api/v1/teams/${team.id}/coaches');
+  /// Fetches key coaching/staff names for [teamId] (official `/teams/{id}/coaches`).
+  /// Returns keys: headCoach (manager), pitchingCoach, firstBaseCoach, thirdBaseCoach.
+  Future<Map<String, String?>> fetchKeyStaffByTeamId(String teamId) async {
+    final url = Uri.https(_baseUrl, '/api/v1/teams/$teamId/coaches');
     final response = await http.get(url);
     if (response.statusCode != 200) {
       throw Exception('Coach fetch failed: ${response.statusCode}');
@@ -165,5 +168,15 @@ class MlbApiService {
       'firstBaseCoach': nameForJob('First Base Coach'),
       'thirdBaseCoach': nameForJob('Third Base Coach'),
     };
+  }
+
+  /// Fetches key coaching/staff names for a team.
+  /// Returns keys: headCoach, pitchingCoach, firstBaseCoach, thirdBaseCoach.
+  Future<Map<String, String?>> fetchKeyStaffByTeamName(String teamName) async {
+    final team = await findTeamByName(teamName);
+    if (team == null) {
+      throw Exception('Team "$teamName" not found');
+    }
+    return fetchKeyStaffByTeamId(team.id);
   }
 }

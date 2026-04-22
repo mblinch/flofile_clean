@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
+import 'package:firebase_core/firebase_core.dart';
+
+import 'firebase_options.dart';
 import 'screens/caption_builder_screen.dart';
 import 'widgets/preferences_dialog.dart';
 import 'intents.dart';
@@ -9,13 +11,15 @@ import 'intents.dart';
 // Global navigator key so native menus / dialogs can reach the app context.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await _initFirebaseIfConfigured();
+
   // Suppress debug output in console
   debugPrint = (String? message, {int? wrapWidth}) {
     // Suppress all debug output
   };
-
-  WidgetsFlutterBinding.ensureInitialized();
 
   // Handle native app menu "Preferences…" (Cmd+,) — open Preferences dialog
   const prefsChannel = MethodChannel('caption_writer/preferences');
@@ -42,6 +46,28 @@ void main() {
   }
 
   runApp(const MyApp());
+}
+
+/// Initializes Firebase when [DefaultFirebaseOptions] is populated by FlutterFire.
+/// Until you run [tool/complete_firebase_setup.sh], the stub throws [UnsupportedError] and this is a no-op.
+Future<void> _initFirebaseIfConfigured() async {
+  FirebaseOptions options;
+  try {
+    options = DefaultFirebaseOptions.currentPlatform;
+  } on UnsupportedError catch (e) {
+    // Always log: [main] replaces [debugPrint] with a no-op right after this returns.
+    print('[Firebase] Not configured for this device/platform: $e');
+    return;
+  }
+  try {
+    await Firebase.initializeApp(options: options);
+    if (Firebase.apps.isNotEmpty) {
+      print('[Firebase] Initialized for project: ${options.projectId}');
+    }
+  } catch (e, st) {
+    print('[Firebase] initializeApp failed: $e');
+    print(st);
+  }
 }
 
 class DmgWarningApp extends StatelessWidget {

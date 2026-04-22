@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../services/preferences_service.dart';
 import 'package:dropdown_flutter/custom_dropdown.dart';
 
+import 'app_compact_checkbox.dart';
+
 /// Standalone FTP Server Settings panel. Can be shown in a dialog or embedded (e.g. in Preferences > FTP).
 /// Uses the same storage keys as the caption widget (ftp_profiles, current_ftp_profile).
 class FtpSettingsPanel extends StatefulWidget {
@@ -214,7 +216,12 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Checkbox(value: passiveMode, onChanged: (v) => setDialogState(() => passiveMode = v ?? true)),
+                    AppCompactCheckbox(
+                      value: passiveMode,
+                      onChanged: (v) =>
+                          setDialogState(() => passiveMode = v),
+                    ),
+                    const SizedBox(width: 6),
                     const Text('Use Passive Mode'),
                   ],
                 ),
@@ -444,8 +451,11 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      SizedBox(width: 20, height: 20, child: Checkbox(value: false, onChanged: (_) {}, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap)),
-                      const SizedBox(width: 8),
+                      AppCompactCheckbox(
+                        value: false,
+                        onChanged: null,
+                      ),
+                      const SizedBox(width: 6),
                       Text('Enable duplicate file saving', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
                     ],
                   ),

@@ -58,6 +58,10 @@ dependencies:
   # Native-style settings/preferences UI (sectioned lists)
   flutter_settings_ui: ^3.0.1
   flutter_switch: ^0.3.2
+  firebase_core: ^4.7.0
+  cloud_firestore: ^6.3.0
+  # Tighter, styled checkbox than Material (avoids huge default control + padding)
+  custom_checkbox_plus: ^1.0.0
 
 dev_dependencies:
   flutter_test:

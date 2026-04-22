@@ -1,0 +1,8 @@
+{
+  "name": "caption-writer-roster-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "firebase-admin": "^13.0.2"
+  }
+}

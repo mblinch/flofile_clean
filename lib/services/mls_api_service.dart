@@ -38,14 +38,21 @@ class MlsApiService {
       ..sort((a, b) => a.name.compareTo(b.name));
   }
 
-  Future<List<Player>> fetchTeamRoster(String teamName) async {
+  Future<TeamInfo?> findTeamByName(String teamName) async {
     final teams = await fetchAllTeams();
-    final team = _findTeam(teams, teamName);
+    return _findTeam(teams, teamName);
+  }
+
+  Future<List<Player>> fetchTeamRoster(String teamName) async {
+    final team = await findTeamByName(teamName);
     if (team == null) {
       throw Exception('MLS team not found: "$teamName"');
     }
-    return _fetchRosterById(team.id);
+    return fetchRosterByTeamId(team.id);
   }
+
+  Future<List<Player>> fetchRosterByTeamId(String teamId) =>
+      _fetchRosterById(teamId);
 
   Future<List<Player>> _fetchRosterById(String teamId) async {
     final url = Uri.https(_baseUrl, '$_basePath/teams/$teamId/roster');
@@ -69,16 +76,18 @@ class MlsApiService {
           (map['firstName'] as String?) ?? fullName.split(' ').first;
       final displayName =
           jersey != null && jersey.isNotEmpty ? '$fullName #$jersey' : fullName;
+      final playerId = map['id']?.toString();
       return Player(
         fullName: fullName,
         firstName: firstName,
         jerseyNumber: jersey,
         displayName: displayName,
+        playerId: playerId,
       );
     }).toList();
   }
 
-  /// Best-effort lookup for MLS head coach from ESPN team payload.
+  /// Best-effort lookup for MLS manager (head coach) from ESPN team payload.
   /// Some responses do not include coaching staff fields.
   Future<String?> fetchHeadCoachByTeamName(String teamName) async {
     final teams = await fetchAllTeams();

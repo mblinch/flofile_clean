@@ -4,6 +4,7 @@ import '../utils/native_file_picker.dart';
 import 'dart:convert';
 import 'dart:io';
 import '../utils/exiftool_helper.dart';
+import 'app_compact_checkbox.dart';
 
 class MetadataPresetDialog extends StatefulWidget {
   final Map<String, String>? currentPreset;
@@ -609,16 +610,15 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
             const SizedBox(height: 6),
             Row(
               children: [
-                Checkbox(
+                AppCompactCheckbox(
                   value: selectedCaptionStyle == 'getty',
                   onChanged: (value) {
                     setState(() {
-                      selectedCaptionStyle = value == true ? 'getty' : null;
+                      selectedCaptionStyle = value ? 'getty' : null;
                     });
                   },
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
                 ),
+                const SizedBox(width: 6),
                 Text(
                   'Getty Style',
                   style: TextStyle(

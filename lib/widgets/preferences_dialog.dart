@@ -6,6 +6,8 @@ import '../services/camera_serial_service.dart';
 import '../services/preferences_service.dart';
 import '../utils/native_file_picker.dart';
 import 'camera_serial_dialog.dart';
+import 'app_compact_checkbox.dart';
+import 'caption_layout_builder_dialog.dart';
 import 'ftp_settings_panel.dart';
 
 class PreferencesDialog extends StatefulWidget {
@@ -246,29 +248,13 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade400, width: 1),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildOnOffSegment('Off', !serialBylines, () async {
-                            if (serialBylines) {
-                              await _preferencesService.saveSerialNumberBylines(false);
-                              await _loadCurrentPreferences();
-                            }
-                          }, isFirst: true),
-                          _buildOnOffSegment('On', serialBylines, () async {
-                            if (!serialBylines) {
-                              await _preferencesService.saveSerialNumberBylines(true);
-                              await _loadCurrentPreferences();
-                            }
-                          }, isLast: true),
-                        ],
-                      ),
+                    AppCompactCheckbox(
+                      value: serialBylines,
+                      accentColor: _prefsBlue,
+                      onChanged: (v) async {
+                        await _preferencesService.saveSerialNumberBylines(v);
+                        await _loadCurrentPreferences();
+                      },
                     ),
                     const SizedBox(width: 12),
                     TextButton(
@@ -312,31 +298,13 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade400, width: 1),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildOnOffSegment('Off', !burstOn, () async {
-                            if (burstOn) {
-                              await _preferencesService
-                                  .saveBurstDetectionEnabled(false);
-                              await _loadCurrentPreferences();
-                            }
-                          }, isFirst: true),
-                          _buildOnOffSegment('On', burstOn, () async {
-                            if (!burstOn) {
-                              await _preferencesService
-                                  .saveBurstDetectionEnabled(true);
-                              await _loadCurrentPreferences();
-                            }
-                          }, isLast: true),
-                        ],
-                      ),
+                    AppCompactCheckbox(
+                      value: burstOn,
+                      accentColor: _prefsBlue,
+                      onChanged: (v) async {
+                        await _preferencesService.saveBurstDetectionEnabled(v);
+                        await _loadCurrentPreferences();
+                      },
                     ),
                   ],
                 ),
@@ -360,31 +328,20 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade400, width: 1),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _buildOnOffSegment('Off', !resolutionEnabled, () async {
-                          if (resolutionEnabled) {
-                            await _preferencesService.saveResolutionWarningThreshold(0);
-                            _resolutionController.text = '0';
-                            await _loadCurrentPreferences();
-                          }
-                        }, isFirst: true),
-                        _buildOnOffSegment('On', resolutionEnabled, () async {
-                          if (!resolutionEnabled) {
-                            await _preferencesService.saveResolutionWarningThreshold(3000);
-                            _resolutionController.text = '3000';
-                            await _loadCurrentPreferences();
-                          }
-                        }, isLast: true),
-                      ],
-                    ),
+                  AppCompactCheckbox(
+                    value: resolutionEnabled,
+                    accentColor: _prefsBlue,
+                    onChanged: (v) async {
+                      if (v) {
+                        await _preferencesService
+                            .saveResolutionWarningThreshold(3000);
+                        _resolutionController.text = '3000';
+                      } else {
+                        await _preferencesService.saveResolutionWarningThreshold(0);
+                        _resolutionController.text = '0';
+                      }
+                      await _loadCurrentPreferences();
+                    },
                   ),
                   const SizedBox(width: 12),
                   SizedBox(
@@ -531,6 +488,19 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   'Show or hide optional fields below the caption. The layout uses the full width for the fields that remain visible.',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.view_agenda_outlined, size: 18),
+                    label: const Text('Caption layout…'),
+                    onPressed: () async {
+                      await CaptionLayoutBuilderDialog.show(context);
+                      if (!mounted) return;
+                      await _loadCurrentPreferences();
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -629,59 +599,21 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       children: [
         SizedBox(
           width: 88,
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.grey.shade400, width: 1),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildOnOffSegment('Off', !isOn, () async {
-                if (isOn) await onChanged(false);
-              }, isFirst: true),
-              _buildOnOffSegment('On', isOn, () async {
-                if (!isOn) await onChanged(true);
-              }, isLast: true),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildOnOffSegment(String label, bool selected, VoidCallback onTap, {bool isFirst = false, bool isLast = false}) {
-    const radius = 3.0;
-    final borderRadius = BorderRadius.only(
-      topLeft: Radius.circular(isFirst ? radius : 0),
-      bottomLeft: Radius.circular(isFirst ? radius : 0),
-      topRight: Radius.circular(isLast ? radius : 0),
-      bottomRight: Radius.circular(isLast ? radius : 0),
-    );
-    return Material(
-      color: selected ? _prefsBlue : Colors.transparent,
-      borderRadius: borderRadius,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: borderRadius,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : Colors.grey.shade700,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onChanged(!isOn),
+            child: Text(
+              label,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
             ),
           ),
         ),
-      ),
+        AppCompactCheckbox(
+          value: isOn,
+          accentColor: _prefsBlue,
+          onChanged: (v) => onChanged(v),
+        ),
+      ],
     );
   }
 
