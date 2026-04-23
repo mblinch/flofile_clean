@@ -818,7 +818,7 @@ class _RegionVariantOptionsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 248,
+      width: 272,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(6),
@@ -849,6 +849,7 @@ class _RegionVariantOptionsCard extends StatelessWidget {
           ),
           _row(LocationRegionVariant.fullName, hint: 'Full'),
           _row(LocationRegionVariant.shortForm, hint: 'Abbr'),
+          _row(LocationRegionVariant.apStyle, hint: 'AP'),
           const SizedBox(height: 4),
         ],
       ),

@@ -64,6 +64,7 @@ class RosterFirestoreService {
               : (jersey != null && jersey.isNotEmpty)
                   ? '$fullName #$jersey'
                   : fullName;
+      final position = (data['position'] as String?)?.trim();
       out.add(Player(
         fullName: fullName,
         firstName: firstName,
@@ -72,6 +73,7 @@ class RosterFirestoreService {
         playerId: (data['playerId'] as String?)?.trim().isNotEmpty == true
             ? (data['playerId'] as String).trim()
             : doc.id,
+        position: (position == null || position.isEmpty) ? null : position,
       ));
     }
     out.sort((a, b) {
@@ -165,6 +167,7 @@ class RosterFirestoreService {
             'jerseyNumber': p.jerseyNumber,
             'displayName': p.displayName,
             if (p.playerId != null) 'playerId': p.playerId,
+            if (p.position != null) 'position': p.position,
             'updatedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
         } else {
@@ -232,7 +235,8 @@ class RosterFirestoreService {
     return cur['fullName'] != p.fullName ||
         cur['firstName'] != p.firstName ||
         cur['jerseyNumber'] != p.jerseyNumber ||
-        cur['displayName'] != p.displayName;
+        cur['displayName'] != p.displayName ||
+        cur['position'] != p.position;
   }
 }
 

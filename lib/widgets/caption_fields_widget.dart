@@ -18,7 +18,12 @@ import '../utils/exiftool_helper.dart';
 import '../utils/default_verb_keywords.dart';
 import '../utils/home_run_type_ui.dart';
 import '../services/preferences_service.dart';
+import '../caption_style/caption_formula_renderer.dart';
+import '../caption_style/caption_session_context.dart';
+import '../caption_style/game_info.dart';
+import '../caption_style/caption_template.dart';
 import '../caption_style/caption_text_normalize.dart';
+import '../caption_style/region_abbrev.dart';
 import 'app_compact_checkbox.dart';
 import 'ftp_settings_panel.dart';
 import '../flo_layout_constants.dart';
@@ -442,6 +447,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // When non-null, they take precedence over photo metadata values.
   String? _bylinePhotographerOverride;
   String? _bylineCreditOverride;
+  String _bylineCustomText = '';
   String _bylinePrefixText = 'Photo by';
   bool _bylineUseBrackets = true;
   bool _bylineUseSlash = true;
@@ -1766,17 +1772,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       builder: (ctx) => _BylineEditorDialog(
         initialPhotographer: initPhotographer,
         initialCredit: initCredit,
+        initialCustomText: _bylineCustomText,
         initialPrefixText: _bylinePrefixText,
         initialUseBrackets: _bylineUseBrackets,
         initialUseSlash: _bylineUseSlash,
         metadataPhotographer: metaPhotographer,
         metadataCredit: metaCredit,
-        onApply: (photographer, credit, prefixText, useBrackets, useSlash) {
+        onApply: (
+          photographer,
+          credit,
+          customText,
+          prefixText,
+          useBrackets,
+          useSlash,
+        ) {
           setState(() {
             _bylinePhotographerOverride =
                 photographer.trim().isEmpty ? null : photographer.trim();
             _bylineCreditOverride =
                 credit.trim().isEmpty ? null : credit.trim();
+            _bylineCustomText = customText.trim();
             _bylinePrefixText = prefixText;
             _bylineUseBrackets = useBrackets;
             _bylineUseSlash = useSlash;
@@ -1787,6 +1802,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           setState(() {
             _bylinePhotographerOverride = null;
             _bylineCreditOverride = null;
+            _bylineCustomText = '';
             _bylinePrefixText = 'Photo by';
             _bylineUseBrackets = true;
             _bylineUseSlash = true;
@@ -16174,6 +16190,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (value == null) return null;
     String s = value.toString();
 
+    final hadBracketList = s.trim().startsWith('[') && s.trim().endsWith(']');
+
     // If it's a simple clean string, return it as-is
     if (!s.contains('[') &&
         !s.contains(',') &&
@@ -16189,6 +16207,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     s = s.replaceAll(RegExp(r'[;,/\s]+$'), '');
     // Collapse multiple spaces
     s = s.replaceAll(RegExp(r'\s+'), ' ');
+
+    // If metadata came through as a bracketed list, collapse duplicate entries.
+    if (hadBracketList) {
+      final parts = s
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (parts.isNotEmpty) {
+        final seen = <String>{};
+        final unique = <String>[];
+        for (final p in parts) {
+          final key = p.toLowerCase();
+          if (seen.add(key)) unique.add(p);
+        }
+        s = unique.join(', ');
+      }
+    }
 
     if (s.isEmpty || s.toLowerCase() == 'null') return null;
     return s;
@@ -16332,13 +16368,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Get date components
     final city = cityController.text;
     final prov = provinceController.text;
-    final monLC = _month(photoDate.month);
-    final day = photoDate.day;
-    final year = photoDate.year;
-    final monthUpper = monLC.toUpperCase();
-    final formattedDate = '$monLC $day, $year';
-    final dateline = _formatDateline(city, prov, monthUpper, day);
-    final locationSuffix = _formatLocationSuffix(city, prov, formattedDate);
+    final captionTemplate = await _preferencesService.getCaptionTemplate();
 
     // Determine which team the selected players belong to
     // First player selected = Main focus, opposite team players = always "against"
@@ -16457,12 +16487,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             teamName: mainPlayerTeam,
           );
         } else {
-          playerName =
-              '${_stripCoachOnlyTagForCaption(mainPlayerFullName)} of the $mainPlayerTeam';
+          playerName = _combinePlayersWithSingleTeam(
+            [mainPlayerFullName],
+            template: captionTemplate,
+          );
         }
       } else {
         // If "with teammates" is NOT selected and not a multi-player hit interface, use all active players
-        playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+        playerName = _combinePlayersWithSingleTeam(activePlayers.toList(),
+            template: captionTemplate);
       }
     } else {
       // For Pitching Change, don't set playerName since it's handled in actionPhrase
@@ -16470,7 +16503,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         playerName = '';
       } else {
         // For other actions, use all active players
-        playerName = _combinePlayersWithSingleTeam(activePlayers.toList());
+        playerName = _combinePlayersWithSingleTeam(activePlayers.toList(),
+            template: captionTemplate);
       }
     }
 
@@ -16550,6 +16584,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (opponentPlayers.isNotEmpty) {
         final opponentNames = _combinePlayersWithSingleTeam(
           opponentPlayers.toList(),
+          template: captionTemplate,
         );
         opponentPart = ' against $opponentNames';
       } else if (opponentTeamName != null) {
@@ -16626,11 +16661,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
+    creatorValue = _sanitizeBylineString(creatorValue);
+    creditValue = _sanitizeBylineString(creditValue);
+
     // Debug logging
 
     String photoBy;
     // Since we're now getting String values from the metadata widget, we don't need List handling
-    photoBy = creatorValue ?? '';
+    photoBy = _sanitizeBylineString(creatorValue) ?? '';
 
     // Try to detect photographer from camera serial number if no creator is set and serial number bylines are enabled
     if (photoBy.isEmpty &&
@@ -16759,17 +16797,65 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         byline.toLowerCase().contains('getty images') && sport == 'basketball';
     final disclaimerPart = isGetty ? ' $_gettyDisclaimer' : '';
 
-    String bylineSuffix = '';
-    if (byline.isNotEmpty) {
-      final prefix = _bylinePrefixText.trim();
-      final body = prefix.isNotEmpty ? '$prefix $byline' : byline;
-      bylineSuffix = _bylineUseBrackets ? ' ($body)' : ' $body';
-    }
-    var caption = '$dateline '
-        '$playerName$customTextPart${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}$opponentPartModified${skipInningPart ? '' : inningPart} '
-        '$gamePart at $stadium on $formattedDate $locationSuffix.$disclaimerPart$bylineSuffix';
+    final captionBody = (
+      '$playerName'
+      '$customTextPart'
+      '${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}'
+      '$opponentPartModified'
+      '${skipInningPart ? '' : inningPart} '
+      '$gamePart'
+    ).trim();
 
-    final captionTemplate = await _preferencesService.getCaptionTemplate();
+    final iptc = <String, String>{};
+    final rawMeta = widget.metadata;
+    if (rawMeta != null) {
+      rawMeta.forEach((key, value) {
+        if (value == null) return;
+        final txt = value.toString();
+        if (txt.isEmpty) return;
+        iptc[key] = txt;
+      });
+    }
+    final isUs = _isGameInUnitedStates();
+    final gameInfo = GameInfo(
+      gameDate: photoDate,
+      city: city,
+      region: prov,
+      country: isUs ? 'United States' : 'Canada',
+      countryCode: isUs ? 'USA' : 'CAN',
+      venue: stadium,
+      photographerName: photoBy,
+      agencyName: creditValue?.toString() ?? '',
+      iptcMetadata: iptc,
+    );
+    CreditSampleAgency sampleAgency;
+    switch (captionTemplate.wireStyle) {
+      case WireStyle.imagn:
+        sampleAgency = CreditSampleAgency.imagn;
+        break;
+      case WireStyle.ap:
+        sampleAgency = CreditSampleAgency.ap;
+        break;
+      case WireStyle.getty:
+      case WireStyle.gettyInternational:
+      case WireStyle.custom:
+        sampleAgency = CreditSampleAgency.gettyImages;
+        break;
+    }
+    final effectiveTemplate = captionTemplate;
+    // Keep the session context up-to-date so the layout builder preview
+    // shows real game data instead of the random sample.
+    CaptionSessionContext.update(captionBody: captionBody, gameInfo: gameInfo);
+    var caption = CaptionFormulaRenderer.render(
+      template: effectiveTemplate,
+      game: gameInfo,
+      sampleAgency: sampleAgency,
+      captionOverride: captionBody,
+    );
+    if (disclaimerPart.isNotEmpty) {
+      caption = '$caption$disclaimerPart';
+    }
+
     if (captionTemplate.removeDiacritics) {
       caption = CaptionTextNormalize.stripDiacritics(caption);
     }
@@ -17581,6 +17667,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _updatePersonalityField() {
+    // When the personality field is disabled, leave it completely untouched.
+    if (!_showPersonalityField) return;
+
     // Combine all selected players from both teams
     final allSelectedPlayers = <String>[];
     allSelectedPlayers.addAll(selectedHomePlayers);
@@ -20076,14 +20165,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String stateOrProvince,
     String monthUpper,
     int day,
+    CaptionTemplate template,
   ) {
+    final isApCaption = template.wireStyle == WireStyle.ap;
     if (_isGameInUnitedStates()) {
-      // US format: CITY, FULL STATE NAME - DATE
-      // Expand state abbreviation to full name if needed
+      if (isApCaption) {
+        final apState = _apStyleStateOrFallback(stateOrProvince);
+        return '${city.toUpperCase()}, ${apState.toUpperCase()} - $monthUpper $day:';
+      }
       final fullStateName = _expandStateAbbreviation(stateOrProvince);
       return '${city.toUpperCase()}, ${fullStateName.toUpperCase()} - $monthUpper $day:';
     } else {
-      // Canadian format: CITY, CANADA - DATE
+      // AP and non-AP both use city + country here (no province in dateline).
       return '${city.toUpperCase()}, CANADA - $monthUpper $day:';
     }
   }
@@ -20092,18 +20185,31 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String city,
     String stateOrProvince,
     String formattedDate,
+    CaptionTemplate template,
   ) {
+    final isApCaption = template.wireStyle == WireStyle.ap;
     if (_isGameInUnitedStates()) {
-      // US format: in City, Full State Name (no country needed)
-      // Expand state abbreviation to full name if needed
+      if (isApCaption) {
+        final apState = _apStyleStateOrFallback(stateOrProvince);
+        return 'in ${_capitalize(city)}, $apState';
+      }
       final fullStateName = _expandStateAbbreviation(stateOrProvince);
       return 'in ${_capitalize(city)}, ${_capitalize(fullStateName)}';
     } else {
-      // Canadian format: in City, Full Province Name, Canada
-      // Expand province abbreviation to full name if needed
+      if (isApCaption) {
+        return 'in ${_capitalize(city)}, Canada';
+      }
       final fullProvinceName = _expandProvinceAbbreviation(stateOrProvince);
       return 'in ${_capitalize(city)}, ${_capitalize(fullProvinceName)}, Canada';
     }
+  }
+
+  String _apStyleStateOrFallback(String stateOrProvince) {
+    final fullStateName = _expandStateAbbreviation(stateOrProvince).trim();
+    final ap = abbreviateUsStateApStyle(fullStateName);
+    if (ap.isNotEmpty) return ap;
+    if (fullStateName.isNotEmpty) return fullStateName;
+    return stateOrProvince.trim();
   }
 
   // Helper method to expand Canadian province abbreviations to full names
@@ -20248,7 +20354,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }).join(' ');
   }
 
-  String _combinePlayersWithSingleTeam(List<String> players) {
+  /// Looks up the position abbreviation for a player by their displayName.
+  String? _positionForDisplayName(String displayName) {
+    for (final p in [..._homeRoster, ..._awayRoster]) {
+      if (p.displayName == displayName) return p.position;
+    }
+    return null;
+  }
+
+  String _combinePlayersWithSingleTeam(List<String> players,
+      {CaptionTemplate? template}) {
     if (players.isEmpty) return '';
 
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
@@ -20276,17 +20391,41 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Get full player names (strip Keyboard Fire coach titles / legacy `#HC` for caption text)
-    final playerNames = players
+    var playerNames = players
         .map((p) => _stripCoachOnlyTagForCaption(p.trim()))
         .where((s) => s.isNotEmpty)
         .toList();
+
+    // Append position abbreviation when the template requests it.
+    if (template != null && template.includePlayerPosition) {
+      playerNames = List.generate(playerNames.length, (i) {
+        final raw = i < players.length ? players[i] : playerNames[i];
+        final pos = _positionForDisplayName(raw.trim());
+        if (pos != null && pos.isNotEmpty) {
+          // Insert position before the jersey number: "Name, POS, #27"
+          return playerNames[i].replaceFirstMapped(
+            RegExp(r'(\s*[#(]\d+)'),
+            (m) => ', $pos${m.group(1)}',
+          );
+        }
+        return playerNames[i];
+      });
+    }
+
+    // Apply jersey-number format from the active caption template.
+    if (template != null &&
+        template.numberFormat == NumberFormatStyle.parens) {
+      playerNames = playerNames
+          .map((n) => n.replaceAllMapped(
+              RegExp(r'\s*#(\d+)'), (m) => ' (${m.group(1)})'))
+          .toList();
+    }
 
     // Determine the team from the first player's selection context
     final isHomeTeamPlayer = selectedHomePlayers.contains(players.first);
     final teamName = isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
 
     if (teamName == null) {
-      // Fallback to just player names if team is not available
       if (playerNames.length == 1) {
         return playerNames.first;
       } else if (playerNames.length == 2) {
@@ -20297,15 +20436,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
-    if (playerNames.length == 1) {
-      return '${playerNames.first} of the $teamName';
-    } else if (playerNames.length == 2) {
-      // Two players: "Player1 and Player2 of the team"
-      return '${playerNames[0]} and ${playerNames[1]} of the $teamName';
+    // Apply team order from the active caption template.
+    final teamBefore =
+        template?.captionTeamOrder == CaptionTeamOrder.teamBefore;
+
+    if (teamBefore) {
+      final possessive =
+          teamName.toLowerCase().endsWith('s') ? "$teamName'" : "$teamName's";
+      if (playerNames.length == 1) {
+        return '$possessive ${playerNames.first}';
+      } else if (playerNames.length == 2) {
+        return '$possessive ${playerNames[0]} and ${playerNames[1]}';
+      } else {
+        final last = playerNames.removeLast();
+        return '$possessive ${playerNames.join(', ')}, and $last';
+      }
     } else {
-      // Three or more players: "Player1, Player2, and Player3 of the team"
-      final last = playerNames.removeLast();
-      return '${playerNames.join(', ')}, and $last of the $teamName';
+      if (playerNames.length == 1) {
+        return '${playerNames.first} of the $teamName';
+      } else if (playerNames.length == 2) {
+        return '${playerNames[0]} and ${playerNames[1]} of the $teamName';
+      } else {
+        final last = playerNames.removeLast();
+        return '${playerNames.join(', ')}, and $last of the $teamName';
+      }
     }
   }
 
@@ -26320,6 +26474,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 class _BylineEditorDialog extends StatefulWidget {
   final String initialPhotographer;
   final String initialCredit;
+  final String initialCustomText;
   final String initialPrefixText;
   final bool initialUseBrackets;
   final bool initialUseSlash;
@@ -26329,6 +26484,7 @@ class _BylineEditorDialog extends StatefulWidget {
   final void Function(
       String photographer,
       String credit,
+      String customText,
       String prefixText,
       bool useBrackets,
       bool useSlash) onApply;
@@ -26337,6 +26493,7 @@ class _BylineEditorDialog extends StatefulWidget {
   const _BylineEditorDialog({
     required this.initialPhotographer,
     required this.initialCredit,
+    required this.initialCustomText,
     required this.initialPrefixText,
     required this.initialUseBrackets,
     required this.initialUseSlash,
@@ -26353,6 +26510,7 @@ class _BylineEditorDialog extends StatefulWidget {
 class _BylineEditorDialogState extends State<_BylineEditorDialog> {
   late final TextEditingController _photographerCtrl;
   late final TextEditingController _creditCtrl;
+  late final TextEditingController _customCtrl;
   late final TextEditingController _prefixCtrl;
   final FocusNode _photographerFocus = FocusNode();
   final FocusNode _creditFocus = FocusNode();
@@ -26365,11 +26523,13 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
     _photographerCtrl =
         TextEditingController(text: widget.initialPhotographer);
     _creditCtrl = TextEditingController(text: widget.initialCredit);
+    _customCtrl = TextEditingController(text: widget.initialCustomText);
     _prefixCtrl = TextEditingController(text: widget.initialPrefixText);
     _useBrackets = widget.initialUseBrackets;
     _useSlash = widget.initialUseSlash;
     _photographerCtrl.addListener(() => setState(() {}));
     _creditCtrl.addListener(() => setState(() {}));
+    _customCtrl.addListener(() => setState(() {}));
     _prefixCtrl.addListener(() => setState(() {}));
   }
 
@@ -26377,6 +26537,7 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
   void dispose() {
     _photographerCtrl.dispose();
     _creditCtrl.dispose();
+    _customCtrl.dispose();
     _prefixCtrl.dispose();
     _photographerFocus.dispose();
     _creditFocus.dispose();
@@ -26384,6 +26545,8 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
   }
 
   String get _previewByline {
+    final custom = _customCtrl.text.trim();
+    if (custom.isNotEmpty) return custom;
     final p = _photographerCtrl.text.trim();
     final c = _creditCtrl.text.trim();
     String inner = '';
@@ -26504,6 +26667,31 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
                       isOverridden: _creditIsOverridden,
                       focusNode: _creditFocus),
 
+                  const SizedBox(height: 8),
+
+                  // Custom byline override
+                  Text(
+                    'Custom byline text',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  _field(
+                    _customCtrl,
+                    hint: 'Type exact byline text to use',
+                    isOverridden: _customCtrl.text.trim().isNotEmpty,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'When set, this fully replaces the generated byline.',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
                   const SizedBox(height: 8),
 
                   // Format options
@@ -26669,6 +26857,7 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
                           widget.onApply(
                             _photographerCtrl.text,
                             _creditCtrl.text,
+                            _customCtrl.text,
                             _prefixCtrl.text.trim(),
                             _useBrackets,
                             _useSlash,

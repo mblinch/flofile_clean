@@ -15,6 +15,14 @@ String abbreviateRegionName(String fullName) {
   return _usStates[k] ?? _canada[k] ?? '';
 }
 
+/// US state full name -> AP-style abbreviation.
+/// Returns empty string when unknown / non-US.
+String abbreviateUsStateApStyle(String fullName) {
+  if (fullName.trim().isEmpty) return '';
+  final k = normalizeRegionKey(fullName);
+  return _usStatesApStyle[k] ?? '';
+}
+
 const Map<String, String> _usStates = {
   'alabama': 'AL',
   'alaska': 'AK',
@@ -86,4 +94,57 @@ const Map<String, String> _canada = {
   'northwest territories': 'NT',
   'nunavut': 'NU',
   'yukon': 'YT',
+};
+
+const Map<String, String> _usStatesApStyle = {
+  'alabama': 'Ala.',
+  'alaska': 'Alaska',
+  'arizona': 'Ariz.',
+  'arkansas': 'Ark.',
+  'california': 'Calif.',
+  'colorado': 'Colo.',
+  'connecticut': 'Conn.',
+  'delaware': 'Del.',
+  'florida': 'Fla.',
+  'georgia': 'Ga.',
+  'hawaii': 'Hawaii',
+  'idaho': 'Idaho',
+  'illinois': 'Ill.',
+  'indiana': 'Ind.',
+  'iowa': 'Iowa',
+  'kansas': 'Kan.',
+  'kentucky': 'Ky.',
+  'louisiana': 'La.',
+  'maine': 'Maine',
+  'maryland': 'Md.',
+  'massachusetts': 'Mass.',
+  'michigan': 'Mich.',
+  'minnesota': 'Minn.',
+  'mississippi': 'Miss.',
+  'missouri': 'Mo.',
+  'montana': 'Mont.',
+  'nebraska': 'Neb.',
+  'nevada': 'Nev.',
+  'new hampshire': 'N.H.',
+  'new jersey': 'N.J.',
+  'new mexico': 'N.M.',
+  'new york': 'N.Y.',
+  'north carolina': 'N.C.',
+  'north dakota': 'N.D.',
+  'ohio': 'Ohio',
+  'oklahoma': 'Okla.',
+  'oregon': 'Ore.',
+  'pennsylvania': 'Pa.',
+  'rhode island': 'R.I.',
+  'south carolina': 'S.C.',
+  'south dakota': 'S.D.',
+  'tennessee': 'Tenn.',
+  'texas': 'Texas',
+  'utah': 'Utah',
+  'vermont': 'Vt.',
+  'virginia': 'Va.',
+  'washington': 'Wash.',
+  'west virginia': 'W. Va.',
+  'wisconsin': 'Wis.',
+  'wyoming': 'Wyo.',
 };

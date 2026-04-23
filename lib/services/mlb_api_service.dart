@@ -12,12 +12,17 @@ class Player {
   /// the same record across jersey / name changes and trades.
   final String? playerId;
 
+  /// Short position label from the league API (e.g. "SP", "CF", "PG", "LW").
+  /// Null when the source does not provide position data.
+  final String? position;
+
   Player({
     required this.fullName,
     required this.firstName,
     this.jerseyNumber,
     required this.displayName,
     this.playerId,
+    this.position,
   });
 
   factory Player.fromJson(Map<String, dynamic> json, String? jerseyNumber) {
@@ -119,7 +124,17 @@ class MlbApiService {
       return rosterList.map((playerJson) {
         final person = playerJson['person'] as Map<String, dynamic>;
         final jerseyNumber = playerJson['jerseyNumber'] as String?;
-        return Player.fromJson(person, jerseyNumber);
+        final posMap = playerJson['position'] as Map<String, dynamic>?;
+        final position = (posMap?['abbreviation'] as String?)?.trim();
+        final p = Player.fromJson(person, jerseyNumber);
+        return Player(
+          fullName: p.fullName,
+          firstName: p.firstName,
+          jerseyNumber: p.jerseyNumber,
+          displayName: p.displayName,
+          playerId: p.playerId,
+          position: position?.isEmpty == true ? null : position,
+        );
       }).toList();
     } catch (e) {
       print('Error fetching roster for team $teamId: $e');

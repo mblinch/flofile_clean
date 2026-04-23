@@ -6,6 +6,7 @@ import 'caption_template.dart';
 import 'caption_text_normalize.dart';
 import 'date_formula.dart';
 import 'game_info.dart';
+import 'region_abbrev.dart';
 
 /// Drives the sample credit line dropdown (preview branding).
 enum CreditSampleAgency { gettyImages, imagn, ap }
@@ -169,9 +170,16 @@ class CaptionFormulaRenderer {
   ///   whole line after assembly (kept for templates that haven't migrated).
   /// - When two geo chips render back-to-back with no literal between them,
   ///   a single space is inserted so fields never run together.
-  static String formatLocationLine(GameInfo g, LocationLineOptions options) {
+  static String formatLocationLine(
+    GameInfo g,
+    LocationLineOptions options, {
+    bool apStyleCaption = false,
+  }) {
     final b = StringBuffer();
     var lastEmittedWasGeo = false;
+    final countryName = g.resolvedCountryName.trim().toLowerCase();
+    final countryCode = g.resolvedCountryCode.trim().toLowerCase();
+    final isCanada = countryName == 'canada' || countryCode == 'can';
     for (final c in options.chips) {
       switch (c.kind) {
         case LocationChipKind.city:
@@ -181,12 +189,22 @@ class CaptionFormulaRenderer {
           if (c.kind == LocationChipKind.city) {
             raw = g.city.trim();
           } else if (c.kind == LocationChipKind.region) {
-            final useShort = c.regionVariant == LocationRegionVariant.shortForm;
-            raw = (useShort ? g.resolvedRegionShort : g.resolvedRegionName)
-                .trim();
-            if (raw.isEmpty) {
-              raw = (useShort ? g.resolvedRegionName : g.resolvedRegionShort)
+            if (apStyleCaption && isCanada) {
+              lastEmittedWasGeo = false;
+              break;
+            }
+            if (c.regionVariant == LocationRegionVariant.apStyle) {
+              final full = g.resolvedRegionName.trim();
+              raw = abbreviateUsStateApStyle(full);
+              if (raw.isEmpty) raw = full;
+            } else {
+              final useShort = c.regionVariant == LocationRegionVariant.shortForm;
+              raw = (useShort ? g.resolvedRegionShort : g.resolvedRegionName)
                   .trim();
+              if (raw.isEmpty) {
+                raw = (useShort ? g.resolvedRegionName : g.resolvedRegionShort)
+                    .trim();
+              }
             }
           } else {
             final useIso = c.countryVariant == LocationCountryVariant.isoCode;
@@ -212,6 +230,9 @@ class CaptionFormulaRenderer {
       }
     }
     var s = b.toString();
+    if (apStyleCaption) {
+      s = s.replaceFirst(RegExp(r'[,\s]+$'), '');
+    }
     if (s.trim().isEmpty) return '—';
     if (options.uppercase) s = s.toUpperCase();
     return s;
@@ -277,6 +298,7 @@ class CaptionFormulaRenderer {
     required Map<String, String> iptcMetadata,
     required CreditSampleAgency sampleAgency,
     bool apShortParen = false,
+    List<String> customTexts = const [],
   }) {
     var name = photographerName.trim().isEmpty
         ? 'Photographer'
@@ -314,11 +336,17 @@ class CaptionFormulaRenderer {
     }
     if (bylineOptions.copyrightCaps) copyright = copyright.toUpperCase();
 
-    if (apShortParen) {
+    // apShortParen only applies when no custom chip has text typed into it.
+    final hasCustomText = bylineOptions.fieldOrder.contains(BylineFieldKind.custom) &&
+        customTexts.any((t) => t.trim().isNotEmpty);
+    if (apShortParen && !hasCustomText) {
       final short =
           credit.length > 20 || credit.contains('Associated') ? 'AP' : credit;
       return '($name/$short)';
     }
+
+    // Each custom occurrence in fieldOrder maps to customTexts[i] in order.
+    var customOccurrence = 0;
     String fieldValue(BylineFieldKind kind) {
       switch (kind) {
         case BylineFieldKind.name:
@@ -327,6 +355,9 @@ class CaptionFormulaRenderer {
           return credit;
         case BylineFieldKind.copyright:
           return copyright;
+        case BylineFieldKind.custom:
+          final idx = customOccurrence++;
+          return idx < customTexts.length ? customTexts[idx].trim() : '';
       }
     }
 
@@ -408,43 +439,39 @@ class CaptionFormulaRenderer {
   }
 
   static const List<_SamplePlayer> _samplePlayers = [
+    _SamplePlayer('Toronto Blue Jays', 'SP', 'Vladimir Guerrero Jr.', 27,
+        'Atlanta Braves'),
     _SamplePlayer(
-        'Toronto FC', 'forward', 'Josh Sargent', 9, 'Colorado Rapids'),
+        'Toronto Blue Jays', 'CF', 'George Springer', 4, 'Atlanta Braves'),
     _SamplePlayer(
-        'Toronto FC', 'forward', 'Dániel Sallói', 20, 'Colorado Rapids'),
-    _SamplePlayer('Toronto FC', 'forward', 'Federico Bernardeschi', 10,
-        'Colorado Rapids'),
+        'Toronto Blue Jays', 'SS', 'Bo Bichette', 11, 'Atlanta Braves'),
     _SamplePlayer(
-        'Toronto FC', 'midfielder', 'Jonathan Osorio', 21, 'Colorado Rapids'),
+        'Toronto Blue Jays', 'C', 'Danny Jansen', 9, 'Atlanta Braves'),
     _SamplePlayer(
-        'Toronto FC', 'midfielder', 'Matty Longstaff', 16, 'Colorado Rapids'),
+        'Toronto Blue Jays', 'RF', 'Teoscar Hernández', 37, 'Atlanta Braves'),
     _SamplePlayer(
-        'Toronto FC', 'defender', 'Richie Laryea', 22, 'Colorado Rapids'),
+        'Atlanta Braves', 'SP', 'Max Fried', 54, 'Toronto Blue Jays'),
     _SamplePlayer(
-        'Toronto FC', 'goalkeeper', 'Sean Johnson', 1, 'Colorado Rapids'),
+        'Atlanta Braves', '3B', 'Austin Riley', 27, 'Toronto Blue Jays'),
     _SamplePlayer(
-        'Colorado Rapids', 'forward', 'Rafael Navarro', 10, 'Toronto FC'),
-    _SamplePlayer('Colorado Rapids', 'midfielder', 'Djordje Mihailovic', 14,
-        'Toronto FC'),
+        'Atlanta Braves', 'RF', 'Ronald Acuña Jr.', 13, 'Toronto Blue Jays'),
     _SamplePlayer(
-        'Colorado Rapids', 'midfielder', 'Cole Bassett', 26, 'Toronto FC'),
+        'Atlanta Braves', 'C', 'Travis d\'Arnaud', 16, 'Toronto Blue Jays'),
     _SamplePlayer(
-        'Colorado Rapids', 'defender', 'Moïse Bombito', 5, 'Toronto FC'),
-    _SamplePlayer(
-        'Colorado Rapids', 'goalkeeper', 'Zack Steffen', 1, 'Toronto FC'),
+        'Atlanta Braves', 'SS', 'Dansby Swanson', 7, 'Toronto Blue Jays'),
   ];
 
   static const List<String> _sampleActions = [
-    'celebrates scoring against the {opp} during the second half',
-    'takes a shot on goal against the {opp} during the first half',
-    'controls the ball in the attacking third against the {opp} during the second half',
-    'challenges for a header against the {opp} during the first half',
-    'battles for possession at midfield against the {opp} during the match',
-    'dribbles past defenders against the {opp} during the second half',
-    'reacts after a missed chance against the {opp} during the first half',
-    'directs teammates against the {opp} during a set piece',
-    'makes a save against the {opp} during the second half',
-    'clears the ball out of the defensive third against the {opp}',
+    'celebrates after hitting a home run against the {opp}',
+    'pitches during the third inning against the {opp}',
+    'fields a ground ball against the {opp} during the fifth inning',
+    'rounds third base against the {opp} during the seventh inning',
+    'reacts after striking out against the {opp} in the ninth inning',
+    'slides into second base against the {opp} during the fourth inning',
+    'warms up in the bullpen before facing the {opp}',
+    'celebrates with teammates after scoring against the {opp}',
+    'takes a swing against the {opp} during the sixth inning',
+    'throws to first base against the {opp} during the second inning',
   ];
 
   static String render({
@@ -452,6 +479,7 @@ class CaptionFormulaRenderer {
     required GameInfo game,
     required CreditSampleAgency sampleAgency,
     String? captionOverride,
+    String? creditOverride,
   }) {
     final cap = captionOverride ?? sampleDynamicCaption(template);
     final venue = game.venue.trim().isEmpty ? 'Venue' : game.venue.trim();
@@ -462,6 +490,7 @@ class CaptionFormulaRenderer {
       sampleAgency: sampleAgency,
       cap: cap,
       venue: venue,
+      creditOverride: creditOverride,
     );
   }
 
@@ -510,6 +539,7 @@ class CaptionFormulaRenderer {
     required CreditSampleAgency sampleAgency,
     required String cap,
     required String venue,
+    String? creditOverride,
   }) {
     String valueAt(int segmentIndex) {
       final s = template.segmentOrder[segmentIndex];
@@ -520,6 +550,7 @@ class CaptionFormulaRenderer {
           return formatLocationLine(
             game,
             locationLineOptionsForOccurrence(template, occ),
+            apStyleCaption: template.wireStyle == WireStyle.ap,
           );
         case CaptionSegment.date:
           final occ = segmentOccurrenceIndex(
@@ -537,6 +568,8 @@ class CaptionFormulaRenderer {
         case CaptionSegment.venue:
           return venue;
         case CaptionSegment.credit:
+          final manualCredit = creditOverride?.trim() ?? '';
+          if (manualCredit.isNotEmpty) return manualCredit;
           return formatCreditLine(
             format: template.creditFormat,
             bylineOptions: template.bylineOptions,
@@ -544,6 +577,8 @@ class CaptionFormulaRenderer {
             agencyName: game.agencyName,
             iptcMetadata: game.iptcMetadata,
             sampleAgency: sampleAgency,
+            apShortParen: template.wireStyle == WireStyle.ap,
+            customTexts: template.bylineOptions.customTexts,
           );
       }
     }

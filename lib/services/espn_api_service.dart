@@ -105,12 +105,15 @@ class EspnApiService {
       final displayName =
           jersey != null && jersey.isNotEmpty ? '$fullName #$jersey' : fullName;
       final playerId = map['id']?.toString();
+      final posMap = map['position'] as Map<String, dynamic>?;
+      final position = (posMap?['abbreviation'] as String?)?.trim();
       return Player(
         fullName: fullName,
         firstName: firstName,
         jerseyNumber: jersey,
         displayName: displayName,
         playerId: playerId,
+        position: position?.isEmpty == true ? null : position,
       );
     }).toList();
   }

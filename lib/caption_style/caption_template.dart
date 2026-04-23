@@ -46,6 +46,7 @@ LocationCountryVariant locationCountryVariantFromJson(String? s) {
 enum LocationRegionVariant {
   fullName,
   shortForm,
+  apStyle,
 }
 
 String locationRegionVariantLabel(LocationRegionVariant v) {
@@ -54,12 +55,17 @@ String locationRegionVariantLabel(LocationRegionVariant v) {
       return 'Full State/Province Name';
     case LocationRegionVariant.shortForm:
       return 'Short Form';
+    case LocationRegionVariant.apStyle:
+      return 'AP Style';
   }
 }
 
 LocationRegionVariant locationRegionVariantFromJson(String? s) {
   if (s == LocationRegionVariant.shortForm.name) {
     return LocationRegionVariant.shortForm;
+  }
+  if (s == LocationRegionVariant.apStyle.name) {
+    return LocationRegionVariant.apStyle;
   }
   return LocationRegionVariant.fullName;
 }
@@ -283,7 +289,11 @@ class LocationLineOptions {
           const LocationChip(id: 'a_city', kind: LocationChipKind.city),
           const LocationChip(
               id: 'a_lit1', kind: LocationChipKind.literal, literal: ', '),
-          const LocationChip(id: 'a_reg', kind: LocationChipKind.region),
+          const LocationChip(
+            id: 'a_reg',
+            kind: LocationChipKind.region,
+            regionVariant: LocationRegionVariant.apStyle,
+          ),
         ],
       );
 }
@@ -306,7 +316,7 @@ enum CreditFormat { photo_by, mandatory_credit }
 /// Which IPTC field drives the byline organization segment.
 enum BylineOrganizationSource { credit, copyright }
 
-enum BylineFieldKind { name, credit, copyright }
+enum BylineFieldKind { name, credit, copyright, custom }
 
 class BylineOptions {
   const BylineOptions({
@@ -319,6 +329,7 @@ class BylineOptions {
     this.creditCaps = false,
     this.copyrightCaps = false,
     this.fieldOrder = const [BylineFieldKind.name, BylineFieldKind.credit],
+    this.customTexts = const [],
   });
 
   final String prefix;
@@ -330,6 +341,8 @@ class BylineOptions {
   final bool creditCaps;
   final bool copyrightCaps;
   final List<BylineFieldKind> fieldOrder;
+  /// One entry per `BylineFieldKind.custom` occurrence in [fieldOrder], in order.
+  final List<String> customTexts;
 
   BylineOptions copyWith({
     String? prefix,
@@ -341,6 +354,7 @@ class BylineOptions {
     bool? creditCaps,
     bool? copyrightCaps,
     List<BylineFieldKind>? fieldOrder,
+    List<String>? customTexts,
   }) =>
       BylineOptions(
         prefix: prefix ?? this.prefix,
@@ -352,6 +366,7 @@ class BylineOptions {
         creditCaps: creditCaps ?? this.creditCaps,
         copyrightCaps: copyrightCaps ?? this.copyrightCaps,
         fieldOrder: fieldOrder ?? List<BylineFieldKind>.from(this.fieldOrder),
+        customTexts: customTexts ?? List<String>.from(this.customTexts),
       );
 
   Map<String, dynamic> toJson() => {
@@ -364,6 +379,8 @@ class BylineOptions {
         if (creditCaps) 'creditCaps': true,
         if (copyrightCaps) 'copyrightCaps': true,
         'fieldOrder': fieldOrder.map((e) => e.name).toList(),
+        if (customTexts.any((t) => t.trim().isNotEmpty))
+          'customTexts': customTexts,
       };
 
   factory BylineOptions.fromJson(Map<String, dynamic> j) {
@@ -388,6 +405,18 @@ class BylineOptions {
           : const [BylineFieldKind.name, BylineFieldKind.credit];
     }
 
+    List<String> customTextsFromRaw(dynamic raw, String legacyCustomText) {
+      if (raw is List) return raw.map((e) => e.toString()).toList();
+      // Migrate from old single customText field
+      if (legacyCustomText.isNotEmpty) return [legacyCustomText];
+      return [];
+    }
+
+    final fieldOrder = orderFromRaw(j['fieldOrder']);
+    final legacyCustomText = j['customText'] as String? ?? '';
+    final customTexts =
+        customTextsFromRaw(j['customTexts'], legacyCustomText);
+
     return BylineOptions(
       prefix: j['prefix'] as String? ?? '',
       between: j['between'] as String? ?? '/',
@@ -398,7 +427,8 @@ class BylineOptions {
       creditCaps:
           j['creditCaps'] as bool? ?? (j['organizationCaps'] as bool? ?? false),
       copyrightCaps: j['copyrightCaps'] as bool? ?? false,
-      fieldOrder: orderFromRaw(j['fieldOrder']),
+      fieldOrder: fieldOrder,
+      customTexts: customTexts,
     );
   }
 

@@ -5,6 +5,7 @@ import 'package:dropdown_flutter/custom_dropdown.dart';
 import 'package:flutter/material.dart';
 
 import '../caption_style/caption_formula_renderer.dart';
+import '../caption_style/caption_session_context.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/date_formula.dart';
 import '../caption_style/game_info.dart';
@@ -47,7 +48,7 @@ class _CaptionLayoutBuilderDialogState
     region: 'Ontario',
     country: 'Canada',
     countryCode: 'CAN',
-    venue: 'BMO Field',
+    venue: 'Rogers Centre',
   );
 
   /// Fallback IPTC date samples when no folder import has populated prefs yet.
@@ -60,8 +61,17 @@ class _CaptionLayoutBuilderDialogState
   /// Session [GameInfo] from prefs (updated when images are imported — EXIF date).
   GameInfo? _loadedGameInfo;
 
-  /// Preview row: merge imported game/IPTC dates with static place/venue sample.
+  /// Preview row: prefer live session data, then prefs-loaded data, then mock.
   GameInfo get _previewGameInfo {
+    // If the user has already generated a caption this session, use that data.
+    final session = CaptionSessionContext.gameInfo;
+    if (session != null) {
+      return session.copyWith(
+        photographerName: session.photographerName.isNotEmpty
+            ? session.photographerName
+            : CurrentUserService.displayNameOrPlaceholder(),
+      );
+    }
     final snap = _loadedGameInfo;
     String pick(String a, String b) => b.trim().isNotEmpty ? b : a;
     return _baseMockGameInfo.copyWith(
@@ -98,6 +108,7 @@ class _CaptionLayoutBuilderDialogState
   CaptionTemplate? _imagnWireDefault;
   CaptionTemplate? _apWireDefault;
   CaptionTemplate? _gettyIntlWireDefault;
+  final Map<WireStyle, CaptionTemplate> _wireDrafts = {};
 
   /// Custom labels shown in the Caption Style dropdown for built-in wires.
   /// `null` means “use factory name (Getty / Imagn / AP / Getty International)”.
@@ -140,6 +151,10 @@ class _CaptionLayoutBuilderDialogState
   final TextEditingController _bylinePrefixCtrl = TextEditingController();
   final TextEditingController _bylineBetweenCtrl = TextEditingController();
   final TextEditingController _bylineSuffixCtrl = TextEditingController();
+  /// One controller per `BylineFieldKind.custom` occurrence in fieldOrder.
+  final List<TextEditingController> _customChipCtrls = [];
+  /// Occurrence index of the custom chip whose text field is currently open.
+  int? _editingCustomOccurrence;
   bool _syncingBylineCtrls = false;
 
   /// Structured date formula — drives the chip-based [DateFormulaEditor].
@@ -213,6 +228,27 @@ class _CaptionLayoutBuilderDialogState
     _bylinePrefixCtrl.text = _template.bylineOptions.prefix;
     _bylineBetweenCtrl.text = _template.bylineOptions.between;
     _bylineSuffixCtrl.text = _template.bylineOptions.suffix;
+
+    final customCount = _template.bylineOptions.fieldOrder
+        .where((k) => k == BylineFieldKind.custom)
+        .length;
+    final texts = _template.bylineOptions.customTexts;
+
+    // Grow controller list if needed
+    while (_customChipCtrls.length < customCount) {
+      final ctrl = TextEditingController();
+      ctrl.addListener(_onBylineTextEdited);
+      _customChipCtrls.add(ctrl);
+    }
+    // Shrink controller list if needed
+    while (_customChipCtrls.length > customCount) {
+      final ctrl = _customChipCtrls.removeLast();
+      ctrl.removeListener(_onBylineTextEdited);
+      ctrl.dispose();
+    }
+    for (var i = 0; i < _customChipCtrls.length; i++) {
+      _customChipCtrls[i].text = i < texts.length ? texts[i] : '';
+    }
     _syncingBylineCtrls = false;
   }
 
@@ -224,6 +260,7 @@ class _CaptionLayoutBuilderDialogState
           prefix: _bylinePrefixCtrl.text,
           between: _bylineBetweenCtrl.text,
           suffix: _bylineSuffixCtrl.text,
+          customTexts: _customChipCtrls.map((c) => c.text).toList(),
         ),
       );
     });
@@ -343,24 +380,19 @@ class _CaptionLayoutBuilderDialogState
             bylineOptions: o.copyWith(copyrightCaps: !o.copyrightCaps),
           );
           break;
+        case BylineFieldKind.custom:
+          break;
       }
     });
   }
 
-  void _moveBylineField(BylineFieldKind kind, int delta) {
+  void _moveBylineFieldAt(int chipIndex, int delta) {
     final order =
         List<BylineFieldKind>.from(_template.bylineOptions.fieldOrder);
-    final i = order.indexOf(kind);
-    if (i < 0) return;
-    final j = i + delta;
+    if (chipIndex < 0 || chipIndex >= order.length) return;
+    final j = chipIndex + delta;
     if (j < 0 || j >= order.length) return;
-    setState(() {
-      final v = order.removeAt(i);
-      order.insert(j, v);
-      _template = _template.copyWith(
-        bylineOptions: _template.bylineOptions.copyWith(fieldOrder: order),
-      );
-    });
+    _reorderBylineField(chipIndex, j);
   }
 
   void _reorderBylineField(int fromIndex, int targetIndex) {
@@ -370,13 +402,45 @@ class _CaptionLayoutBuilderDialogState
     if (fromIndex < 0 || fromIndex >= order.length) return;
     if (targetIndex < 0 || targetIndex >= order.length) return;
     setState(() {
+      final movingKind = order[fromIndex];
       final item = order.removeAt(fromIndex);
-      // Drop over a chip places the dragged chip at that chip's index.
-      // This avoids no-op behavior when moving one step to the right.
       final insert = targetIndex.clamp(0, order.length);
       order.insert(insert, item);
+
+      var customTexts =
+          List<String>.from(_template.bylineOptions.customTexts);
+      // When a custom chip is moved, keep its text travelling with it.
+      if (movingKind == BylineFieldKind.custom) {
+        final fromOcc = _customOccurrenceAt(
+            _template.bylineOptions.fieldOrder, fromIndex);
+        // Compute occurrence in the new order at the insert position.
+        // We need the order before insert to calculate correctly.
+        final tempOrder =
+            List<BylineFieldKind>.from(_template.bylineOptions.fieldOrder);
+        tempOrder.removeAt(fromIndex);
+        final toOcc = _customOccurrenceAt(tempOrder, insert);
+
+        if (fromOcc < customTexts.length && fromOcc != toOcc) {
+          final text = customTexts.removeAt(fromOcc);
+          customTexts.insert(toOcc.clamp(0, customTexts.length), text);
+          // Mirror in controllers too
+          if (fromOcc < _customChipCtrls.length) {
+            final ctrl = _customChipCtrls.removeAt(fromOcc);
+            _customChipCtrls.insert(
+                toOcc.clamp(0, _customChipCtrls.length), ctrl);
+          }
+          // Adjust editing occurrence
+          if (_editingCustomOccurrence == fromOcc) {
+            _editingCustomOccurrence = toOcc;
+          }
+        }
+      }
+
       _template = _template.copyWith(
-        bylineOptions: _template.bylineOptions.copyWith(fieldOrder: order),
+        bylineOptions: _template.bylineOptions.copyWith(
+          fieldOrder: order,
+          customTexts: customTexts,
+        ),
       );
     });
   }
@@ -384,24 +448,71 @@ class _CaptionLayoutBuilderDialogState
   void _addBylineField(BylineFieldKind kind) {
     final order =
         List<BylineFieldKind>.from(_template.bylineOptions.fieldOrder);
-    if (order.contains(kind)) return;
+    // Non-custom fields are unique; custom chips can appear multiple times.
+    if (kind != BylineFieldKind.custom && order.contains(kind)) return;
     setState(() {
       order.add(kind);
+      var customTexts =
+          List<String>.from(_template.bylineOptions.customTexts);
+      if (kind == BylineFieldKind.custom) {
+        customTexts.add('');
+        final ctrl = TextEditingController();
+        ctrl.addListener(_onBylineTextEdited);
+        _customChipCtrls.add(ctrl);
+        // Auto-expand the new chip for editing
+        _editingCustomOccurrence = _customChipCtrls.length - 1;
+      }
       _template = _template.copyWith(
-        bylineOptions: _template.bylineOptions.copyWith(fieldOrder: order),
+        bylineOptions: _template.bylineOptions.copyWith(
+          fieldOrder: order,
+          customTexts: customTexts,
+        ),
       );
     });
   }
 
-  void _removeBylineField(BylineFieldKind kind) {
+  /// Returns the occurrence index (0-based) of [fieldOrder[chipIndex]] among
+  /// chips of the same kind that appear before [chipIndex].
+  int _customOccurrenceAt(List<BylineFieldKind> order, int chipIndex) {
+    int occ = 0;
+    for (var i = 0; i < chipIndex; i++) {
+      if (order[i] == BylineFieldKind.custom) occ++;
+    }
+    return occ;
+  }
+
+  void _removeBylineFieldAt(int chipIndex) {
     final order =
         List<BylineFieldKind>.from(_template.bylineOptions.fieldOrder);
+    if (chipIndex < 0 || chipIndex >= order.length) return;
+    final kind = order[chipIndex];
     if (kind == BylineFieldKind.name) return;
-    if (!order.contains(kind)) return;
     setState(() {
-      order.remove(kind);
+      order.removeAt(chipIndex);
+      var customTexts =
+          List<String>.from(_template.bylineOptions.customTexts);
+      if (kind == BylineFieldKind.custom) {
+        final occ = _customOccurrenceAt(
+            _template.bylineOptions.fieldOrder, chipIndex);
+        if (occ < customTexts.length) customTexts.removeAt(occ);
+        if (occ < _customChipCtrls.length) {
+          _customChipCtrls[occ].removeListener(_onBylineTextEdited);
+          _customChipCtrls[occ].dispose();
+          _customChipCtrls.removeAt(occ);
+        }
+        if (_editingCustomOccurrence != null) {
+          if (_editingCustomOccurrence == occ) {
+            _editingCustomOccurrence = null;
+          } else if (_editingCustomOccurrence! > occ) {
+            _editingCustomOccurrence = _editingCustomOccurrence! - 1;
+          }
+        }
+      }
       _template = _template.copyWith(
-        bylineOptions: _template.bylineOptions.copyWith(fieldOrder: order),
+        bylineOptions: _template.bylineOptions.copyWith(
+          fieldOrder: order,
+          customTexts: customTexts,
+        ),
       );
     });
   }
@@ -754,6 +865,21 @@ class _CaptionLayoutBuilderDialogState
     }
   }
 
+  bool _isBuiltInWire(WireStyle wire) => wire != WireStyle.custom;
+
+  void _rememberCurrentWireDraft() {
+    if (!_isBuiltInWire(_selectedWire) || _selectedSavedStyleId != null) return;
+    _wireDrafts[_selectedWire] = _deepCopyCaptionTemplate(_template);
+  }
+
+  CaptionTemplate _draftOrBaseline(WireStyle wire) {
+    final draft = _wireDrafts[wire];
+    if (draft != null) {
+      return _deepCopyCaptionTemplate(draft).copyWith(wireStyle: wire);
+    }
+    return _wiredBaseline(wire);
+  }
+
   /// Full JSON round-trip so nested lists (per–date-chip formulas, etc.) stay independent.
   CaptionTemplate _deepCopyCaptionTemplate(CaptionTemplate t) {
     final raw = json.decode(json.encode(t.toJson())) as Map<String, dynamic>;
@@ -763,6 +889,7 @@ class _CaptionLayoutBuilderDialogState
   /// Copies the working layout as [WireStyle.custom] for editing without replacing
   /// the Getty / Imagn / AP wire default.
   void _duplicateCaptionStyle() {
+    _rememberCurrentWireDraft();
     final previousWire = _selectedWire;
     final copy = _deepCopyCaptionTemplate(_template);
     setState(() {
@@ -842,6 +969,39 @@ class _CaptionLayoutBuilderDialogState
         ),
       );
     }
+  }
+
+  Future<void> _setAllStylesAsDefaults() async {
+    _rememberCurrentWireDraft();
+    final prefs = await PreferencesService.getInstance();
+    const wires = <WireStyle>[
+      WireStyle.getty,
+      WireStyle.imagn,
+      WireStyle.ap,
+      WireStyle.gettyInternational,
+    ];
+
+    final nextDefaults = <WireStyle, CaptionTemplate>{};
+    for (final wire in wires) {
+      final draft = _wireDrafts[wire];
+      final source = draft ?? _wiredBaseline(wire);
+      final normalized = _deepCopyCaptionTemplate(source).copyWith(wireStyle: wire);
+      await prefs.saveCaptionTemplateWireDefault(wire, normalized);
+      nextDefaults[wire] = normalized;
+    }
+    if (!mounted) return;
+    setState(() {
+      _gettyWireDefault = nextDefaults[WireStyle.getty];
+      _imagnWireDefault = nextDefaults[WireStyle.imagn];
+      _apWireDefault = nextDefaults[WireStyle.ap];
+      _gettyIntlWireDefault = nextDefaults[WireStyle.gettyInternational];
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Saved all caption styles as defaults.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   void _disposeGapControllers() {
@@ -1045,6 +1205,7 @@ class _CaptionLayoutBuilderDialogState
     if (w == _selectedWire && _selectedSavedStyleId == null) {
       return;
     }
+    _rememberCurrentWireDraft();
     setState(() {
       _selectedSavedStyleId = null;
       _locationEditorOpen = false;
@@ -1059,7 +1220,7 @@ class _CaptionLayoutBuilderDialogState
         case WireStyle.gettyInternational:
         case WireStyle.imagn:
         case WireStyle.ap:
-          final b = _wiredBaseline(w);
+          final b = _draftOrBaseline(w);
           _template = b;
           _lastPreset = b;
           break;
@@ -1340,6 +1501,14 @@ class _CaptionLayoutBuilderDialogState
   @override
   void dispose() {
     _autosaveDebounce?.cancel();
+    // Flush any unsaved changes that were still pending in the debounce buffer.
+    final snapshot = _templateSnapshot();
+    if (_prefsLoaded && snapshot != _lastSavedTemplateSnapshot) {
+      final templateToSave = _template;
+      PreferencesService.getInstance().then((prefs) {
+        prefs.saveCaptionTemplate(templateToSave);
+      });
+    }
     _disposeGapControllers();
     _bylinePrefixCtrl.removeListener(_onBylineTextEdited);
     _bylineBetweenCtrl.removeListener(_onBylineTextEdited);
@@ -1347,6 +1516,11 @@ class _CaptionLayoutBuilderDialogState
     _bylinePrefixCtrl.dispose();
     _bylineBetweenCtrl.dispose();
     _bylineSuffixCtrl.dispose();
+    for (final ctrl in _customChipCtrls) {
+      ctrl.removeListener(_onBylineTextEdited);
+      ctrl.dispose();
+    }
+    _customChipCtrls.clear();
     _renameCaptionStyleNameCtrl?.dispose();
     super.dispose();
   }
@@ -1644,6 +1818,26 @@ class _CaptionLayoutBuilderDialogState
 
   Widget _bylineEditor() {
     final order = _template.bylineOptions.fieldOrder;
+    // Track custom occurrence index as we iterate chips
+    var customOcc = 0;
+    final chips = <Widget>[];
+    for (var i = 0; i < order.length; i++) {
+      final kind = order[i];
+      final occ = kind == BylineFieldKind.custom ? customOcc++ : 0;
+      chips.add(_bylineDraggableChip(
+        kind,
+        index: i,
+        total: order.length,
+        customOccurrence: occ,
+      ));
+      if (i < order.length - 1) chips.add(_bylineBetweenMirror(i));
+    }
+
+    final editingOcc = _editingCustomOccurrence;
+    final editingCtrl = (editingOcc != null && editingOcc < _customChipCtrls.length)
+        ? _customChipCtrls[editingOcc]
+        : null;
+
     return SizedBox(
       width: double.infinity,
       child: Column(
@@ -1663,14 +1857,32 @@ class _CaptionLayoutBuilderDialogState
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 _smallBylineField(_bylinePrefixCtrl, width: 140),
-                for (var i = 0; i < order.length; i++) ...[
-                  _bylineDraggableChip(order[i], index: i, total: order.length),
-                  if (i < order.length - 1) _bylineBetweenMirror(i),
-                ],
+                ...chips,
                 _smallBylineField(_bylineSuffixCtrl, width: 140),
               ],
             ),
           ),
+          // Inline text field for the currently-edited custom chip
+          if (editingCtrl != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'Custom text:',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _smallBylineField(editingCtrl, width: 220),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 6),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -1688,18 +1900,20 @@ class _CaptionLayoutBuilderDialogState
                 _sourceOptionChip(
                   selected: false,
                   label: '+ Credit',
-                  onTap: () => _addBylineField(
-                    BylineFieldKind.credit,
-                  ),
+                  onTap: () => _addBylineField(BylineFieldKind.credit),
                 ),
               if (!order.contains(BylineFieldKind.copyright))
                 _sourceOptionChip(
                   selected: false,
                   label: '+ Copyright',
-                  onTap: () => _addBylineField(
-                    BylineFieldKind.copyright,
-                  ),
+                  onTap: () => _addBylineField(BylineFieldKind.copyright),
                 ),
+              // Custom can always be added (multiple allowed)
+              _sourceOptionChip(
+                selected: false,
+                label: '+ Custom',
+                onTap: () => _addBylineField(BylineFieldKind.custom),
+              ),
             ],
           ),
         ],
@@ -1760,11 +1974,13 @@ class _CaptionLayoutBuilderDialogState
     BylineFieldKind kind, {
     required int index,
     required int total,
+    int customOccurrence = 0,
   }) {
     final chipCore = _bylineTokenChipCore(
       kind,
       index: index,
       total: total,
+      customOccurrence: customOccurrence,
     );
     return DragTarget<int>(
       onWillAcceptWithDetails: (d) => d.data != index,
@@ -1808,6 +2024,7 @@ class _CaptionLayoutBuilderDialogState
     BylineFieldKind kind, {
     required int index,
     required int total,
+    int customOccurrence = 0,
   }) {
     String label;
     bool caps;
@@ -1824,14 +2041,34 @@ class _CaptionLayoutBuilderDialogState
         label = 'IPTC:Copyright';
         caps = _template.bylineOptions.copyrightCaps;
         break;
+      case BylineFieldKind.custom:
+        // Show a short preview of the typed text, or "Custom" if empty.
+        final preview = customOccurrence < _customChipCtrls.length
+            ? _customChipCtrls[customOccurrence].text.trim()
+            : '';
+        label = preview.isEmpty
+            ? 'Custom'
+            : (preview.length > 14
+                ? '${preview.substring(0, 14)}…'
+                : preview);
+        caps = false;
+        break;
     }
+    final isEditingThis = kind == BylineFieldKind.custom &&
+        _editingCustomOccurrence == customOccurrence;
     return Container(
       height: 28,
       padding: const EdgeInsets.symmetric(horizontal: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFF4F4F5),
+        color: isEditingThis
+            ? const Color(0xFFEEF4FF)
+            : const Color(0xFFF4F4F5),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0x14000000)),
+        border: Border.all(
+          color: isEditingThis
+              ? const Color(0xFF2563EB)
+              : const Color(0x14000000),
+        ),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1858,34 +2095,51 @@ class _CaptionLayoutBuilderDialogState
           _bylineMiniButton(
             icon: Icons.chevron_left,
             enabled: index > 0,
-            onTap: () => _moveBylineField(kind, -1),
+            onTap: () => _moveBylineFieldAt(index, -1),
           ),
           const SizedBox(width: 2),
           _bylineMiniButton(
             icon: Icons.chevron_right,
             enabled: index < total - 1,
-            onTap: () => _moveBylineField(kind, 1),
+            onTap: () => _moveBylineFieldAt(index, 1),
           ),
           const SizedBox(width: 2),
-          _bylineChipIconButton(
-            onTap: () => _toggleBylineFieldCaps(kind),
-            background: caps ? const Color(0xFFD0E3FA) : Colors.white,
-            child: const Text(
-              'Aa',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF3A3A3A),
-                height: 1,
+          if (kind == BylineFieldKind.custom)
+            _bylineChipIconButton(
+              onTap: () => setState(() {
+                _editingCustomOccurrence =
+                    _editingCustomOccurrence == customOccurrence
+                        ? null
+                        : customOccurrence;
+              }),
+              background:
+                  isEditingThis ? const Color(0xFFD0E3FA) : Colors.white,
+              child: Icon(
+                Icons.edit_outlined,
+                size: 10,
+                color: Colors.grey.shade700,
+              ),
+            )
+          else
+            _bylineChipIconButton(
+              onTap: () => _toggleBylineFieldCaps(kind),
+              background: caps ? const Color(0xFFD0E3FA) : Colors.white,
+              child: const Text(
+                'Aa',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF3A3A3A),
+                  height: 1,
+                ),
               ),
             ),
-          ),
           if (kind != BylineFieldKind.name) ...[
             const SizedBox(width: 2),
             _bylineMiniButton(
               icon: Icons.close,
               enabled: true,
-              onTap: () => _removeBylineField(kind),
+              onTap: () => _removeBylineFieldAt(index),
             ),
           ],
         ],
@@ -2547,6 +2801,7 @@ class _CaptionLayoutBuilderDialogState
       iptcMetadata: _previewGameInfo.iptcMetadata,
       sampleAgency: sampleAgency,
       apShortParen: _template.wireStyle == WireStyle.ap,
+      customTexts: _template.bylineOptions.customTexts,
     );
 
     String valueAt(int segmentIndex, List<CaptionSegment> order) {
@@ -2559,6 +2814,7 @@ class _CaptionLayoutBuilderDialogState
             _previewGameInfo,
             CaptionFormulaRenderer.locationLineOptionsForOccurrence(
                 _template, occ),
+            apStyleCaption: _template.wireStyle == WireStyle.ap,
           );
         case CaptionSegment.date:
           final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
@@ -2628,10 +2884,14 @@ class _CaptionLayoutBuilderDialogState
   @override
   Widget build(BuildContext context) {
     _scheduleAutosave();
-    final sampleCaption = CaptionFormulaRenderer.randomSinglePlayerCaption(
-      _template,
-      seed: _captionSampleSeed,
-    );
+    // Use the real session caption body when available; fall back to random sample.
+    final sessionBody = CaptionSessionContext.captionBody;
+    final sampleCaption = sessionBody != null && sessionBody.isNotEmpty
+        ? sessionBody
+        : CaptionFormulaRenderer.randomSinglePlayerCaption(
+            _template,
+            seed: _captionSampleSeed,
+          );
     final playerPreviewText = CaptionFormulaRenderer.randomSinglePlayerPreview(
       _template,
       seed: _captionSampleSeed,
@@ -2998,6 +3258,7 @@ class _CaptionLayoutBuilderDialogState
                                                         onChanged: (token) {
                                                           if (token == null)
                                                             return;
+                                                          _rememberCurrentWireDraft();
                                                           _applyCaptionStyleMenuToken(
                                                               token);
                                                         },
@@ -3105,6 +3366,40 @@ class _CaptionLayoutBuilderDialogState
                                                                 _duplicateCaptionStyle,
                                                             child: Text(
                                                               'Duplicate',
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                color:
+                                                                    _captionLayoutBlue,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        Tooltip(
+                                                          message:
+                                                              'After you tune Getty/Imagn/AP/Getty International, '
+                                                              'save all of them as your new defaults at once.',
+                                                          child: TextButton(
+                                                            style: TextButton
+                                                                .styleFrom(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                horizontal: 6,
+                                                                vertical: 2,
+                                                              ),
+                                                              minimumSize:
+                                                                  Size.zero,
+                                                              tapTargetSize:
+                                                                  MaterialTapTargetSize
+                                                                      .shrinkWrap,
+                                                            ),
+                                                            onPressed:
+                                                                _setAllStylesAsDefaults,
+                                                            child: Text(
+                                                              'Set all as defaults',
                                                               style: TextStyle(
                                                                 fontSize: 10,
                                                                 fontWeight:
