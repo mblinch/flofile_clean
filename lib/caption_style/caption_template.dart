@@ -492,6 +492,7 @@ class CaptionTemplate {
     required this.numberFormat,
     required this.captionTeamOrder,
     this.includePlayerPosition = true,
+    this.americanEnglish = true,
     this.removeDiacritics = true,
     required this.separator,
     required this.creditFormat,
@@ -532,6 +533,10 @@ class CaptionTemplate {
   /// Whether the player's position label (e.g. `forward`, `guard`) appears in
   /// the dynamic caption segment.
   final bool includePlayerPosition;
+
+  /// Controls US vs international spelling for expanded position labels
+  /// (e.g. `center` vs `centre`) when AP-style captions write positions out.
+  final bool americanEnglish;
 
   /// When true, Latin accents in generated captions are folded to ASCII
   /// (player names, opponent names, etc.).
@@ -576,6 +581,7 @@ class CaptionTemplate {
         numberFormat: NumberFormatStyle.hash,
         captionTeamOrder: CaptionTeamOrder.teamAfter,
         includePlayerPosition: true,
+        americanEnglish: true,
         removeDiacritics: true,
         separator: ' - ',
         creditFormat: CreditFormat.photo_by,
@@ -602,6 +608,7 @@ class CaptionTemplate {
         numberFormat: NumberFormatStyle.parens,
         captionTeamOrder: CaptionTeamOrder.teamBefore,
         includePlayerPosition: true,
+        americanEnglish: true,
         removeDiacritics: true,
         separator: '; ',
         creditFormat: CreditFormat.mandatory_credit,
@@ -632,6 +639,7 @@ class CaptionTemplate {
         numberFormat: NumberFormatStyle.hash,
         captionTeamOrder: CaptionTeamOrder.teamAfter,
         includePlayerPosition: true,
+        americanEnglish: true,
         removeDiacritics: true,
         separator: ' - ',
         creditFormat: CreditFormat.photo_by,
@@ -658,6 +666,7 @@ class CaptionTemplate {
         numberFormat: NumberFormatStyle.parens,
         captionTeamOrder: CaptionTeamOrder.teamBefore,
         includePlayerPosition: true,
+        americanEnglish: true,
         removeDiacritics: true,
         separator: ' — ',
         creditFormat: CreditFormat.photo_by,
@@ -682,6 +691,7 @@ class CaptionTemplate {
     NumberFormatStyle numberFormat = NumberFormatStyle.parens,
     CaptionTeamOrder captionTeamOrder = CaptionTeamOrder.teamBefore,
     bool includePlayerPosition = true,
+    bool americanEnglish = true,
     bool removeDiacritics = true,
     String separator = '; ',
     CreditFormat creditFormat = CreditFormat.mandatory_credit,
@@ -705,6 +715,7 @@ class CaptionTemplate {
         numberFormat: numberFormat,
         captionTeamOrder: captionTeamOrder,
         includePlayerPosition: includePlayerPosition,
+        americanEnglish: americanEnglish,
         removeDiacritics: removeDiacritics,
         separator: separator,
         creditFormat: creditFormat,
@@ -729,6 +740,7 @@ class CaptionTemplate {
     NumberFormatStyle? numberFormat,
     CaptionTeamOrder? captionTeamOrder,
     bool? includePlayerPosition,
+    bool? americanEnglish,
     bool? removeDiacritics,
     String? separator,
     CreditFormat? creditFormat,
@@ -752,6 +764,7 @@ class CaptionTemplate {
         numberFormat: numberFormat ?? this.numberFormat,
         captionTeamOrder: captionTeamOrder ?? this.captionTeamOrder,
         includePlayerPosition: includePlayerPosition ?? this.includePlayerPosition,
+        americanEnglish: americanEnglish ?? this.americanEnglish,
         removeDiacritics: removeDiacritics ?? this.removeDiacritics,
         separator: separator ?? this.separator,
         creditFormat: creditFormat ?? this.creditFormat,
@@ -837,6 +850,7 @@ class CaptionTemplate {
         'numberFormat': numberFormat.name,
         'captionTeamOrder': captionTeamOrder.name,
         if (!includePlayerPosition) 'includePlayerPosition': false,
+        if (!americanEnglish) 'americanEnglish': false,
         if (!removeDiacritics) 'removeDiacritics': false,
         'separator': separator,
         'creditFormat': creditFormat.name,
@@ -897,6 +911,7 @@ class CaptionTemplate {
       ),
       captionTeamOrder: _parseCaptionTeamOrder(json),
       includePlayerPosition: json['includePlayerPosition'] as bool? ?? true,
+      americanEnglish: json['americanEnglish'] as bool? ?? true,
       removeDiacritics: json['removeDiacritics'] as bool? ?? true,
       separator: json['separator'] as String? ?? '; ',
       creditFormat: CreditFormat.values.firstWhere(

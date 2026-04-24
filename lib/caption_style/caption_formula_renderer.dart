@@ -6,6 +6,7 @@ import 'caption_template.dart';
 import 'caption_text_normalize.dart';
 import 'date_formula.dart';
 import 'game_info.dart';
+import 'position_labels.dart';
 import 'region_abbrev.dart';
 
 /// Drives the sample credit line dropdown (preview branding).
@@ -391,7 +392,14 @@ class CaptionFormulaRenderer {
       teamName = CaptionTextNormalize.stripDiacritics(teamName);
     }
     final numText = _numberToken(template.numberFormat, player.number);
-    final position = template.includePlayerPosition ? ' ${player.position}' : '';
+    final position = template.includePlayerPosition
+        ? ' ${formatPositionLabelForCaption(
+            player.position,
+            apStyle: template.wireStyle == WireStyle.ap,
+            americanEnglish: template.americanEnglish,
+            sport: 'baseball',
+          )}'
+        : '';
     final teamPossessive = _possessiveTeam(teamName);
     switch (template.captionTeamOrder) {
       case CaptionTeamOrder.teamAfter:

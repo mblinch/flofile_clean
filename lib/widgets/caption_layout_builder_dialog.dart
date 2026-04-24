@@ -808,6 +808,7 @@ class _CaptionLayoutBuilderDialogState
           numberFormat: t.numberFormat,
           captionTeamOrder: t.captionTeamOrder,
           includePlayerPosition: t.includePlayerPosition,
+          americanEnglish: t.americanEnglish,
           removeDiacritics: t.removeDiacritics,
           separator: t.separator,
           creditFormat: t.creditFormat,
@@ -830,6 +831,7 @@ class _CaptionLayoutBuilderDialogState
           numberFormat: t.numberFormat,
           captionTeamOrder: t.captionTeamOrder,
           includePlayerPosition: t.includePlayerPosition,
+          americanEnglish: t.americanEnglish,
           removeDiacritics: t.removeDiacritics,
           separator: t.separator,
           creditFormat: t.creditFormat,
@@ -852,6 +854,7 @@ class _CaptionLayoutBuilderDialogState
           numberFormat: t.numberFormat,
           captionTeamOrder: t.captionTeamOrder,
           includePlayerPosition: t.includePlayerPosition,
+          americanEnglish: t.americanEnglish,
           removeDiacritics: t.removeDiacritics,
           separator: t.separator,
           creditFormat: t.creditFormat,
@@ -1238,6 +1241,7 @@ class _CaptionLayoutBuilderDialogState
             numberFormat: ref.numberFormat,
             captionTeamOrder: ref.captionTeamOrder,
             includePlayerPosition: ref.includePlayerPosition,
+            americanEnglish: ref.americanEnglish,
             removeDiacritics: ref.removeDiacritics,
             separator: ref.separator,
             creditFormat: ref.creditFormat,
@@ -2301,6 +2305,17 @@ class _CaptionLayoutBuilderDialogState
       label: label,
       onTap: () => setState(() {
         _template = _template.copyWith(removeDiacritics: strip);
+      }),
+    );
+  }
+
+  Widget _americanEnglishChoice(bool american) {
+    final label = american ? 'American' : 'International';
+    return _checkOptionChip(
+      selected: _template.americanEnglish == american,
+      label: label,
+      onTap: () => setState(() {
+        _template = _template.copyWith(americanEnglish: american);
       }),
     );
   }
@@ -3645,6 +3660,44 @@ class _CaptionLayoutBuilderDialogState
                                                                     CaptionTeamOrder
                                                                         .teamAfter,
                                                                   ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(
+                                                            height: 6),
+                                                        Row(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            SizedBox(
+                                                              width: 90,
+                                                              child: Text(
+                                                                'English:',
+                                                                style:
+                                                                    _layoutOptionTextStyle,
+                                                              ),
+                                                            ),
+                                                            const SizedBox(
+                                                                width: 6),
+                                                            Expanded(
+                                                              child: Row(
+                                                                crossAxisAlignment:
+                                                                    CrossAxisAlignment
+                                                                        .center,
+                                                                mainAxisAlignment:
+                                                                    MainAxisAlignment
+                                                                        .start,
+                                                                children: [
+                                                                  _americanEnglishChoice(
+                                                                      true),
+                                                                  const SizedBox(
+                                                                      width:
+                                                                          12),
+                                                                  _americanEnglishChoice(
+                                                                      false),
                                                                 ],
                                                               ),
                                                             ),

@@ -23,6 +23,7 @@ import '../caption_style/caption_session_context.dart';
 import '../caption_style/game_info.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/caption_text_normalize.dart';
+import '../caption_style/position_labels.dart';
 import '../caption_style/region_abbrev.dart';
 import 'app_compact_checkbox.dart';
 import 'ftp_settings_panel.dart';
@@ -20396,20 +20397,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         .where((s) => s.isNotEmpty)
         .toList();
 
-    // Append position abbreviation when the template requests it.
+    // Build position labels (kept separate so team-before captions can place
+    // position between team name and player name).
+    final positionLabels = List<String?>.filled(playerNames.length, null);
     if (template != null && template.includePlayerPosition) {
-      playerNames = List.generate(playerNames.length, (i) {
+      final sportName = widget.sport?.toLowerCase();
+      for (var i = 0; i < playerNames.length; i++) {
         final raw = i < players.length ? players[i] : playerNames[i];
         final pos = _positionForDisplayName(raw.trim());
         if (pos != null && pos.isNotEmpty) {
-          // Insert position before the jersey number: "Name, POS, #27"
-          return playerNames[i].replaceFirstMapped(
-            RegExp(r'(\s*[#(]\d+)'),
-            (m) => ', $pos${m.group(1)}',
+          final formattedPos = formatPositionLabelForCaption(
+            pos,
+            apStyle: template.wireStyle == WireStyle.ap,
+            americanEnglish: template.americanEnglish,
+            sport: sportName,
           );
+          if (formattedPos.isNotEmpty) {
+            positionLabels[i] = formattedPos;
+          }
         }
-        return playerNames[i];
-      });
+      }
     }
 
     // Apply jersey-number format from the active caption template.
@@ -20441,24 +20448,38 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         template?.captionTeamOrder == CaptionTeamOrder.teamBefore;
 
     if (teamBefore) {
-      final possessive =
-          teamName.toLowerCase().endsWith('s') ? "$teamName'" : "$teamName's";
+      String playerWithPosition(int i) {
+        final p = playerNames[i];
+        final pos = i < positionLabels.length ? positionLabels[i] : null;
+        if (pos != null && pos.trim().isNotEmpty) return '${pos.trim()} $p';
+        return p;
+      }
       if (playerNames.length == 1) {
-        return '$possessive ${playerNames.first}';
+        return '$teamName ${playerWithPosition(0)}';
       } else if (playerNames.length == 2) {
-        return '$possessive ${playerNames[0]} and ${playerNames[1]}';
+        return '$teamName ${playerWithPosition(0)} and ${playerWithPosition(1)}';
       } else {
-        final last = playerNames.removeLast();
-        return '$possessive ${playerNames.join(', ')}, and $last';
+        final segments = List<String>.generate(
+            playerNames.length, (i) => playerWithPosition(i));
+        final last = segments.removeLast();
+        return '$teamName ${segments.join(', ')}, and $last';
       }
     } else {
+      String playerWithPosition(int i) {
+        final p = playerNames[i];
+        final pos = i < positionLabels.length ? positionLabels[i] : null;
+        if (pos != null && pos.trim().isNotEmpty) return '$p, ${pos.trim()}';
+        return p;
+      }
       if (playerNames.length == 1) {
-        return '${playerNames.first} of the $teamName';
+        return '${playerWithPosition(0)} of the $teamName';
       } else if (playerNames.length == 2) {
-        return '${playerNames[0]} and ${playerNames[1]} of the $teamName';
+        return '${playerWithPosition(0)} and ${playerWithPosition(1)} of the $teamName';
       } else {
-        final last = playerNames.removeLast();
-        return '${playerNames.join(', ')}, and $last of the $teamName';
+        final segments = List<String>.generate(
+            playerNames.length, (i) => playerWithPosition(i));
+        final last = segments.removeLast();
+        return '${segments.join(', ')}, and $last of the $teamName';
       }
     }
   }
