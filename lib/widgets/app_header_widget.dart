@@ -282,55 +282,6 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                 ),
               ),
             ),
-            // Live resolution indicator — centered in title bar (balanced Expanded sides)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.zero,
-              ),
-              child: Builder(
-                builder: (context) {
-                  final screenSize = MediaQuery.of(context).size;
-                  final currentWidth = screenSize.width.round();
-                  final currentHeight = screenSize.height.round();
-                  final isTargetSize =
-                      currentWidth == 1200 && currentHeight == 800;
-
-                  return Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.aspect_ratio,
-                        size: 11,
-                        color: isTargetSize
-                            ? Colors.green.shade600
-                            : Colors.grey.shade600,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${currentWidth}x${currentHeight}',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w500,
-                          color: isTargetSize
-                              ? Colors.green.shade700
-                              : Colors.grey.shade700,
-                        ),
-                      ),
-                      if (isTargetSize) ...[
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.check_circle,
-                          size: 11,
-                          color: Colors.green.shade600,
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-            ),
             const Expanded(child: SizedBox.shrink()),
           ],
         ),

@@ -7860,6 +7860,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final sizing = _getDynamicSizing();
     final dynamicFontSize = sizing['fontSize']!;
     final dynamicVerticalPadding = sizing['verticalPadding']!;
+    final rowHorizontalPadding = sizing['rowHorizontalPadding']!;
+    final headerFontSizeGrid = sizing['headerFontSizeGrid']!;
+    final headerIconSizeGrid = sizing['headerIconSizeGrid']!;
+    final gridHeaderVerticalPadding = sizing['gridHeaderVerticalPadding']!;
 
     // Get home and away rosters
     List<Player> homeRoster = _getFilteredRoster(true);
@@ -7915,7 +7919,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               // Home team header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: gridHeaderVerticalPadding,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   border: Border(
@@ -7924,13 +7931,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.home, size: 12, color: Colors.grey.shade700),
+                    Icon(
+                      Icons.home,
+                      size: headerIconSizeGrid,
+                      color: Colors.grey.shade700,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         _getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'HOME',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: headerFontSizeGrid,
                           fontWeight: FontWeight.bold,
                           color: Colors.grey.shade700,
                         ),
@@ -7983,7 +7994,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       child: Container(
                         padding: EdgeInsets.symmetric(
-                          horizontal: 6,
+                          horizontal: rowHorizontalPadding,
                           vertical: dynamicVerticalPadding,
                         ),
                         decoration: BoxDecoration(
@@ -8060,7 +8071,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               // Away team header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: gridHeaderVerticalPadding,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
                   border: Border(
@@ -8069,13 +8083,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.flight, size: 12, color: Colors.grey.shade700),
+                    Icon(
+                      Icons.flight,
+                      size: headerIconSizeGrid,
+                      color: Colors.grey.shade700,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         _getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'AWAY',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: headerFontSizeGrid,
                           fontWeight: FontWeight.bold,
                           color: Colors.grey.shade700,
                         ),
@@ -8128,7 +8146,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       child: Container(
                         padding: EdgeInsets.symmetric(
-                          horizontal: 6,
+                          horizontal: rowHorizontalPadding,
                           vertical: dynamicVerticalPadding,
                         ),
                         decoration: BoxDecoration(
@@ -20388,7 +20406,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         !players.every((p) => _isKeyboardFireBaseballStaffToken(p))) {
       final isHomeTeamPlayer = selectedHomePlayers.contains(players.first);
       final teamName = isHomeTeamPlayer ? selectedHomeTeam : selectedAwayTeam;
-      return _combineBaseballMixedPlayersAndStaffForCaption(players, teamName);
+      return _combineBaseballMixedPlayersAndStaffForCaption(
+        players,
+        teamName,
+        template: template,
+      );
     }
 
     // Get full player names (strip Keyboard Fire coach titles / legacy `#HC` for caption text)
@@ -23534,26 +23556,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return sortedPlayers;
   }
 
-  // Calculate dynamic sizing based on screen dimensions
+  /// Fixed roster list/grid metrics (no window-based scaling).
   Map<String, double> _getDynamicSizing() {
-    final screenSize = MediaQuery.of(context).size;
-    final screenWidth = screenSize.width;
-    final screenHeight = screenSize.height;
-
-    // Base font size and padding
-    double baseFontSize = 10.0;
-    double baseVerticalPadding = 2.0;
-
-    // Scale based on screen size (minimum 800x600, maximum 2560x1440)
-    final widthScale = (screenWidth / 1200.0).clamp(0.7, 1.5);
-    final heightScale = (screenHeight / 800.0).clamp(0.7, 1.5);
-
-    // Use the smaller scale to maintain proportions
-    final scale = (widthScale < heightScale ? widthScale : heightScale);
-
     return {
-      'fontSize': (baseFontSize * scale).clamp(9.0, 16.0),
-      'verticalPadding': (baseVerticalPadding * scale).clamp(1.0, 6.0),
+      'fontSize': 10.0,
+      'verticalPadding': 2.0,
+      'rowHorizontalPadding': 6.0,
+      'rowHorizontalPaddingWide': 8.0,
+      'headerFontSizeGrid': 10.0,
+      'headerIconSizeGrid': 12.0,
+      'gridHeaderVerticalPadding': 4.0,
+      'listHeaderIconSize': 14.0,
+      'listHeaderFontSize': 8.0,
+      'listHeaderVerticalPadding': 6.0,
+      'jerseyBadgeFont': 11.0,
+      'jerseyNameGap': 8.0,
     };
   }
 
@@ -23950,24 +23967,55 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         .trim();
   }
 
-  /// `Aaron Boone manager`, `Pat Murphy pitching coach`, … (no team suffix).
+  /// `manager Aaron Boone`, `pitching coach Pat Murphy`, … (no team prefix/suffix).
   String _baseballStaffNameRoleFragment(String displayToken) {
     final p = _parseKeyboardFireCoachToken(displayToken);
     if (p == null) return displayToken.trim();
-    return '${p.name} ${p.rolePhrase}';
+    return '${p.rolePhrase} ${p.name}';
   }
 
-  /// Staff → role fragment; player → full roster display token (`Name #99` kept like a jersey).
-  String _baseballCaptionFragmentForRosterToken(String token) {
+  /// Staff → role fragment; player → roster token with optional position kept.
+  String _baseballCaptionFragmentForRosterToken(
+    String token, {
+    CaptionTemplate? template,
+  }) {
     final t = token.trim();
     if (t.isEmpty) return '';
     if (_isKeyboardFireBaseballStaffToken(t)) {
       return _baseballStaffNameRoleFragment(t);
     }
-    return t;
+    String normalized = t;
+    if (template != null && template.numberFormat == NumberFormatStyle.parens) {
+      normalized = normalized.replaceAllMapped(
+        RegExp(r'\s*#(\d+)'),
+        (m) => ' (${m.group(1)})',
+      );
+    }
+    if (template == null || !template.includePlayerPosition) return normalized;
+    final posRaw = _positionForDisplayName(t);
+    if (posRaw == null || posRaw.trim().isEmpty) return normalized;
+    final formattedPos = formatPositionLabelForCaption(
+      posRaw,
+      apStyle: template.wireStyle == WireStyle.ap,
+      americanEnglish: template.americanEnglish,
+      sport: widget.sport?.toLowerCase(),
+    ).trim();
+    if (formattedPos.isEmpty) return normalized;
+    final trailingNumber =
+        RegExp(r'(\s*(?:\(\d+\)|#\d+))$').firstMatch(normalized);
+    final numberSuffix = trailingNumber?.group(1) ?? '';
+    final baseName = trailingNumber == null
+        ? normalized.trim()
+        : normalized.substring(0, trailingNumber.start).trim();
+    final apTeamPositionPlayer = template.wireStyle == WireStyle.ap &&
+        template.captionTeamOrder == CaptionTeamOrder.teamBefore;
+    if (apTeamPositionPlayer) {
+      return '$formattedPos $baseName$numberSuffix';
+    }
+    return '$baseName $formattedPos$numberSuffix';
   }
 
-  /// `A #12 and B manager of the Team` — one shared ` of the ` team suffix.
+  /// `Team A #12 and manager B` — one shared team prefix.
   String _joinBaseballCaptionFragmentsWithTeam(
     List<String> fragments,
     String? teamName,
@@ -23985,22 +24033,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       joined = '${copy.join(', ')}, and $last';
     }
     if (t.isEmpty) return joined;
-    return '$joined of the $t';
+    return '$t $joined';
   }
 
   /// Player(s) + coach(es): jersey numbers on players, titles on coaches.
   String _combineBaseballMixedPlayersAndStaffForCaption(
     List<String> players,
     String? teamName,
+    {CaptionTemplate? template}
   ) {
     final fragments = players
-        .map(_baseballCaptionFragmentForRosterToken)
+        .map((p) => _baseballCaptionFragmentForRosterToken(
+              p,
+              template: template,
+            ))
         .where((s) => s.isNotEmpty)
         .toList();
     return _joinBaseballCaptionFragmentsWithTeam(fragments, teamName);
   }
 
-  /// Two+ staff: `Name manager and Name pitching coach of the Team`.
+  /// Two+ staff: `Team manager Name and pitching coach Name`.
   String _combineBaseballKeyboardFireStaffForCaption(
     List<String> tokens,
     String? teamName,
@@ -24012,7 +24064,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return _joinBaseballCaptionFragmentsWithTeam(fragments, teamName);
   }
 
-  /// Baseball Keyboard Fire: `Name manager of the Team`, `Name pitching coach of the Team`, etc.
+  /// Baseball Keyboard Fire: `Team manager Name`, `Team pitching coach Name`, etc.
   String _baseballStaffRoleOfTeamCaptionPhrase({
     required String displayToken,
     required String? teamName,
@@ -24022,12 +24074,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final hasTeam = t.isNotEmpty;
     if (p == null) {
       final name = displayToken.trim();
-      return hasTeam ? '$name of the $t' : name;
+      return hasTeam ? '$t $name' : name;
     }
     if (!hasTeam) {
-      return '${p.name} ${p.rolePhrase}';
+      return '${p.rolePhrase} ${p.name}';
     }
-    return '${p.name} ${p.rolePhrase} of the $t';
+    return '$t ${p.rolePhrase} ${p.name}';
   }
 
   /// Typed manager name, or the **Manager** line selected on the roster (`Name Manager`).
@@ -26153,6 +26205,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final sizing = _getDynamicSizing();
     final dynamicFontSize = sizing['fontSize']!;
     final dynamicVerticalPadding = sizing['verticalPadding']!;
+    final rowHorizontalPaddingWide = sizing['rowHorizontalPaddingWide']!;
+    final listHeaderIconSize = sizing['listHeaderIconSize']!;
+    final listHeaderFontSize = sizing['listHeaderFontSize']!;
+    final listHeaderVerticalPadding = sizing['listHeaderVerticalPadding']!;
+    final jerseyBadgeFont = sizing['jerseyBadgeFont']!;
+    final jerseyNameGap = sizing['jerseyNameGap']!;
 
     // Use filtered rosters (respects unified and team-specific search)
     final sortedHomeRoster = List<Player>.from(_getFilteredRoster(true))
@@ -26205,9 +26263,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Home team header
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: 8,
-                    vertical: 6,
+                    vertical: listHeaderVerticalPadding,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
@@ -26217,13 +26275,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.home, size: 14, color: Colors.grey.shade700),
+                      Icon(
+                        Icons.home,
+                        size: listHeaderIconSize,
+                        color: Colors.grey.shade700,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           selectedHomeTeam ?? 'Home Team',
                           style: TextStyle(
-                            fontSize: 8,
+                            fontSize: listHeaderFontSize,
                             fontWeight: FontWeight.bold,
                             color: Colors.grey.shade700,
                           ),
@@ -26266,7 +26328,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         },
                         child: Container(
                           padding: EdgeInsets.symmetric(
-                            horizontal: 8,
+                            horizontal: rowHorizontalPaddingWide,
                             vertical: dynamicVerticalPadding *
                                 1.5, // Slightly more padding for this view
                           ),
@@ -26303,14 +26365,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Text(
                                 '🔥H${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: jerseyBadgeFont,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected
                                       ? Colors.white
                                       : Colors.grey.shade600,
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              SizedBox(width: jerseyNameGap),
                               Expanded(
                                 child: Text(
                                   _removeJerseyNumberFromName(
@@ -26351,9 +26413,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Away team header
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
+                  padding: EdgeInsets.symmetric(
                     horizontal: 8,
-                    vertical: 6,
+                    vertical: listHeaderVerticalPadding,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
@@ -26363,13 +26425,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.flight, size: 14, color: Colors.grey.shade700),
+                      Icon(
+                        Icons.flight,
+                        size: listHeaderIconSize,
+                        color: Colors.grey.shade700,
+                      ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           selectedAwayTeam ?? 'Away Team',
                           style: TextStyle(
-                            fontSize: 8,
+                            fontSize: listHeaderFontSize,
                             fontWeight: FontWeight.bold,
                             color: Colors.grey.shade700,
                           ),
@@ -26412,7 +26478,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         },
                         child: Container(
                           padding: EdgeInsets.symmetric(
-                            horizontal: 8,
+                            horizontal: rowHorizontalPaddingWide,
                             vertical: dynamicVerticalPadding *
                                 1.5, // Slightly more padding for this view
                           ),
@@ -26449,14 +26515,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Text(
                                 '🔥V${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: jerseyBadgeFont,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected
                                       ? Colors.white
                                       : Colors.grey.shade600,
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              SizedBox(width: jerseyNameGap),
                               Expanded(
                                 child: Text(
                                   _removeJerseyNumberFromName(

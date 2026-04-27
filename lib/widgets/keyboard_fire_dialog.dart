@@ -140,6 +140,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   final TextEditingController _customVerbController = TextEditingController();
   final ScrollController _categoriesScrollController = ScrollController();
   final ScrollController _verbsScrollController = ScrollController();
+  final ScrollController _homeRosterScrollController = ScrollController();
+  final ScrollController _awayRosterScrollController = ScrollController();
   final FocusNode _homeBarFocus = FocusNode();
   final FocusNode _awayBarFocus = FocusNode();
   final FocusNode _categoryBarFocus = FocusNode();
@@ -542,6 +544,44 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// When true, show players in a **number grid**: one row per decade (0–9, 10–19, …),
   /// ten columns per row. When false, list view with names.
   bool _useSquarePlayerView = false;
+  bool _showHomeCoachingPanel = true;
+  bool _showAwayCoachingPanel = true;
+
+  // Lock list sizing to each column's initial viewport height so resizing the
+  // dialog does not keep changing player text/row size.
+  double? _lockedHomeRosterListViewportHeight;
+  double? _lockedAwayRosterListViewportHeight;
+
+  /// Roster list: fit this many lines in the scroll viewport without scrolling.
+  static const int _kListRosterVisibleRows = 26;
+
+  /// **List mode only:** exact row height so 26 rows (+ scroll padding) match the
+  /// list viewport; [_keyboardFireListRosterFontSize] derives `fontSize` from that
+  /// row so type fills the row instead of shrinking with an extra “phantom” budget.
+  double _keyboardFireListRosterRowHeight(double listViewportHeight) {
+    const verticalScrollPad = 2.0 + 3.0; // `fromLTRB(3, 2, 3, 3)` top + bottom
+    final inner =
+        (listViewportHeight - verticalScrollPad).clamp(48.0, 4000.0);
+    return inner / _kListRosterVisibleRows;
+  }
+
+  /// Jersey/name `fontSize` for list roster; tied to [_keyboardFireListRosterRowHeight].
+  double _keyboardFireListRosterFontSize(double listViewportHeight) {
+    final rowH = _keyboardFireListRosterRowHeight(listViewportHeight);
+    // Fraction of row for one line; `height: 1.0` on roster Text keeps the line box tight.
+    return (rowH * 0.86).clamp(7.75, 10.85);
+  }
+
+  /// Shared roster text size used as the typography baseline for verbs/categories.
+  /// Locks to the same initial roster viewport measurement used by player rows.
+  double _keyboardFireRosterReferenceFontSize() {
+    final home = _lockedHomeRosterListViewportHeight;
+    final away = _lockedAwayRosterListViewportHeight;
+    final viewport = (home != null && away != null)
+        ? ((home + away) / 2.0)
+        : (home ?? away ?? 340.0);
+    return _keyboardFireListRosterFontSize(viewport);
+  }
 
   /// Mirrors Preferences → Application → Caption fields (Keywords / Personality; headline strip removed).
   PreferencesService? _prefsService;
@@ -1040,6 +1080,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     _customVerbController.dispose();
     _categoriesScrollController.dispose();
     _verbsScrollController.dispose();
+    _homeRosterScrollController.dispose();
+    _awayRosterScrollController.dispose();
     _homeBarFocus.dispose();
     _awayBarFocus.dispose();
     _categoryBarFocus.dispose();
@@ -2151,8 +2193,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
-  List<Widget> _buildRosterRows(List<Player> roster, bool isHomeTeam,
-      {String? barText}) {
+  List<Widget> _buildRosterRows(
+    List<Player> roster,
+    bool isHomeTeam, {
+    String? barText,
+    double listFontSize = 12.0,
+    /// When set (Keyboard Fire list column), each row is exactly this tall so 26
+    /// players match the viewport and font tracks row height.
+    double? listRowHeight,
+  }) {
     if (roster.isEmpty) return [];
     final selectedNames = _getSelectedPlayerNames(isHomeTeam);
     final currentNumbers = _parseNumbers(barText ?? '');
@@ -2162,6 +2211,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         final bn = int.tryParse(b.jerseyNumber ?? '') ?? 999;
         return an.compareTo(bn);
       });
+
     return sorted.map((p) {
       final num = p.jerseyNumber ?? '—';
       final raw = p.displayName;
@@ -2178,6 +2228,74 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           : (isCurrent
               ? Colors.grey.shade200
               : (isHovered ? Colors.grey.shade200 : null));
+      final rowCrossAlign = listRowHeight != null
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.baseline;
+      final inkCore = InkWell(
+        onSecondaryTapDown: (details) =>
+            _showPlayerContextMenu(details: details, player: p, isHome: isHomeTeam),
+        onTap: jersey.isNotEmpty
+            ? () {
+                final state = widget.captionState;
+                if (state == null) return;
+                if (isPicked) {
+                  (state as dynamic).removePlayerByJersey(isHomeTeam, jersey);
+                } else {
+                  state.addPlayerByJersey(isHomeTeam, jersey);
+                }
+                state.updateCaptionFromKeyboardFire();
+                setState(() {});
+                _refreshCaptionPreviewLater();
+              }
+            : null,
+        child: Container(
+          alignment:
+              listRowHeight != null ? Alignment.centerLeft : null,
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
+          decoration: BoxDecoration(
+            color: bgColor,
+            border: isPicked
+                ? const Border(
+                    left: BorderSide(color: Color(0xFF4A90E2), width: 3),
+                  )
+                : null,
+          ),
+          child: Row(
+            crossAxisAlignment: rowCrossAlign,
+            textBaseline: listRowHeight != null ? null : TextBaseline.alphabetic,
+            children: [
+              SizedBox(
+                width: 24,
+                child: Text(
+                  num,
+                  style: TextStyle(
+                    fontSize: listFontSize,
+                    height: listRowHeight != null ? 1.0 : 1.06,
+                    fontWeight: FontWeight.w600,
+                    color: isPicked
+                        ? const Color(0xFF0052CC)
+                        : Colors.grey.shade800,
+                  ),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  displayName,
+                  style: TextStyle(
+                    fontSize: listFontSize,
+                    height: listRowHeight != null ? 1.0 : 1.06,
+                    color:
+                        isPicked ? const Color(0xFF0052CC) : Colors.black87,
+                    fontWeight:
+                        isPicked ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
       return MouseRegion(
         onEnter: rosterKey != null
             ? (_) => setState(() => _hoveredRosterKey = rosterKey)
@@ -2185,67 +2303,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         onExit: rosterKey != null
             ? (_) => setState(() => _hoveredRosterKey = null)
             : null,
-        child: InkWell(
-          onSecondaryTapDown: (details) =>
-              _showPlayerContextMenu(details: details, player: p, isHome: isHomeTeam),
-          onTap: jersey.isNotEmpty
-              ? () {
-                  final state = widget.captionState;
-                  if (state == null) return;
-                  if (isPicked) {
-                    (state as dynamic).removePlayerByJersey(isHomeTeam, jersey);
-                  } else {
-                    state.addPlayerByJersey(isHomeTeam, jersey);
-                  }
-                  state.updateCaptionFromKeyboardFire();
-                  setState(() {});
-                  _refreshCaptionPreviewLater();
-                }
-              : null,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0),
-            decoration: BoxDecoration(
-              color: bgColor,
-              border: isPicked
-                  ? const Border(
-                      left: BorderSide(color: Color(0xFF4A90E2), width: 3),
-                    )
-                  : null,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                SizedBox(
-                  width: 24,
-                  child: Text(
-                    num,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isPicked
-                          ? const Color(0xFF0052CC)
-                          : Colors.grey.shade800,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    displayName,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color:
-                          isPicked ? const Color(0xFF0052CC) : Colors.black87,
-                      fontWeight:
-                          isPicked ? FontWeight.w600 : FontWeight.normal,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        child: listRowHeight != null
+            ? SizedBox(height: listRowHeight, child: inkCore)
+            : inkCore,
       );
     }).toList();
   }
@@ -2262,6 +2322,53 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   /// Horizontal rule + **Coaching** title + staff lines, inside the roster scroll view.
   Widget _buildRosterCoachScrollSuffix(bool isHomeTeam) {
+    final showCoaching = isHomeTeam
+        ? _showHomeCoachingPanel
+        : _showAwayCoachingPanel;
+    if (!showCoaching) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(3, 4, 3, 2),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Tooltip(
+            message: 'Show coaching',
+            child: InkWell(
+              onTap: () => setState(() {
+                if (isHomeTeam) {
+                  _showHomeCoachingPanel = true;
+                } else {
+                  _showAwayCoachingPanel = true;
+                }
+              }),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.visibility_off,
+                      size: 15,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Coaching',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final lines =
         isHomeTeam ? _homeStaffDisplay : _awayStaffDisplay;
     final teamName =
@@ -2275,14 +2382,43 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       const SizedBox(height: 5),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: Text(
-          'Coaching',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: Colors.black87,
-            height: 1.15,
-          ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Text(
+                'Coaching',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.black87,
+                  height: 1.15,
+                ),
+              ),
+            ),
+            Tooltip(
+              message: 'Hide coaching',
+              child: InkWell(
+                onTap: () => setState(() {
+                  if (isHomeTeam) {
+                    _showHomeCoachingPanel = false;
+                  } else {
+                    _showAwayCoachingPanel = false;
+                  }
+                }),
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Icon(
+                    Icons.visibility,
+                    size: 16,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
       const SizedBox(height: 3),
@@ -2292,13 +2428,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         teamName != null &&
         teamName.trim().isNotEmpty) {
       children.add(
-        Padding(
-          padding: const EdgeInsets.fromLTRB(3, 0, 3, 3),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(3, 0, 3, 3),
           child: Text(
             'Loading…',
             style: TextStyle(
               fontSize: 11,
-              color: Colors.grey.shade600,
+              color: Colors.grey,
               fontStyle: FontStyle.italic,
             ),
           ),
@@ -2428,7 +2564,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     required bool isHomeTeam,
     required Set<String> selectedNames,
   }) {
-    const double gridCellHeight = 28;
+    const double gridCellHeight = 30;
+    final screenSize = MediaQuery.sizeOf(context);
+    // Keep grid labels a touch smaller at compact 1200x800-like windows.
+    final compactGridText =
+        screenSize.width <= 1220 && screenSize.height <= 840;
+    final jerseyFontSize = compactGridText ? 10.5 : 11.0;
+    final lastNameFontSize = compactGridText ? 7.0 : 8.0;
     if (player == null) {
       return SizedBox(
         height: gridCellHeight,
@@ -2487,7 +2629,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 Text(
                   jersey,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: jerseyFontSize,
                     fontWeight: isPicked ? FontWeight.w600 : FontWeight.w500,
                     color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
                   ),
@@ -2495,7 +2637,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 Text(
                   lastName,
                   style: TextStyle(
-                    fontSize: 9,
+                    fontSize: lastNameFontSize,
                     fontWeight: FontWeight.w500,
                     height: 1.0,
                     color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
@@ -2515,7 +2657,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   /// Number grid: one row per decade (0–9, 10–19, 20–29, …) and only real
   /// player cells are rendered (no empty placeholder squares).
-  Widget _buildRosterSquareGrid(List<Player> roster, bool isHomeTeam) {
+  Widget _buildRosterSquareGrid(
+    List<Player> roster,
+    bool isHomeTeam,
+  ) {
     if (roster.isEmpty) {
       return SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
@@ -2525,9 +2670,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 20),
               child: Center(
-                child: Text('No players',
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade600)),
+                child: Text(
+                  'No players',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
               ),
             ),
             _buildRosterCoachScrollSuffix(isHomeTeam),
@@ -2555,9 +2704,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 20),
               child: Center(
-                child: Text('No players',
-                    style: TextStyle(
-                        fontSize: 11, color: Colors.grey.shade600)),
+                child: Text(
+                  'No players',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
               ),
             ),
             _buildRosterCoachScrollSuffix(isHomeTeam),
@@ -2573,35 +2726,43 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final b in buckets)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Wrap(
-                spacing: 1,
-                runSpacing: 1,
-                children: [
-                  for (int d = 0; d < 10; d++)
-                    if (byNum[b * 10 + d] != null)
-                      SizedBox(
-                        width: 38,
-                        child: _buildRosterSquareGridCell(
-                          player: byNum[b * 10 + d],
-                          isHomeTeam: isHomeTeam,
-                          selectedNames: selectedNames,
-                        ),
+          for (int bi = 0; bi < buckets.length; bi++) ...[
+            Wrap(
+              // Keep each decade (0-9, 10-19, ...) tight as one cluster.
+              spacing: 1,
+              runSpacing: 1,
+              children: [
+                for (int d = 0; d < 10; d++)
+                  if (byNum[buckets[bi] * 10 + d] != null)
+                    SizedBox(
+                      width: 40,
+                      child: _buildRosterSquareGridCell(
+                        player: byNum[buckets[bi] * 10 + d],
+                        isHomeTeam: isHomeTeam,
+                        selectedNames: selectedNames,
                       ),
-                ],
-              ),
+                    ),
+              ],
             ),
+            if (bi != buckets.length - 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Container(
+                  height: 1,
+                  color: Colors.grey.shade300,
+                ),
+              ),
+            if (bi == buckets.length - 1) const SizedBox(height: 2),
+          ],
           if (nonNumeric.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: 3),
+            const Padding(
+              padding: EdgeInsets.only(top: 3),
               child: Text(
                 'Other',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
+                  color: Colors.grey,
                 ),
               ),
             ),
@@ -2631,7 +2792,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: Container(
                     width: 53,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 5),
+                      horizontal: 4,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: isPicked ? const Color(0xFFDBEAFF) : Colors.white,
                       border: Border.all(
@@ -2683,8 +2846,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     );
   }
 
-  Widget _buildRosterSection(String teamLabel, List<Player> roster,
-      {required bool isHomeTeam}) {
+  Widget _buildRosterSection(
+    String teamLabel,
+    List<Player> roster, {
+    required bool isHomeTeam,
+  }) {
     if (roster.isEmpty) return const SizedBox.shrink();
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -3112,8 +3278,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     );
   }
 
-  Widget _buildRosterColumn(String teamLabel, List<Player> roster,
-      {required bool isHomeTeam}) {
+  Widget _buildRosterColumn(
+    String teamLabel,
+    List<Player> roster, {
+    required bool isHomeTeam,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
@@ -3129,17 +3298,54 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   /// Roster list only (no border; caller wraps with bar inside same box).
   /// [barText] is the current bar input; matching rows get grey, committed get blue.
-  Widget _buildRosterColumnContent(List<Player> roster, bool isHomeTeam,
-      {String? barText}) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ..._buildRosterRows(roster, isHomeTeam, barText: barText),
-          _buildRosterCoachScrollSuffix(isHomeTeam),
-        ],
-      ),
+  Widget _buildRosterColumnContent(
+    List<Player> roster,
+    bool isHomeTeam, {
+    String? barText,
+  }) {
+    final controller =
+        isHomeTeam ? _homeRosterScrollController : _awayRosterScrollController;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final currentViewport = constraints.maxHeight;
+              final lockedViewport = isHomeTeam
+                  ? (_lockedHomeRosterListViewportHeight ??= currentViewport)
+                  : (_lockedAwayRosterListViewportHeight ??= currentViewport);
+              final listFont = _keyboardFireListRosterFontSize(lockedViewport);
+              final listRowH = _keyboardFireListRosterRowHeight(lockedViewport);
+              return RawScrollbar(
+                controller: controller,
+                thumbVisibility: true,
+                trackVisibility: true,
+                thickness: 10,
+                radius: const Radius.circular(6),
+                child: SingleChildScrollView(
+                  controller: controller,
+                  padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: _buildRosterRows(
+                      roster,
+                      isHomeTeam,
+                      barText: barText,
+                      listFontSize: listFont,
+                      listRowHeight: listRowH,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(3, 0, 3, 3),
+          child: _buildRosterCoachScrollSuffix(isHomeTeam),
+        ),
+      ],
     );
   }
 
@@ -3158,6 +3364,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// Hold a row ~500 ms then drag to reorder; quick tap selects.
   Widget _buildCategoryPanelContent({String? barText}) {
     final cats = _verbList;
+    final rosterTextSize = _keyboardFireRosterReferenceFontSize();
     if (cats.isEmpty) {
       return Center(
         child: Text('No categories',
@@ -3291,8 +3498,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: Text(
                         name,
                         style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                          fontSize: rosterTextSize,
+                          fontWeight: FontWeight.w700,
                           color: Colors.grey.shade800,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -3318,6 +3525,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// Single column: each category as a header, then its verb rows (if expanded). One bar = 2 digits (cat + verb).
   Widget _buildCategoriesWithVerbsContent({String? barText}) {
     final cats = _verbList;
+    final rosterTextSize = _keyboardFireRosterReferenceFontSize();
     if (cats.isEmpty) {
       return Center(
         child: Text('No categories',
@@ -3716,8 +3924,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             child: Text(
                               name,
                               style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: rosterTextSize,
+                                  fontWeight: FontWeight.w700,
                                   color: Colors.grey.shade800),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -3902,7 +4110,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 child: Text(
                                   '$verbNum',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: rosterTextSize,
                                     fontWeight: FontWeight.w600,
                                     color: isPinned
                                         ? const Color(0xFFB45309)
@@ -3919,7 +4127,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       child: Text(
                                         verb,
                                         style: TextStyle(
-                                          fontSize: 12,
+                                          fontSize: rosterTextSize,
                                           color: isPinned
                                               ? const Color(0xFFB45309)
                                               : (isPicked
@@ -4339,6 +4547,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// [barText] = current bar input; matching row gets grey, picked verb gets blue.
   Widget _buildVerbPanelContent({String? barText}) {
     final cats = _verbList;
+    final rosterTextSize = _keyboardFireRosterReferenceFontSize();
     final selectedVerbs = _selectedCategoryIndex != null && cats.isNotEmpty
         ? ((cats[_selectedCategoryIndex!]['verbs'] as List<dynamic>?)
                 ?.cast<String>() ??
@@ -4448,7 +4657,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             child: Text(
                               '$verbNum',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: rosterTextSize,
                                 fontWeight: FontWeight.w600,
                                 color: isPicked
                                     ? const Color(0xFF0052CC)
@@ -4463,7 +4672,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   child: Text(
                                     verb,
                                     style: TextStyle(
-                                      fontSize: 11,
+                                      fontSize: rosterTextSize,
                                       color: isPicked
                                           ? const Color(0xFF0052CC)
                                           : Colors.black87,
@@ -5514,7 +5723,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final homeName = widget.homeTeamName ?? 'Home';
     final awayName = widget.awayTeamName ?? 'Away';
 
@@ -5666,8 +5874,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                         valueListenable: _homeBarController,
                                         builder: (_, value, __) =>
                                             _buildRosterColumnContent(
-                                                _homeRosterView, true,
-                                                barText: value.text),
+                                              _homeRosterView,
+                                              true,
+                                              barText: value.text,
+                                            ),
                                       ),
                               ),
                             ],
@@ -5892,8 +6102,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                         valueListenable: _awayBarController,
                                         builder: (_, value, __) =>
                                             _buildRosterColumnContent(
-                                                _awayRosterView, false,
-                                                barText: value.text),
+                                              _awayRosterView,
+                                              false,
+                                              barText: value.text,
+                                            ),
                                       ),
                               ),
                             ],

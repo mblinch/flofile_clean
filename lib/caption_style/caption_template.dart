@@ -5,7 +5,9 @@ import 'date_formula.dart';
 /// Wire service preset or fully custom formula.
 ///
 /// Enum order doubles as the display order in the Caption Style dropdown.
-/// Added values (like [gettyInternational]) are appended at the end so
+/// [getty] is the North America / city–state–country preset (“Getty USA” in UI).
+/// [gettyInternational] matches the same caption formula with a City · Region ·
+/// Country location line. Added values are appended at the end so
 /// previously-serialised templates — which round-trip via `.name` — still
 /// decode correctly.
 enum WireStyle { getty, imagn, ap, custom, gettyInternational }
@@ -76,6 +78,7 @@ class LocationChip {
     required this.kind,
     this.literal = '',
     this.caps = false,
+    this.enabled = true,
     this.countryVariant = LocationCountryVariant.fullName,
     this.regionVariant = LocationRegionVariant.fullName,
   });
@@ -91,6 +94,13 @@ class LocationChip {
   /// chip for backward compatibility with old templates.
   final bool caps;
 
+  /// Whether this geo chip contributes to the rendered location line. When
+  /// `false`, both the chip and the literal that immediately follows it are
+  /// skipped during rendering, but the chip is preserved in [LocationLineOptions.chips]
+  /// so its position / variant / caps state is remembered. Always `true` for
+  /// [LocationChipKind.literal] chips (toggling is a geo-chip-only concept).
+  final bool enabled;
+
   /// When [kind] is [LocationChipKind.country]: use [GameInfo.country] vs [GameInfo.countryCode].
   final LocationCountryVariant countryVariant;
 
@@ -102,6 +112,7 @@ class LocationChip {
         'kind': kind.name,
         if (kind == LocationChipKind.literal) 'literal': literal,
         if (caps) 'caps': true,
+        if (!enabled && kind != LocationChipKind.literal) 'enabled': false,
         if (kind == LocationChipKind.country &&
             countryVariant != LocationCountryVariant.fullName)
           'countryVariant': countryVariant.name,
@@ -126,6 +137,9 @@ class LocationChip {
           ? (j['literal'] as String? ?? '')
           : '',
       caps: j['caps'] as bool? ?? false,
+      enabled: kind == LocationChipKind.literal
+          ? true
+          : (j['enabled'] as bool? ?? true),
       countryVariant: kind == LocationChipKind.country
           ? locationCountryVariantFromJson(j['countryVariant']?.toString())
           : LocationCountryVariant.fullName,
@@ -140,6 +154,7 @@ class LocationChip {
     LocationChipKind? kind,
     String? literal,
     bool? caps,
+    bool? enabled,
     LocationCountryVariant? countryVariant,
     LocationRegionVariant? regionVariant,
   }) =>
@@ -148,6 +163,7 @@ class LocationChip {
         kind: kind ?? this.kind,
         literal: literal ?? this.literal,
         caps: caps ?? this.caps,
+        enabled: enabled ?? this.enabled,
         countryVariant: countryVariant ?? this.countryVariant,
         regionVariant: regionVariant ?? this.regionVariant,
       );
@@ -316,7 +332,16 @@ enum CreditFormat { photo_by, mandatory_credit }
 /// Which IPTC field drives the byline organization segment.
 enum BylineOrganizationSource { credit, copyright }
 
-enum BylineFieldKind { name, credit, copyright, custom }
+enum BylineFieldKind {
+  name,
+  credit,
+  copyright,
+  custom,
+  /// User-typed photographer name override (shown in credit line like [name]).
+  customCreator,
+  /// User-typed agency/credit override (shown in credit line like [credit]).
+  customCredit,
+}
 
 class BylineOptions {
   const BylineOptions({
@@ -330,6 +355,9 @@ class BylineOptions {
     this.copyrightCaps = false,
     this.fieldOrder = const [BylineFieldKind.name, BylineFieldKind.credit],
     this.customTexts = const [],
+    this.disabledKinds = const <BylineFieldKind>{},
+    this.customCreatorText = '',
+    this.customCreditText = '',
   });
 
   final String prefix;
@@ -344,6 +372,18 @@ class BylineOptions {
   /// One entry per `BylineFieldKind.custom` occurrence in [fieldOrder], in order.
   final List<String> customTexts;
 
+  /// Kinds present in [fieldOrder] that the user has toggled "off" — they
+  /// keep their position so re-enabling drops them right back in place,
+  /// but the renderer skips them. Only meaningful for non-custom kinds
+  /// (custom occurrences are removed entirely instead).
+  final Set<BylineFieldKind> disabledKinds;
+
+  /// Typed override for [BylineFieldKind.customCreator] (photographer name).
+  final String customCreatorText;
+
+  /// Typed override for [BylineFieldKind.customCredit] (agency / credit).
+  final String customCreditText;
+
   BylineOptions copyWith({
     String? prefix,
     String? between,
@@ -355,6 +395,9 @@ class BylineOptions {
     bool? copyrightCaps,
     List<BylineFieldKind>? fieldOrder,
     List<String>? customTexts,
+    Set<BylineFieldKind>? disabledKinds,
+    String? customCreatorText,
+    String? customCreditText,
   }) =>
       BylineOptions(
         prefix: prefix ?? this.prefix,
@@ -367,6 +410,10 @@ class BylineOptions {
         copyrightCaps: copyrightCaps ?? this.copyrightCaps,
         fieldOrder: fieldOrder ?? List<BylineFieldKind>.from(this.fieldOrder),
         customTexts: customTexts ?? List<String>.from(this.customTexts),
+        disabledKinds:
+            disabledKinds ?? Set<BylineFieldKind>.from(this.disabledKinds),
+        customCreatorText: customCreatorText ?? this.customCreatorText,
+        customCreditText: customCreditText ?? this.customCreditText,
       );
 
   Map<String, dynamic> toJson() => {
@@ -381,6 +428,10 @@ class BylineOptions {
         'fieldOrder': fieldOrder.map((e) => e.name).toList(),
         if (customTexts.any((t) => t.trim().isNotEmpty))
           'customTexts': customTexts,
+        if (disabledKinds.isNotEmpty)
+          'disabledKinds': disabledKinds.map((e) => e.name).toList(),
+        if (customCreatorText.isNotEmpty) 'customCreatorText': customCreatorText,
+        if (customCreditText.isNotEmpty) 'customCreditText': customCreditText,
       };
 
   factory BylineOptions.fromJson(Map<String, dynamic> j) {
@@ -417,6 +468,20 @@ class BylineOptions {
     final customTexts =
         customTextsFromRaw(j['customTexts'], legacyCustomText);
 
+    Set<BylineFieldKind> disabledFromRaw(dynamic raw) {
+      if (raw is List) {
+        final out = <BylineFieldKind>{};
+        for (final v in raw) {
+          final s = v.toString();
+          for (final k in BylineFieldKind.values) {
+            if (k.name == s) out.add(k);
+          }
+        }
+        return out;
+      }
+      return const <BylineFieldKind>{};
+    }
+
     return BylineOptions(
       prefix: j['prefix'] as String? ?? '',
       between: j['between'] as String? ?? '/',
@@ -428,7 +493,10 @@ class BylineOptions {
           j['creditCaps'] as bool? ?? (j['organizationCaps'] as bool? ?? false),
       copyrightCaps: j['copyrightCaps'] as bool? ?? false,
       fieldOrder: fieldOrder,
+      disabledKinds: disabledFromRaw(j['disabledKinds']),
       customTexts: customTexts,
+      customCreatorText: j['customCreatorText'] as String? ?? '',
+      customCreditText: j['customCreditText'] as String? ?? '',
     );
   }
 
@@ -437,6 +505,12 @@ class BylineOptions {
         between: '/',
         suffix: ')',
         organizationSource: BylineOrganizationSource.credit,
+        fieldOrder: [
+          BylineFieldKind.name,
+          BylineFieldKind.credit,
+          BylineFieldKind.custom,
+        ],
+        customTexts: [''],
       );
 
   static BylineOptions imagn() => const BylineOptions(
@@ -474,7 +548,24 @@ class BylineOptions {
 }
 
 /// Ordered segments: static frame + dynamic caption slot + static tail.
-enum CaptionSegment { location, date, caption, venue, credit }
+///
+/// [customText] is optional freeform narrative (e.g. game situation) sourced
+/// from [BylineFieldKind.custom] entries; when present in [segmentOrder],
+/// [CaptionFormulaRenderer] renders those customs in-place and omits them
+/// from the [credit] segment so they are not duplicated.
+enum CaptionSegment {
+  location,
+  date,
+  caption,
+  customText,
+  /// Join word before venue etc.: ` at `, ` in `, ` on ` (editable per slot).
+  separator,
+  /// Any literal text between snippets — punctuation, dashes, spaces, etc.
+  /// Displayed as "Custom" in the UI; editable per slot.
+  punctuation,
+  venue,
+  credit,
+}
 
 /// Sentinel to distinguish "not passed" from "explicitly null" in copyWith.
 const Object _unset = Object();
@@ -498,7 +589,10 @@ class CaptionTemplate {
     required this.creditFormat,
     required this.bylineOptions,
     required this.segmentOrder,
+    this.gameIdentifierText = '',
     this.customSeparators,
+    this.separatorSnippets,
+    this.punctuationSnippets,
     this.locationOptionsByOccurrence,
     this.dateFormulasByOccurrence,
   });
@@ -548,11 +642,29 @@ class CaptionTemplate {
   final BylineOptions bylineOptions;
   final List<CaptionSegment> segmentOrder;
 
+  /// Free-form narrative for the [CaptionSegment.customText] slot (e.g. game
+  /// situation text). Stored separately from [BylineOptions.customTexts] so
+  /// the caption body "Game identifier" and the credit-line "Custom text"
+  /// fields are independent of each other.
+  final String gameIdentifierText;
+
   /// Text between consecutive [segmentOrder] entries. When set, length must be
   /// [segmentOrder.length - 1]. When null or wrong length, rendering falls
   /// back to [CaptionFormulaRenderer.defaultCustomGaps] for presets (Getty /
   /// Imagn / AP) or [separator] between each pair for [WireStyle.custom].
+  ///
+  /// When [segmentOrder] includes [CaptionSegment.separator] or
+  /// [CaptionSegment.punctuation], gaps are usually empty strings and these
+  /// snippets carry the join / punctuation text instead.
   final List<String>? customSeparators;
+
+  /// One string per [CaptionSegment.separator] in [segmentOrder] (left-to-right),
+  /// e.g. ` at `, ` in `, ` on `.
+  final List<String>? separatorSnippets;
+
+  /// One string per [CaptionSegment.punctuation] ("Custom" in UI) in [segmentOrder],
+  /// e.g. ` - `, `: `, `. `. Any literal text is valid.
+  final List<String>? punctuationSnippets;
 
   /// One [LocationLineOptions] per [CaptionSegment.location] in [segmentOrder]
   /// (left-to-right). When null, every location segment uses [locationOptions].
@@ -562,17 +674,25 @@ class CaptionTemplate {
   /// When null, every date segment uses [dateFormula].
   final List<DateFormula>? dateFormulasByOccurrence;
 
+  /// Matches [CaptionTemplate.getty] / [CaptionTemplate.gettyInternational]
+  /// snippet layout (Custom literal chips + optional narrative + separator before venue).
   static const List<CaptionSegment> defaultSegmentOrder = [
     CaptionSegment.location,
+    CaptionSegment.punctuation,
     CaptionSegment.date,
+    CaptionSegment.punctuation,
     CaptionSegment.caption,
+    CaptionSegment.punctuation,
+    CaptionSegment.customText,
+    CaptionSegment.separator,
     CaptionSegment.venue,
+    CaptionSegment.punctuation,
     CaptionSegment.credit,
   ];
 
   factory CaptionTemplate.getty() => CaptionTemplate(
         id: 'preset_getty',
-        name: 'Getty Images',
+        name: 'Getty USA',
         wireStyle: WireStyle.getty,
         dateFormat: 'MMMM d, yyyy',
         dateExpression: '',
@@ -588,11 +708,22 @@ class CaptionTemplate {
         bylineOptions: BylineOptions.getty(),
         segmentOrder: const [
           CaptionSegment.location,
+          CaptionSegment.punctuation,
           CaptionSegment.date,
+          CaptionSegment.punctuation,
           CaptionSegment.caption,
+          CaptionSegment.punctuation,
+          CaptionSegment.customText,
+          CaptionSegment.separator,
           CaptionSegment.venue,
+          CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
+        customSeparators: const [
+          '', '', '', '', '', '', '', '', '', '',
+        ],
+        separatorSnippets: const [' at '],
+        punctuationSnippets: const [' - ', ': ', ' ', '. '],
         locationOptionsByOccurrence: null,
         dateFormulasByOccurrence: null,
       );
@@ -615,19 +746,25 @@ class CaptionTemplate {
         bylineOptions: BylineOptions.imagn(),
         segmentOrder: const [
           CaptionSegment.date,
+          CaptionSegment.punctuation,
           CaptionSegment.location,
+          CaptionSegment.punctuation,
           CaptionSegment.caption,
+          CaptionSegment.separator,
           CaptionSegment.venue,
+          CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
+        customSeparators: const ['', '', '', '', '', '', '', ''],
+        separatorSnippets: const [' at '],
+        punctuationSnippets: const ['; ', '; ', '. '],
         locationOptionsByOccurrence: null,
         dateFormulasByOccurrence: null,
       );
 
-  /// Getty variant tuned for international assignments: same field order /
-  /// team order / credit conventions as [WireStyle.getty], but the default
-  /// location format uses City · Region · Country so wire editors outside
-  /// North America don't have to retype it every caption.
+  /// Same caption structure and Custom literal chips as [CaptionTemplate.getty]
+  /// ([WireStyle.getty] / Getty USA), with [LocationFormat.city_region_country]
+  /// so the default location line is City · Region · Country.
   factory CaptionTemplate.gettyInternational() => CaptionTemplate(
         id: 'preset_getty_international',
         name: 'Getty International',
@@ -646,11 +783,22 @@ class CaptionTemplate {
         bylineOptions: BylineOptions.getty(),
         segmentOrder: const [
           CaptionSegment.location,
+          CaptionSegment.punctuation,
           CaptionSegment.date,
+          CaptionSegment.punctuation,
           CaptionSegment.caption,
+          CaptionSegment.punctuation,
+          CaptionSegment.customText,
+          CaptionSegment.separator,
           CaptionSegment.venue,
+          CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
+        customSeparators: const [
+          '', '', '', '', '', '', '', '', '', '',
+        ],
+        separatorSnippets: const [' at '],
+        punctuationSnippets: const [' - ', ': ', ' ', '. '],
         locationOptionsByOccurrence: null,
         dateFormulasByOccurrence: null,
       );
@@ -673,11 +821,18 @@ class CaptionTemplate {
         bylineOptions: BylineOptions.ap(),
         segmentOrder: const [
           CaptionSegment.location,
+          CaptionSegment.punctuation,
           CaptionSegment.date,
+          CaptionSegment.punctuation,
           CaptionSegment.caption,
+          CaptionSegment.separator,
           CaptionSegment.venue,
+          CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
+        customSeparators: const ['', '', '', '', '', '', '', ''],
+        separatorSnippets: const [' at '],
+        punctuationSnippets: const [' (', ') — ', '. '],
         locationOptionsByOccurrence: null,
         dateFormulasByOccurrence: null,
       );
@@ -698,35 +853,53 @@ class CaptionTemplate {
     BylineOptions? bylineOptions,
     List<CaptionSegment>? segmentOrder,
     List<String>? customSeparators,
+    List<String>? separatorSnippets,
+    List<String>? punctuationSnippets,
     DateFormula? dateFormula,
     List<DateFormula>? dateFormulasByOccurrence,
     List<LocationLineOptions>? locationOptionsByOccurrence,
-  }) =>
-      CaptionTemplate(
-        id: id,
-        name: name,
-        wireStyle: WireStyle.custom,
-        dateFormat: dateFormat,
-        dateExpression: dateExpression,
-        dateFormula: dateFormula,
-        locationOptions: locationOptions ??
-            LocationLineOptions.fromLegacyFormat(
-                LocationFormat.city_region_country),
-        numberFormat: numberFormat,
-        captionTeamOrder: captionTeamOrder,
-        includePlayerPosition: includePlayerPosition,
-        americanEnglish: americanEnglish,
-        removeDiacritics: removeDiacritics,
-        separator: separator,
-        creditFormat: creditFormat,
-        bylineOptions:
-            bylineOptions ?? BylineOptions.fromLegacyFormat(creditFormat),
-        segmentOrder:
-            segmentOrder ?? List<CaptionSegment>.from(defaultSegmentOrder),
-        customSeparators: customSeparators,
-        locationOptionsByOccurrence: locationOptionsByOccurrence,
-        dateFormulasByOccurrence: dateFormulasByOccurrence,
-      ).normalizePerOccurrenceLists();
+  }) {
+    final resolvedOrder =
+        segmentOrder ?? List<CaptionSegment>.from(defaultSegmentOrder);
+    final useFactorySnippetDefaults = segmentOrder == null;
+    final gapCount = resolvedOrder.length - 1;
+    final resolvedCustomSeparators = customSeparators ??
+        (useFactorySnippetDefaults && gapCount > 0
+            ? List<String>.filled(gapCount, '')
+            : null);
+    final resolvedSepSnippets = separatorSnippets ??
+        (useFactorySnippetDefaults ? <String>[separator] : null);
+    final resolvedPunSnippets = punctuationSnippets ??
+        (useFactorySnippetDefaults
+            ? <String>[separator, separator, separator, separator]
+            : null);
+    return CaptionTemplate(
+      id: id,
+      name: name,
+      wireStyle: WireStyle.custom,
+      dateFormat: dateFormat,
+      dateExpression: dateExpression,
+      dateFormula: dateFormula,
+      locationOptions: locationOptions ??
+          LocationLineOptions.fromLegacyFormat(
+              LocationFormat.city_region_country),
+      numberFormat: numberFormat,
+      captionTeamOrder: captionTeamOrder,
+      includePlayerPosition: includePlayerPosition,
+      americanEnglish: americanEnglish,
+      removeDiacritics: removeDiacritics,
+      separator: separator,
+      creditFormat: creditFormat,
+      bylineOptions:
+          bylineOptions ?? BylineOptions.fromLegacyFormat(creditFormat),
+      segmentOrder: resolvedOrder,
+      customSeparators: resolvedCustomSeparators,
+      separatorSnippets: resolvedSepSnippets,
+      punctuationSnippets: resolvedPunSnippets,
+      locationOptionsByOccurrence: locationOptionsByOccurrence,
+      dateFormulasByOccurrence: dateFormulasByOccurrence,
+    ).normalizePerOccurrenceLists();
+  }
 
   CaptionTemplate copyWith({
     String? id,
@@ -746,7 +919,10 @@ class CaptionTemplate {
     CreditFormat? creditFormat,
     BylineOptions? bylineOptions,
     List<CaptionSegment>? segmentOrder,
+    String? gameIdentifierText,
     List<String>? customSeparators,
+    Object? separatorSnippets = _unset,
+    Object? punctuationSnippets = _unset,
     Object? locationOptionsByOccurrence = _unset,
     Object? dateFormulasByOccurrence = _unset,
   }) =>
@@ -771,7 +947,14 @@ class CaptionTemplate {
         bylineOptions: bylineOptions ?? this.bylineOptions,
         segmentOrder:
             segmentOrder ?? List<CaptionSegment>.from(this.segmentOrder),
+        gameIdentifierText: gameIdentifierText ?? this.gameIdentifierText,
         customSeparators: customSeparators ?? this.customSeparators,
+        separatorSnippets: identical(separatorSnippets, _unset)
+            ? this.separatorSnippets
+            : separatorSnippets as List<String>?,
+        punctuationSnippets: identical(punctuationSnippets, _unset)
+            ? this.punctuationSnippets
+            : punctuationSnippets as List<String>?,
         locationOptionsByOccurrence: identical(locationOptionsByOccurrence, _unset)
             ? this.locationOptionsByOccurrence
             : locationOptionsByOccurrence as List<LocationLineOptions>?,
@@ -835,6 +1018,63 @@ class CaptionTemplate {
       }
     }
 
+    final sepCount =
+        r.segmentOrder.where((s) => s == CaptionSegment.separator).length;
+    final punCount =
+        r.segmentOrder.where((s) => s == CaptionSegment.punctuation).length;
+
+    String defaultSeparatorPad() {
+      if (r.wireStyle == WireStyle.getty ||
+          r.wireStyle == WireStyle.gettyInternational) {
+        return ' at ';
+      }
+      if (r.wireStyle == WireStyle.custom) {
+        return r.separator;
+      }
+      return ' ';
+    }
+
+    String defaultPunctuationPad() {
+      if (r.wireStyle == WireStyle.custom) {
+        return r.separator;
+      }
+      return ' ';
+    }
+
+    if (sepCount > 0) {
+      final by = r.separatorSnippets;
+      if (by == null || by.length != sepCount) {
+        final list = <String>[];
+        for (var i = 0; i < sepCount; i++) {
+          if (by != null && i < by.length) {
+            list.add(by[i]);
+          } else {
+            list.add(defaultSeparatorPad());
+          }
+        }
+        r = r.copyWith(separatorSnippets: list);
+      }
+    } else if (r.separatorSnippets != null) {
+      r = r.copyWith(separatorSnippets: null);
+    }
+
+    if (punCount > 0) {
+      final by = r.punctuationSnippets;
+      if (by == null || by.length != punCount) {
+        final list = <String>[];
+        for (var i = 0; i < punCount; i++) {
+          if (by != null && i < by.length) {
+            list.add(by[i]);
+          } else {
+            list.add(defaultPunctuationPad());
+          }
+        }
+        r = r.copyWith(punctuationSnippets: list);
+      }
+    } else if (r.punctuationSnippets != null) {
+      r = r.copyWith(punctuationSnippets: null);
+    }
+
     return r;
   }
 
@@ -856,7 +1096,10 @@ class CaptionTemplate {
         'creditFormat': creditFormat.name,
         'bylineOptions': bylineOptions.toJson(),
         'segmentOrder': segmentOrder.map((e) => e.name).toList(),
+        if (gameIdentifierText.isNotEmpty) 'gameIdentifierText': gameIdentifierText,
         if (customSeparators != null) 'customSeparators': customSeparators,
+        if (separatorSnippets != null) 'separatorSnippets': separatorSnippets,
+        if (punctuationSnippets != null) 'punctuationSnippets': punctuationSnippets,
         if (locationOptionsByOccurrence != null)
           'locationOptionsByOccurrence': locationOptionsByOccurrence!
               .map((e) => e.toJson())
@@ -928,7 +1171,14 @@ class CaptionTemplate {
               ),
             ),
       segmentOrder: _parseSegmentOrder(json['segmentOrder']),
+      gameIdentifierText: json['gameIdentifierText'] as String? ?? '',
       customSeparators: (json['customSeparators'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList(),
+      separatorSnippets: (json['separatorSnippets'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList(),
+      punctuationSnippets: (json['punctuationSnippets'] as List<dynamic>?)
           ?.map((e) => e.toString())
           .toList(),
       locationOptionsByOccurrence:
@@ -1002,11 +1252,21 @@ class CaptionTemplate {
     final segments = _parseSegmentOrder(legacyIds);
     if (flavor == 'imagn') {
       return CaptionTemplate.imagn()
-          .copyWith(segmentOrder: segments)
+          .copyWith(
+            segmentOrder: segments,
+            customSeparators: null,
+            separatorSnippets: null,
+            punctuationSnippets: null,
+          )
           .normalizePerOccurrenceLists();
     }
     return CaptionTemplate.getty()
-        .copyWith(segmentOrder: segments)
+        .copyWith(
+          segmentOrder: segments,
+          customSeparators: null,
+          separatorSnippets: null,
+          punctuationSnippets: null,
+        )
         .normalizePerOccurrenceLists();
   }
 }

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../caption_style/caption_formula_renderer.dart';
 import '../caption_style/caption_template.dart';
+import '../caption_style/game_info.dart';
+import '../caption_style/region_abbrev.dart';
 
 /// Matches the caption layout dialog's accent blue.
 const Color _editorBlue = Color(0xFF0052CC);
@@ -13,24 +16,40 @@ const Color _fieldText = Color(0xFF3A3A3A);
 /// Active state for the ALL CAPS (Aa) control only; chip fill stays neutral.
 const Color _capsButtonBg = Color(0xFFD0E3FA);
 
-/// Structured, chip-based location line builder.
+/// All geo field kinds the editor exposes, in the canonical order they appear
+/// when an existing template hasn't placed them yet.
+const List<LocationChipKind> _allGeoKinds = [
+  LocationChipKind.city,
+  LocationChipKind.region,
+  LocationChipKind.country,
+];
+
+/// Structured, single-line location editor.
 ///
-/// Same visual / interaction model as the date formula editor: each geo field
-/// (city / region / country) is a draggable chip and the literal text between
-/// fields lives in fixed-width separator boxes (leading + one between each pair
-/// + trailing). Internally we parse the persisted
-/// [LocationLineOptions.chips] list into a (fields, separators) tuple, let the
-/// user mutate that, then serialize it back to literal / geo chips when we
-/// emit [onChanged].
+/// Every supported geo field (City, State/Province, Country) is always shown
+/// as a chip. A switch on each chip toggles whether that field appears in the
+/// rendered caption. Between every pair of adjacent chips sits a small
+/// separator field that owns the literal text printed between them. Each chip
+/// has a leading drag handle (the ⋮⋮ icon); click + drag from there to reorder
+/// — the rest of the chip stays interactive so the toggle / caps / gear stay
+/// clickable. A live preview line at the bottom shows the resulting
+/// geographical string using the host's sample [GameInfo] (or a hard-coded
+/// Toronto/Ontario/Canada example when none is provided).
 class LocationFormulaEditor extends StatefulWidget {
   const LocationFormulaEditor({
     super.key,
     required this.options,
     required this.onChanged,
+    this.sampleGameInfo,
   });
 
   final LocationLineOptions options;
   final ValueChanged<LocationLineOptions> onChanged;
+
+  /// Drives the inline sample text on each chip and the bottom preview line.
+  /// Falls back to canonical Toronto / Ontario / Canada values when null or
+  /// the corresponding field is empty.
+  final GameInfo? sampleGameInfo;
 
   @override
   State<LocationFormulaEditor> createState() => _LocationFormulaEditorState();
@@ -39,26 +58,30 @@ class LocationFormulaEditor extends StatefulWidget {
 class _LocField {
   _LocField({
     required this.kind,
-    required this.caps,
     required this.id,
+    this.enabled = true,
+    this.caps = false,
     this.countryVariant = LocationCountryVariant.fullName,
     this.regionVariant = LocationRegionVariant.fullName,
   });
   final LocationChipKind kind;
-  bool caps;
   final String id;
+  bool enabled;
+  bool caps;
   LocationCountryVariant countryVariant;
   LocationRegionVariant regionVariant;
 }
 
 class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
-  int? _hoverIndex;
   int _idSeq = 0;
 
-  /// The geo fields in order.
+  /// Geo fields in display order. Always contains exactly one entry per kind
+  /// in [_allGeoKinds]; missing kinds are appended at the end as disabled.
   late List<_LocField> _fields;
 
-  /// Literal text between / around fields — length == fields.length + 1.
+  /// Literal text between fields. Length is always `_fields.length - 1`,
+  /// where `_separators[i]` is the literal between `_fields[i]` and
+  /// `_fields[i + 1]`.
   late List<String> _separators;
 
   @override
@@ -75,74 +98,106 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     }
   }
 
+  /// Build [_fields] / [_separators] from the persisted chip list. Geo chips
+  /// are taken in their saved order with their saved enabled/caps/variant.
+  /// Literal chips between two geos collapse into a single separator string;
+  /// any leading or trailing literals are dropped because they have no chip to
+  /// attach to in the new flat editor.
   void _parseFromOptions() {
     final fields = <_LocField>[];
     final seps = <String>[];
-    final buf = StringBuffer();
+    final pendingLit = StringBuffer();
+    var sawAnyField = false;
     for (final c in widget.options.chips) {
       if (c.kind == LocationChipKind.literal) {
-        buf.write(c.literal);
-      } else {
-        seps.add(buf.toString());
-        buf.clear();
+        if (sawAnyField) pendingLit.write(c.literal);
+        continue;
+      }
+      if (sawAnyField) {
+        seps.add(pendingLit.toString());
+      }
+      pendingLit.clear();
+      sawAnyField = true;
+      fields.add(_LocField(
+        kind: c.kind,
+        id: c.id,
+        enabled: c.enabled,
+        caps: c.caps,
+        countryVariant: c.kind == LocationChipKind.country
+            ? c.countryVariant
+            : LocationCountryVariant.fullName,
+        regionVariant: c.kind == LocationChipKind.region
+            ? c.regionVariant
+            : LocationRegionVariant.fullName,
+      ));
+    }
+
+    // Append disabled placeholders for any geo kinds not already present, so
+    // the user can toggle them on without ever needing an "Add field" button.
+    final present = fields.map((f) => f.kind).toSet();
+    for (final k in _allGeoKinds) {
+      if (!present.contains(k)) {
+        if (fields.isNotEmpty) seps.add(_defaultSeparator(k));
         fields.add(_LocField(
-          kind: c.kind,
-          caps: c.caps,
-          id: c.id,
-          countryVariant: c.kind == LocationChipKind.country
-              ? c.countryVariant
-              : LocationCountryVariant.fullName,
-          regionVariant: c.kind == LocationChipKind.region
-              ? c.regionVariant
-              : LocationRegionVariant.fullName,
+          kind: k,
+          id: _newId(k.name),
+          enabled: false,
         ));
       }
     }
-    seps.add(buf.toString());
+
     _fields = fields;
     _separators = seps;
   }
+
+  String _defaultSeparator(LocationChipKind incomingKind) => ', ';
 
   String _newId(String prefix) {
     _idSeq++;
     return '${prefix}_lfe_${DateTime.now().microsecondsSinceEpoch}_$_idSeq';
   }
 
-  /// Convert current in-memory (fields, separators) → canonical
-  /// [LocationLineOptions.chips] list and emit to the parent.
+  /// Convert the current (fields, separators) state back to the canonical
+  /// [LocationLineOptions.chips] list and emit it to the parent.
   void _emit() {
     final out = <LocationChip>[];
     for (var i = 0; i < _fields.length; i++) {
-      final sep = i == 0 ? '' : _separators[i];
-      if (sep.isNotEmpty) {
-        out.add(LocationChip(
-          id: _newId('lit'),
-          kind: LocationChipKind.literal,
-          literal: sep,
-        ));
+      if (i > 0) {
+        final sep = _separators[i - 1];
+        if (sep.isNotEmpty) {
+          out.add(LocationChip(
+            id: _newId('lit'),
+            kind: LocationChipKind.literal,
+            literal: sep,
+          ));
+        }
       }
+      final f = _fields[i];
       out.add(LocationChip(
-        id: _fields[i].id,
-        kind: _fields[i].kind,
-        caps: _fields[i].caps,
-        countryVariant: _fields[i].kind == LocationChipKind.country
-            ? _fields[i].countryVariant
+        id: f.id,
+        kind: f.kind,
+        enabled: f.enabled,
+        caps: f.caps,
+        countryVariant: f.kind == LocationChipKind.country
+            ? f.countryVariant
             : LocationCountryVariant.fullName,
-        regionVariant: _fields[i].kind == LocationChipKind.region
-            ? _fields[i].regionVariant
+        regionVariant: f.kind == LocationChipKind.region
+            ? f.regionVariant
             : LocationRegionVariant.fullName,
       ));
     }
-    widget.onChanged(widget.options.copyWith(
-      uppercase: false,
-      chips: out,
-    ));
+    widget.onChanged(widget.options.copyWith(uppercase: false, chips: out));
   }
 
   // -- Mutations -------------------------------------------------------------
 
-  void _setSeparator(int i, String value) {
-    setState(() => _separators[i] = value);
+  void _setSeparator(int gapIndex, String value) {
+    setState(() => _separators[gapIndex] = value);
+    _emit();
+  }
+
+  void _setEnabled(int i, bool enabled) {
+    setState(() => _fields[i].enabled = enabled);
     _emit();
   }
 
@@ -161,46 +216,31 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     _emit();
   }
 
-  void _removeField(int i) {
-    if (i < 0 || i >= _fields.length) return;
-    setState(() {
-      _fields.removeAt(i);
-      final merged = _separators[i] + _separators[i + 1];
-      _separators
-        ..removeAt(i + 1)
-        ..removeAt(i);
-      _separators.insert(i, merged);
-    });
-    _emit();
-  }
-
-  void _addField(LocationChipKind kind) {
-    if (_hasField(kind)) return;
-    setState(() {
-      _fields.add(_LocField(
-        kind: kind,
-        caps: false,
-        id: _newId(kind.name),
-      ));
-      _separators.add('');
-    });
-    _emit();
-  }
-
-  bool _hasField(LocationChipKind kind) => _fields.any((f) => f.kind == kind);
-
   void _reorder(int fromIndex, int targetIndex) {
     if (fromIndex == targetIndex) return;
     if (fromIndex < 0 || fromIndex >= _fields.length) return;
+    if (targetIndex < 0 || targetIndex >= _fields.length) return;
     setState(() {
-      final chip = _fields.removeAt(fromIndex);
-      final trailing = _separators.removeAt(fromIndex + 1);
+      final f = _fields.removeAt(fromIndex);
+      // "Drop chip X onto chip Y" semantic: X lands AT Y's slot in the
+      // post-removal list (length N-1), and the chips between fromIndex and
+      // targetIndex shift to fill the gap. Do NOT subtract 1 when moving
+      // right — that biases the insertion to the slot *before* Y, which
+      // makes right-direction drags look like a no-op (A drops next to its
+      // own former position instead of crossing past Y).
       var insert = targetIndex;
-      if (fromIndex < targetIndex) insert = targetIndex - 1;
       if (insert < 0) insert = 0;
       if (insert > _fields.length) insert = _fields.length;
-      _fields.insert(insert, chip);
-      _separators.insert(insert + 1, trailing);
+      _fields.insert(insert, f);
+      // Separators are positional — they always sit between adjacent slots —
+      // so we leave them in place and let the user re-edit if needed. We do
+      // need to make sure the count stays exactly `_fields.length - 1`.
+      while (_separators.length > _fields.length - 1) {
+        _separators.removeLast();
+      }
+      while (_separators.length < _fields.length - 1) {
+        _separators.add(', ');
+      }
     });
     _emit();
   }
@@ -215,7 +255,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
       children: [
         _tokenRow(),
         const SizedBox(height: 6),
-        _addFieldsRow(),
+        _previewLine(),
       ],
     );
   }
@@ -225,10 +265,9 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     for (var i = 0; i < _fields.length; i++) {
       children.add(_fieldChip(i));
       if (i < _fields.length - 1) {
-        children.add(_separatorInput(i + 1));
+        children.add(_separatorInput(i));
       }
     }
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
@@ -246,133 +285,154 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     );
   }
 
-  Widget _separatorInput(int index) {
+  Widget _separatorInput(int gapIndex) {
     return _LocSeparatorInput(
-      key: ValueKey('loc-sep-$index-${_separators[index]}'),
-      initialValue: _separators[index],
-      onChanged: (v) => _setSeparator(index, v),
+      // Stable key: must NOT include the current value, otherwise the widget
+      // gets thrown away and rebuilt on every keystroke, which both loses
+      // focus (you'd have to click again to keep typing) and causes macOS to
+      // ring the system bell when an unfocused backspace bubbles to the OS.
+      key: ValueKey('loc-sep-$gapIndex'),
+      value: _separators[gapIndex],
+      onChanged: (v) => _setSeparator(gapIndex, v),
     );
   }
 
   Widget _fieldChip(int index) {
     final f = _fields[index];
-    final isCaps = f.caps;
-    final isHovered = _hoverIndex == index;
+    final sample = _sampleValueFor(f);
+    final enabled = f.enabled;
 
-    final chipCore = MouseRegion(
-      onEnter: (_) => setState(() => _hoverIndex = index),
-      onExit: (_) {
-        if (_hoverIndex == index) setState(() => _hoverIndex = null);
-      },
-      cursor: SystemMouseCursors.grab,
-      child: Container(
-        height: 28,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        decoration: BoxDecoration(
-          color: _chipSurface,
-          border: Border.all(color: _chipBorder),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: Icon(
-                Icons.drag_indicator,
-                size: 14,
-                color: Colors.grey.shade500,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Text(
-              _locationFieldLabel(f.kind),
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: _fieldText,
-                height: 1,
-              ),
-            ),
-            if (f.kind == LocationChipKind.country) ...[
+    // Body content of the chip excluding the drag handle. Built as a builder
+    // because we need two copies: the live one (interactive) and the
+    // floating drag-feedback image (frozen / non-interactive).
+    Widget buildChipBody({required Widget handle}) {
+      return Opacity(
+        opacity: enabled ? 1.0 : 0.55,
+        child: Container(
+          height: 28,
+          padding: const EdgeInsets.only(left: 2, right: 6),
+          decoration: BoxDecoration(
+            color: _chipSurface,
+            border: Border.all(color: _chipBorder),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              handle,
               const SizedBox(width: 4),
-              _CountryVariantGearButton(
-                current: f.countryVariant,
-                onSelect: (v) => _setCountryVariant(index, v),
+              _ChipSwitch(
+                value: enabled,
+                onChanged: (v) => _setEnabled(index, v),
               ),
-            ],
-            if (f.kind == LocationChipKind.region) ...[
-              const SizedBox(width: 4),
-              _RegionVariantGearButton(
-                current: f.regionVariant,
-                onSelect: (v) => _setRegionVariant(index, v),
-              ),
-            ],
-            const SizedBox(width: 6),
-            _chipIconButton(
-              tooltip: 'ALL CAPS',
-              onTap: () => _toggleCaps(index),
-              background: isCaps ? _capsButtonBg : Colors.white,
-              child: const Text(
-                'Aa',
-                style: TextStyle(
-                  fontSize: 10,
+              const SizedBox(width: 6),
+              Text(
+                _locationFieldLabel(f.kind),
+                style: const TextStyle(
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: _fieldText,
                   height: 1,
                 ),
               ),
-            ),
-            const SizedBox(width: 2),
-            AnimatedOpacity(
-              duration: const Duration(milliseconds: 120),
-              opacity: isHovered ? 1 : 0.4,
-              child: _chipIconButton(
-                tooltip: 'Remove',
-                onTap: () => _removeField(index),
-                background: Colors.white,
-                child: Icon(
-                  Icons.close,
-                  size: 11,
-                  color: Colors.grey.shade700,
+              const SizedBox(width: 4),
+              Text(
+                sample,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.grey.shade600,
+                  height: 1,
                 ),
               ),
-            ),
-          ],
+              if (f.kind == LocationChipKind.country) ...[
+                const SizedBox(width: 6),
+                _CountryVariantGearButton(
+                  current: f.countryVariant,
+                  onSelect: (v) => _setCountryVariant(index, v),
+                ),
+              ],
+              if (f.kind == LocationChipKind.region) ...[
+                const SizedBox(width: 6),
+                _RegionVariantGearButton(
+                  current: f.regionVariant,
+                  onSelect: (v) => _setRegionVariant(index, v),
+                ),
+              ],
+              const SizedBox(width: 6),
+              _chipIconButton(
+                tooltip: 'ALL CAPS',
+                onTap: () => _toggleCaps(index),
+                background: f.caps ? _capsButtonBg : Colors.white,
+                child: const Text(
+                  'Aa',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: _fieldText,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // The drag handle has two visual states: a static icon (used inside the
+    // floating drag feedback) and the live one wrapped in [Draggable] so it
+    // becomes the immediate drag source on mouse / touch.
+    Widget staticHandle() => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+          child: Icon(
+            Icons.drag_indicator,
+            size: 14,
+            color: Colors.grey.shade500,
+          ),
+        );
+
+    final feedbackChip = buildChipBody(handle: staticHandle());
+
+    final draggableHandle = Draggable<int>(
+      data: index,
+      feedback: Material(
+        color: Colors.transparent,
+        elevation: 4,
+        borderRadius: BorderRadius.circular(6),
+        child: Opacity(opacity: 0.92, child: feedbackChip),
+      ),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Tooltip(
+          message: 'Drag to reorder',
+          child: staticHandle(),
         ),
       ),
     );
+
+    final chipCore = buildChipBody(handle: draggableHandle);
 
     return DragTarget<int>(
       onWillAcceptWithDetails: (d) => d.data != index,
       onAcceptWithDetails: (d) => _reorder(d.data, index),
       builder: (context, candidate, _) {
-        final active = candidate.isNotEmpty;
+        final hot = candidate.isNotEmpty;
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 1),
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: active ? _editorBlue : Colors.transparent,
+                color: hot ? _editorBlue : Colors.transparent,
                 width: 2,
               ),
               right: BorderSide(
-                color: active ? _editorBlue : Colors.transparent,
+                color: hot ? _editorBlue : Colors.transparent,
                 width: 2,
               ),
             ),
           ),
-          child: LongPressDraggable<int>(
-            data: index,
-            feedback: Material(
-              color: Colors.transparent,
-              elevation: 4,
-              borderRadius: BorderRadius.circular(6),
-              child: Opacity(opacity: 0.92, child: chipCore),
-            ),
-            childWhenDragging: Opacity(opacity: 0.35, child: chipCore),
-            child: chipCore,
-          ),
+          child: chipCore,
         );
       },
     );
@@ -404,87 +464,125 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     return btn;
   }
 
-  Widget _addFieldsRow() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          'Add field:',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade600,
+  Widget _previewLine() {
+    final sample = widget.sampleGameInfo ?? _fallbackSampleGameInfo();
+    final rendered = CaptionFormulaRenderer.formatLocationLine(
+      sample,
+      widget.options,
+    );
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Row(
+        children: [
+          Text(
+            'Preview:',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+              letterSpacing: 0.3,
+            ),
           ),
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              _ghostButton(
-                label: 'City',
-                enabled: !_hasField(LocationChipKind.city),
-                onTap: () => _addField(LocationChipKind.city),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              rendered,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: _fieldText,
               ),
-              _ghostButton(
-                label: 'State/Province',
-                enabled: !_hasField(LocationChipKind.region),
-                onTap: () => _addField(LocationChipKind.region),
-              ),
-              _ghostButton(
-                label: 'Country',
-                enabled: !_hasField(LocationChipKind.country),
-                onTap: () => _addField(LocationChipKind.country),
-              ),
-            ],
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _ghostButton({
-    required String label,
-    required bool enabled,
-    required VoidCallback onTap,
-  }) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.45,
-      child: Material(
-        color: Colors.white,
-        shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.grey.shade300),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: InkWell(
-          onTap: enabled ? onTap : null,
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.add, size: 11, color: Colors.grey.shade700),
-                const SizedBox(width: 3),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade800,
-                  ),
-                ),
-              ],
-            ),
-          ),
+  String _sampleValueFor(_LocField f) {
+    final g = widget.sampleGameInfo;
+    switch (f.kind) {
+      case LocationChipKind.city:
+        final v = (g?.city ?? '').trim();
+        return v.isNotEmpty ? v : 'Toronto';
+      case LocationChipKind.region:
+        final full = (g?.resolvedRegionName ?? '').trim();
+        final short = (g?.resolvedRegionShort ?? '').trim();
+        switch (f.regionVariant) {
+          case LocationRegionVariant.fullName:
+            if (full.isNotEmpty) return full;
+            if (short.isNotEmpty) return short;
+            return 'Ontario';
+          case LocationRegionVariant.shortForm:
+            if (short.isNotEmpty) return short;
+            if (full.isNotEmpty) return full;
+            return 'ON';
+          case LocationRegionVariant.apStyle:
+            if (full.isNotEmpty) {
+              final ap = abbreviateUsStateApStyle(full);
+              return ap.isNotEmpty ? ap : full;
+            }
+            if (short.isNotEmpty) return short;
+            return 'Ont.';
+        }
+      case LocationChipKind.country:
+        final full = (g?.resolvedCountryName ?? '').trim();
+        final iso = (g?.resolvedCountryCode ?? '').trim();
+        switch (f.countryVariant) {
+          case LocationCountryVariant.fullName:
+            if (full.isNotEmpty) return full;
+            if (iso.isNotEmpty) return iso;
+            return 'Canada';
+          case LocationCountryVariant.isoCode:
+            if (iso.isNotEmpty) return iso;
+            if (full.isNotEmpty) return full;
+            return 'CAN';
+        }
+      case LocationChipKind.literal:
+        return '';
+    }
+  }
+
+  GameInfo _fallbackSampleGameInfo() {
+    return const GameInfo(
+      city: 'Toronto',
+      region: 'Ontario',
+      regionCode: 'ON',
+      country: 'Canada',
+      countryCode: 'CAN',
+    );
+  }
+}
+
+/// Compact iOS-style switch sized to fit inside a 28px-tall editor chip.
+class _ChipSwitch extends StatelessWidget {
+  const _ChipSwitch({required this.value, required this.onChanged});
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    // Use a scaled Switch.adaptive so the look matches the host platform's
+    // toggle (Cupertino on macOS/iOS, Material on Linux/Windows/Android).
+    return SizedBox(
+      width: 32,
+      height: 18,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: Switch.adaptive(
+          value: value,
+          onChanged: onChanged,
+          activeColor: Colors.white,
+          activeTrackColor: _editorBlue,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
     );
   }
 }
 
-/// Same interaction model as [DateFormulaEditor]’s format gear: overlay card, not [PopupMenuButton].
+/// Same interaction model as [DateFormulaEditor]'s format gear: overlay card, not [PopupMenuButton].
 class _CountryVariantGearButton extends StatefulWidget {
   const _CountryVariantGearButton({
     required this.current,
@@ -903,15 +1001,20 @@ String _locationFieldLabel(LocationChipKind k) {
   }
 }
 
-/// Fixed-size separator text field — mirrors the date editor's separator box.
+/// Fixed-size separator text field — sized to roughly five characters wide so
+/// it's the obvious "small punctuation slot" between two field chips.
 class _LocSeparatorInput extends StatefulWidget {
   const _LocSeparatorInput({
     super.key,
-    required this.initialValue,
+    required this.value,
     required this.onChanged,
   });
 
-  final String initialValue;
+  /// The current separator text. The widget owns its own [TextEditingController]
+  /// so it doesn't reset on parent rebuilds; [didUpdateWidget] resyncs the
+  /// controller text when [value] changes externally (e.g. after a reorder)
+  /// and the field is not focused.
+  final String value;
   final ValueChanged<String> onChanged;
 
   @override
@@ -920,7 +1023,7 @@ class _LocSeparatorInput extends StatefulWidget {
 
 class _LocSeparatorInputState extends State<_LocSeparatorInput> {
   late final TextEditingController _ctrl =
-      TextEditingController(text: widget.initialValue);
+      TextEditingController(text: widget.value);
   final FocusNode _focus = FocusNode();
   bool _focused = false;
 
@@ -928,6 +1031,20 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
   void initState() {
     super.initState();
     _focus.addListener(_onFocus);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LocSeparatorInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // While the user is actively typing we let our local controller win; only
+    // pick up an external change when focus is elsewhere (e.g. the parent
+    // restored a saved template or a reorder shuffled the separator pool).
+    if (!_focus.hasFocus && widget.value != _ctrl.text) {
+      _ctrl.value = TextEditingValue(
+        text: widget.value,
+        selection: TextSelection.collapsed(offset: widget.value.length),
+      );
+    }
   }
 
   void _onFocus() {
@@ -950,15 +1067,25 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Container(
-        width: 44,
-        height: 28,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: borderColor, width: borderWidth),
-        ),
-        child: Center(
+      // GestureDetector wraps the entire 38×28 box so clicks anywhere inside
+      // (including the padding around the TextField's intrinsic size) focus
+      // the input. Without this, the live hit area is just the small rendered
+      // TextField glyph row, which is why the previous version felt like it
+      // needed multiple clicks to "catch".
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          if (!_focus.hasFocus) _focus.requestFocus();
+        },
+        child: Container(
+          width: 38,
+          height: 28,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: borderColor, width: borderWidth),
+          ),
+          alignment: Alignment.center,
           child: TextField(
             controller: _ctrl,
             focusNode: _focus,
@@ -974,10 +1101,7 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
             ),
-            onChanged: (v) {
-              setState(() {});
-              widget.onChanged(v);
-            },
+            onChanged: widget.onChanged,
           ),
         ),
       ),

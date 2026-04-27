@@ -12,9 +12,24 @@ import 'region_abbrev.dart';
 /// Drives the sample credit line dropdown (preview branding).
 enum CreditSampleAgency { gettyImages, imagn, ap }
 
+/// [before] + inline editor + [after] matches a full [CaptionFormulaRenderer.render]
+/// when the middle is [formatBylineCustomTextBlock] for a single byline custom slot.
+class CaptionPreviewNarrativeSplit {
+  const CaptionPreviewNarrativeSplit({
+    required this.before,
+    required this.after,
+  });
+
+  final String before;
+  final String after;
+}
+
 /// Renders static frame + sample dynamic caption for the layout dialog preview.
 class CaptionFormulaRenderer {
   CaptionFormulaRenderer._();
+
+  /// Private-use placeholder; must not appear in real segment output.
+  static const String _kCustomNarrativePreviewPlaceholder = '\uE000';
 
   static String formatDate(
     DateTime? d,
@@ -164,9 +179,40 @@ class CaptionFormulaRenderer {
     return null;
   }
 
+  /// Returns [chips] with disabled geo chips removed. Drops the literal that
+  /// immediately follows each disabled chip (so its trailing separator doesn't
+  /// orphan), and trims any leading/trailing literals left at the edges of the
+  /// list after removal so the rendered line never starts or ends with a
+  /// stranded separator.
+  static List<LocationChip> _activeLocationChips(List<LocationChip> chips) {
+    final out = <LocationChip>[];
+    var skipNextLiteral = false;
+    for (final c in chips) {
+      if (c.kind != LocationChipKind.literal && !c.enabled) {
+        skipNextLiteral = true;
+        continue;
+      }
+      if (c.kind == LocationChipKind.literal && skipNextLiteral) {
+        skipNextLiteral = false;
+        continue;
+      }
+      skipNextLiteral = false;
+      out.add(c);
+    }
+    while (out.isNotEmpty && out.first.kind == LocationChipKind.literal) {
+      out.removeAt(0);
+    }
+    while (out.isNotEmpty && out.last.kind == LocationChipKind.literal) {
+      out.removeLast();
+    }
+    return out;
+  }
+
   /// Builds the location line from [GameInfo] using ordered [LocationLineOptions.chips].
   ///
   /// - Per-chip `caps` uppercases just that chip's emitted text.
+  /// - Per-chip `enabled` toggles whether the chip (and the literal that
+  ///   immediately follows it) contributes to the rendered line.
   /// - The legacy global [LocationLineOptions.uppercase] still force-caps the
   ///   whole line after assembly (kept for templates that haven't migrated).
   /// - When two geo chips render back-to-back with no literal between them,
@@ -181,7 +227,8 @@ class CaptionFormulaRenderer {
     final countryName = g.resolvedCountryName.trim().toLowerCase();
     final countryCode = g.resolvedCountryCode.trim().toLowerCase();
     final isCanada = countryName == 'canada' || countryCode == 'can';
-    for (final c in options.chips) {
+    final chips = _activeLocationChips(options.chips);
+    for (final c in chips) {
       switch (c.kind) {
         case LocationChipKind.city:
         case LocationChipKind.region:
@@ -266,6 +313,30 @@ class CaptionFormulaRenderer {
     return template.locationOptions;
   }
 
+  /// [occurrenceIndex] counts only [CaptionSegment.separator] entries, left-to-right.
+  static String separatorSnippetFor(
+    CaptionTemplate template,
+    int segmentIndex,
+  ) {
+    final occ = segmentOccurrenceIndex(
+        template.segmentOrder, segmentIndex, CaptionSegment.separator);
+    final list = template.separatorSnippets;
+    if (list != null && occ >= 0 && occ < list.length) return list[occ];
+    return ' ';
+  }
+
+  /// [occurrenceIndex] counts only [CaptionSegment.punctuation] entries, left-to-right.
+  static String punctuationSnippetFor(
+    CaptionTemplate template,
+    int segmentIndex,
+  ) {
+    final occ = segmentOccurrenceIndex(
+        template.segmentOrder, segmentIndex, CaptionSegment.punctuation);
+    final list = template.punctuationSnippets;
+    if (list != null && occ >= 0 && occ < list.length) return list[occ];
+    return '';
+  }
+
   /// [occurrenceIndex] counts only [CaptionSegment.date] entries, left-to-right.
   static DateFormula? dateFormulaForOccurrence(
     CaptionTemplate template,
@@ -291,6 +362,25 @@ class CaptionFormulaRenderer {
     }
   }
 
+  /// Narrative line built only from [BylineFieldKind.custom] slots (joined with
+  /// a single space). Used when [CaptionSegment.customText] is in
+  /// [CaptionTemplate.segmentOrder] so that text appears after the caption body.
+  static String formatBylineCustomTextBlock({
+    required BylineOptions bylineOptions,
+    List<String> customTexts = const [],
+  }) {
+    var customOccurrence = 0;
+    final parts = <String>[];
+    for (final kind in bylineOptions.fieldOrder) {
+      if (kind != BylineFieldKind.custom) continue;
+      final idx = customOccurrence++;
+      if (idx >= customTexts.length) continue;
+      final t = customTexts[idx].trim();
+      if (t.isNotEmpty) parts.add(t);
+    }
+    return parts.join(' ');
+  }
+
   static String formatCreditLine({
     required CreditFormat format,
     required BylineOptions bylineOptions,
@@ -300,6 +390,10 @@ class CaptionFormulaRenderer {
     required CreditSampleAgency sampleAgency,
     bool apShortParen = false,
     List<String> customTexts = const [],
+    /// When false, custom slots still consume [customTexts] indices but render
+    /// empty so customs can be emitted from [formatBylineCustomTextBlock] in
+    /// an earlier caption segment instead.
+    bool includeCustomInCredit = true,
   }) {
     var name = photographerName.trim().isEmpty
         ? 'Photographer'
@@ -337,9 +431,12 @@ class CaptionFormulaRenderer {
     }
     if (bylineOptions.copyrightCaps) copyright = copyright.toUpperCase();
 
-    // apShortParen only applies when no custom chip has text typed into it.
-    final hasCustomText = bylineOptions.fieldOrder.contains(BylineFieldKind.custom) &&
-        customTexts.any((t) => t.trim().isNotEmpty);
+    // apShortParen only applies when no custom text has been typed.
+    final hasCustomText =
+        (bylineOptions.fieldOrder.contains(BylineFieldKind.custom) &&
+            customTexts.any((t) => t.trim().isNotEmpty)) ||
+        bylineOptions.customCreatorText.trim().isNotEmpty ||
+        bylineOptions.customCreditText.trim().isNotEmpty;
     if (apShortParen && !hasCustomText) {
       final short =
           credit.length > 20 || credit.contains('Associated') ? 'AP' : credit;
@@ -358,12 +455,36 @@ class CaptionFormulaRenderer {
           return copyright;
         case BylineFieldKind.custom:
           final idx = customOccurrence++;
+          if (!includeCustomInCredit) return '';
           return idx < customTexts.length ? customTexts[idx].trim() : '';
+        case BylineFieldKind.customCreator:
+          var v = bylineOptions.customCreatorText.trim();
+          if (bylineOptions.nameCaps) v = v.toUpperCase();
+          return v;
+        case BylineFieldKind.customCredit:
+          var v = bylineOptions.customCreditText.trim();
+          if (bylineOptions.creditCaps || bylineOptions.organizationCaps) {
+            v = v.toUpperCase();
+          }
+          return v;
       }
     }
 
+    // Toggled-off kinds keep their slot in fieldOrder (so re-enabling restores
+    // position) but render as empty so the join-with-`between` step skips them.
+    // Custom occurrences still advance the customOccurrence counter so disabled
+    // non-custom kinds don't shift custom text mappings.
+    // customCreator / customCredit are always removable (no disabled toggle).
     final fields = bylineOptions.fieldOrder
-        .map(fieldValue)
+        .map((kind) {
+          if (kind != BylineFieldKind.custom &&
+              kind != BylineFieldKind.customCreator &&
+              kind != BylineFieldKind.customCredit &&
+              bylineOptions.disabledKinds.contains(kind)) {
+            return '';
+          }
+          return fieldValue(kind);
+        })
         .where((v) => v.trim().isNotEmpty)
         .toList();
     if (fields.isEmpty) return '';
@@ -440,6 +561,17 @@ class CaptionFormulaRenderer {
     }
     final action = actionTemplate.replaceAll('{opp}', opp);
     var line = '$lead $action';
+    // Preview should always read with a game segment (inning, half-inning,
+    // quarter, or half) — append if an action template ever omits one.
+    final hasGameSegment = RegExp(
+      r'\b(inning|innings|quarter|quarters|halftime)\b|'
+      r'\b(first|second)\s+half\b|'
+      r'\b(top|bottom)\s+of\s+the\b',
+      caseSensitive: false,
+    ).hasMatch(line);
+    if (!hasGameSegment) {
+      line = '$line in the third inning';
+    }
     if (template.removeDiacritics) {
       line = CaptionTextNormalize.stripDiacritics(line);
     }
@@ -470,16 +602,21 @@ class CaptionFormulaRenderer {
   ];
 
   static const List<String> _sampleActions = [
-    'celebrates after hitting a home run against the {opp}',
+    'celebrates after hitting a home run against the {opp} in the bottom of the eighth inning',
     'pitches during the third inning against the {opp}',
     'fields a ground ball against the {opp} during the fifth inning',
     'rounds third base against the {opp} during the seventh inning',
     'reacts after striking out against the {opp} in the ninth inning',
     'slides into second base against the {opp} during the fourth inning',
-    'warms up in the bullpen before facing the {opp}',
-    'celebrates with teammates after scoring against the {opp}',
-    'takes a swing against the {opp} during the sixth inning',
-    'throws to first base against the {opp} during the second inning',
+    'warms up in the bullpen during the second inning before facing the {opp}',
+    'celebrates with teammates after scoring against the {opp} in the top of the sixth inning',
+    'takes a swing against the {opp} in the bottom of the third inning',
+    'throws to first base against the {opp} during the first inning',
+    'checks the runner at first against the {opp} in the top of the fifth inning',
+    'reaches on an error against the {opp} in the bottom of the second inning',
+    // Non-baseball time phrases (still paired with MLB sample names for layout preview).
+    'works against the {opp} during the third quarter',
+    'battles for space against the {opp} in the second half',
   ];
 
   static String render({
@@ -499,6 +636,42 @@ class CaptionFormulaRenderer {
       cap: cap,
       venue: venue,
       creditOverride: creditOverride,
+      customSegmentPlaceholderIndex: null,
+    );
+  }
+
+  /// When the layout includes a [CaptionSegment.customText] segment, splits
+  /// the preview around that slot so the game identifier can be edited inline.
+  /// Returns `null` when no such segment exists.
+  static CaptionPreviewNarrativeSplit? previewCaptionNarrativeSplit({
+    required CaptionTemplate template,
+    required GameInfo game,
+    required CreditSampleAgency sampleAgency,
+    String? captionOverride,
+    String? creditOverride,
+  }) {
+    final order = template.segmentOrder;
+    final cut = order.indexWhere((s) => s == CaptionSegment.customText);
+    if (cut < 0) return null;
+
+    final cap = captionOverride ?? sampleDynamicCaption(template);
+    final venue = game.venue.trim().isEmpty ? 'Venue' : game.venue.trim();
+    final merged = _renderFromSegments(
+      template: template,
+      game: game,
+      sampleAgency: sampleAgency,
+      cap: cap,
+      venue: venue,
+      creditOverride: creditOverride,
+      customSegmentPlaceholderIndex: cut,
+    );
+    final i = merged.indexOf(_kCustomNarrativePreviewPlaceholder);
+    if (i < 0) return null;
+    return CaptionPreviewNarrativeSplit(
+      before: merged.substring(0, i),
+      after: merged.substring(
+        i + _kCustomNarrativePreviewPlaceholder.length,
+      ),
     );
   }
 
@@ -548,6 +721,10 @@ class CaptionFormulaRenderer {
     required String cap,
     required String venue,
     String? creditOverride,
+    /// When set, that [CaptionSegment.customText] index is emitted as
+    /// [_kCustomNarrativePreviewPlaceholder] and empty custom text is not
+    /// dropped (so gaps match an empty slot).
+    int? customSegmentPlaceholderIndex,
   }) {
     String valueAt(int segmentIndex) {
       final s = template.segmentOrder[segmentIndex];
@@ -573,6 +750,16 @@ class CaptionFormulaRenderer {
           );
         case CaptionSegment.caption:
           return cap;
+        case CaptionSegment.customText:
+          if (customSegmentPlaceholderIndex != null &&
+              segmentIndex == customSegmentPlaceholderIndex) {
+            return _kCustomNarrativePreviewPlaceholder;
+          }
+          return template.gameIdentifierText.trim();
+        case CaptionSegment.separator:
+          return separatorSnippetFor(template, segmentIndex);
+        case CaptionSegment.punctuation:
+          return punctuationSnippetFor(template, segmentIndex);
         case CaptionSegment.venue:
           return venue;
         case CaptionSegment.credit:
@@ -596,10 +783,34 @@ class CaptionFormulaRenderer {
 
     final n = order.length;
     final gapList = effectiveSegmentGaps(template);
-    final b = StringBuffer()..write(valueAt(0));
-    for (var i = 1; i < n; i++) {
-      b.write(gapList[i - 1]);
-      b.write(valueAt(i));
+
+    // Drop an empty [CaptionSegment.customText] slot so the join between
+    // caption and venue still uses the correct " at " (not a stray space).
+    // Placeholder mode keeps the slot so split preview gaps stay correct.
+    final List<int> indices;
+    if (customSegmentPlaceholderIndex != null) {
+      indices = List<int>.generate(n, (i) => i);
+    } else {
+      indices = <int>[];
+      for (var i = 0; i < n; i++) {
+        if (order[i] == CaptionSegment.customText &&
+            valueAt(i).trim().isEmpty) {
+          continue;
+        }
+        indices.add(i);
+      }
+    }
+    if (indices.isEmpty) return '';
+
+    final b = StringBuffer()..write(valueAt(indices[0]));
+    for (var j = 1; j < indices.length; j++) {
+      final prev = indices[j - 1];
+      final cur = indices[j];
+      final gap = cur == prev + 1
+          ? gapList[prev]
+          : defaultGapBetweenSegments(template, order[prev], order[cur]);
+      b.write(gap);
+      b.write(valueAt(cur));
     }
     return b.toString();
   }
@@ -618,6 +829,12 @@ class CaptionFormulaRenderer {
     CaptionSegment a,
     CaptionSegment b,
   ) {
+    if (a == CaptionSegment.separator ||
+        b == CaptionSegment.separator ||
+        a == CaptionSegment.punctuation ||
+        b == CaptionSegment.punctuation) {
+      return '';
+    }
     switch (preset.wireStyle) {
       case WireStyle.getty:
       case WireStyle.gettyInternational:
@@ -629,12 +846,27 @@ class CaptionFormulaRenderer {
             a, b, CaptionSegment.date, CaptionSegment.caption)) {
           return ': ';
         }
+        if (a == CaptionSegment.caption && b == CaptionSegment.customText) {
+          return ' ';
+        }
+        if (a == CaptionSegment.customText && b == CaptionSegment.venue) {
+          return ' at ';
+        }
+        if (a == CaptionSegment.customText && b == CaptionSegment.credit) {
+          return '. ';
+        }
         if (b == CaptionSegment.venue) return ' at ';
         if (b == CaptionSegment.credit) return '. ';
         return ' ';
       case WireStyle.imagn:
         if (b == CaptionSegment.credit) return '. ';
         if (b == CaptionSegment.venue) return ' at ';
+        if (a == CaptionSegment.caption && b == CaptionSegment.customText) {
+          return '; ';
+        }
+        if (a == CaptionSegment.customText && b == CaptionSegment.credit) {
+          return '. ';
+        }
         return '; ';
       case WireStyle.ap:
         if (_segmentPairEither(
@@ -644,6 +876,15 @@ class CaptionFormulaRenderer {
         if (_segmentPairEither(
             a, b, CaptionSegment.date, CaptionSegment.caption)) {
           return ') — ';
+        }
+        if (a == CaptionSegment.caption && b == CaptionSegment.customText) {
+          return ' ';
+        }
+        if (a == CaptionSegment.customText && b == CaptionSegment.venue) {
+          return ' at ';
+        }
+        if (a == CaptionSegment.customText && b == CaptionSegment.credit) {
+          return '. ';
         }
         if (b == CaptionSegment.venue) return ' at ';
         if (b == CaptionSegment.credit) return '. ';

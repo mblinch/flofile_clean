@@ -56,17 +56,23 @@ String dateFieldKindLabel(DateFieldKind k) {
 }
 
 /// Single renderable field inside a [DateFormula] — mutable because the editor
-/// patches optionIndex/caps in place on user interaction.
+/// patches optionIndex/caps/enabled in place on user interaction.
 class DateFieldToken {
   DateFieldToken({
     required this.kind,
     this.optionIndex = 0,
     this.caps = false,
+    this.enabled = true,
   });
 
   final DateFieldKind kind;
   int optionIndex;
   bool caps;
+  /// When `false`, [DateFormula.render] skips this field (and the separator
+  /// that immediately follows it) so users can toggle a field off without
+  /// losing its position in the formula. Defaults to `true` for backward
+  /// compatibility with templates saved before this flag existed.
+  bool enabled;
 
   /// Clamped current option (guards against stale indexes from old JSON).
   DateFieldFormatOption get option {
@@ -84,13 +90,20 @@ class DateFieldToken {
     return useCaps ? raw.toUpperCase() : raw;
   }
 
-  DateFieldToken copy() =>
-      DateFieldToken(kind: kind, optionIndex: optionIndex, caps: caps);
+  DateFieldToken copy() => DateFieldToken(
+        kind: kind,
+        optionIndex: optionIndex,
+        caps: caps,
+        enabled: enabled,
+      );
 
   Map<String, dynamic> toJson() => {
         'kind': kind.name,
         'optionIndex': optionIndex,
         'caps': caps,
+        // Only emit when off so existing JSON keeps the same shape; loaders
+        // default to enabled when the key is absent.
+        if (!enabled) 'enabled': false,
       };
 
   static DateFieldToken fromJson(Map<String, dynamic> j) {
@@ -103,6 +116,7 @@ class DateFieldToken {
       kind: kind,
       optionIndex: (j['optionIndex'] as num?)?.toInt() ?? 0,
       caps: j['caps'] as bool? ?? false,
+      enabled: j['enabled'] as bool? ?? true,
     );
   }
 }
@@ -125,19 +139,35 @@ class DateFormula {
   final List<String> separators;
 
   String render(DateTime date) {
-    final buf = StringBuffer();
+    if (fields.isEmpty) return '';
+
+    // Filter to enabled fields, remembering each kept field's original index
+    // so we can pull the right separator between adjacent kept fields. The
+    // rule (mirroring the location editor) is: when a field is disabled, the
+    // separator that immediately FOLLOWS it is dropped along with it. Whatever
+    // separator survives between two kept fields is what was originally
+    // between the previous-kept-field and the next chip — exactly what the
+    // user sees in the editor's between-chip slots.
+    final keptIndices = <int>[];
     for (var i = 0; i < fields.length; i++) {
-      // Leading (i == 0) literal is written verbatim. Between-field separators
-      // default to a single space when empty so chips never run together like
-      // "AprilMonth9" just because the user left the slot blank.
-      if (i == 0) {
-        buf.write(separators[i]);
-      } else {
-        buf.write(separators[i].isEmpty ? ' ' : separators[i]);
-      }
-      buf.write(fields[i].render(date));
+      if (fields[i].enabled) keptIndices.add(i);
     }
-    buf.write(separators.last);
+    if (keptIndices.isEmpty) return '';
+
+    final buf = StringBuffer();
+    for (var k = 0; k < keptIndices.length; k++) {
+      final origIdx = keptIndices[k];
+      if (k > 0) {
+        // Separator between this kept field and the previous one is the
+        // separator that originally sat AFTER the previous kept field. Empty
+        // strings collapse to a single space so chips never run together like
+        // "AprilMonth9" when a user leaves the slot blank.
+        final sepIdx = keptIndices[k - 1] + 1;
+        final sep = sepIdx < separators.length ? separators[sepIdx] : '';
+        buf.write(sep.isEmpty ? ' ' : sep);
+      }
+      buf.write(fields[origIdx].render(date));
+    }
     return buf.toString();
   }
 

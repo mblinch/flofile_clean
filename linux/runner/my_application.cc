@@ -47,7 +47,15 @@ static void my_application_activate(GApplication* application) {
     gtk_window_set_title(window, "FloFile Beta");
   }
 
-  gtk_window_set_default_size(window, 1280, 720);
+  gtk_window_set_default_size(window, 1280, 800);
+  GdkGeometry geometry;
+  geometry.min_width = 1280;
+  geometry.min_height = 800;
+  gtk_window_set_geometry_hints(
+      window,
+      nullptr,
+      &geometry,
+      static_cast<GdkWindowHints>(GDK_HINT_MIN_SIZE));
   gtk_widget_show(GTK_WIDGET(window));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();

@@ -62,7 +62,7 @@ class PreferencesService {
   /// `getty` or `imagn` — legacy; superseded by [CaptionTemplate] JSON.
   static const String _keyCaptionLayoutFlavor = 'caption_layout_flavor';
   static const String _keyCaptionTemplateJson = 'caption_template_json';
-  /// Optional per-wire layout baselines (Getty / Imagn / AP) for [CaptionLayoutBuilderDialog].
+  /// Optional per-wire layout baselines (Getty USA / Imagn / AP) for [CaptionLayoutBuilderDialog].
   static const String _keyCaptionTemplateDefaultGettyJson =
       'caption_template_default_getty_json';
   static const String _keyCaptionTemplateDefaultImagnJson =
@@ -74,7 +74,7 @@ class PreferencesService {
   /// Named snapshots from “Save new caption style” in the layout builder.
   static const String _keyCaptionStyleLibraryJson = 'caption_style_library_json';
   /// User-chosen labels shown in the Caption Style menu for the built-in wires.
-  /// Null / absent → fall back to the factory name (Getty / Imagn / AP /
+  /// Null / absent → fall back to the factory name (Getty USA / Imagn / AP /
   /// Getty International).
   static const String _keyCaptionWireLabelGetty =
       'caption_wire_label_getty';
@@ -1266,7 +1266,7 @@ class PreferencesService {
   }
 
   /// User's custom label for a built-in wire in the Caption Style menu,
-  /// or `null` if the factory name (Getty / Imagn / AP) should be shown.
+  /// or `null` if the factory name (Getty USA / Imagn / AP) should be shown.
   Future<String?> getCaptionWireLabel(WireStyle wire) async {
     final key = _captionWireLabelKey(wire);
     if (key == null) return null;
