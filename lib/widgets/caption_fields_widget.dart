@@ -16504,6 +16504,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           playerName = _baseballStaffRoleOfTeamCaptionPhrase(
             displayToken: mainPlayerFullName,
             teamName: mainPlayerTeam,
+            template: captionTemplate,
           );
         } else {
           playerName = _combinePlayersWithSingleTeam(
@@ -16532,7 +16533,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     final verbForAction = _selectedActionVerb ?? _selectedVerb;
     if (verbForAction != null) {
-      actionPhrase = _buildActionPhrase();
+      actionPhrase = _buildActionPhrase(template: captionTemplate);
     }
 
     // Handle opponent players if selected
@@ -16756,24 +16757,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     // Build the final caption
-    String gamePart;
     String opponentPartModified;
 
-    // Set game part based on sport
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
-    if (sport == 'hockey') {
-      gamePart = 'in their NHL game';
-    } else if (sport == 'basketball') {
-      gamePart = 'in their NBA game';
-    } else if (sport == 'soccer') {
-      // In-game joins after period text: "...during the first half of their MLS soccer match..."
-      // Pre/Post-game reads better as "...ahead of playing against X in their MLS soccer match..."
-      gamePart = (_isPriorToGame || _isPostGame)
-          ? 'in their MLS soccer match'
-          : 'of their MLS soccer match';
-    } else {
-      gamePart = 'in their MLB game';
-    }
 
     if (_isPriorToGame || _isPostGame) {
       // For pre-game or post-game, we need to extract just the team name from opponentPart
@@ -16821,8 +16807,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       '$customTextPart'
       '${actionPhrase.isNotEmpty ? ' $actionPhrase' : ''}'
       '$opponentPartModified'
-      '${skipInningPart ? '' : inningPart} '
-      '$gamePart'
+      '${skipInningPart ? '' : inningPart}'
     ).trim();
 
     final iptc = <String, String>{};
@@ -20395,9 +20380,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return _baseballStaffRoleOfTeamCaptionPhrase(
           displayToken: players.first,
           teamName: teamName,
+          template: template,
         );
       }
-      return _combineBaseballKeyboardFireStaffForCaption(players, teamName);
+      return _combineBaseballKeyboardFireStaffForCaption(
+        players,
+        teamName,
+        template: template,
+      );
     }
 
     // Baseball: mix of roster players (keep `Name #99`) and staff (use role like a “number”).
@@ -20600,7 +20590,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return false; // Default: include "against"
   }
 
-  String _buildActionPhrase() {
+  String _buildActionPhrase({CaptionTemplate? template}) {
     final rawVerb = _selectedActionVerb ?? _selectedVerb;
     if (rawVerb == null) return '';
     final originalVerb = _resolveCanonicalVerbKey(rawVerb);
@@ -20863,16 +20853,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               firstCoach != null &&
               firstCoach.rolePhrase == 'manager';
           if (firstIsManager) {
-            final mgrLead =
-                _pitchingChangeLeadSubject(firstPlayer, teamName);
+            final mgrLead = _pitchingChangeLeadSubject(
+              firstPlayer,
+              teamName,
+              template: template,
+            );
             final afterMgr = selectedPlayers.skip(1).toList();
             if (afterMgr.isEmpty) {
               const breakPlay = ' in a break in play';
               return '$mgrLead takes a pitcher out of the game$breakPlay$inningText against the ${_getOpposingTeamName()}';
             }
             final pitcherToken = afterMgr.first;
-            final pitcherName =
-                _pitchingChangeLeadSubject(pitcherToken, teamName);
+            final pitcherName = _pitchingChangeLeadSubject(
+              pitcherToken,
+              teamName,
+              template: template,
+            );
             final onlookerCandidates = afterMgr.skip(1).toList();
             final onlookers =
                 _pitchingChangeOnlookerTokens(onlookerCandidates, mgrPc);
@@ -20885,8 +20881,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             return '$mgrLead takes $pitcherName out of the game$breakPlay$inningText against the ${_getOpposingTeamName()}';
           }
 
-          final firstPlayerName =
-              _pitchingChangeLeadSubject(firstPlayer, teamName);
+          final firstPlayerName = _pitchingChangeLeadSubject(
+            firstPlayer,
+            teamName,
+            template: template,
+          );
 
           // Others selected after the pitcher; drop the manager so they are not named twice
           // ("by manager X" vs "as X manager look on").
@@ -24052,11 +24051,40 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return _joinBaseballCaptionFragmentsWithTeam(fragments, teamName);
   }
 
-  /// Two+ staff: `Team manager Name and pitching coach Name`.
+  /// Two+ staff: default `Team manager Name and pitching coach Name`;
+  /// Getty: `Name manager and Name pitching coach of the Team`.
   String _combineBaseballKeyboardFireStaffForCaption(
     List<String> tokens,
-    String? teamName,
-  ) {
+    String? teamName, {
+    CaptionTemplate? template,
+  }) {
+    final t = teamName?.trim() ?? '';
+    final getty = template?.wireStyle == WireStyle.getty ||
+        template?.wireStyle == WireStyle.gettyInternational;
+    if (getty && t.isNotEmpty) {
+      final parts = <String>[];
+      for (final tok in tokens) {
+        final p = _parseKeyboardFireCoachToken(tok.trim());
+        if (p == null) {
+          final n = tok.trim();
+          if (n.isNotEmpty) parts.add(n);
+        } else {
+          parts.add('${p.name} ${p.rolePhrase}');
+        }
+      }
+      if (parts.isEmpty) return '';
+      String joined;
+      if (parts.length == 1) {
+        joined = parts.first;
+      } else if (parts.length == 2) {
+        joined = '${parts[0]} and ${parts[1]}';
+      } else {
+        final copy = List<String>.from(parts);
+        final last = copy.removeLast();
+        joined = '${copy.join(', ')}, and $last';
+      }
+      return '$joined of the $t';
+    }
     final fragments = tokens
         .map(_baseballStaffNameRoleFragment)
         .where((s) => s.isNotEmpty)
@@ -24064,20 +24092,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return _joinBaseballCaptionFragmentsWithTeam(fragments, teamName);
   }
 
-  /// Baseball Keyboard Fire: `Team manager Name`, `Team pitching coach Name`, etc.
+  /// Baseball Keyboard Fire: default `Team manager Name`, `Team pitching coach Name`.
+  /// Getty / Getty International: `Name manager of the Team`, `Name pitching coach of the Team`.
   String _baseballStaffRoleOfTeamCaptionPhrase({
     required String displayToken,
     required String? teamName,
+    CaptionTemplate? template,
   }) {
     final p = _parseKeyboardFireCoachToken(displayToken);
     final t = teamName?.trim() ?? '';
     final hasTeam = t.isNotEmpty;
+    final getty = template?.wireStyle == WireStyle.getty ||
+        template?.wireStyle == WireStyle.gettyInternational;
     if (p == null) {
       final name = displayToken.trim();
       return hasTeam ? '$t $name' : name;
     }
     if (!hasTeam) {
+      if (getty) {
+        return '${p.name} ${p.rolePhrase}';
+      }
       return '${p.rolePhrase} ${p.name}';
+    }
+    if (getty) {
+      return '${p.name} ${p.rolePhrase} of the $t';
     }
     return '$t ${p.rolePhrase} ${p.name}';
   }
@@ -24098,13 +24136,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   /// First subject in Pitching Change: `Name #99 of the Team` or coach `Name role of the Team`.
-  String _pitchingChangeLeadSubject(String token, String? teamName) {
+  String _pitchingChangeLeadSubject(
+    String token,
+    String? teamName, {
+    CaptionTemplate? template,
+  }) {
     final t = token.trim();
     if (t.isEmpty) return '';
     if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball' &&
         _isKeyboardFireBaseballStaffToken(t)) {
       return _baseballStaffRoleOfTeamCaptionPhrase(
-          displayToken: t, teamName: teamName);
+        displayToken: t,
+        teamName: teamName,
+        template: template,
+      );
     }
     final tn = teamName?.trim() ?? '';
     if (tn.isEmpty) return t;

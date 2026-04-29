@@ -757,9 +757,9 @@ class CaptionFormulaRenderer {
           }
           return template.gameIdentifierText.trim();
         case CaptionSegment.separator:
-          return separatorSnippetFor(template, segmentIndex);
+          return _smartGlueText(separatorSnippetFor(template, segmentIndex));
         case CaptionSegment.punctuation:
-          return punctuationSnippetFor(template, segmentIndex);
+          return _smartGlueText(punctuationSnippetFor(template, segmentIndex));
         case CaptionSegment.venue:
           return venue;
         case CaptionSegment.credit:
@@ -806,13 +806,43 @@ class CaptionFormulaRenderer {
     for (var j = 1; j < indices.length; j++) {
       final prev = indices[j - 1];
       final cur = indices[j];
-      final gap = cur == prev + 1
-          ? gapList[prev]
-          : defaultGapBetweenSegments(template, order[prev], order[cur]);
+      final a = order[prev];
+      final c = order[cur];
+      // Separator/punctuation chips carry their full joining text; always use
+      // an empty gap on both sides so stored customSeparators never insert a
+      // stray space adjacent to one of those chips.
+      final isGluePair = a == CaptionSegment.separator ||
+          c == CaptionSegment.separator ||
+          a == CaptionSegment.punctuation ||
+          c == CaptionSegment.punctuation;
+      final gap = isGluePair
+          ? ''
+          : (cur == prev + 1
+              ? _smartGlueText(gapList[prev])
+              : defaultGapBetweenSegments(template, a, c));
       b.write(gap);
       b.write(valueAt(cur));
     }
     return b.toString();
+  }
+
+  /// Normalises a user-typed separator or gap string so spacing is applied
+  /// automatically — users should never have to add their own spaces.
+  ///
+  /// Rules (applied to the *trimmed* value):
+  ///  • **Attaching punctuation** (`. ! ? , ; :`) → no space before, one space
+  ///    after.  e.g. "." → ". ", "," → ", "
+  ///  • **Everything else** (words, dashes, em-dashes, symbols…) → space
+  ///    before AND space after.
+  ///    e.g. "on" → " on ", "-" → " - ", "—" → " — "
+  ///
+  /// If the raw value is blank/whitespace-only it is returned as-is so that an
+  /// intentionally empty gap stays empty.
+  static String _smartGlueText(String raw) {
+    final t = raw.trim();
+    if (t.isEmpty) return raw;
+    final attachesToPrev = RegExp(r'^[.!?,;:]').hasMatch(t);
+    return attachesToPrev ? '$t ' : ' $t ';
   }
 
   static bool _segmentPairEither(

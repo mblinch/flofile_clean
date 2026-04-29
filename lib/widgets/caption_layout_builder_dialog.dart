@@ -1832,11 +1832,14 @@ class _CaptionLayoutBuilderDialogState
         !_bylinePreviewSelected &&
         !_customTextSnippetEditorOpen &&
         !_separatorSnippetEditorOpen &&
-        !_punctuationSnippetEditorOpen) {
+        !_punctuationSnippetEditorOpen &&
+        _focusedGapIndex == null) {
       return const SizedBox.shrink();
     }
     String label;
-    if (_activeFormulaIndex != null &&
+    if (_focusedGapIndex != null) {
+      label = 'Separator';
+    } else if (_activeFormulaIndex != null &&
         _activeFormulaIndex! >= 0 &&
         _activeFormulaIndex! < _template.segmentOrder.length) {
       final activeSegment = _template.segmentOrder[_activeFormulaIndex!];
@@ -3086,26 +3089,56 @@ class _CaptionLayoutBuilderDialogState
             ),
           );
         }
-        // If no explicit glue segments, show the computed gap string.
+        // If no explicit glue segments, show the implicit gap as a tappable
+        // label so users can edit it directly.
         if (glueBetween.isEmpty && i < gapStrings.length) {
           final gap = gapStrings[i];
-          if (gap.trim().isNotEmpty) {
-            glueBetween.add(
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Text(
-                  gap,
-                  style: TextStyle(
-                    fontSize: 10,
-                    height: 1.2,
-                    color: Colors.grey.shade500,
-                    fontStyle: FontStyle.italic,
+          final isFocused = _focusedGapIndex == i;
+          final displayLabel = gap.isEmpty ? '(no sep)' : gap;
+          glueBetween.add(
+            Tooltip(
+              message: 'Tap to edit separator',
+              waitDuration: const Duration(milliseconds: 300),
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _closeAllInlineEdits();
+                      _focusedGapIndex = isFocused ? null : i;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: isFocused
+                          ? const Color(0xFFEEF4FF)
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(3),
+                      border: Border.all(
+                        color: isFocused
+                            ? const Color(0xFF2563EB)
+                            : Colors.grey.shade300,
+                        width: isFocused ? 1.2 : 0.5,
+                      ),
+                    ),
+                    child: Text(
+                      displayLabel,
+                      style: TextStyle(
+                        fontSize: 10,
+                        height: 1.2,
+                        color: isFocused
+                            ? const Color(0xFF2563EB)
+                            : Colors.grey.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            );
-          }
+            ),
+          );
         }
         for (final g in glueBetween) {
           widgets.add(g);
@@ -4478,7 +4511,8 @@ class _CaptionLayoutBuilderDialogState
                                           _bylinePreviewSelected ||
                                           _customTextSnippetEditorOpen ||
                                           _separatorSnippetEditorOpen ||
-                                          _punctuationSnippetEditorOpen) ...[
+                                          _punctuationSnippetEditorOpen ||
+                                          _focusedGapIndex != null) ...[
                                         const SizedBox(height: 8),
                                         Container(
                                           decoration: BoxDecoration(
@@ -4540,7 +4574,12 @@ class _CaptionLayoutBuilderDialogState
                                                               .grey.shade700,
                                                         ),
                                                       ),
-                                                    if (_customTextSnippetEditorOpen)
+                                                    if (_focusedGapIndex != null &&
+                                                        _focusedGapIndex! < _gapControllers.length)
+                                                      _GapSeparatorField(
+                                                        controller: _gapControllers[_focusedGapIndex!],
+                                                      )
+                                                    else if (_customTextSnippetEditorOpen)
                                                       _customTextSnippetEditor()
                                                     else if (_separatorSnippetEditorOpen ||
                                                         _punctuationSnippetEditorOpen)

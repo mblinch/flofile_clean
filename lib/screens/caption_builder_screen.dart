@@ -2670,8 +2670,20 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Handle image deletion
   void _onImageDeleted(String imagePath) {
     setState(() {
-      // Remove the deleted image from the list
-      imagePaths.remove(imagePath);
+      final deletedIndex = imagePaths.indexOf(imagePath);
+      if (deletedIndex >= 0) {
+        imagePaths.removeAt(deletedIndex);
+        // If an image *before* the current selection is removed, indices shift
+        // down by one; without this, the highlight skips the next thumbnail.
+        if (deletedIndex < currentIndex) {
+          currentIndex--;
+        }
+        if (imagePaths.isEmpty) {
+          currentIndex = 0;
+        } else if (currentIndex >= imagePaths.length) {
+          currentIndex = imagePaths.length - 1;
+        }
+      }
 
       // Remove from uploaded images set
       _uploadedImages.remove(imagePath);
@@ -2689,13 +2701,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       _xmpRatings?.remove(imagePath);
       _xmpLabels?.remove(imagePath);
       _xmpTagged?.remove(imagePath);
-
-      // Adjust current index if needed
-      if (imagePaths.isEmpty) {
-        currentIndex = 0;
-      } else if (currentIndex >= imagePaths.length) {
-        currentIndex = imagePaths.length - 1;
-      }
 
       // Load metadata for the current image if there are any images left
       if (imagePaths.isNotEmpty) {
