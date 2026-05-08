@@ -174,29 +174,35 @@ class LocationLineOptions {
   const LocationLineOptions({
     required this.uppercase,
     required this.chips,
+    this.autoSpacing = true,
   });
 
   final bool uppercase;
   final List<LocationChip> chips;
+  final bool autoSpacing;
 
   LocationLineOptions copyWith({
     bool? uppercase,
     List<LocationChip>? chips,
+    bool? autoSpacing,
   }) =>
       LocationLineOptions(
         uppercase: uppercase ?? this.uppercase,
         chips: chips ?? List<LocationChip>.from(this.chips),
+        autoSpacing: autoSpacing ?? this.autoSpacing,
       );
 
   /// Deep copy for per–geo-chip templates (duplicate Geographical segments).
   LocationLineOptions clone() => LocationLineOptions(
         uppercase: uppercase,
         chips: chips.map((c) => c.copyWith()).toList(),
+        autoSpacing: autoSpacing,
       );
 
   Map<String, dynamic> toJson() => {
         'uppercase': uppercase,
         'locationChips': chips.map((e) => e.toJson()).toList(),
+        if (!autoSpacing) 'autoSpacing': false,
       };
 
   factory LocationLineOptions.fromJson(Map<String, dynamic> j) {
@@ -211,6 +217,7 @@ class LocationLineOptions {
         return LocationLineOptions(
           uppercase: uppercase,
           chips: LocationLineOptions.imagnDefault().chips,
+          autoSpacing: j['autoSpacing'] as bool? ?? true,
         );
       }
       // Migrate legacy global uppercase → per-chip caps, so once migrated the
@@ -221,14 +228,26 @@ class LocationLineOptions {
             .map((c) =>
                 c.kind == LocationChipKind.literal ? c : c.copyWith(caps: true))
             .toList();
-        return LocationLineOptions(uppercase: false, chips: migrated);
+        return LocationLineOptions(
+          uppercase: false,
+          chips: migrated,
+          autoSpacing: j['autoSpacing'] as bool? ?? true,
+        );
       }
       // Legacy: uppercase + per-chip caps meant whole-line upper still ran and
       // ignored Aa toggles; per-chip caps are the only source of truth now.
       if (uppercase && anyChipCaps) {
-        return LocationLineOptions(uppercase: false, chips: parsed);
+        return LocationLineOptions(
+          uppercase: false,
+          chips: parsed,
+          autoSpacing: j['autoSpacing'] as bool? ?? true,
+        );
       }
-      return LocationLineOptions(uppercase: uppercase, chips: parsed);
+      return LocationLineOptions(
+        uppercase: uppercase,
+        chips: parsed,
+        autoSpacing: j['autoSpacing'] as bool? ?? true,
+      );
     }
     return LocationLineOptions._fromLegacyFlatJson(j);
   }
@@ -259,7 +278,11 @@ class LocationLineOptions {
       chips.add(LocationChip(
           id: nid('city'), kind: LocationChipKind.city, literal: ''));
     }
-    return LocationLineOptions(uppercase: uppercase, chips: chips);
+    return LocationLineOptions(
+      uppercase: uppercase,
+      chips: chips,
+      autoSpacing: j['autoSpacing'] as bool? ?? true,
+    );
   }
 
   /// Preset strips matching former [LocationFormat] defaults.
@@ -358,6 +381,7 @@ class BylineOptions {
     this.disabledKinds = const <BylineFieldKind>{},
     this.customCreatorText = '',
     this.customCreditText = '',
+    this.autoSpacing = true,
   });
 
   final String prefix;
@@ -383,6 +407,7 @@ class BylineOptions {
 
   /// Typed override for [BylineFieldKind.customCredit] (agency / credit).
   final String customCreditText;
+  final bool autoSpacing;
 
   BylineOptions copyWith({
     String? prefix,
@@ -398,6 +423,7 @@ class BylineOptions {
     Set<BylineFieldKind>? disabledKinds,
     String? customCreatorText,
     String? customCreditText,
+    bool? autoSpacing,
   }) =>
       BylineOptions(
         prefix: prefix ?? this.prefix,
@@ -414,6 +440,7 @@ class BylineOptions {
             disabledKinds ?? Set<BylineFieldKind>.from(this.disabledKinds),
         customCreatorText: customCreatorText ?? this.customCreatorText,
         customCreditText: customCreditText ?? this.customCreditText,
+        autoSpacing: autoSpacing ?? this.autoSpacing,
       );
 
   Map<String, dynamic> toJson() => {
@@ -432,6 +459,7 @@ class BylineOptions {
           'disabledKinds': disabledKinds.map((e) => e.name).toList(),
         if (customCreatorText.isNotEmpty) 'customCreatorText': customCreatorText,
         if (customCreditText.isNotEmpty) 'customCreditText': customCreditText,
+        if (!autoSpacing) 'autoSpacing': false,
       };
 
   factory BylineOptions.fromJson(Map<String, dynamic> j) {
@@ -497,6 +525,7 @@ class BylineOptions {
       customTexts: customTexts,
       customCreatorText: j['customCreatorText'] as String? ?? '',
       customCreditText: j['customCreditText'] as String? ?? '',
+      autoSpacing: j['autoSpacing'] as bool? ?? true,
     );
   }
 
@@ -590,9 +619,15 @@ class CaptionTemplate {
     required this.bylineOptions,
     required this.segmentOrder,
     this.gameIdentifierText = '',
+    this.captionPrefix = '',
+    this.captionSuffix = ' ',
+    this.gameIdentifierPrefix = '',
+    this.gameIdentifierSuffix = ' ',
     this.customSeparators,
     this.separatorSnippets,
     this.punctuationSnippets,
+    this.venuePrefix = '',
+    this.venueSuffix = '',
     this.locationOptionsByOccurrence,
     this.dateFormulasByOccurrence,
   });
@@ -647,6 +682,10 @@ class CaptionTemplate {
   /// the caption body "Game identifier" and the credit-line "Custom text"
   /// fields are independent of each other.
   final String gameIdentifierText;
+  final String captionPrefix;
+  final String captionSuffix;
+  final String gameIdentifierPrefix;
+  final String gameIdentifierSuffix;
 
   /// Text between consecutive [segmentOrder] entries. When set, length must be
   /// [segmentOrder.length - 1]. When null or wrong length, rendering falls
@@ -665,6 +704,9 @@ class CaptionTemplate {
   /// One string per [CaptionSegment.punctuation] ("Custom" in UI) in [segmentOrder],
   /// e.g. ` - `, `: `, `. `. Any literal text is valid.
   final List<String>? punctuationSnippets;
+
+  final String venuePrefix;
+  final String venueSuffix;
 
   /// One [LocationLineOptions] per [CaptionSegment.location] in [segmentOrder]
   /// (left-to-right). When null, every location segment uses [locationOptions].
@@ -855,6 +897,12 @@ class CaptionTemplate {
     List<String>? customSeparators,
     List<String>? separatorSnippets,
     List<String>? punctuationSnippets,
+    String captionPrefix = '',
+    String captionSuffix = ' ',
+    String gameIdentifierPrefix = '',
+    String gameIdentifierSuffix = ' ',
+    String venuePrefix = '',
+    String venueSuffix = '',
     DateFormula? dateFormula,
     List<DateFormula>? dateFormulasByOccurrence,
     List<LocationLineOptions>? locationOptionsByOccurrence,
@@ -893,9 +941,15 @@ class CaptionTemplate {
       bylineOptions:
           bylineOptions ?? BylineOptions.fromLegacyFormat(creditFormat),
       segmentOrder: resolvedOrder,
+      captionPrefix: captionPrefix,
+      captionSuffix: captionSuffix,
+      gameIdentifierPrefix: gameIdentifierPrefix,
+      gameIdentifierSuffix: gameIdentifierSuffix,
       customSeparators: resolvedCustomSeparators,
       separatorSnippets: resolvedSepSnippets,
       punctuationSnippets: resolvedPunSnippets,
+      venuePrefix: venuePrefix,
+      venueSuffix: venueSuffix,
       locationOptionsByOccurrence: locationOptionsByOccurrence,
       dateFormulasByOccurrence: dateFormulasByOccurrence,
     ).normalizePerOccurrenceLists();
@@ -920,9 +974,15 @@ class CaptionTemplate {
     BylineOptions? bylineOptions,
     List<CaptionSegment>? segmentOrder,
     String? gameIdentifierText,
+    String? captionPrefix,
+    String? captionSuffix,
+    String? gameIdentifierPrefix,
+    String? gameIdentifierSuffix,
     List<String>? customSeparators,
     Object? separatorSnippets = _unset,
     Object? punctuationSnippets = _unset,
+    String? venuePrefix,
+    String? venueSuffix,
     Object? locationOptionsByOccurrence = _unset,
     Object? dateFormulasByOccurrence = _unset,
   }) =>
@@ -948,6 +1008,10 @@ class CaptionTemplate {
         segmentOrder:
             segmentOrder ?? List<CaptionSegment>.from(this.segmentOrder),
         gameIdentifierText: gameIdentifierText ?? this.gameIdentifierText,
+        captionPrefix: captionPrefix ?? this.captionPrefix,
+        captionSuffix: captionSuffix ?? this.captionSuffix,
+        gameIdentifierPrefix: gameIdentifierPrefix ?? this.gameIdentifierPrefix,
+        gameIdentifierSuffix: gameIdentifierSuffix ?? this.gameIdentifierSuffix,
         customSeparators: customSeparators ?? this.customSeparators,
         separatorSnippets: identical(separatorSnippets, _unset)
             ? this.separatorSnippets
@@ -955,6 +1019,8 @@ class CaptionTemplate {
         punctuationSnippets: identical(punctuationSnippets, _unset)
             ? this.punctuationSnippets
             : punctuationSnippets as List<String>?,
+        venuePrefix: venuePrefix ?? this.venuePrefix,
+        venueSuffix: venueSuffix ?? this.venueSuffix,
         locationOptionsByOccurrence: identical(locationOptionsByOccurrence, _unset)
             ? this.locationOptionsByOccurrence
             : locationOptionsByOccurrence as List<LocationLineOptions>?,
@@ -1097,9 +1163,17 @@ class CaptionTemplate {
         'bylineOptions': bylineOptions.toJson(),
         'segmentOrder': segmentOrder.map((e) => e.name).toList(),
         if (gameIdentifierText.isNotEmpty) 'gameIdentifierText': gameIdentifierText,
+        if (captionPrefix.isNotEmpty) 'captionPrefix': captionPrefix,
+        if (captionSuffix != ' ') 'captionSuffix': captionSuffix,
+        if (gameIdentifierPrefix.isNotEmpty)
+          'gameIdentifierPrefix': gameIdentifierPrefix,
+        if (gameIdentifierSuffix != ' ')
+          'gameIdentifierSuffix': gameIdentifierSuffix,
         if (customSeparators != null) 'customSeparators': customSeparators,
         if (separatorSnippets != null) 'separatorSnippets': separatorSnippets,
         if (punctuationSnippets != null) 'punctuationSnippets': punctuationSnippets,
+        if (venuePrefix.isNotEmpty) 'venuePrefix': venuePrefix,
+        if (venueSuffix.isNotEmpty) 'venueSuffix': venueSuffix,
         if (locationOptionsByOccurrence != null)
           'locationOptionsByOccurrence': locationOptionsByOccurrence!
               .map((e) => e.toJson())
@@ -1172,6 +1246,10 @@ class CaptionTemplate {
             ),
       segmentOrder: _parseSegmentOrder(json['segmentOrder']),
       gameIdentifierText: json['gameIdentifierText'] as String? ?? '',
+      captionPrefix: json['captionPrefix'] as String? ?? '',
+      captionSuffix: json['captionSuffix'] as String? ?? ' ',
+      gameIdentifierPrefix: json['gameIdentifierPrefix'] as String? ?? '',
+      gameIdentifierSuffix: json['gameIdentifierSuffix'] as String? ?? ' ',
       customSeparators: (json['customSeparators'] as List<dynamic>?)
           ?.map((e) => e.toString())
           .toList(),
@@ -1181,6 +1259,8 @@ class CaptionTemplate {
       punctuationSnippets: (json['punctuationSnippets'] as List<dynamic>?)
           ?.map((e) => e.toString())
           .toList(),
+      venuePrefix: json['venuePrefix'] as String? ?? '',
+      venueSuffix: json['venueSuffix'] as String? ?? '',
       locationOptionsByOccurrence:
           (json['locationOptionsByOccurrence'] as List<dynamic>?)
               ?.map((e) => LocationLineOptions.fromJson(

@@ -24,6 +24,22 @@ class CaptionPreviewNarrativeSplit {
   final String after;
 }
 
+class CaptionPreviewPlayer {
+  const CaptionPreviewPlayer(
+    this.team,
+    this.position,
+    this.name,
+    this.number,
+    this.opponent,
+  );
+
+  final String team;
+  final String position;
+  final String name;
+  final int number;
+  final String opponent;
+}
+
 /// Renders static frame + sample dynamic caption for the layout dialog preview.
 class CaptionFormulaRenderer {
   CaptionFormulaRenderer._();
@@ -74,7 +90,8 @@ class CaptionFormulaRenderer {
           uppercaseAll: uppercaseAll);
     }
     final s = _formatDateExpressionString(game, template, expr);
-    return uppercaseAll ? s.toUpperCase() : s;
+    final out = uppercaseAll ? s.toUpperCase() : s;
+    return out;
   }
 
   /// Resolves the [DateTime] for structured [DateFormula] rendering.
@@ -198,12 +215,6 @@ class CaptionFormulaRenderer {
       }
       skipNextLiteral = false;
       out.add(c);
-    }
-    while (out.isNotEmpty && out.first.kind == LocationChipKind.literal) {
-      out.removeAt(0);
-    }
-    while (out.isNotEmpty && out.last.kind == LocationChipKind.literal) {
-      out.removeLast();
     }
     return out;
   }
@@ -488,11 +499,22 @@ class CaptionFormulaRenderer {
         .where((v) => v.trim().isNotEmpty)
         .toList();
     if (fields.isEmpty) return '';
-    return '${bylineOptions.prefix}${fields.join(bylineOptions.between)}${bylineOptions.suffix}';
+    final out =
+        '${bylineOptions.prefix}${fields.join(bylineOptions.between)}${bylineOptions.suffix}';
+    return out;
   }
 
-  static String sampleDynamicCaption(CaptionTemplate template) {
-    return randomSinglePlayerCaption(template, seed: 0);
+  static String sampleDynamicCaption(
+    CaptionTemplate template, {
+    List<CaptionPreviewPlayer>? previewPlayers,
+    List<String>? previewActions,
+  }) {
+    return randomSinglePlayerCaption(
+      template,
+      seed: 0,
+      previewPlayers: previewPlayers,
+      previewActions: previewActions,
+    );
   }
 
   static String _numberToken(NumberFormatStyle nf, int number) {
@@ -505,7 +527,8 @@ class CaptionFormulaRenderer {
     return trimmed.toLowerCase().endsWith('s') ? "$trimmed'" : "$trimmed's";
   }
 
-  static String _singlePlayerLead(CaptionTemplate template, _SamplePlayer player) {
+  static String _singlePlayerLead(
+      CaptionTemplate template, CaptionPreviewPlayer player) {
     var playerName = player.name;
     var teamName = player.team;
     if (template.removeDiacritics) {
@@ -537,9 +560,13 @@ class CaptionFormulaRenderer {
   static String randomSinglePlayerPreview(
     CaptionTemplate template, {
     int seed = 0,
+    List<CaptionPreviewPlayer>? previewPlayers,
   }) {
     final rand = Random(seed);
-    final player = _samplePlayers[rand.nextInt(_samplePlayers.length)];
+    final players = (previewPlayers != null && previewPlayers.isNotEmpty)
+        ? previewPlayers
+        : _samplePlayers;
+    final player = players[rand.nextInt(players.length)];
     return _singlePlayerLead(template, player);
   }
 
@@ -549,12 +576,19 @@ class CaptionFormulaRenderer {
   static String randomSinglePlayerCaption(
     CaptionTemplate template, {
     int seed = 0,
+    List<CaptionPreviewPlayer>? previewPlayers,
+    List<String>? previewActions,
   }) {
     final rand = Random(seed);
-    final player = _samplePlayers[rand.nextInt(_samplePlayers.length)];
+    final players = (previewPlayers != null && previewPlayers.isNotEmpty)
+        ? previewPlayers
+        : _samplePlayers;
+    final actions = (previewActions != null && previewActions.isNotEmpty)
+        ? previewActions
+        : _sampleActions;
+    final player = players[rand.nextInt(players.length)];
     final lead = _singlePlayerLead(template, player);
-    final actionTemplate =
-        _sampleActions[rand.nextInt(_sampleActions.length)];
+    final actionTemplate = actions[rand.nextInt(actions.length)];
     var opp = player.opponent;
     if (template.removeDiacritics) {
       opp = CaptionTextNormalize.stripDiacritics(opp);
@@ -578,26 +612,26 @@ class CaptionFormulaRenderer {
     return line;
   }
 
-  static const List<_SamplePlayer> _samplePlayers = [
-    _SamplePlayer('Toronto Blue Jays', 'SP', 'Vladimir Guerrero Jr.', 27,
+  static const List<CaptionPreviewPlayer> _samplePlayers = [
+    CaptionPreviewPlayer('Toronto Blue Jays', 'SP', 'Vladimir Guerrero Jr.', 27,
         'Atlanta Braves'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Toronto Blue Jays', 'CF', 'George Springer', 4, 'Atlanta Braves'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Toronto Blue Jays', 'SS', 'Bo Bichette', 11, 'Atlanta Braves'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Toronto Blue Jays', 'C', 'Danny Jansen', 9, 'Atlanta Braves'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Toronto Blue Jays', 'RF', 'Teoscar Hernández', 37, 'Atlanta Braves'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Atlanta Braves', 'SP', 'Max Fried', 54, 'Toronto Blue Jays'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Atlanta Braves', '3B', 'Austin Riley', 27, 'Toronto Blue Jays'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Atlanta Braves', 'RF', 'Ronald Acuña Jr.', 13, 'Toronto Blue Jays'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Atlanta Braves', 'C', 'Travis d\'Arnaud', 16, 'Toronto Blue Jays'),
-    _SamplePlayer(
+    CaptionPreviewPlayer(
         'Atlanta Braves', 'SS', 'Dansby Swanson', 7, 'Toronto Blue Jays'),
   ];
 
@@ -625,8 +659,15 @@ class CaptionFormulaRenderer {
     required CreditSampleAgency sampleAgency,
     String? captionOverride,
     String? creditOverride,
+    List<CaptionPreviewPlayer>? previewPlayers,
+    List<String>? previewActions,
   }) {
-    final cap = captionOverride ?? sampleDynamicCaption(template);
+    final cap = captionOverride ??
+        sampleDynamicCaption(
+          template,
+          previewPlayers: previewPlayers,
+          previewActions: previewActions,
+        );
     final venue = game.venue.trim().isEmpty ? 'Venue' : game.venue.trim();
 
     return _renderFromSegments(
@@ -649,12 +690,19 @@ class CaptionFormulaRenderer {
     required CreditSampleAgency sampleAgency,
     String? captionOverride,
     String? creditOverride,
+    List<CaptionPreviewPlayer>? previewPlayers,
+    List<String>? previewActions,
   }) {
     final order = template.segmentOrder;
     final cut = order.indexWhere((s) => s == CaptionSegment.customText);
     if (cut < 0) return null;
 
-    final cap = captionOverride ?? sampleDynamicCaption(template);
+    final cap = captionOverride ??
+        sampleDynamicCaption(
+          template,
+          previewPlayers: previewPlayers,
+          previewActions: previewActions,
+        );
     final venue = game.venue.trim().isEmpty ? 'Venue' : game.venue.trim();
     final merged = _renderFromSegments(
       template: template,
@@ -749,19 +797,23 @@ class CaptionFormulaRenderer {
             dateFormulaOverride: f,
           );
         case CaptionSegment.caption:
-          return cap;
+          return '${template.captionPrefix}$cap${template.captionSuffix}';
         case CaptionSegment.customText:
           if (customSegmentPlaceholderIndex != null &&
               segmentIndex == customSegmentPlaceholderIndex) {
-            return _kCustomNarrativePreviewPlaceholder;
+            return '${template.gameIdentifierPrefix}'
+                '$_kCustomNarrativePreviewPlaceholder'
+                '${template.gameIdentifierSuffix}';
           }
-          return template.gameIdentifierText.trim();
+          final gameIdentifier = template.gameIdentifierText.trim();
+          return '${template.gameIdentifierPrefix}'
+              '$gameIdentifier'
+              '${template.gameIdentifierSuffix}';
         case CaptionSegment.separator:
-          return _smartGlueText(separatorSnippetFor(template, segmentIndex));
         case CaptionSegment.punctuation:
-          return _smartGlueText(punctuationSnippetFor(template, segmentIndex));
+          return '';
         case CaptionSegment.venue:
-          return venue;
+          return '${template.venuePrefix}$venue${template.venueSuffix}';
         case CaptionSegment.credit:
           final manualCredit = creditOverride?.trim() ?? '';
           if (manualCredit.isNotEmpty) return manualCredit;
@@ -782,67 +834,33 @@ class CaptionFormulaRenderer {
     if (order.isEmpty) return '';
 
     final n = order.length;
-    final gapList = effectiveSegmentGaps(template);
 
-    // Drop an empty [CaptionSegment.customText] slot so the join between
-    // caption and venue still uses the correct " at " (not a stray space).
-    // Placeholder mode keeps the slot so split preview gaps stay correct.
+    // Main-layout separator/punctuation segments are legacy glue controls.
+    // They are no longer part of the visible layout model; spacing/punctuation
+    // belongs inside the sub-editors, so rendering only joins content blocks.
     final List<int> indices;
-    if (customSegmentPlaceholderIndex != null) {
-      indices = List<int>.generate(n, (i) => i);
-    } else {
-      indices = <int>[];
-      for (var i = 0; i < n; i++) {
-        if (order[i] == CaptionSegment.customText &&
-            valueAt(i).trim().isEmpty) {
-          continue;
-        }
-        indices.add(i);
+    indices = <int>[];
+    for (var i = 0; i < n; i++) {
+      final segment = order[i];
+      if (segment == CaptionSegment.separator ||
+          segment == CaptionSegment.punctuation) {
+        continue;
       }
+      if (customSegmentPlaceholderIndex == null &&
+          segment == CaptionSegment.customText &&
+          valueAt(i).trim().isEmpty) {
+        continue;
+      }
+      indices.add(i);
     }
     if (indices.isEmpty) return '';
 
     final b = StringBuffer()..write(valueAt(indices[0]));
     for (var j = 1; j < indices.length; j++) {
-      final prev = indices[j - 1];
       final cur = indices[j];
-      final a = order[prev];
-      final c = order[cur];
-      // Separator/punctuation chips carry their full joining text; always use
-      // an empty gap on both sides so stored customSeparators never insert a
-      // stray space adjacent to one of those chips.
-      final isGluePair = a == CaptionSegment.separator ||
-          c == CaptionSegment.separator ||
-          a == CaptionSegment.punctuation ||
-          c == CaptionSegment.punctuation;
-      final gap = isGluePair
-          ? ''
-          : (cur == prev + 1
-              ? _smartGlueText(gapList[prev])
-              : defaultGapBetweenSegments(template, a, c));
-      b.write(gap);
       b.write(valueAt(cur));
     }
     return b.toString();
-  }
-
-  /// Normalises a user-typed separator or gap string so spacing is applied
-  /// automatically — users should never have to add their own spaces.
-  ///
-  /// Rules (applied to the *trimmed* value):
-  ///  • **Attaching punctuation** (`. ! ? , ; :`) → no space before, one space
-  ///    after.  e.g. "." → ". ", "," → ", "
-  ///  • **Everything else** (words, dashes, em-dashes, symbols…) → space
-  ///    before AND space after.
-  ///    e.g. "on" → " on ", "-" → " - ", "—" → " — "
-  ///
-  /// If the raw value is blank/whitespace-only it is returned as-is so that an
-  /// intentionally empty gap stays empty.
-  static String _smartGlueText(String raw) {
-    final t = raw.trim();
-    if (t.isEmpty) return raw;
-    final attachesToPrev = RegExp(r'^[.!?,;:]').hasMatch(t);
-    return attachesToPrev ? '$t ' : ' $t ';
   }
 
   static bool _segmentPairEither(
@@ -937,18 +955,3 @@ class CaptionFormulaRenderer {
   }
 }
 
-class _SamplePlayer {
-  const _SamplePlayer(
-    this.team,
-    this.position,
-    this.name,
-    this.number,
-    this.opponent,
-  );
-
-  final String team;
-  final String position;
-  final String name;
-  final int number;
-  final String opponent;
-}

@@ -1041,6 +1041,79 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Expose current sport for child widgets (e.g. KeyboardFirePanel period picker).
   String get currentSportName => widget.sport?.toLowerCase() ?? 'baseball';
 
+  String _previewTimePhraseForSport() {
+    switch (_currentSport) {
+      case 'hockey':
+        return 'in the third period';
+      case 'basketball':
+        return 'in the fourth quarter';
+      case 'soccer':
+        return 'in the second half';
+      case 'baseball':
+      default:
+        return 'in the third inning';
+    }
+  }
+
+  List<CaptionPreviewPlayer> _buildPreviewPlayersForSession() {
+    final home = selectedHomeTeam?.trim();
+    final away = selectedAwayTeam?.trim();
+    if (home == null || home.isEmpty || away == null || away.isEmpty) {
+      return const [];
+    }
+
+    final players = <CaptionPreviewPlayer>[];
+    int parseNumber(String? raw) => int.tryParse(raw ?? '') ?? 0;
+    String pos(Player p) => (p.position ?? '').trim().isEmpty ? 'P' : p.position!;
+
+    for (final p in _homeRoster.take(20)) {
+      players.add(
+        CaptionPreviewPlayer(
+          home,
+          pos(p),
+          p.fullName,
+          parseNumber(p.jerseyNumber),
+          away,
+        ),
+      );
+    }
+    for (final p in _awayRoster.take(20)) {
+      players.add(
+        CaptionPreviewPlayer(
+          away,
+          pos(p),
+          p.fullName,
+          parseNumber(p.jerseyNumber),
+          home,
+        ),
+      );
+    }
+    return players;
+  }
+
+  List<String> _buildPreviewActionsForSession() {
+    final phrase = _previewTimePhraseForSport();
+    final actions = <String>[];
+    final seen = <String>{};
+    for (final verbs in verbCategories.values) {
+      for (final verb in verbs) {
+        final canonical = verb.trim();
+        if (canonical.isEmpty || !seen.add(canonical)) continue;
+        final wording = _getVerbDisplayText(canonical).trim();
+        if (wording.isEmpty) continue;
+        actions.add('${wording.toLowerCase()} against the {opp} $phrase');
+      }
+    }
+    return actions;
+  }
+
+  void _publishCaptionPreviewSessionData() {
+    CaptionSessionContext.setPreviewData(
+      previewPlayers: _buildPreviewPlayersForSession(),
+      previewActions: _buildPreviewActionsForSession(),
+    );
+  }
+
   // Match a magic-bar verb token to a canonical verb using the following rules:
   // - Single-word verbs: the first 2–3 letters are accepted (require at least 2)
   // - Multi-word verbs: use the acronym of the first letters of each word, excluding "the".
@@ -2890,6 +2963,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'DEBUG: Using preloaded rosters: ${_homeRoster.length} home players, ${_awayRoster.length} away players',
         );
       });
+      _publishCaptionPreviewSessionData();
 
       // Fetch venue information for the specific game and update stadium field
       if (selectedHomeTeam != null &&
@@ -2953,6 +3027,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       print(
         'Successfully loaded rosters: ${_homeRoster.length} home players, ${_awayRoster.length} away players',
       );
+      _publishCaptionPreviewSessionData();
       print('Home team stadium: $homeTeamStadium');
       print('Away team stadium: $awayTeamStadium');
     } catch (e) {
@@ -16849,7 +16924,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final effectiveTemplate = captionTemplate;
     // Keep the session context up-to-date so the layout builder preview
     // shows real game data instead of the random sample.
-    CaptionSessionContext.update(captionBody: captionBody, gameInfo: gameInfo);
+    CaptionSessionContext.update(
+      captionBody: captionBody,
+      gameInfo: gameInfo,
+      previewPlayers: _buildPreviewPlayersForSession(),
+      previewActions: _buildPreviewActionsForSession(),
+    );
     var caption = CaptionFormulaRenderer.render(
       template: effectiveTemplate,
       game: gameInfo,

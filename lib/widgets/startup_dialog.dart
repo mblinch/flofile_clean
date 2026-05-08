@@ -94,6 +94,7 @@ class _StartupDialogState extends State<StartupDialog> {
   String? _favoriteHomeTeam;
   String? _favoriteAwayTeam;
   String? _goTimeWarningText;
+  static const bool _showStartupCoachInfo = false;
   String? _homeCoachRole;
   String? _awayCoachRole;
   bool _homeCoachLoading = false;
@@ -322,10 +323,10 @@ class _StartupDialogState extends State<StartupDialog> {
         }
         isLoadingTeams = false;
       });
-      if (selectedHomeTeam != null) {
+      if (_showStartupCoachInfo && selectedHomeTeam != null) {
         _refreshCoachLabelForTeam(isHome: true);
       }
-      if (selectedAwayTeam != null) {
+      if (_showStartupCoachInfo && selectedAwayTeam != null) {
         _refreshCoachLabelForTeam(isHome: false);
       }
     } catch (e) {
@@ -932,7 +933,9 @@ class _StartupDialogState extends State<StartupDialog> {
                       selectedAwayTeam = team;
                     }
                   });
-                  _refreshCoachLabelForTeam(isHome: isHome);
+                  if (_showStartupCoachInfo) {
+                    _refreshCoachLabelForTeam(isHome: isHome);
+                  }
                   await _toggleFavoriteTeam(isHome: isHome);
                 },
                 child: Padding(
@@ -962,7 +965,9 @@ class _StartupDialogState extends State<StartupDialog> {
           }
           _goTimeWarningText = null;
         });
-        _refreshCoachLabelForTeam(isHome: isHome);
+        if (_showStartupCoachInfo) {
+          _refreshCoachLabelForTeam(isHome: isHome);
+        }
       },
     );
   }
@@ -1030,8 +1035,8 @@ class _StartupDialogState extends State<StartupDialog> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: 532,
-            height: 500,
+            width: 720,
+            height: 600,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             color: Colors.white, // Added white background
             child: Column(
@@ -1443,27 +1448,29 @@ class _StartupDialogState extends State<StartupDialog> {
                               ],
                             ),
 
-                            const SizedBox(height: 4),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: _buildStartupCoachRichText(
-                                    role: _awayCoachRole,
-                                    loading: _awayCoachLoading,
-                                    nameOrStatus: _awayCoachName,
+                            if (_showStartupCoachInfo) ...[
+                              const SizedBox(height: 4),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: _buildStartupCoachRichText(
+                                      role: _awayCoachRole,
+                                      loading: _awayCoachLoading,
+                                      nameOrStatus: _awayCoachName,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 28),
-                                Expanded(
-                                  child: _buildStartupCoachRichText(
-                                    role: _homeCoachRole,
-                                    loading: _homeCoachLoading,
-                                    nameOrStatus: _homeCoachName,
+                                  const SizedBox(width: 28),
+                                  Expanded(
+                                    child: _buildStartupCoachRichText(
+                                      role: _homeCoachRole,
+                                      loading: _homeCoachLoading,
+                                      nameOrStatus: _homeCoachName,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),

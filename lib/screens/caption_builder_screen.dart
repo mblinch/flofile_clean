@@ -3916,7 +3916,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         backgroundColor: Colors.grey.shade100,
         body: Center(
           child: Container(
-            width: 400,
+            width: 600,
+            height: 560,
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
               color: Colors.white,

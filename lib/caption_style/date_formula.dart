@@ -128,6 +128,7 @@ class DateFormula {
   DateFormula({
     required this.fields,
     required this.separators,
+    this.autoSpacing = true,
   }) {
     assert(
       separators.length == fields.length + 1,
@@ -137,6 +138,7 @@ class DateFormula {
 
   final List<DateFieldToken> fields;
   final List<String> separators;
+  final bool autoSpacing;
 
   String render(DateTime date) {
     if (fields.isEmpty) return '';
@@ -157,16 +159,21 @@ class DateFormula {
     final buf = StringBuffer();
     for (var k = 0; k < keptIndices.length; k++) {
       final origIdx = keptIndices[k];
-      if (k > 0) {
-        // Separator between this kept field and the previous one is the
-        // separator that originally sat AFTER the previous kept field. Empty
-        // strings collapse to a single space so chips never run together like
-        // "AprilMonth9" when a user leaves the slot blank.
-        final sepIdx = keptIndices[k - 1] + 1;
-        final sep = sepIdx < separators.length ? separators[sepIdx] : '';
-        buf.write(sep.isEmpty ? ' ' : sep);
+      // Separator before this kept field. For the first kept field this is the
+      // exposed leading slot; for later fields it is the slot after the
+      // previous kept field.
+      final sepIdx = k == 0 ? origIdx : keptIndices[k - 1] + 1;
+      final sep = sepIdx < separators.length ? separators[sepIdx] : '';
+      if (sep.isNotEmpty) {
+        buf.write(sep);
+      } else if (k > 0) {
+        buf.write(' ');
       }
       buf.write(fields[origIdx].render(date));
+    }
+    final trailingIdx = keptIndices.last + 1;
+    if (trailingIdx < separators.length) {
+      buf.write(separators[trailingIdx]);
     }
     return buf.toString();
   }
@@ -174,11 +181,13 @@ class DateFormula {
   DateFormula clone() => DateFormula(
         fields: fields.map((f) => f.copy()).toList(),
         separators: List<String>.from(separators),
+        autoSpacing: autoSpacing,
       );
 
   Map<String, dynamic> toJson() => {
         'fields': fields.map((f) => f.toJson()).toList(),
         'separators': separators,
+        if (!autoSpacing) 'autoSpacing': false,
       };
 
   static DateFormula fromJson(Map<String, dynamic> j) {
@@ -194,7 +203,11 @@ class DateFormula {
       // never throw on user data.
       seps = List<String>.filled(fields.length + 1, '', growable: true);
     }
-    return DateFormula(fields: fields, separators: seps);
+    return DateFormula(
+      fields: fields,
+      separators: seps,
+      autoSpacing: j['autoSpacing'] as bool? ?? true,
+    );
   }
 
   String encode() => json.encode(toJson());
@@ -315,6 +328,7 @@ class DateFormula {
   }
 
   static bool _formulasEqual(DateFormula a, DateFormula b) {
+    if (a.autoSpacing != b.autoSpacing) return false;
     if (a.fields.length != b.fields.length) return false;
     if (a.separators.length != b.separators.length) return false;
     for (var i = 0; i < a.fields.length; i++) {

@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dropdown_flutter/custom_dropdown.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../caption_style/caption_formula_renderer.dart';
 import '../caption_style/caption_session_context.dart';
@@ -1221,17 +1222,27 @@ class _CaptionLayoutBuilderDialogState
     _gapControllers.clear();
   }
 
+  static String _normalizeSep(String raw) {
+    return RegExp(r'[,.]').hasMatch(raw)
+        ? raw.replaceAll(RegExp(r'\s+'), '')
+        : raw;
+  }
+
   void _initGapControllers(CaptionTemplate t) {
     _focusedGapIndex = null;
     _disposeGapControllers();
     // Always match [CaptionFormulaRenderer.effectiveSegmentGaps] so preview and
     // inline fields stay aligned (handles null or wrong-length custom lists).
     final gaps = CaptionFormulaRenderer.effectiveSegmentGaps(t);
-    for (final g in gaps) {
+    final normalizedGaps = gaps.map(_normalizeSep).toList();
+    for (final g in normalizedGaps) {
       final c = TextEditingController(text: g);
       c.addListener(_onGapEdited);
       _gapControllers.add(c);
     }
+    // Apply normalized values back to the template so the preview is correct
+    // immediately — even for old saved templates with bad punctuation spacing.
+    _template = _template.copyWith(customSeparators: normalizedGaps);
   }
 
   /// Inserts [kind] into [segmentOrder] immediately after the snippet at
@@ -1945,6 +1956,8 @@ class _CaptionLayoutBuilderDialogState
               ),
             ),
           ),
+          const SizedBox(height: 6),
+          _spaceLegend(),
           // Chip-type palette — add/remove each available field type.
           const SizedBox(height: 6),
           Wrap(
@@ -2088,14 +2101,263 @@ class _CaptionLayoutBuilderDialogState
     );
   }
 
-  /// Push a typed value into [_bylineBetweenCtrl] (which already triggers
-  /// [_onBylineTextEdited]) without spawning a feedback loop. The controller
-  /// is the single source of truth; every separator input mirrors it.
   void _setBylineBetween(String value) {
     if (_bylineBetweenCtrl.text == value) return;
     _bylineBetweenCtrl.text = value;
     _bylineBetweenCtrl.selection =
         TextSelection.collapsed(offset: value.length);
+  }
+
+  void _setVenuePrefix(String value) {
+    setState(() {
+      _template = _template.copyWith(venuePrefix: value);
+    });
+  }
+
+  void _setVenueSuffix(String value) {
+    setState(() {
+      _template = _template.copyWith(venueSuffix: value);
+    });
+  }
+
+  void _setCaptionPrefix(String value) {
+    setState(() {
+      _template = _template.copyWith(captionPrefix: value);
+    });
+  }
+
+  void _setCaptionSuffix(String value) {
+    setState(() {
+      _template = _template.copyWith(captionSuffix: value);
+    });
+  }
+
+  void _setGameIdentifierPrefix(String value) {
+    setState(() {
+      _template = _template.copyWith(gameIdentifierPrefix: value);
+    });
+  }
+
+  void _setGameIdentifierSuffix(String value) {
+    setState(() {
+      _template = _template.copyWith(gameIdentifierSuffix: value);
+    });
+  }
+
+  Widget _captionSegmentEditor() {
+    final sampleCaption = CaptionFormulaRenderer.randomSinglePlayerCaption(
+      _template,
+      seed: _captionSampleSeed,
+      previewPlayers: CaptionSessionContext.previewPlayers,
+      previewActions: CaptionSessionContext.previewActions,
+    );
+    final rendered =
+        '${_template.captionPrefix}$sampleCaption${_template.captionSuffix}';
+    return _simpleSegmentSeparatorEditor(
+      label: 'Caption',
+      body: sampleCaption,
+      prefix: _template.captionPrefix,
+      suffix: _template.captionSuffix,
+      onPrefixChanged: _setCaptionPrefix,
+      onSuffixChanged: _setCaptionSuffix,
+      rendered: rendered,
+    );
+  }
+
+  Widget _simpleSegmentSeparatorEditor({
+    required String label,
+    required String body,
+    required String prefix,
+    required String suffix,
+    required ValueChanged<String> onPrefixChanged,
+    required ValueChanged<String> onSuffixChanged,
+    required String rendered,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _BylineSeparatorInput(
+                  key: ValueKey('$label-prefix'),
+                  value: prefix,
+                  onChanged: onPrefixChanged,
+                ),
+                Container(
+                  height: 28,
+                  constraints: const BoxConstraints(maxWidth: 520),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F4F5),
+                    border: Border.all(color: const Color(0x14000000)),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$label $body',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF3A3A3A),
+                      height: 1,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                _BylineSeparatorInput(
+                  key: ValueKey('$label-suffix'),
+                  value: suffix,
+                  onChanged: onSuffixChanged,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        _spaceLegend(),
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              Text(
+                'Preview:',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  rendered,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF3A3A3A),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _spaceLegend() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        '⎵ = space',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey.shade500,
+        ),
+      ),
+    );
+  }
+
+  Widget _venueEditor() {
+    final venue = _previewGameInfo.venue.trim().isEmpty
+        ? 'Venue'
+        : _previewGameInfo.venue.trim();
+    final rendered = '${_template.venuePrefix}$venue${_template.venueSuffix}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _BylineSeparatorInput(
+                  key: const ValueKey('venue-prefix'),
+                  value: _template.venuePrefix,
+                  onChanged: _setVenuePrefix,
+                ),
+                Container(
+                  height: 28,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F4F5),
+                    border: Border.all(color: const Color(0x14000000)),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    'IPTC:Location $venue',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF3A3A3A),
+                      height: 1,
+                    ),
+                  ),
+                ),
+                _BylineSeparatorInput(
+                  key: const ValueKey('venue-suffix'),
+                  value: _template.venueSuffix,
+                  onChanged: _setVenueSuffix,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        _spaceLegend(),
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              Text(
+                'Preview:',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  rendered,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF3A3A3A),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _bylineFieldChip(
@@ -2685,7 +2947,7 @@ class _CaptionLayoutBuilderDialogState
                           hintText: 'type here…',
                           hintStyle: _captionFullPreviewStyle.copyWith(
                             color: Colors.grey.shade400,
-                            fontStyle: FontStyle.italic,
+                            fontStyle: FontStyle.normal,
                           ),
                         ),
                       ),
@@ -2709,20 +2971,67 @@ class _CaptionLayoutBuilderDialogState
   /// Plain editor for the narrative [CaptionSegment.customText] slot — not the
   /// IPTC byline chip row (name / credit / copyright).
   Widget _customTextSnippetEditor() {
-    return _CaptionLayoutBorderedMultilineField(
-      controller: _gameIdentifierCtrl,
-      minLines: 1,
-      maxLines: 5,
-      autofocus: true,
-    );
-  }
-
-  Widget _snippetLiteralEditor() {
-    return _CaptionLayoutBorderedMultilineField(
-      controller: _snippetLiteralCtrl,
-      minLines: 1,
-      maxLines: 3,
-      autofocus: true,
+    final rendered = '${_template.gameIdentifierPrefix}'
+        '${_gameIdentifierCtrl.text}'
+        '${_template.gameIdentifierSuffix}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _BylineSeparatorInput(
+              key: const ValueKey('game-identifier-prefix'),
+              value: _template.gameIdentifierPrefix,
+              onChanged: _setGameIdentifierPrefix,
+            ),
+            Expanded(
+              child: _CaptionLayoutBorderedMultilineField(
+                controller: _gameIdentifierCtrl,
+                minLines: 1,
+                maxLines: 5,
+                autofocus: true,
+              ),
+            ),
+            _BylineSeparatorInput(
+              key: const ValueKey('game-identifier-suffix'),
+              value: _template.gameIdentifierSuffix,
+              onChanged: _setGameIdentifierSuffix,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _spaceLegend(),
+        const SizedBox(height: 6),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Row(
+            children: [
+              Text(
+                'Preview:',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  rendered,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF3A3A3A),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -2791,14 +3100,6 @@ class _CaptionLayoutBuilderDialogState
                 : 'Game identifier',
             style: menuStyle,
           ),
-        ),
-        PopupMenuItem(
-          value: CaptionSegment.separator,
-          child: Text('Separator (at / on / in …)', style: menuStyle),
-        ),
-        PopupMenuItem(
-          value: CaptionSegment.punctuation,
-          child: Text('Custom (literal text)', style: menuStyle),
         ),
         PopupMenuItem(
           value: CaptionSegment.venue,
@@ -2962,19 +3263,23 @@ class _CaptionLayoutBuilderDialogState
             dateFormulaOverride: f,
           );
         case CaptionSegment.caption:
-          return sampleCaption;
+          return '${_template.captionPrefix}'
+              '$sampleCaption'
+              '${_template.captionSuffix}';
         case CaptionSegment.customText:
-          return _template.gameIdentifierText.trim();
+          return '${_template.gameIdentifierPrefix}'
+              '${_template.gameIdentifierText.trim()}'
+              '${_template.gameIdentifierSuffix}';
         case CaptionSegment.venue:
-          return venue;
+          return '${_template.venuePrefix}$venue${_template.venueSuffix}';
         case CaptionSegment.credit:
           return credit;
         case CaptionSegment.separator:
-          return CaptionFormulaRenderer.separatorSnippetFor(
-              _template, segmentIndex);
+          return _normalizeSep(CaptionFormulaRenderer.separatorSnippetFor(
+              _template, segmentIndex));
         case CaptionSegment.punctuation:
-          return CaptionFormulaRenderer.punctuationSnippetFor(
-              _template, segmentIndex);
+          return _normalizeSep(CaptionFormulaRenderer.punctuationSnippetFor(
+              _template, segmentIndex));
       }
     }
 
@@ -2993,10 +3298,10 @@ class _CaptionLayoutBuilderDialogState
     final order = _template.segmentOrder;
     if (order.isEmpty) return const [];
     final n = order.length;
-    final gapStrings = CaptionFormulaRenderer.effectiveSegmentGaps(_template);
 
-    // Build a list of only the non-glue segment indices so we can insert gap
-    // labels between consecutive visible chips.
+    // Build a list of only content segment indices. Separator/punctuation
+    // segments still render in the final caption, but the main layout editor no
+    // longer exposes them as editable chips; sub-editors own visible spacing.
     final visibleIndices = <int>[];
     for (var i = 0; i < n; i++) {
       final seg = order[i];
@@ -3045,105 +3350,6 @@ class _CaptionLayoutBuilderDialogState
         },
       );
       widgets.add(snippetRow);
-
-      // Show the gap string between this chip and the next visible chip so the
-      // user can see (and tap to edit) the joining text (e.g. " - " or ": ").
-      if (vi < visibleIndices.length - 1) {
-        final nextI = visibleIndices[vi + 1];
-        // Collect all segments between i and nextI (the glue/separator chips).
-        // We show them as small tappable text labels.
-        final glueBetween = <Widget>[];
-        for (var g = i + 1; g < nextI; g++) {
-          final gSeg = order[g];
-          final gVal = valueAt(g, order);
-          final label = gVal.trim().isEmpty ? '(empty)' : gVal;
-          glueBetween.add(
-            Tooltip(
-              message: 'Tap to edit ${_segmentDisplayLabel(gSeg, g)}',
-              waitDuration: const Duration(milliseconds: 300),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () => _activateFormulaEditor(index: g, segment: gSeg),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(3),
-                      border:
-                          Border.all(color: Colors.grey.shade300, width: 0.5),
-                    ),
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 10,
-                        height: 1.2,
-                        color: Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-        // If no explicit glue segments, show the implicit gap as a tappable
-        // label so users can edit it directly.
-        if (glueBetween.isEmpty && i < gapStrings.length) {
-          final gap = gapStrings[i];
-          final isFocused = _focusedGapIndex == i;
-          final displayLabel = gap.isEmpty ? '(no sep)' : gap;
-          glueBetween.add(
-            Tooltip(
-              message: 'Tap to edit separator',
-              waitDuration: const Duration(milliseconds: 300),
-              child: MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _closeAllInlineEdits();
-                      _focusedGapIndex = isFocused ? null : i;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: isFocused
-                          ? const Color(0xFFEEF4FF)
-                          : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(3),
-                      border: Border.all(
-                        color: isFocused
-                            ? const Color(0xFF2563EB)
-                            : Colors.grey.shade300,
-                        width: isFocused ? 1.2 : 0.5,
-                      ),
-                    ),
-                    child: Text(
-                      displayLabel,
-                      style: TextStyle(
-                        fontSize: 10,
-                        height: 1.2,
-                        color: isFocused
-                            ? const Color(0xFF2563EB)
-                            : Colors.grey.shade600,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-        for (final g in glueBetween) {
-          widgets.add(g);
-        }
-      }
     }
     return widgets;
   }
@@ -3312,17 +3518,29 @@ class _CaptionLayoutBuilderDialogState
   @override
   Widget build(BuildContext context) {
     _scheduleAutosave();
-    // Use the real session caption body when available; fall back to random sample.
+    final previewPlayers = CaptionSessionContext.previewPlayers;
+    final previewActions = CaptionSessionContext.previewActions;
+    final hasLivePreviewData =
+        previewPlayers.isNotEmpty && previewActions.isNotEmpty;
+    // Prefer live roster+verb samples; fall back to last rendered caption body.
     final sessionBody = CaptionSessionContext.captionBody;
-    final sampleCaption = sessionBody != null && sessionBody.isNotEmpty
-        ? sessionBody
-        : CaptionFormulaRenderer.randomSinglePlayerCaption(
+    final sampleCaption = hasLivePreviewData
+        ? CaptionFormulaRenderer.randomSinglePlayerCaption(
             _template,
             seed: _captionSampleSeed,
-          );
+            previewPlayers: previewPlayers,
+            previewActions: previewActions,
+          )
+        : (sessionBody != null && sessionBody.isNotEmpty
+            ? sessionBody
+            : CaptionFormulaRenderer.randomSinglePlayerCaption(
+                _template,
+                seed: _captionSampleSeed,
+              ));
     final playerPreviewText = CaptionFormulaRenderer.randomSinglePlayerPreview(
       _template,
       seed: _captionSampleSeed,
+      previewPlayers: hasLivePreviewData ? previewPlayers : null,
     );
     final previewAgency = _sampleAgencyForWire(_selectedWire);
     final fullCaptionPreview = CaptionFormulaRenderer.render(
@@ -4509,10 +4727,7 @@ class _CaptionLayoutBuilderDialogState
                                           _captionPreviewSelected ||
                                           _venuePreviewSelected ||
                                           _bylinePreviewSelected ||
-                                          _customTextSnippetEditorOpen ||
-                                          _separatorSnippetEditorOpen ||
-                                          _punctuationSnippetEditorOpen ||
-                                          _focusedGapIndex != null) ...[
+                                          _customTextSnippetEditorOpen) ...[
                                         const SizedBox(height: 8),
                                         Container(
                                           decoration: BoxDecoration(
@@ -4564,26 +4779,11 @@ class _CaptionLayoutBuilderDialogState
                                                       MainAxisSize.min,
                                                   children: [
                                                     if (_captionPreviewSelected)
-                                                      Text(
-                                                        'The portion of the caption made in the app',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          color: Colors
-                                                              .grey.shade700,
-                                                        ),
-                                                      ),
-                                                    if (_focusedGapIndex != null &&
-                                                        _focusedGapIndex! < _gapControllers.length)
-                                                      _GapSeparatorField(
-                                                        controller: _gapControllers[_focusedGapIndex!],
-                                                      )
+                                                      _captionSegmentEditor()
                                                     else if (_customTextSnippetEditorOpen)
                                                       _customTextSnippetEditor()
-                                                    else if (_separatorSnippetEditorOpen ||
-                                                        _punctuationSnippetEditorOpen)
-                                                      _snippetLiteralEditor()
+                                                    else if (_venuePreviewSelected)
+                                                      _venueEditor()
                                                     else if (_bylinePreviewSelected)
                                                       _bylineEditor(),
                                                     if (_dateEditorOpen)
@@ -4709,6 +4909,7 @@ class _GapSeparatorField extends StatefulWidget {
 
 class _GapSeparatorFieldState extends State<_GapSeparatorField> {
   final FocusNode _focus = FocusNode();
+  bool _wasFocused = false;
 
   @override
   void initState() {
@@ -4717,6 +4918,19 @@ class _GapSeparatorFieldState extends State<_GapSeparatorField> {
   }
 
   void _onFocusNodeChanged() {
+    final focused = _focus.hasFocus;
+    // Normalize on blur so pre-existing or hand-typed bad spacing is fixed.
+    if (_wasFocused && !focused) {
+      final raw = widget.controller.text;
+      final normalized = _CaptionLayoutBuilderDialogState._normalizeSep(raw);
+      if (normalized != raw) {
+        widget.controller.value = TextEditingValue(
+          text: normalized,
+          selection: TextSelection.collapsed(offset: normalized.length),
+        );
+      }
+    }
+    _wasFocused = focused;
     setState(() {});
   }
 
@@ -4731,8 +4945,8 @@ class _GapSeparatorFieldState extends State<_GapSeparatorField> {
   Widget build(BuildContext context) {
     final focused = _focus.hasFocus;
     return Container(
-      width: 44,
-      height: 28,
+      width: 56,
+      height: 34,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(4),
@@ -4747,9 +4961,10 @@ class _GapSeparatorFieldState extends State<_GapSeparatorField> {
           focusNode: _focus,
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 15,
             color: Colors.grey.shade800,
             height: 1.1,
+            fontFamily: 'monospace',
           ),
           decoration: const InputDecoration(
             isDense: true,
@@ -4935,27 +5150,61 @@ class _BylineSeparatorInput extends StatefulWidget {
   State<_BylineSeparatorInput> createState() => _BylineSeparatorInputState();
 }
 
+class _VisibleSpaceTextController extends TextEditingController {
+  _VisibleSpaceTextController({super.text});
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final spaceStyle = style?.copyWith(
+      fontSize: (style.fontSize ?? 13) * 0.75,
+      color: Colors.grey.shade500,
+    );
+    return TextSpan(
+      style: style,
+      children: [
+        for (final ch in text.split(''))
+          TextSpan(
+            text: ch == ' ' ? '⎵' : ch,
+            style: ch == ' ' ? spaceStyle : null,
+          ),
+      ],
+    );
+  }
+}
+
 class _BylineSeparatorInputState extends State<_BylineSeparatorInput> {
-  late final TextEditingController _ctrl =
-      TextEditingController(text: widget.value);
+  late final TextEditingController _ctrl;
   final FocusNode _focus = FocusNode();
   bool _focused = false;
 
   @override
   void initState() {
     super.initState();
+    _ctrl = _VisibleSpaceTextController(
+      text: widget.value,
+    );
     _focus.addListener(_onFocus);
   }
 
   @override
   void didUpdateWidget(covariant _BylineSeparatorInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_focus.hasFocus && widget.value != _ctrl.text) {
+    final value = widget.value;
+    if (!_focus.hasFocus && value != _ctrl.text) {
       _ctrl.value = TextEditingValue(
-        text: widget.value,
-        selection: TextSelection.collapsed(offset: widget.value.length),
+        text: value,
+        selection: TextSelection.collapsed(offset: value.length),
       );
     }
+  }
+
+  void _handleChanged(String value) {
+    setState(() {});
+    widget.onChanged(value);
   }
 
   void _onFocus() {
@@ -4975,6 +5224,12 @@ class _BylineSeparatorInputState extends State<_BylineSeparatorInput> {
   Widget build(BuildContext context) {
     final borderColor = _focused ? _captionLayoutBlue : Colors.grey.shade300;
     final borderWidth = _focused ? 1.5 : 1.0;
+    const style = TextStyle(
+      fontSize: 13,
+      color: Color(0xFF3A3A3A),
+      height: 1.1,
+    );
+    final fieldWidth = _fieldWidthFor(_ctrl.text, style);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -4984,7 +5239,7 @@ class _BylineSeparatorInputState extends State<_BylineSeparatorInput> {
           if (!_focus.hasFocus) _focus.requestFocus();
         },
         child: Container(
-          width: 38,
+          width: fieldWidth,
           height: 28,
           decoration: BoxDecoration(
             color: Colors.white,
@@ -4995,11 +5250,7 @@ class _BylineSeparatorInputState extends State<_BylineSeparatorInput> {
           child: TextField(
             controller: _ctrl,
             focusNode: _focus,
-            style: const TextStyle(
-              fontSize: 13,
-              color: Color(0xFF3A3A3A),
-              height: 1.1,
-            ),
+            style: style,
             textAlign: TextAlign.center,
             cursorWidth: 1.2,
             cursorColor: _captionLayoutBlue,
@@ -5011,11 +5262,21 @@ class _BylineSeparatorInputState extends State<_BylineSeparatorInput> {
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
             ),
-            onChanged: widget.onChanged,
+            onChanged: _handleChanged,
           ),
         ),
       ),
     );
+  }
+
+  static double _fieldWidthFor(String text, TextStyle style) {
+    final visible = text.isEmpty ? ' ' : text.replaceAll(' ', '⎵');
+    final painter = TextPainter(
+      text: TextSpan(text: visible, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    return (painter.width + 18).clamp(38.0, 260.0);
   }
 }
 

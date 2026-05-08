@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../caption_style/date_formula.dart';
 
 /// Matches the caption layout dialog's accent blue.
@@ -73,11 +72,10 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
   /// every field on without ever needing an "Add field" button.
   late List<_DateField> _fields;
 
-  /// Literal text between fields. Length is always `_fields.length - 1`,
-  /// where `_separators[i]` is the literal between `_fields[i]` and
-  /// `_fields[i + 1]`.
+  /// Literal text around fields. Length is always `_fields.length + 1`.
+  /// `_separators[0]` is before the first field, `_separators[i + 1]`
+  /// follows `_fields[i]`, and the final entry is after the last field.
   late List<String> _separators;
-
   int? _openPopoverFieldIndex;
 
   @override
@@ -98,10 +96,7 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
   ///
   /// The persisted model uses `separators.length == fields.length + 1` (i.e.
   /// a leading + a trailing literal slot in addition to the between-field
-  /// gaps). The editor only exposes between-field gaps; legacy non-empty
-  /// leading/trailing literals are dropped because they have no chip to
-  /// attach to in the new flat editor and also wouldn't be reachable in the
-  /// new render path (which strips them too).
+  /// gaps), and the editor exposes all of those slots.
   void _parseFromFormula() {
     final f = widget.formula;
     final fields = <_DateField>[];
@@ -113,24 +108,23 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
         enabled: tok.enabled,
       ));
     }
-    final between = <String>[];
-    // separators[i] for i in 1..fields.length-1 sits between fields[i-1] and
-    // fields[i]. separators[0] (leading) and separators[last] (trailing) are
-    // ignored.
-    for (var i = 1; i < f.fields.length; i++) {
-      between.add(i < f.separators.length ? f.separators[i] : ' ');
+    final seps = <String>[];
+    for (var i = 0; i <= f.fields.length; i++) {
+      seps.add(i < f.separators.length ? f.separators[i] : '');
     }
 
     final present = fields.map((e) => e.kind).toSet();
     for (final k in _allDateKinds) {
       if (!present.contains(k)) {
-        if (fields.isNotEmpty) between.add(_defaultSeparator(k));
+        final insertAt = seps.isEmpty ? 0 : seps.length - 1;
+        if (seps.isEmpty) seps.add('');
+        seps.insert(insertAt, fields.isNotEmpty ? _defaultSeparator(k) : '');
         fields.add(_DateField(kind: k, enabled: false));
       }
     }
 
     _fields = fields;
-    _separators = between;
+    _separators = seps;
   }
 
   String _defaultSeparator(DateFieldKind k) {
@@ -145,10 +139,12 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
   }
 
   /// Convert the current (fields, separators) state back to a [DateFormula]
-  /// and emit it to the parent. Leading/trailing literal slots are forced
-  /// empty (the editor never exposes them) so the canonical
-  /// `separators.length == fields.length + 1` invariant still holds.
+  /// and emit it to the parent.
   void _emit() {
+    widget.onChanged(_currentFormula());
+  }
+
+  DateFormula _currentFormula() {
     final tokens = _fields
         .map((f) => DateFieldToken(
               kind: f.kind,
@@ -157,13 +153,11 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
               enabled: f.enabled,
             ))
         .toList();
-    final seps = <String>[];
-    seps.add('');
-    for (final s in _separators) {
-      seps.add(s);
-    }
-    seps.add('');
-    widget.onChanged(DateFormula(fields: tokens, separators: seps));
+    return DateFormula(
+      fields: tokens,
+      separators: List<String>.from(_separators),
+      autoSpacing: false,
+    );
   }
 
   // -- Mutations -------------------------------------------------------------
@@ -201,13 +195,13 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
       if (insert < 0) insert = 0;
       if (insert > _fields.length) insert = _fields.length;
       _fields.insert(insert, f);
-      // Separators are positional — they always sit between adjacent slots —
+      // Separators are positional — they sit around adjacent slots —
       // so we leave them in place and let the user re-edit if needed. We do
-      // need to make sure the count stays exactly `_fields.length - 1`.
-      while (_separators.length > _fields.length - 1) {
+      // need to make sure the count stays exactly `_fields.length + 1`.
+      while (_separators.length > _fields.length + 1) {
         _separators.removeLast();
       }
-      while (_separators.length < _fields.length - 1) {
+      while (_separators.length < _fields.length + 1) {
         _separators.add(' ');
       }
     });
@@ -224,18 +218,35 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
       children: [
         _tokenRow(),
         const SizedBox(height: 6),
+        _spaceLegend(),
+        const SizedBox(height: 6),
         _previewLine(),
       ],
     );
   }
 
+  Widget _spaceLegend() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        '⎵ = space',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey.shade500,
+        ),
+      ),
+    );
+  }
+
   Widget _tokenRow() {
     final children = <Widget>[];
+    if (_fields.isNotEmpty) {
+      children.add(_separatorInput(0));
+    }
     for (var i = 0; i < _fields.length; i++) {
       children.add(_fieldChip(i));
-      if (i < _fields.length - 1) {
-        children.add(_separatorInput(i));
-      }
+      children.add(_separatorInput(i + 1));
     }
     return Container(
       width: double.infinity,
@@ -433,7 +444,7 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
 
   Widget _previewLine() {
     final date = widget.sampleDate ?? _fallbackSampleDate();
-    final rendered = widget.formula.render(date);
+    final rendered = _currentFormula().render(date);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
@@ -743,6 +754,32 @@ class _OptionsCard extends StatelessWidget {
   }
 }
 
+class _VisibleSpaceTextController extends TextEditingController {
+  _VisibleSpaceTextController({super.text});
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final spaceStyle = style?.copyWith(
+      fontSize: (style.fontSize ?? 15) * 0.75,
+      color: Colors.grey.shade500,
+    );
+    return TextSpan(
+      style: style,
+      children: [
+        for (final ch in text.split(''))
+          TextSpan(
+            text: ch == ' ' ? '⎵' : ch,
+            style: ch == ' ' ? spaceStyle : null,
+          ),
+      ],
+    );
+  }
+}
+
 /// Fixed-size separator text field — sized to roughly five characters wide so
 /// it's the obvious "small punctuation slot" between two field chips.
 ///
@@ -765,29 +802,34 @@ class _DateSeparatorInput extends StatefulWidget {
 }
 
 class _DateSeparatorInputState extends State<_DateSeparatorInput> {
-  late final TextEditingController _ctrl =
-      TextEditingController(text: widget.value);
+  late final TextEditingController _ctrl;
   final FocusNode _focus = FocusNode();
   bool _focused = false;
 
   @override
   void initState() {
     super.initState();
+    _ctrl = _VisibleSpaceTextController(
+      text: widget.value,
+    );
     _focus.addListener(_onFocus);
   }
 
   @override
   void didUpdateWidget(covariant _DateSeparatorInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // While the user is actively typing we let our local controller win; only
-    // pick up an external change when focus is elsewhere (e.g. the parent
-    // restored a saved template or a reorder shuffled the separator pool).
-    if (!_focus.hasFocus && widget.value != _ctrl.text) {
+    final value = widget.value;
+    if (!_focus.hasFocus && value != _ctrl.text) {
       _ctrl.value = TextEditingValue(
-        text: widget.value,
-        selection: TextSelection.collapsed(offset: widget.value.length),
+        text: value,
+        selection: TextSelection.collapsed(offset: value.length),
       );
     }
+  }
+
+  void _handleChanged(String value) {
+    setState(() {});
+    widget.onChanged(value);
   }
 
   void _onFocus() {
@@ -807,6 +849,7 @@ class _DateSeparatorInputState extends State<_DateSeparatorInput> {
   Widget build(BuildContext context) {
     final borderColor = _focused ? _editorBlue : Colors.grey.shade300;
     final borderWidth = _focused ? 1.5 : 1.0;
+    final fieldWidth = _fieldWidthFor(_ctrl.text, _style);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -816,8 +859,8 @@ class _DateSeparatorInputState extends State<_DateSeparatorInput> {
           if (!_focus.hasFocus) _focus.requestFocus();
         },
         child: Container(
-          width: 38,
-          height: 28,
+          width: fieldWidth,
+          height: 34,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(4),
@@ -839,7 +882,7 @@ class _DateSeparatorInputState extends State<_DateSeparatorInput> {
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
             ),
-            onChanged: widget.onChanged,
+            onChanged: _handleChanged,
           ),
         ),
       ),
@@ -847,8 +890,20 @@ class _DateSeparatorInputState extends State<_DateSeparatorInput> {
   }
 
   static const TextStyle _style = TextStyle(
-    fontSize: 13,
+    fontSize: 15,
     color: _fieldText,
     height: 1.1,
+    fontFamily: 'monospace',
   );
+
+  static double _fieldWidthFor(String text, TextStyle style) {
+    final visible = text.isEmpty ? ' ' : text.replaceAll(' ', '⎵');
+    final painter = TextPainter(
+      text: TextSpan(text: visible, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    return (painter.width + 18).clamp(56.0, 260.0);
+  }
 }
+

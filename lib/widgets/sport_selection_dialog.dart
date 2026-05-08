@@ -75,8 +75,8 @@ class SportSelectionDialog extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: 520,
-            constraints: const BoxConstraints(maxHeight: 420),
+            width: 720,
+            height: 600,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             color: Colors.white,
             child: Column(

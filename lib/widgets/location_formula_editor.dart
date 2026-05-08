@@ -79,11 +79,10 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
   /// in [_allGeoKinds]; missing kinds are appended at the end as disabled.
   late List<_LocField> _fields;
 
-  /// Literal text between fields. Length is always `_fields.length - 1`,
-  /// where `_separators[i]` is the literal between `_fields[i]` and
-  /// `_fields[i + 1]`.
+  /// Literal text around fields. Length is always `_fields.length + 1`.
+  /// `_separators[0]` is before the first field, `_separators[i + 1]`
+  /// follows `_fields[i]`, and the final entry is after the last field.
   late List<String> _separators;
-
   @override
   void initState() {
     super.initState();
@@ -100,24 +99,18 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
 
   /// Build [_fields] / [_separators] from the persisted chip list. Geo chips
   /// are taken in their saved order with their saved enabled/caps/variant.
-  /// Literal chips between two geos collapse into a single separator string;
-  /// any leading or trailing literals are dropped because they have no chip to
-  /// attach to in the new flat editor.
+  /// Literal chips collapse into separator slots around the geo chips.
   void _parseFromOptions() {
     final fields = <_LocField>[];
     final seps = <String>[];
     final pendingLit = StringBuffer();
-    var sawAnyField = false;
     for (final c in widget.options.chips) {
       if (c.kind == LocationChipKind.literal) {
-        if (sawAnyField) pendingLit.write(c.literal);
+        pendingLit.write(c.literal);
         continue;
       }
-      if (sawAnyField) {
-        seps.add(pendingLit.toString());
-      }
+      seps.add(pendingLit.toString());
       pendingLit.clear();
-      sawAnyField = true;
       fields.add(_LocField(
         kind: c.kind,
         id: c.id,
@@ -137,7 +130,11 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     final present = fields.map((f) => f.kind).toSet();
     for (final k in _allGeoKinds) {
       if (!present.contains(k)) {
-        if (fields.isNotEmpty) seps.add(_defaultSeparator(k));
+        if (fields.isEmpty) {
+          seps.add('');
+        } else {
+          seps.add(_defaultSeparator(k));
+        }
         fields.add(_LocField(
           kind: k,
           id: _newId(k.name),
@@ -145,6 +142,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
         ));
       }
     }
+    seps.add(pendingLit.toString());
 
     _fields = fields;
     _separators = seps;
@@ -160,17 +158,19 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
   /// Convert the current (fields, separators) state back to the canonical
   /// [LocationLineOptions.chips] list and emit it to the parent.
   void _emit() {
+    widget.onChanged(_currentOptions());
+  }
+
+  LocationLineOptions _currentOptions() {
     final out = <LocationChip>[];
     for (var i = 0; i < _fields.length; i++) {
-      if (i > 0) {
-        final sep = _separators[i - 1];
-        if (sep.isNotEmpty) {
-          out.add(LocationChip(
-            id: _newId('lit'),
-            kind: LocationChipKind.literal,
-            literal: sep,
-          ));
-        }
+      final sep = i < _separators.length ? _separators[i] : '';
+      if (sep.isNotEmpty) {
+        out.add(LocationChip(
+          id: _newId('lit'),
+          kind: LocationChipKind.literal,
+          literal: sep,
+        ));
       }
       final f = _fields[i];
       out.add(LocationChip(
@@ -186,7 +186,20 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
             : LocationRegionVariant.fullName,
       ));
     }
-    widget.onChanged(widget.options.copyWith(uppercase: false, chips: out));
+    final trailing =
+        _fields.length < _separators.length ? _separators[_fields.length] : '';
+    if (trailing.isNotEmpty) {
+      out.add(LocationChip(
+        id: _newId('lit'),
+        kind: LocationChipKind.literal,
+        literal: trailing,
+      ));
+    }
+    return widget.options.copyWith(
+      uppercase: false,
+      chips: out,
+      autoSpacing: false,
+    );
   }
 
   // -- Mutations -------------------------------------------------------------
@@ -232,13 +245,13 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
       if (insert < 0) insert = 0;
       if (insert > _fields.length) insert = _fields.length;
       _fields.insert(insert, f);
-      // Separators are positional — they always sit between adjacent slots —
+      // Separators are positional — they sit around adjacent slots —
       // so we leave them in place and let the user re-edit if needed. We do
-      // need to make sure the count stays exactly `_fields.length - 1`.
-      while (_separators.length > _fields.length - 1) {
+      // need to make sure the count stays exactly `_fields.length + 1`.
+      while (_separators.length > _fields.length + 1) {
         _separators.removeLast();
       }
-      while (_separators.length < _fields.length - 1) {
+      while (_separators.length < _fields.length + 1) {
         _separators.add(', ');
       }
     });
@@ -255,18 +268,35 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
       children: [
         _tokenRow(),
         const SizedBox(height: 6),
+        _spaceLegend(),
+        const SizedBox(height: 6),
         _previewLine(),
       ],
     );
   }
 
+  Widget _spaceLegend() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Text(
+        '⎵ = space',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w500,
+          color: Colors.grey.shade500,
+        ),
+      ),
+    );
+  }
+
   Widget _tokenRow() {
     final children = <Widget>[];
+    if (_fields.isNotEmpty) {
+      children.add(_separatorInput(0));
+    }
     for (var i = 0; i < _fields.length; i++) {
       children.add(_fieldChip(i));
-      if (i < _fields.length - 1) {
-        children.add(_separatorInput(i));
-      }
+      children.add(_separatorInput(i + 1));
     }
     return Container(
       width: double.infinity,
@@ -468,7 +498,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     final sample = widget.sampleGameInfo ?? _fallbackSampleGameInfo();
     final rendered = CaptionFormulaRenderer.formatLocationLine(
       sample,
-      widget.options,
+      _currentOptions(),
     );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1001,6 +1031,32 @@ String _locationFieldLabel(LocationChipKind k) {
   }
 }
 
+class _VisibleSpaceTextController extends TextEditingController {
+  _VisibleSpaceTextController({super.text});
+
+  @override
+  TextSpan buildTextSpan({
+    required BuildContext context,
+    TextStyle? style,
+    required bool withComposing,
+  }) {
+    final spaceStyle = style?.copyWith(
+      fontSize: (style.fontSize ?? 15) * 0.75,
+      color: Colors.grey.shade500,
+    );
+    return TextSpan(
+      style: style,
+      children: [
+        for (final ch in text.split(''))
+          TextSpan(
+            text: ch == ' ' ? '⎵' : ch,
+            style: ch == ' ' ? spaceStyle : null,
+          ),
+      ],
+    );
+  }
+}
+
 /// Fixed-size separator text field — sized to roughly five characters wide so
 /// it's the obvious "small punctuation slot" between two field chips.
 class _LocSeparatorInput extends StatefulWidget {
@@ -1022,29 +1078,34 @@ class _LocSeparatorInput extends StatefulWidget {
 }
 
 class _LocSeparatorInputState extends State<_LocSeparatorInput> {
-  late final TextEditingController _ctrl =
-      TextEditingController(text: widget.value);
+  late final TextEditingController _ctrl;
   final FocusNode _focus = FocusNode();
   bool _focused = false;
 
   @override
   void initState() {
     super.initState();
+    _ctrl = _VisibleSpaceTextController(
+      text: widget.value,
+    );
     _focus.addListener(_onFocus);
   }
 
   @override
   void didUpdateWidget(covariant _LocSeparatorInput oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // While the user is actively typing we let our local controller win; only
-    // pick up an external change when focus is elsewhere (e.g. the parent
-    // restored a saved template or a reorder shuffled the separator pool).
-    if (!_focus.hasFocus && widget.value != _ctrl.text) {
+    final value = widget.value;
+    if (!_focus.hasFocus && value != _ctrl.text) {
       _ctrl.value = TextEditingValue(
-        text: widget.value,
-        selection: TextSelection.collapsed(offset: widget.value.length),
+        text: value,
+        selection: TextSelection.collapsed(offset: value.length),
       );
     }
+  }
+
+  void _handleChanged(String value) {
+    setState(() {});
+    widget.onChanged(value);
   }
 
   void _onFocus() {
@@ -1064,6 +1125,7 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
   Widget build(BuildContext context) {
     final borderColor = _focused ? _editorBlue : Colors.grey.shade300;
     final borderWidth = _focused ? 1.5 : 1.0;
+    final fieldWidth = _fieldWidthFor(_ctrl.text, _style);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -1078,8 +1140,8 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
           if (!_focus.hasFocus) _focus.requestFocus();
         },
         child: Container(
-          width: 38,
-          height: 28,
+          width: fieldWidth,
+          height: 34,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(4),
@@ -1101,7 +1163,7 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
             ),
-            onChanged: widget.onChanged,
+            onChanged: _handleChanged,
           ),
         ),
       ),
@@ -1109,8 +1171,19 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
   }
 
   static const TextStyle _style = TextStyle(
-    fontSize: 13,
+    fontSize: 15,
     color: _fieldText,
     height: 1.1,
+    fontFamily: 'monospace',
   );
+
+  static double _fieldWidthFor(String text, TextStyle style) {
+    final visible = text.isEmpty ? ' ' : text.replaceAll(' ', '⎵');
+    final painter = TextPainter(
+      text: TextSpan(text: visible, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    return (painter.width + 18).clamp(56.0, 260.0);
+  }
 }
