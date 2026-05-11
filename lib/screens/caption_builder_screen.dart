@@ -5713,14 +5713,47 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           key: _captionFieldsKey2,
                           metadata: currentMetadata,
                           cameraService: _cameraService,
-                          onMetadataUpdated: (_) {},
+                          onMetadataUpdated: (metadata) {
+                            setState(() {
+                              currentMetadata = metadata;
+                            });
+                          },
+                          onVerbOverridesChanged: () => setState(() {}),
                           getCurrentMetadataValues: () => {},
                           homeTeam: selectedHomeTeam,
                           awayTeam: selectedAwayTeam,
                           sport: _selectedSport,
-                          onNextImage: () {},
-                          onPreviousImage: () {},
+                          currentImagePath: imagePaths.isNotEmpty &&
+                                  currentIndex >= 0 &&
+                                  currentIndex < imagePaths.length
+                              ? imagePaths[currentIndex]
+                              : null,
+                          currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                          totalImages: imagePaths.length,
+                          onNextImage: () {
+                            if (currentIndex < imagePaths.length - 1) {
+                              setState(() {
+                                _thumbCenterRequestId++;
+                              });
+                              _onImageSelected(currentIndex + 1);
+                            }
+                          },
+                          onPreviousImage: () {
+                            if (currentIndex > 0) {
+                              setState(() {
+                                _thumbCenterRequestId++;
+                              });
+                              _onImageSelected(currentIndex - 1);
+                            }
+                          },
                           onReset: _handleReset,
+                          personalityOverride: _personalityOverride,
+                          onImagesLoaded: (files) {
+                            setState(() {
+                              imagePaths = files;
+                              currentIndex = 0;
+                            });
+                          },
                           preloadedHomeRoster: _cachedHomeRoster.isNotEmpty
                               ? _cachedHomeRoster
                               : null,
@@ -5731,6 +5764,31 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                           onSaveIptc: _saveIptcMetadata,
                           bulkSaveCount: _bulkSaveCount,
                           onSaveIptcBackground: _saveIptcMetadataBackground,
+                          onCopyMetadata: () =>
+                              _onCopyMetadata(imagePaths[currentIndex]),
+                          onImageUploaded: (imagePath) {
+                            if (!_currentlyUploading.contains(imagePath)) {
+                              setState(() {
+                                _uploadedImages.add(imagePath);
+                                _uploadProgress[imagePath] =
+                                    1.0;
+                              });
+                            }
+                          },
+                          onUploadProgress: (imagePath, progress) {
+                            setState(() {
+                              _uploadProgress[imagePath] = progress;
+                            });
+                          },
+                          isImageUploaded: (imagePath) {
+                            return _uploadedImages.contains(imagePath);
+                          },
+                          onClearUploadStatus: (imagePath) {
+                            setState(() {
+                              _uploadedImages.remove(imagePath);
+                              _uploadProgress.remove(imagePath);
+                            });
+                          },
                         ),
                       ),
                     ),

@@ -3051,6 +3051,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   @override
   void didUpdateWidget(CaptionFieldsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final bool imageIdentityChanged =
+        widget.currentImagePath != oldWidget.currentImagePath ||
+            widget.currentIndex != oldWidget.currentIndex;
 
     // Check if sport has changed and reload preferences
     if (oldWidget.sport != widget.sport) {
@@ -3064,6 +3067,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         widget.personalityOverride != oldWidget.personalityOverride) {
       personalityController.text = widget.personalityOverride!;
     }
+    // If the selected image changed, always clear reset-lock immediately so
+    // incoming metadata for the new image can be bound.
+    if (imageIdentityChanged && _hasBeenReset) {
+      _hasBeenReset = false;
+    }
     if (widget.metadata != oldWidget.metadata) {
       // Only auto-store if the save handler hasn't already done it explicitly.
       // After an explicit save, _skipNextAutoStore is true to prevent
@@ -3076,9 +3084,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       // New image or first metadata: full reset. Same image (e.g. IPTC save): players only
       // so inning/verb stay; player chips clear for the next frame.
-      final bool imageIdentityChanged =
-          widget.currentImagePath != oldWidget.currentImagePath ||
-              widget.currentIndex != oldWidget.currentIndex;
       final bool firstMetadataBind =
           oldWidget.metadata == null && widget.metadata != null;
       if (imageIdentityChanged || firstMetadataBind) {
