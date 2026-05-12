@@ -726,18 +726,75 @@ class _CaptionLayoutBuilderDialogState
     return jsonEncode(source.toJson());
   }
 
+  /// Ensures [customSeparators] matches the live gap text fields before encoding.
+  void _flushGapControllersIntoTemplate() {
+    if (_gapControllers.isEmpty) return;
+    _template = _template.copyWith(
+      customSeparators: _gapControllers.map((c) => c.text).toList(),
+    );
+  }
+
+  /// Writes the current layout to preferences (active template, optional library row,
+  /// field visibility). [syncBuiltInWireDefault] updates the per-wire baseline when
+  /// editing a built-in wire (not a named library style).
+  Future<void> _persistCaptionLayoutToPreferences({
+    bool syncBuiltInWireDefault = false,
+    bool allowSkipIfUnchanged = true,
+  }) async {
+    _autosaveDebounce?.cancel();
+    _flushGapControllersIntoTemplate();
+    final normalized = _template.normalizePerOccurrenceLists();
+    final saveSnapshot = _templateSnapshot(normalized);
+    if (allowSkipIfUnchanged &&
+        saveSnapshot == _lastSavedTemplateSnapshot &&
+        !syncBuiltInWireDefault) {
+      return;
+    }
+    final prefs = await PreferencesService.getInstance();
+    await prefs.saveCaptionTemplate(normalized);
+    await prefs.saveShowKeywordsField(_showKeywordsField);
+    await prefs.saveShowPersonalityField(_showPersonalityField);
+
+    final libId = _selectedSavedStyleId;
+    if (libId != null) {
+      await prefs.updateCaptionStyleTemplateInLibrary(
+        id: libId,
+        template: normalized,
+      );
+    }
+
+    if (syncBuiltInWireDefault &&
+        libId == null &&
+        _isBuiltInWire(_selectedWire)) {
+      await prefs.saveCaptionTemplateWireDefault(_selectedWire, normalized);
+    }
+
+    _lastSavedTemplateSnapshot = saveSnapshot;
+
+    List<CaptionStyleLibraryEntry>? refreshedLib;
+    if (libId != null) {
+      refreshedLib = await prefs.getCaptionStyleLibrary();
+    }
+    if (!mounted) return;
+    _template = normalized;
+    final lib = refreshedLib;
+    if (lib != null) {
+      setState(() => _captionStyleLibrary = lib);
+    }
+  }
+
   void _scheduleAutosave() {
     if (!_prefsLoaded) return;
     final snapshot = _templateSnapshot();
     if (snapshot == _lastSavedTemplateSnapshot) return;
     _autosaveDebounce?.cancel();
     _autosaveDebounce = Timer(const Duration(milliseconds: 220), () async {
-      final templateToSave = _template;
-      final saveSnapshot = _templateSnapshot(templateToSave);
-      if (saveSnapshot == _lastSavedTemplateSnapshot) return;
-      final prefs = await PreferencesService.getInstance();
-      await prefs.saveCaptionTemplate(templateToSave);
-      _lastSavedTemplateSnapshot = saveSnapshot;
+      try {
+        await _persistCaptionLayoutToPreferences(
+          syncBuiltInWireDefault: false,
+          allowSkipIfUnchanged: true,
+        );
+      } catch (_) {}
     });
   }
 
@@ -1523,13 +1580,29 @@ class _CaptionLayoutBuilderDialogState
   }
 
   Future<void> _save() async {
-    _autosaveDebounce?.cancel();
-    final prefs = await PreferencesService.getInstance();
-    await prefs.saveCaptionTemplate(_template);
-    await prefs.saveShowKeywordsField(_showKeywordsField);
-    await prefs.saveShowPersonalityField(_showPersonalityField);
-    _lastSavedTemplateSnapshot = _templateSnapshot();
-    if (mounted) Navigator.of(context).pop();
+    if (!_prefsLoaded) return;
+    try {
+      await _persistCaptionLayoutToPreferences(
+        syncBuiltInWireDefault: true,
+        allowSkipIfUnchanged: false,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Caption layout saved.'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Could not save caption layout: $e'),
+          backgroundColor: Colors.red.shade800,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    }
   }
 
   /// Three modes for the Rename / Save-as dialog:
@@ -1769,9 +1842,23 @@ class _CaptionLayoutBuilderDialogState
     // Flush any unsaved changes that were still pending in the debounce buffer.
     final snapshot = _templateSnapshot();
     if (_prefsLoaded && snapshot != _lastSavedTemplateSnapshot) {
-      final templateToSave = _template;
-      PreferencesService.getInstance().then((prefs) {
-        prefs.saveCaptionTemplate(templateToSave);
+      _flushGapControllersIntoTemplate();
+      final normalized = _template.normalizePerOccurrenceLists();
+      final libId = _selectedSavedStyleId;
+      final keywords = _showKeywordsField;
+      final personality = _showPersonalityField;
+      PreferencesService.getInstance().then((prefs) async {
+        try {
+          await prefs.saveCaptionTemplate(normalized);
+          await prefs.saveShowKeywordsField(keywords);
+          await prefs.saveShowPersonalityField(personality);
+          if (libId != null) {
+            await prefs.updateCaptionStyleTemplateInLibrary(
+              id: libId,
+              template: normalized,
+            );
+          }
+        } catch (_) {}
       });
     }
     _disposeGapControllers();

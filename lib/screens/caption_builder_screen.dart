@@ -6037,6 +6037,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                             }
                           }
                         },
+                        onTagsSubOptionChanged: (String? tagAction) {
+                          final captionState = _captionFieldsKey2.currentState;
+                          if (captionState != null) {
+                            try {
+                              final dynamic state = captionState;
+                              if (state.mounted) {
+                                state.applyTagsSubOptionFromPopup(tagAction);
+                              }
+                            } catch (e) {
+                              print('Error applying tags sub-option: $e');
+                            }
+                          }
+                        },
                         onPeriodChanged: (String? period) {
                           final captionState = _captionFieldsKey2.currentState;
                           if (captionState != null) {

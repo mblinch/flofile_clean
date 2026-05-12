@@ -6,6 +6,7 @@ import '../utils/default_verb_keywords.dart';
 import 'package:flutter/services.dart';
 import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
+import '../utils/baseball_tags_popup_rows.dart';
 
 class PlayerPopupCaptionBoard extends StatefulWidget {
   final String? homeTeamName;
@@ -24,6 +25,8 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
     bool? firstIsHome,
   )? onSelectionChanged;
   final ValueChanged<String>? onCustomVerbChanged;
+  /// Baseball only: full Tags Runner Out string, empty map value clears detail, null clears.
+  final ValueChanged<String?>? onTagsSubOptionChanged;
   final ValueChanged<String?>? onPeriodChanged;
   /// Baseball only: inning 1–9 (or null). Clears when Pre-Game/Post Game is chosen.
   final ValueChanged<int?>? onInningChanged;
@@ -54,6 +57,7 @@ class PlayerPopupCaptionBoard extends StatefulWidget {
     this.onCaptionGenerated,
     this.onSelectionChanged,
     this.onCustomVerbChanged,
+    this.onTagsSubOptionChanged,
     this.onPeriodChanged,
     this.onInningChanged,
     this.onSwitchTeams,
@@ -1686,27 +1690,45 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                             _selectedAwayPlayers.isNotEmpty ||
                                             _stickyHomePlayers.isNotEmpty ||
                                             _stickyAwayPlayers.isNotEmpty))
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade50,
-                                          border: Border(
-                                            bottom: BorderSide(
-                                              color: Colors.grey.shade200,
-                                              width: 0.5,
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          if (widget.sport?.toLowerCase() ==
+                                                  'baseball' &&
+                                              verb.label.trim().toLowerCase() ==
+                                                  'tags' &&
+                                              widget.onTagsSubOptionChanged !=
+                                                  null)
+                                            _buildBaseballTagsSubOptionPanel(),
+                                          Container(
+                                            padding: const EdgeInsets
+                                                .symmetric(
+                                              horizontal: 12,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade50,
+                                              border: Border(
+                                                bottom: BorderSide(
+                                                  color: Colors.grey.shade200,
+                                                  width: 0.5,
+                                                ),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                const SizedBox(width: 24),
+                                                Expanded(
+                                                  child:
+                                                      _buildActionButtonsRow(
+                                                          collapseOnAction:
+                                                              true),
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            const SizedBox(width: 24),
-                                            Expanded(
-                                              child: _buildActionButtonsRow(
-                                                  collapseOnAction: true),
-                                            ),
-                                          ],
-                                        ),
+                                        ],
                                       ),
                                   ],
                                 );
@@ -1951,6 +1973,63 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBaseballTagsSubOptionPanel() {
+    final rows = baseballTagsPopupChoiceRows();
+    return Material(
+      color: Colors.blue.shade50,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(36, 6, 12, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tag / base detail',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            SizedBox(
+              height: 112,
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                itemCount: rows.length,
+                separatorBuilder: (_, __) =>
+                    Divider(height: 1, color: Colors.grey.shade300),
+                itemBuilder: (context, i) {
+                  final row = rows[i];
+                  final label = row['label']!;
+                  final value = row['value']!;
+                  return InkWell(
+                    onTap: () {
+                      if (value.isEmpty) {
+                        widget.onTagsSubOptionChanged?.call(null);
+                      } else {
+                        widget.onTagsSubOptionChanged?.call(value);
+                      }
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 9,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

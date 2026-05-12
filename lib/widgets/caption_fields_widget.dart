@@ -3072,12 +3072,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (imageIdentityChanged && _hasBeenReset) {
       _hasBeenReset = false;
     }
-    if (widget.metadata != oldWidget.metadata) {
+
+    final bool metadataRefChanged = widget.metadata != oldWidget.metadata;
+    // CaptionBuilderScreen updates index/path before async _loadMetadata() finishes,
+    // so the metadata map can still point at the previous file for one frame (or longer).
+    final bool staleMapOnImageHop = imageIdentityChanged &&
+        !metadataRefChanged &&
+        widget.metadata != null;
+
+    if (metadataRefChanged || imageIdentityChanged) {
       // Only auto-store if the save handler hasn't already done it explicitly.
       // After an explicit save, _skipNextAutoStore is true to prevent
       // didUpdateWidget from overwriting the correct (verb-inclusive) caption
       // with a stale captionController.text.
-      if (!_skipNextAutoStore) {
+      if (!_skipNextAutoStore && metadataRefChanged) {
+        // When only the path/index changed and the map is unchanged, controllers still
+        // hold the previous image—do not push that into "last saved" metadata.
         _storeCurrentMetadata();
       }
       _skipNextAutoStore = false;
@@ -3088,10 +3098,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           oldWidget.metadata == null && widget.metadata != null;
       if (imageIdentityChanged || firstMetadataBind) {
         resetCaptionSelections();
-      } else {
+      } else if (metadataRefChanged) {
         _resetPlayerSelectionsForSameImageMetadata();
       }
-      _loadMetadata();
+
+      if (metadataRefChanged && widget.metadata != null) {
+        _loadMetadata();
+      } else if (staleMapOnImageHop ||
+          (imageIdentityChanged && widget.metadata == null) ||
+          (metadataRefChanged && widget.metadata == null)) {
+        _clearControllersPendingFreshMetadata();
+      }
     }
 
     // Check if teams have changed
@@ -3264,7 +3281,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       // Clear other selections
       _rbiCount = null;
-      _selectedRbiInning = null;
+      // _selectedRbiInning intentionally NOT cleared — inning/period holds across images.
 
       // Clear search states
       _filteredPlayers.clear();
@@ -3297,6 +3314,26 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Public method to reset caption selections (can be called from parent)
   void resetSelections() {
     resetCaptionSelections();
+  }
+
+  /// Clears IPTC-bound text fields when the selected file changed but [widget.metadata]
+  /// is still the previous image's map until the parent's async exiftool read completes.
+  void _clearControllersPendingFreshMetadata() {
+    if (!mounted) return;
+    setState(() {
+      captionController.clear();
+      personalityController.clear();
+      headlineController.clear();
+      keywordsController.clear();
+      stadiumController.clear();
+      cityController.clear();
+      provinceController.clear();
+    });
+    final o = widget.personalityOverride;
+    if (o != null && o.trim().isNotEmpty) {
+      personalityController.text = o;
+    }
+    _keyboardFireCaptionNotifier.value = captionController.text;
   }
 
   // Process all valid codes when spacebar is pressed
@@ -9378,6 +9415,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final verb = verbList[verbIndex];
     if (verb.isEmpty) return;
 
+    const _hitVerbs = {
+      'Single', 'Double', 'Triple', 'Home Run',
+      'Sacrifice Fly', 'Bunt', 'Hit by Pitch',
+    };
     if (!forceSelect && _selectedVerb == verb) {
       setState(() {
         _selectedVerb = null;
@@ -9388,6 +9429,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _rbiCount = null;
         _selectedRbiInning = null;
         _popupCustomVerb = null;
+        _selectedHittingAction = null;
       });
       if (!suppressCaptionUpdate) _updateCaption();
     } else {
@@ -9398,6 +9440,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _selectedHomeRunType = null;
         _rbiCount = null;
         _popupCustomVerb = null;
+        if (verb != 'Tags') {
+          _selectedTagsAction = null;
+        }
+        if (!_hitVerbs.contains(verb)) {
+          _selectedHittingAction = null;
+        }
       });
       _mergeVerbKeywordsIntoFieldIfEnabled(verb);
       if (!suppressCaptionUpdate) _updateCaption();
@@ -9653,8 +9701,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     });
   }
 
+  /// Keyboard fire mode: set hitting action (e.g. 'celebrates', 'celebrates_in_dugout') and refresh.
+  void setHittingActionFromKeyboardFire(String? action) {
+    setState(() {
+      _selectedHittingAction = action;
+    });
+    _updateCaption().then((_) {
+      if (mounted) _keyboardFireCaptionNotifier.value = captionController.text;
+    });
+  }
+
+  /// Currently selected hitting action (celebration, trot, etc.)
+  String? get currentHittingAction => _selectedHittingAction;
+
   /// Currently selected verb label (for keyboard fire sub-menu logic).
   String? get currentSelectedVerb => _selectedVerb;
+
+  /// Currently selected Tags runner-out detail (Keyboard Fire sub-menu).
+  String? get currentTagsAction => _selectedTagsAction;
 
   /// Currently selected RBI count.
   int? get currentRbiCount => _rbiCount;
@@ -17156,6 +17220,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Dejection',
       'Post Game Win',
       'Post Game Loss',
+      // Baseball: structured switch / sub-options (not plain _popupCustomVerb)
+      'Tags',
+      'Catches',
+      'Throws',
+      'Groundball',
+      'Fielding Position',
+      'Double Play',
+      'Triple Play',
+      'Steals',
     };
 
     // Skip if it's a category verb (they don't use _popupCustomVerb)
@@ -17267,6 +17340,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Dejection',
       'Post Game Win',
       'Post Game Loss',
+      // Baseball: structured switch / sub-options (not plain _popupCustomVerb)
+      'Tags',
+      'Catches',
+      'Throws',
+      'Groundball',
+      'Fielding Position',
+      'Double Play',
+      'Triple Play',
+      'Steals',
     };
 
     // If this is a category verb, don't set _popupCustomVerb so it goes through switch statement
@@ -17275,6 +17357,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _popupCustomVerb = null;
         _selectedVerb = resolvedVerb;
         _selectedActionVerb = resolvedVerb;
+        if (resolvedVerb != 'Tags') {
+          _selectedTagsAction = null;
+        }
       });
       _updateCaption();
       return;
@@ -17333,6 +17418,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
         _selectedVerb = resolvedVerb;
         _selectedActionVerb = resolvedVerb;
+      }
+    });
+    _updateCaption();
+  }
+
+  /// Baseball Tags: set runner-out detail from the player-popup picker (matches classic Tags strings).
+  void applyTagsSubOptionFromPopup(String? tagAction) {
+    if ((widget.sport?.toLowerCase() ?? '') != 'baseball') return;
+    final clear = tagAction == null || tagAction.isEmpty;
+    setState(() {
+      if (clear) {
+        _selectedTagsAction = null;
+        _selectedBase = null;
+      } else if (tagAction == 'Tags Runner Out at: On the Base Path') {
+        _selectedTagsAction = tagAction;
+        _selectedBase = null;
+      } else {
+        final parts = tagAction.split(' - ');
+        if (parts.length == 2) {
+          final baseShort =
+              parts[0].replaceAll('Tags Runner Out at: ', '');
+          _selectedBase = baseShort;
+          _selectedTagsAction = tagAction;
+        } else {
+          _selectedTagsAction = tagAction;
+          _selectedBase = null;
+        }
       }
     });
     _updateCaption();
@@ -20680,7 +20792,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (rawVerb == null) return '';
     final originalVerb = _resolveCanonicalVerbKey(rawVerb);
 
-    if (_popupCustomVerb != null && _popupCustomVerb!.isNotEmpty) {
+    if (_popupCustomVerb != null &&
+        _popupCustomVerb!.isNotEmpty &&
+        originalVerb != 'Tags') {
       return _popupCustomVerb!;
     }
 
@@ -21014,25 +21128,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ? '$resolvedVerbPhrase against the ${_getOpposingTeamName()}'
             : 'throws a ball against the ${_getOpposingTeamName()}';
       case 'Tags':
+        final tagsOpposing = _getOpposingPlayers();
+        final taggedName = tagsOpposing.isNotEmpty
+            ? _formatPlayersWithTeam(tagsOpposing)
+            : null;
         if (_selectedTagsAction != null) {
-          // Handle On the Base Path as a special case first
           if (_selectedTagsAction == 'Tags Runner Out at: On the Base Path') {
             final opposingTeam = _getOpposingTeamName();
-            final secondPlayer = _getSecondPlayer();
-            if (secondPlayer != null) {
-              return 'tags $secondPlayer out on the base path against the $opposingTeam';
+            if (taggedName != null) {
+              return 'tags $taggedName out on the base path against the $opposingTeam';
             } else {
               return 'tags a runner out on the base path against the $opposingTeam';
             }
           }
 
-          // Parse the tags action to build proper caption
           final parts = _selectedTagsAction!.split(' - ');
           if (parts.length == 2) {
             final base = parts[0].replaceAll('Tags Runner Out at: ', '');
             final action = parts[1].toLowerCase();
 
-            // Convert base to full word
             String fullBaseName;
             switch (base) {
               case '1st':
@@ -21054,22 +21168,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 fullBaseName = base.toLowerCase();
             }
 
-            // Get the second player (the one being tagged out)
-            final secondPlayer = _getSecondPlayer();
-            if (secondPlayer != null) {
+            if (taggedName != null) {
               if (action == 'stealing') {
-                return 'tags $secondPlayer out at $fullBaseName on a stealing attempt';
+                return 'tags $taggedName out at $fullBaseName on a stealing attempt';
               } else if (action == 'pickoff') {
-                return 'tags $secondPlayer out at $fullBaseName on a pickoff';
+                return 'tags $taggedName out at $fullBaseName on a pickoff';
               } else if (action == 'attempting to advance') {
-                return 'tags $secondPlayer out at $fullBaseName attempting to advance';
+                return 'tags $taggedName out at $fullBaseName attempting to advance';
               } else if (action == 'attempting to score') {
-                return 'tags $secondPlayer out at $fullBaseName attempting to score';
+                return 'tags $taggedName out at $fullBaseName attempting to score';
               } else if (fullBaseName == 'on the base path') {
                 final opposingTeam = _getOpposingTeamName();
-                return 'tags $secondPlayer out on the base path against the $opposingTeam';
+                return 'tags $taggedName out on the base path against the $opposingTeam';
               } else {
-                return 'tags $secondPlayer out at $fullBaseName $action';
+                return 'tags $taggedName out at $fullBaseName $action';
               }
             } else {
               if (action == 'stealing') {
@@ -21089,6 +21201,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             }
           }
           return _selectedTagsAction!.toLowerCase();
+        }
+        if (taggedName != null) {
+          return 'tags $taggedName out against the ${_getOpposingTeamName()}';
         }
         return 'tags a player out of the ${_getOpposingTeamName()}';
       case 'Groundball':

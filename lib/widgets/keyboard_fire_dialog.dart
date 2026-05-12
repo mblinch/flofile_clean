@@ -11,6 +11,7 @@ import '../utils/default_verb_keywords.dart';
 import '../utils/home_run_type_ui.dart';
 import 'verb_keyword_quick_bar.dart';
 import '../flo_layout_constants.dart';
+import '../utils/baseball_tags_popup_rows.dart';
 import 'app_compact_checkbox.dart';
 
 /// Intents for global H/V firebar shortcut (only when not in a text field).
@@ -558,10 +559,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// **List mode only:** exact row height so 26 rows (+ scroll padding) match the
   /// list viewport; [_keyboardFireListRosterFontSize] derives `fontSize` from that
   /// row so type fills the row instead of shrinking with an extra “phantom” budget.
+  /// Keeps list row height sane when the first layout pass gets an unbounded or huge max height.
+  double _sanitizeKbRosterListViewport(double height) {
+    if (!height.isFinite || height <= 0) return 340.0;
+    return height.clamp(120.0, 960.0);
+  }
+
   double _keyboardFireListRosterRowHeight(double listViewportHeight) {
     const verticalScrollPad = 2.0 + 3.0; // `fromLTRB(3, 2, 3, 3)` top + bottom
-    final inner =
-        (listViewportHeight - verticalScrollPad).clamp(48.0, 4000.0);
+    final sane = _sanitizeKbRosterListViewport(listViewportHeight);
+    final inner = (sane - verticalScrollPad).clamp(48.0, 4000.0);
     return inner / _kListRosterVisibleRows;
   }
 
@@ -578,8 +585,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final home = _lockedHomeRosterListViewportHeight;
     final away = _lockedAwayRosterListViewportHeight;
     final viewport = (home != null && away != null)
-        ? ((home + away) / 2.0)
-        : (home ?? away ?? 340.0);
+        ? ((_sanitizeKbRosterListViewport(home) +
+                _sanitizeKbRosterListViewport(away)) /
+            2.0)
+        : _sanitizeKbRosterListViewport(home ?? away ?? 340.0);
     return _keyboardFireListRosterFontSize(viewport);
   }
 
@@ -3311,12 +3320,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final currentViewport = constraints.maxHeight;
+              final currentViewport =
+                  _sanitizeKbRosterListViewport(constraints.maxHeight);
               final lockedViewport = isHomeTeam
                   ? (_lockedHomeRosterListViewportHeight ??= currentViewport)
                   : (_lockedAwayRosterListViewportHeight ??= currentViewport);
-              final listFont = _keyboardFireListRosterFontSize(lockedViewport);
-              final listRowH = _keyboardFireListRosterRowHeight(lockedViewport);
+              final safeViewport =
+                  _sanitizeKbRosterListViewport(lockedViewport);
+              final listFont = _keyboardFireListRosterFontSize(safeViewport);
+              final listRowH = _keyboardFireListRosterRowHeight(safeViewport);
               return RawScrollbar(
                 controller: controller,
                 thumbVisibility: true,
@@ -3967,6 +3979,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   final isPinned = _pinnedVerbCategory == catNum &&
                       _pinnedVerbIndex == verbNum;
                   final isActive = isPicked || isPinned;
+                  String kbSport = 'baseball';
+                  try {
+                    kbSport = (state as dynamic).currentSportName as String? ??
+                        'baseball';
+                  } catch (_) {}
+                  final showTagsMenu = isActive &&
+                      kbSport == 'baseball' &&
+                      canonVerb.trim() == 'Tags';
                   const hitVerbs = {
                     'Single',
                     'Double',
@@ -4175,7 +4195,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       ? _wrapVerbRowForReorder(ci: ci, vi: vi, child: verbRow)
                       : verbRow;
 
-                  if (!showRbiMenu && !showBaseMenu) return wrappedVerbRow;
+                  if (!showRbiMenu && !showBaseMenu && !showTagsMenu) {
+                    return wrappedVerbRow;
+                  }
+
+                  if (showTagsMenu) {
+                    final currentTags =
+                        (state as dynamic).currentTagsAction as String?;
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        wrappedVerbRow,
+                        _buildTagsSubMenuKb(state, currentTags),
+                      ],
+                    );
+                  }
 
                   if (showBaseMenu) {
                     final currentBase =
@@ -4227,6 +4261,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         (verb == 'Sacrifice Fly' || verb == 'Bunt' || verb == 'Hit by Pitch')
             ? 1
             : 3;
+    String? currentAction;
+    try {
+      currentAction = (captionState as dynamic).currentHittingAction as String?;
+    } catch (_) {}
+    final isCele = currentAction == 'celebrates';
     return Container(
       padding: const EdgeInsets.only(left: 36, right: 8, top: 2, bottom: 3),
       decoration: BoxDecoration(
@@ -4287,6 +4326,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             );
           }),
+          const SizedBox(width: 4),
+          _buildCeleButton(captionState, isCele),
         ],
       ),
     );
@@ -4294,6 +4335,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   Widget _buildHomeRunTypeSubMenu(dynamic captionState, String? currentType) {
     const types = ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam'];
+    String? currentAction;
+    try {
+      currentAction = (captionState as dynamic).currentHittingAction as String?;
+    } catch (_) {}
+    final isCele = currentAction == 'celebrates';
     return Container(
       padding: const EdgeInsets.only(left: 8, right: 8, top: 2, bottom: 3),
       decoration: BoxDecoration(
@@ -4345,6 +4391,115 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             );
           }),
+          const SizedBox(width: 4),
+          _buildCeleButton(captionState, isCele),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCeleButton(dynamic captionState, bool isSelected) {
+    const celebratesValue = 'celebrates';
+    return InkWell(
+      borderRadius: BorderRadius.circular(3),
+      onTap: () {
+        try {
+          (captionState as dynamic).setHittingActionFromKeyboardFire(
+              isSelected ? null : celebratesValue);
+        } catch (_) {}
+        setState(() {});
+        _refreshCaptionPreviewLater();
+      },
+      child: Container(
+        width: 32,
+        height: 18,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFE07B39) : Colors.white,
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(
+            color: isSelected
+                ? const Color(0xFFE07B39)
+                : Colors.orange.shade300,
+          ),
+        ),
+        child: Text(
+          'Cele',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: isSelected ? Colors.white : Colors.orange.shade700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagsSubMenuKb(dynamic captionState, String? currentAction) {
+    final rows = baseballTagsPopupChoiceRows();
+    return Container(
+      padding: const EdgeInsets.only(left: 36, right: 6, top: 2, bottom: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F4FC),
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
+          left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Tag / base detail',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          SizedBox(
+            height: 92,
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: rows.length,
+              itemBuilder: (context, i) {
+                final row = rows[i];
+                final label = row['label']!;
+                final value = row['value']!;
+                final isSel = value.isEmpty
+                    ? (currentAction == null || currentAction.isEmpty)
+                    : currentAction == value;
+                return InkWell(
+                  onTap: () {
+                    try {
+                      (captionState as dynamic).applyTagsSubOptionFromPopup(
+                        value.isEmpty ? null : value,
+                      );
+                    } catch (_) {}
+                    setState(() {});
+                    _refreshCaptionPreviewLater();
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+                    color: isSel ? Colors.blue.shade100 : null,
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.grey.shade900,
+                        fontWeight:
+                            isSel ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

@@ -1422,6 +1422,42 @@ class PreferencesService {
     await _saveCaptionStyleLibrary(out);
   }
 
+  /// Replaces the stored [CaptionTemplate] for one library row (same [id] and display name).
+  /// Used when the user edits the active layout while a saved caption style is selected.
+  Future<void> updateCaptionStyleTemplateInLibrary({
+    required String id,
+    required CaptionTemplate template,
+  }) async {
+    if (id.isEmpty) {
+      throw ArgumentError.value(id, 'id', 'must be non-empty');
+    }
+    final list = await getCaptionStyleLibrary();
+    final out = <CaptionStyleLibraryEntry>[];
+    var found = false;
+    for (final e in list) {
+      if (e.id == id) {
+        found = true;
+        final raw =
+            json.decode(json.encode(template.toJson())) as Map<String, dynamic>;
+        final stored = CaptionTemplate.fromJson(raw).copyWith(
+          id: e.id,
+          name: e.displayName,
+        );
+        out.add(CaptionStyleLibraryEntry(
+          id: e.id,
+          displayName: e.displayName,
+          template: stored,
+        ));
+      } else {
+        out.add(e);
+      }
+    }
+    if (!found) {
+      throw StateError('No saved caption style with id "$id".');
+    }
+    await _saveCaptionStyleLibrary(out);
+  }
+
   Future<GameInfo> getCaptionGameInfo() async {
     final prefs = await _getPrefs();
     return GameInfo.tryDecode(prefs.getString(_keyCaptionGameInfoJson)) ??
