@@ -251,6 +251,27 @@ class ApiManager {
     return team?.venueName;
   }
 
+  /// Returns [TeamInfo] (id, name, locationName, venueName) for [teamName].
+  Future<TeamInfo?> findTeamByName(String teamName) async {
+    try {
+      switch (_currentSport) {
+        case 'baseball':
+          return await _mlbService.findTeamByName(teamName);
+        case 'hockey':
+          return await _nhlService.findTeamByName(teamName);
+        case 'basketball':
+          return await _nbaService.findTeamByName(teamName);
+        case 'soccer':
+          return await _mlsService.findTeamByName(teamName);
+        default:
+          return await _nbaService.findTeamByName(teamName);
+      }
+    } catch (e) {
+      print('API Manager: findTeamByName failed: $e');
+      return null;
+    }
+  }
+
   Future<String?> fetchVenueForGame(
       String homeTeam, String awayTeam, DateTime gameDate) async {
     if (_currentSport != 'baseball') return null;

@@ -43,6 +43,10 @@ class PreferencesService {
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
   static const String _keySyncServerUrl = 'sync_server_url';
   static const String _keySyncAccountId = 'sync_account_id';
+  /// IANA zone: EXIF capture times are interpreted as this local zone when
+  /// resolving MLB innings from play-by-play (internal / allowlisted users).
+  static const String _keyMlbInningExifTimezone = 'mlb_inning_exif_timezone';
+  static const String mlbInningExifTimezoneDefault = 'America/New_York';
   /// Legacy prefs key; optional headline strip under the caption is no longer offered.
   static const String _keyShowHeadlineField = 'show_headline_field';
   static const String _keyShowKeywordsField = 'show_keywords_field';
@@ -88,8 +92,15 @@ class PreferencesService {
   static const String _keyGettyInternationalMigrationDone =
       'getty_international_migration_done';
   static const String _keyCaptionGameInfoJson = 'caption_game_info_json';
+  static const String _keyCaptionPreviewHomePrefix =
+      'caption_preview_last_home_';
+  static const String _keyCaptionPreviewAwayPrefix =
+      'caption_preview_last_away_';
+  static const String _keyFavoriteCaptionStylePrefix =
+      'favorite_caption_style_';
   /// `gettyImages` | `imagn` | `ap` for sample credit line in caption layout preview.
   static const String _keyCaptionCreditSampleAgency = 'caption_credit_sample_agency';
+  static const String _keySavedDefaultPreferences = 'saved_default_preferences';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -172,6 +183,13 @@ class PreferencesService {
   Future<void> saveShowKeywordsField(bool show) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyShowKeywordsField, show);
+    final active = CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
+    if (active != null && active.showKeywordsField != show) {
+      await prefs.setString(
+        _keyCaptionTemplateJson,
+        active.copyWith(showKeywordsField: show).encode(),
+      );
+    }
     _notifyCaptionFieldVisibilityChanged();
   }
 
@@ -183,6 +201,13 @@ class PreferencesService {
   Future<void> saveShowPersonalityField(bool show) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyShowPersonalityField, show);
+    final active = CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
+    if (active != null && active.showPersonalityField != show) {
+      await prefs.setString(
+        _keyCaptionTemplateJson,
+        active.copyWith(showPersonalityField: show).encode(),
+      );
+    }
     _notifyCaptionFieldVisibilityChanged();
   }
 
@@ -323,7 +348,19 @@ class PreferencesService {
   // Current sport
   Future<void> saveCurrentSport(String sport) async {
     final prefs = await _getPrefs();
-    await prefs.setString(_keyCurrentSport, sport);
+    final normalized = sport.toLowerCase().trim();
+    await prefs.setString(_keyCurrentSport, normalized);
+
+    final active = CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
+    if (active != null) {
+      final updated = CaptionTemplate.withSportGameIdentifierDefault(
+        active,
+        normalized,
+      );
+      if (updated.gameIdentifierText != active.gameIdentifierText) {
+        await prefs.setString(_keyCaptionTemplateJson, updated.encode());
+      }
+    }
   }
 
   Future<String> getCurrentSport() async {
@@ -882,7 +919,24 @@ class PreferencesService {
     }
   }
 
-  static const String _keySavedDefaultPreferences = 'saved_default_preferences';
+  Future<String> getMlbInningExifTimezone() async {
+    final prefs = await _getPrefs();
+    final v = prefs.getString(_keyMlbInningExifTimezone);
+    if (v == null || v.trim().isEmpty) {
+      return mlbInningExifTimezoneDefault;
+    }
+    return v.trim();
+  }
+
+  Future<void> setMlbInningExifTimezone(String iana) async {
+    final prefs = await _getPrefs();
+    final t = iana.trim();
+    if (t.isEmpty) {
+      await prefs.remove(_keyMlbInningExifTimezone);
+    } else {
+      await prefs.setString(_keyMlbInningExifTimezone, t);
+    }
+  }
 
   /// Exports all preferences as JSON, including per-sport verb settings so they can be saved and passed on.
   Future<Map<String, dynamic>> exportAllPreferences() async {
@@ -917,6 +971,7 @@ class PreferencesService {
       'favoriteTeams': (await getFavoriteTeams()).toList(),
       'syncServerUrl': await getSyncServerUrl(),
       'syncAccountId': await getSyncAccountId(),
+      'mlbInningExifTimezone': await getMlbInningExifTimezone(),
       'ftpProfiles': await getFtpProfiles(),
       'currentFtpProfile': await getCurrentFtpProfile(),
       'placeFirebarOnRight': await getPlaceFirebarOnRight(),
@@ -1031,6 +1086,10 @@ class PreferencesService {
     }
     if (preferences.containsKey('syncAccountId')) {
       await setSyncAccountId(preferences['syncAccountId'] as String? ?? '');
+    }
+    if (preferences.containsKey('mlbInningExifTimezone')) {
+      await setMlbInningExifTimezone(
+          preferences['mlbInningExifTimezone'] as String? ?? '');
     }
     if (preferences.containsKey('useBallDontLieApi')) {
       final prefs = await _getPrefs();
@@ -1182,10 +1241,25 @@ class PreferencesService {
   /// Full caption wire template (presets + custom). Migrates legacy order/flavor once if needed.
   Future<CaptionTemplate> getCaptionTemplate() async {
     final prefs = await _getPrefs();
-    final decoded = CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
-    if (decoded != null) return decoded;
-    final migrated = await _migrateCaptionTemplateFromLegacy();
-    return migrated ?? CaptionTemplate.getty();
+    final sport = await getCurrentSport();
+    final raw = prefs.getString(_keyCaptionTemplateJson);
+    final decoded = CaptionTemplate.tryDecode(raw);
+    CaptionTemplate template;
+    if (decoded != null) {
+      // One-time: templates saved before per-style layout options stored globals.
+      if (raw != null && !raw.contains('"showKeywordsField"')) {
+        template = decoded.copyWith(
+          showKeywordsField: prefs.getBool(_keyShowKeywordsField) ?? false,
+          showPersonalityField: prefs.getBool(_keyShowPersonalityField) ?? true,
+        );
+      } else {
+        template = decoded;
+      }
+    } else {
+      final migrated = await _migrateCaptionTemplateFromLegacy();
+      template = migrated ?? CaptionTemplate.getty();
+    }
+    return CaptionTemplate.withSportGameIdentifierDefault(template, sport);
   }
 
   Future<CaptionTemplate?> _migrateCaptionTemplateFromLegacy() async {
@@ -1207,6 +1281,10 @@ class PreferencesService {
     await prefs.setString(_keyCaptionTemplateJson, template.encode());
     await prefs.remove(_keyCaptionLayoutOrder);
     await prefs.remove(_keyCaptionLayoutFlavor);
+    // Keep legacy global keys in sync with the active caption style.
+    await prefs.setBool(_keyShowKeywordsField, template.showKeywordsField);
+    await prefs.setBool(_keyShowPersonalityField, template.showPersonalityField);
+    _notifyCaptionFieldVisibilityChanged();
   }
 
   static String? _captionTemplateWireDefaultKey(WireStyle wire) {
@@ -1229,7 +1307,10 @@ class PreferencesService {
     final key = _captionTemplateWireDefaultKey(wire);
     if (key == null) return null;
     final prefs = await _getPrefs();
-    return CaptionTemplate.tryDecode(prefs.getString(key));
+    final decoded = CaptionTemplate.tryDecode(prefs.getString(key));
+    if (decoded == null) return null;
+    final sport = await getCurrentSport();
+    return CaptionTemplate.withSportGameIdentifierDefault(decoded, sport);
   }
 
   Future<void> saveCaptionTemplateWireDefault(
@@ -1467,6 +1548,49 @@ class PreferencesService {
   Future<void> saveCaptionGameInfo(GameInfo info) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyCaptionGameInfoJson, info.encode());
+  }
+
+  Future<void> saveLastCaptionPreviewTeams({
+    required String sport,
+    required String homeTeam,
+    required String awayTeam,
+  }) async {
+    final prefs = await _getPrefs();
+    final s = sport.toLowerCase().trim();
+    await prefs.setString('$_keyCaptionPreviewHomePrefix$s', homeTeam);
+    await prefs.setString('$_keyCaptionPreviewAwayPrefix$s', awayTeam);
+  }
+
+  Future<MapEntry<String?, String?>> getLastCaptionPreviewTeams({
+    required String sport,
+  }) async {
+    final prefs = await _getPrefs();
+    final s = sport.toLowerCase().trim();
+    return MapEntry(
+      prefs.getString('$_keyCaptionPreviewHomePrefix$s'),
+      prefs.getString('$_keyCaptionPreviewAwayPrefix$s'),
+    );
+  }
+
+  /// Menu token for the user's favorite caption layout style (per sport).
+  Future<String?> getFavoriteCaptionStyleToken({String sport = 'baseball'}) async {
+    final prefs = await _getPrefs();
+    return prefs.getString(
+      '${_keyFavoriteCaptionStylePrefix}${sport.toLowerCase().trim()}',
+    );
+  }
+
+  Future<void> saveFavoriteCaptionStyleToken(
+    String? token, {
+    String sport = 'baseball',
+  }) async {
+    final prefs = await _getPrefs();
+    final key = '${_keyFavoriteCaptionStylePrefix}${sport.toLowerCase().trim()}';
+    if (token == null || token.trim().isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, token.trim());
+    }
   }
 
   /// One of `gettyImages`, `imagn`, `ap`.

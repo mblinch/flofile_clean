@@ -62,6 +62,7 @@ dependencies:
   cloud_firestore: ^6.3.0
   # Tighter, styled checkbox than Material (avoids huge default control + padding)
   custom_checkbox_plus: ^1.0.0
+  timezone: ^0.10.1
 
 dev_dependencies:
   flutter_test:

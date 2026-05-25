@@ -1,12 +1,26 @@
+/// Whether roster abbreviations (C, RF, 1B, …) are written out in captions.
+/// AP and Imagn use full labels (`catcher`, `right fielder`); Getty USA often
+/// keeps the abbreviation.
+bool captionWireExpandsPositionLabels({
+  required bool apStyleWire,
+  required bool imagnStyleWire,
+}) =>
+    apStyleWire || imagnStyleWire;
+
 String formatPositionLabelForCaption(
   String raw, {
   required bool apStyle,
+  bool imagnStyle = false,
   bool americanEnglish = true,
   String? sport,
 }) {
   final value = raw.trim();
   if (value.isEmpty) return value;
-  if (!apStyle) return value;
+  final expand = captionWireExpandsPositionLabels(
+    apStyleWire: apStyle,
+    imagnStyleWire: imagnStyle,
+  );
+  if (!expand) return value;
 
   final parts = value
       .split('/')

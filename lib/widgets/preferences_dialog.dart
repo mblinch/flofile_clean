@@ -7,6 +7,7 @@ import '../services/preferences_service.dart';
 import '../utils/native_file_picker.dart';
 import 'camera_serial_dialog.dart';
 import 'app_compact_checkbox.dart';
+import 'app_styled_dialogs.dart';
 import 'caption_layout_builder_dialog.dart';
 import 'ftp_settings_panel.dart';
 
@@ -33,6 +34,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   late PreferencesService _preferencesService;
   final TextEditingController _photoshopPathController = TextEditingController();
   final TextEditingController _resolutionController = TextEditingController();
+  final TextEditingController _mlbInningTzController = TextEditingController();
   String _sportForDefault = 'baseball';
   Map<String, dynamic>? _currentPreferences;
   bool _isLoading = true;
@@ -48,6 +50,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   void dispose() {
     _photoshopPathController.dispose();
     _resolutionController.dispose();
+    _mlbInningTzController.dispose();
     super.dispose();
   }
 
@@ -68,6 +71,9 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       _photoshopPathController.text = _currentPreferences?['photoshopPath']?.toString() ?? '';
       final res = _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
       _resolutionController.text = '$res';
+      _mlbInningTzController.text =
+          _currentPreferences?['mlbInningExifTimezone']?.toString() ??
+              PreferencesService.mlbInningExifTimezoneDefault;
       final sport = _currentPreferences?['currentSport']?.toString();
       _sportForDefault = (sport == null || sport.isEmpty) ? '' : sport;
     });
@@ -452,6 +458,53 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
         ),
         _buildInlineRow(
+          'MLB inning (EXIF timezone)',
+          child: Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 320,
+                  child: TextField(
+                    controller: _mlbInningTzController,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      hintText: 'e.g. America/New_York',
+                      hintStyle:
+                          TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    ),
+                    onSubmitted: (text) async {
+                      await _preferencesService.setMlbInningExifTimezone(text);
+                      await _loadCurrentPreferences();
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Used only when the MLB inning-from-photo-time feature is on for '
+                  'your account: EXIF time is read as local time in this zone, then '
+                  'matched to MLB play-by-play (UTC). Examples: America/New_York, '
+                  'America/Los_Angeles.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+        ),
+        _buildInlineRow(
           'Caption fields',
           child: Expanded(
             child: Column(
@@ -481,17 +534,15 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 10),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.view_agenda_outlined, size: 18),
-                    label: const Text('Caption layout…'),
-                    onPressed: () async {
-                      await CaptionLayoutBuilderDialog.show(context);
-                      if (!mounted) return;
-                      await _loadCurrentPreferences();
-                    },
-                  ),
+                AppSecondaryButton(
+                  label: 'Caption Layout',
+                  icon: Icons.view_agenda_outlined,
+                  fullWidth: false,
+                  onTap: () async {
+                    await CaptionLayoutBuilderDialog.show(context);
+                    if (!mounted) return;
+                    await _loadCurrentPreferences();
+                  },
                 ),
               ],
             ),

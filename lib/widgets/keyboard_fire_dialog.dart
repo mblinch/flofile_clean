@@ -553,30 +553,34 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   double? _lockedHomeRosterListViewportHeight;
   double? _lockedAwayRosterListViewportHeight;
 
-  /// Roster list: fit this many lines in the scroll viewport without scrolling.
-  static const int _kListRosterVisibleRows = 26;
+  /// Roster list: target this many “lines” per viewport height for density.
+  /// Higher = shorter rows (tighter list).
+  static const int _kListRosterVisibleRows = 48;
 
-  /// **List mode only:** exact row height so 26 rows (+ scroll padding) match the
-  /// list viewport; [_keyboardFireListRosterFontSize] derives `fontSize` from that
-  /// row so type fills the row instead of shrinking with an extra “phantom” budget.
-  /// Keeps list row height sane when the first layout pass gets an unbounded or huge max height.
+  /// **List mode only:** row height from viewport ÷ [_kListRosterVisibleRows], then
+  /// clamped so tall windows / stale locked heights never produce huge gaps between names.
+  /// [_keyboardFireListRosterFontSize] derives `fontSize` from this row height.
   double _sanitizeKbRosterListViewport(double height) {
     if (!height.isFinite || height <= 0) return 340.0;
-    return height.clamp(120.0, 960.0);
+    return height.clamp(120.0, 640.0);
   }
+
+  static const double _kKbRosterRowHeightMin = 12.5;
+  static const double _kKbRosterRowHeightMax = 18.5;
 
   double _keyboardFireListRosterRowHeight(double listViewportHeight) {
     const verticalScrollPad = 2.0 + 3.0; // `fromLTRB(3, 2, 3, 3)` top + bottom
     final sane = _sanitizeKbRosterListViewport(listViewportHeight);
     final inner = (sane - verticalScrollPad).clamp(48.0, 4000.0);
-    return inner / _kListRosterVisibleRows;
+    final computed = inner / _kListRosterVisibleRows;
+    return computed.clamp(_kKbRosterRowHeightMin, _kKbRosterRowHeightMax);
   }
 
   /// Jersey/name `fontSize` for list roster; tied to [_keyboardFireListRosterRowHeight].
   double _keyboardFireListRosterFontSize(double listViewportHeight) {
     final rowH = _keyboardFireListRosterRowHeight(listViewportHeight);
-    // Fraction of row for one line; `height: 1.0` on roster Text keeps the line box tight.
-    return (rowH * 0.86).clamp(7.75, 10.85);
+    // Slightly smaller cap than before so compact rows don’t keep oversized type.
+    return (rowH * 0.82).clamp(7.5, 9.5);
   }
 
   /// Shared roster text size used as the typography baseline for verbs/categories.
@@ -2207,8 +2211,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     bool isHomeTeam, {
     String? barText,
     double listFontSize = 12.0,
-    /// When set (Keyboard Fire list column), each row is exactly this tall so 26
-    /// players match the viewport and font tracks row height.
+    /// When set (Keyboard Fire list column), each row is this tall (capped) so the
+    /// roster stays dense; font tracks row height.
     double? listRowHeight,
   }) {
     if (roster.isEmpty) return [];
@@ -4267,7 +4271,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     } catch (_) {}
     final isCele = currentAction == 'celebrates';
     return Container(
-      padding: const EdgeInsets.only(left: 36, right: 8, top: 2, bottom: 3),
+      padding: const EdgeInsets.only(left: 8, right: 8, top: 2, bottom: 3),
       decoration: BoxDecoration(
         color: const Color(0xFFF0F4FF),
         border: Border(
@@ -4276,12 +4280,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Text(
             'RBI:',
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+              fontSize: 8.5,
+              fontWeight: FontWeight.w400,
+              height: 1.0,
               color: Colors.grey.shade600,
             ),
           ),
@@ -4302,8 +4309,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   _refreshCaptionPreviewLater();
                 },
                 child: Container(
-                  width: 22,
-                  height: 18,
+                  width: 20,
+                  height: 16,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: isSelected ? const Color(0xFF4A90E2) : Colors.white,
@@ -4317,8 +4324,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: Text(
                     '$rbi',
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w400,
+                      height: 1.0,
                       color: isSelected ? Colors.white : Colors.grey.shade800,
                     ),
                   ),
@@ -4368,7 +4376,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 },
                 child: Container(
                   width: 22,
-                  height: 18,
+                  height: 16,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: isSelected ? const Color(0xFF4A90E2) : Colors.white,
@@ -4382,8 +4390,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: Text(
                     label,
                     style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w400,
+                      height: 1.0,
                       color: isSelected ? Colors.white : Colors.grey.shade800,
                     ),
                   ),
@@ -4411,8 +4420,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         _refreshCaptionPreviewLater();
       },
       child: Container(
-        width: 32,
-        height: 18,
+        width: 28,
+        height: 16,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isSelected ? const Color(0xFFE07B39) : Colors.white,
@@ -4426,8 +4435,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         child: Text(
           'Cele',
           style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
+            fontSize: 8.5,
+            fontWeight: FontWeight.w400,
+            height: 1.0,
             color: isSelected ? Colors.white : Colors.orange.shade700,
           ),
         ),
@@ -4507,14 +4517,93 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   Widget _buildBaseSubMenu(
       dynamic captionState, String verb, String? currentBase) {
-    final bases = verb == 'Steals'
-        ? const ['2nd', '3rd', 'Home', 'Tagged Out']
-        : const ['1st', '2nd', '3rd', 'Home', 'Tagged Out'];
+    final primaryBases = verb == 'Steals'
+        ? const ['2nd', '3rd', 'Home']
+        : const ['1st', '2nd', '3rd', 'Home'];
+    const taggedOutBase = 'Tagged Out';
     final storedBase = (captionState as dynamic).baseBeforeTaggedOut as String?;
     final isTaggedOut = currentBase == 'Tagged Out';
+    String? currentAction;
+    try {
+      currentAction = (captionState as dynamic).currentHittingAction as String?;
+    } catch (_) {}
+    final isCele = currentAction == 'celebrates';
+
+    String kbBaseChipLabel(String base) =>
+        base == 'Tagged Out' ? 'Out' : base;
+
+    double kbBaseChipWidth(String base) {
+      if (base == 'Home') return 34;
+      if (base == 'Tagged Out') return 22;
+      return 22;
+    }
+
+    Widget baseChip(String base) {
+      final isSelected = currentBase == base;
+      final isStoredBase =
+          isTaggedOut && base != 'Tagged Out' && storedBase == base;
+
+      final Color bgColor;
+      final Color borderColor;
+      final Color textColor;
+      if (isSelected) {
+        bgColor = base == 'Tagged Out'
+            ? const Color(0xFFE53935)
+            : const Color(0xFF4A90E2);
+        borderColor = bgColor;
+        textColor = Colors.white;
+      } else if (isStoredBase) {
+        bgColor = const Color(0xFF4A90E2).withOpacity(0.15);
+        borderColor = const Color(0xFF4A90E2);
+        textColor = const Color(0xFF4A90E2);
+      } else {
+        bgColor = Colors.white;
+        borderColor = Colors.grey.shade300;
+        textColor = Colors.grey.shade800;
+      }
+
+      final w = kbBaseChipWidth(base);
+
+      return Padding(
+        padding: const EdgeInsets.only(right: 4),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(3),
+          onTap: () {
+            try {
+              (captionState as dynamic).setBaseFromKeyboardFire(base);
+            } catch (_) {}
+            setState(() {});
+            _refreshCaptionPreviewLater();
+          },
+          child: Container(
+            width: w,
+            height: 16,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: borderColor),
+            ),
+            child: Text(
+              kbBaseChipLabel(base),
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.clip,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.w400,
+                height: 1.0,
+                color: textColor,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Container(
-      padding: const EdgeInsets.only(left: 36, right: 8, top: 2, bottom: 3),
+      padding: const EdgeInsets.only(left: 8, right: 8, top: 2, bottom: 3),
       decoration: BoxDecoration(
         color: const Color(0xFFF0F4FF),
         border: Border(
@@ -4522,70 +4611,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Base:',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600)),
-          const SizedBox(width: 6),
-          ...bases.map((base) {
-            final isSelected = currentBase == base;
-            // When Tagged Out is active, also highlight the stored original base
-            final isStoredBase =
-                isTaggedOut && base != 'Tagged Out' && storedBase == base;
-
-            final Color bgColor;
-            final Color borderColor;
-            final Color textColor;
-            if (isSelected) {
-              bgColor = base == 'Tagged Out'
-                  ? const Color(0xFFE53935)
-                  : const Color(0xFF4A90E2);
-              borderColor = bgColor;
-              textColor = Colors.white;
-            } else if (isStoredBase) {
-              bgColor = const Color(0xFF4A90E2).withOpacity(0.15);
-              borderColor = const Color(0xFF4A90E2);
-              textColor = const Color(0xFF4A90E2);
-            } else {
-              bgColor = Colors.white;
-              borderColor = Colors.grey.shade300;
-              textColor = Colors.grey.shade800;
-            }
-
-            return Padding(
-              padding: const EdgeInsets.only(right: 4),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(3),
-                onTap: () {
-                  try {
-                    (captionState as dynamic).setBaseFromKeyboardFire(base);
-                  } catch (_) {}
-                  setState(() {});
-                  _refreshCaptionPreviewLater();
-                },
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: bgColor,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Text(
-                    base,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: textColor,
-                    ),
-                  ),
-                ),
-              ),
-            );
-          }),
+          Row(
+            children: primaryBases.map(baseChip).toList(),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              baseChip(taggedOutBase),
+              const SizedBox(width: 4),
+              _buildCeleButton(captionState, isCele),
+            ],
+          ),
         ],
       ),
     );
@@ -5348,6 +5388,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
+  Widget _baseballKeyboardFireMlbControl() {
+    final cs = widget.captionState;
+    if (cs == null) return const SizedBox.shrink();
+    try {
+      return (cs as dynamic).buildMlbInningClockAffordanceForKeyboardFire()
+          as Widget;
+    } catch (_) {
+      return const SizedBox.shrink();
+    }
+  }
+
   void _onInningSelect(int? inning) {
     final state = widget.captionState;
     if (state == null) return;
@@ -5533,6 +5584,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   color: Colors.grey.shade700,
                 ),
               ),
+              if (isBaseball) ...[
+                const SizedBox(width: 4),
+                _baseballKeyboardFireMlbControl(),
+              ],
               const SizedBox(width: 6),
               Expanded(
                 child: SingleChildScrollView(

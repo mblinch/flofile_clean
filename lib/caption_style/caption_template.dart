@@ -340,6 +340,34 @@ class LocationLineOptions {
 /// Jersey / roster number style in the dynamic caption sample.
 enum NumberFormatStyle { hash, parens }
 
+/// Built-in game-identifier phrases per league (see [defaultGameIdentifierText]).
+const Set<String> kKnownGameIdentifierDefaults = {
+  'in their MLB game',
+  'in their NHL game',
+  'in their NBA game',
+  'in their MLS match',
+};
+
+/// Default [CaptionTemplate.gameIdentifierText] for the active sport.
+String defaultGameIdentifierText(String? sport) {
+  switch ((sport ?? 'baseball').toLowerCase()) {
+    case 'baseball':
+    case 'mlb':
+      return 'in their MLB game';
+    case 'hockey':
+    case 'nhl':
+      return 'in their NHL game';
+    case 'basketball':
+    case 'nba':
+      return 'in their NBA game';
+    case 'soccer':
+    case 'mls':
+      return 'in their MLS match';
+    default:
+      return '';
+  }
+}
+
 /// Whether the club appears before or after the player in the dynamic caption
 /// sentence (preview + default caption slot when no override is supplied).
 enum CaptionTeamOrder {
@@ -614,6 +642,8 @@ class CaptionTemplate {
     this.includePlayerPosition = true,
     this.americanEnglish = true,
     this.removeDiacritics = true,
+    this.showPersonalityField = true,
+    this.showKeywordsField = false,
     required this.separator,
     required this.creditFormat,
     required this.bylineOptions,
@@ -664,12 +694,18 @@ class CaptionTemplate {
   final bool includePlayerPosition;
 
   /// Controls US vs international spelling for expanded position labels
-  /// (e.g. `center` vs `centre`) when AP-style captions write positions out.
+  /// (e.g. `center` vs `centre`) when AP / Imagn write positions out.
   final bool americanEnglish;
 
   /// When true, Latin accents in generated captions are folded to ASCII
   /// (player names, opponent names, etc.).
   final bool removeDiacritics;
+
+  /// Optional Personality field beside the main caption (per caption style).
+  final bool showPersonalityField;
+
+  /// Optional Keywords field beside the main caption (per caption style).
+  final bool showKeywordsField;
 
   /// Primary joiner used in [WireStyle.custom] between segments.
   final String separator;
@@ -890,6 +926,8 @@ class CaptionTemplate {
     bool includePlayerPosition = true,
     bool americanEnglish = true,
     bool removeDiacritics = true,
+    bool showPersonalityField = true,
+    bool showKeywordsField = false,
     String separator = '; ',
     CreditFormat creditFormat = CreditFormat.mandatory_credit,
     BylineOptions? bylineOptions,
@@ -899,6 +937,7 @@ class CaptionTemplate {
     List<String>? punctuationSnippets,
     String captionPrefix = '',
     String captionSuffix = ' ',
+    String gameIdentifierText = '',
     String gameIdentifierPrefix = '',
     String gameIdentifierSuffix = ' ',
     String venuePrefix = '',
@@ -936,6 +975,8 @@ class CaptionTemplate {
       includePlayerPosition: includePlayerPosition,
       americanEnglish: americanEnglish,
       removeDiacritics: removeDiacritics,
+      showPersonalityField: showPersonalityField,
+      showKeywordsField: showKeywordsField,
       separator: separator,
       creditFormat: creditFormat,
       bylineOptions:
@@ -943,6 +984,7 @@ class CaptionTemplate {
       segmentOrder: resolvedOrder,
       captionPrefix: captionPrefix,
       captionSuffix: captionSuffix,
+      gameIdentifierText: gameIdentifierText,
       gameIdentifierPrefix: gameIdentifierPrefix,
       gameIdentifierSuffix: gameIdentifierSuffix,
       customSeparators: resolvedCustomSeparators,
@@ -969,6 +1011,8 @@ class CaptionTemplate {
     bool? includePlayerPosition,
     bool? americanEnglish,
     bool? removeDiacritics,
+    bool? showPersonalityField,
+    bool? showKeywordsField,
     String? separator,
     CreditFormat? creditFormat,
     BylineOptions? bylineOptions,
@@ -1002,6 +1046,9 @@ class CaptionTemplate {
         includePlayerPosition: includePlayerPosition ?? this.includePlayerPosition,
         americanEnglish: americanEnglish ?? this.americanEnglish,
         removeDiacritics: removeDiacritics ?? this.removeDiacritics,
+        showPersonalityField:
+            showPersonalityField ?? this.showPersonalityField,
+        showKeywordsField: showKeywordsField ?? this.showKeywordsField,
         separator: separator ?? this.separator,
         creditFormat: creditFormat ?? this.creditFormat,
         bylineOptions: bylineOptions ?? this.bylineOptions,
@@ -1158,6 +1205,8 @@ class CaptionTemplate {
         if (!includePlayerPosition) 'includePlayerPosition': false,
         if (!americanEnglish) 'americanEnglish': false,
         if (!removeDiacritics) 'removeDiacritics': false,
+        'showPersonalityField': showPersonalityField,
+        'showKeywordsField': showKeywordsField,
         'separator': separator,
         'creditFormat': creditFormat.name,
         'bylineOptions': bylineOptions.toJson(),
@@ -1230,6 +1279,8 @@ class CaptionTemplate {
       includePlayerPosition: json['includePlayerPosition'] as bool? ?? true,
       americanEnglish: json['americanEnglish'] as bool? ?? true,
       removeDiacritics: json['removeDiacritics'] as bool? ?? true,
+      showPersonalityField: json['showPersonalityField'] as bool? ?? true,
+      showKeywordsField: json['showKeywordsField'] as bool? ?? false,
       separator: json['separator'] as String? ?? '; ',
       creditFormat: CreditFormat.values.firstWhere(
         (e) => e.name == json['creditFormat'],
@@ -1323,6 +1374,22 @@ class CaptionTemplate {
   }
 
   String encode() => json.encode(toJson());
+
+  /// Fills [gameIdentifierText] from [defaultGameIdentifierText] when empty, or
+  /// when [replaceKnownDefaults] and the current text is another sport’s default.
+  static CaptionTemplate withSportGameIdentifierDefault(
+    CaptionTemplate template,
+    String? sport, {
+    bool replaceKnownDefaults = true,
+  }) {
+    final next = defaultGameIdentifierText(sport);
+    if (next.isEmpty) return template;
+    final current = template.gameIdentifierText.trim();
+    final shouldSet = current.isEmpty ||
+        (replaceKnownDefaults && kKnownGameIdentifierDefaults.contains(current));
+    if (!shouldSet) return template;
+    return template.copyWith(gameIdentifierText: next);
+  }
 
   /// Migrates from legacy prefs (`game_date`, `body`, …) + `getty` / `imagn` flavor.
   static CaptionTemplate fromLegacySegmentOrder(

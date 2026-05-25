@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/services.dart';
-import 'package:extended_image/extended_image.dart';
 import '../utils/exiftool_helper.dart';
+import 'oriented_file_preview.dart';
 import '../helpers.dart';
 
 class MetadataPopupDialog extends StatefulWidget {
@@ -1832,12 +1832,13 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                               child: SizedBox(
                                 width: 568,
                                 height: 400,
-                                child: ExtendedImage.file(
-                                  File(_currentImagePath ?? widget.imagePath!),
+                                child: OrientedFilePreview(
                                   key: ValueKey(
                                       _currentImagePath ?? widget.imagePath),
+                                  path: _currentImagePath ?? widget.imagePath!,
                                   fit: BoxFit.contain,
-                                  enableLoadState: false,
+                                  cacheWidth: 1200,
+                                  filterQuality: FilterQuality.high,
                                 ),
                               ),
                             ),

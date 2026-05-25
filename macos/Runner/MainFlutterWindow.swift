@@ -36,6 +36,9 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    ColorManagedPreviewPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "ColorManagedPreviewPlugin"))
+
     super.awakeFromNib()
   }
 

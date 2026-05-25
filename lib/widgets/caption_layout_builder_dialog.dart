@@ -14,6 +14,7 @@ import '../services/current_user_service.dart';
 import '../services/preferences_service.dart';
 import 'app_compact_checkbox.dart';
 import 'date_formula_editor.dart';
+import 'caption_style_dropdown_row.dart';
 import 'location_formula_editor.dart';
 
 /// Same primary blue as [PreferencesDialog] (FTP / accents).
@@ -45,11 +46,12 @@ class _CaptionLayoutBuilderDialogState
   /// TODO: wire credit to the IPTC byline/credit fields once available.
   static final GameInfo _baseMockGameInfo = GameInfo(
     gameDate: DateTime(2026, 4, 4),
-    city: 'Toronto',
-    region: 'Ontario',
-    country: 'Canada',
-    countryCode: 'CAN',
-    venue: 'Rogers Centre',
+    city: 'Los Angeles',
+    region: 'California',
+    regionCode: 'CA',
+    country: 'United States',
+    countryCode: 'USA',
+    venue: 'Los Angeles Sports Stadium',
   );
 
   /// Fallback IPTC date samples when no folder import has populated prefs yet.
@@ -144,11 +146,15 @@ class _CaptionLayoutBuilderDialogState
   List<CaptionStyleLibraryEntry> _captionStyleLibrary = const [];
 
   /// Caption screen: Personality / Keywords visibility (same prefs as Preferences dialog).
-  bool _showKeywordsField = false;
-  bool _showPersonalityField = true;
 
   /// When set, the dropdown shows this library entry; cleared for wire presets.
   String? _selectedSavedStyleId;
+
+  /// Application sport (baseball / hockey / basketball / soccer) for defaults.
+  String _sessionSport = 'baseball';
+
+  /// Favorite caption-style menu token (per sport), shown with a star in the dropdown.
+  String? _favoriteCaptionStyleToken;
 
   static const String _menuTokGetty = 'wire:getty';
   static const String _menuTokImagn = 'wire:imagn';
@@ -662,12 +668,18 @@ class _CaptionLayoutBuilderDialogState
     });
   }
 
+  CaptionTemplate _withSessionSportGameId(CaptionTemplate t) =>
+      CaptionTemplate.withSportGameIdentifierDefault(t, _sessionSport);
+
   Future<void> _loadFromPrefs() async {
     final prefs = await PreferencesService.getInstance();
+    _sessionSport = await prefs.getCurrentSport();
+    _favoriteCaptionStyleToken =
+        await prefs.getFavoriteCaptionStyleToken(sport: _sessionSport);
     // Promote any legacy "Getty International" library entry before we read
     // the library so it doesn't show up alongside the new built-in wire.
     await prefs.migrateGettyInternationalLibraryEntry();
-    var template = await prefs.getCaptionTemplate();
+    var template = _withSessionSportGameId(await prefs.getCaptionTemplate());
     final mergedGaps = CaptionFormulaRenderer.effectiveSegmentGaps(template);
     if (template.customSeparators == null ||
         template.customSeparators!.length != mergedGaps.length) {
@@ -681,8 +693,6 @@ class _CaptionLayoutBuilderDialogState
     final gettyIntlDef =
         await prefs.getCaptionTemplateWireDefault(WireStyle.gettyInternational);
     final styleLib = await prefs.getCaptionStyleLibrary();
-    final showKeywords = await prefs.getShowKeywordsField();
-    final showPersonality = await prefs.getShowPersonalityField();
     final gettyLabel = await prefs.getCaptionWireLabel(WireStyle.getty);
     final imagnLabel = await prefs.getCaptionWireLabel(WireStyle.imagn);
     final apLabel = await prefs.getCaptionWireLabel(WireStyle.ap);
@@ -700,8 +710,6 @@ class _CaptionLayoutBuilderDialogState
       _apWireLabel = apLabel;
       _gettyIntlWireLabel = gettyIntlLabel;
       _captionStyleLibrary = styleLib;
-      _showKeywordsField = showKeywords;
-      _showPersonalityField = showPersonality;
       _template = template;
       _selectedWire = template.wireStyle;
       _selectedSavedStyleId =
@@ -719,6 +727,21 @@ class _CaptionLayoutBuilderDialogState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncDateUiFromTemplate();
     });
+  }
+
+  Future<void> _toggleFavoriteCaptionStyle(String token) async {
+    final prefs = await PreferencesService.getInstance();
+    setState(() {
+      if (_favoriteCaptionStyleToken == token) {
+        _favoriteCaptionStyleToken = null;
+      } else {
+        _favoriteCaptionStyleToken = token;
+      }
+    });
+    await prefs.saveFavoriteCaptionStyleToken(
+      _favoriteCaptionStyleToken,
+      sport: _sessionSport,
+    );
   }
 
   String _templateSnapshot([CaptionTemplate? t]) {
@@ -752,8 +775,6 @@ class _CaptionLayoutBuilderDialogState
     }
     final prefs = await PreferencesService.getInstance();
     await prefs.saveCaptionTemplate(normalized);
-    await prefs.saveShowKeywordsField(_showKeywordsField);
-    await prefs.saveShowPersonalityField(_showPersonalityField);
 
     final libId = _selectedSavedStyleId;
     if (libId != null) {
@@ -879,14 +900,22 @@ class _CaptionLayoutBuilderDialogState
     }
   }
 
-  List<String> _captionStyleDropdownTokens() => [
-        _menuTokGetty,
-        _menuTokImagn,
-        _menuTokAp,
-        _menuTokGettyIntl,
-        _menuTokCustom,
-        ..._captionStyleLibrary.map((e) => 'saved:${e.id}'),
-      ];
+  List<String> _captionStyleDropdownTokens() {
+    final tokens = [
+      _menuTokGetty,
+      _menuTokImagn,
+      _menuTokAp,
+      _menuTokGettyIntl,
+      _menuTokCustom,
+      ..._captionStyleLibrary.map((e) => 'saved:${e.id}'),
+    ];
+    tokens.sort(
+      (a, b) => _captionStyleMenuLabel(a)
+          .toLowerCase()
+          .compareTo(_captionStyleMenuLabel(b).toLowerCase()),
+    );
+    return tokens;
+  }
 
   CaptionStyleLibraryEntry? _entryForSavedStyleToken(String token) {
     if (!token.startsWith('saved:')) return null;
@@ -961,7 +990,8 @@ class _CaptionLayoutBuilderDialogState
         _focusedGapIndex = null;
         _disposeGapControllers();
         _selectedSavedStyleId = entry.id;
-        _template = _deepCopyCaptionTemplate(entry.template);
+        _template =
+            _withSessionSportGameId(_deepCopyCaptionTemplate(entry.template));
         _selectedWire = _template.wireStyle;
         if (_template.wireStyle == WireStyle.custom) {
           _lastPreset = _wiredBaseline(WireStyle.getty);
@@ -1012,11 +1042,12 @@ class _CaptionLayoutBuilderDialogState
   /// migrated to the current factory segment layout on first load.
   CaptionTemplate _wiredBaseline(WireStyle wire) {
     CaptionTemplate apply(CaptionTemplate? saved, CaptionTemplate factory) {
-      if (saved == null) return factory;
-      if (!_hasSnippetLayout(saved)) {
-        return _migrateSnippetLayout(saved, factory);
-      }
-      return saved;
+      final base = saved == null
+          ? factory
+          : (!_hasSnippetLayout(saved)
+              ? _migrateSnippetLayout(saved, factory)
+              : saved);
+      return _withSessionSportGameId(base);
     }
 
     switch (wire) {
@@ -1053,6 +1084,8 @@ class _CaptionLayoutBuilderDialogState
           includePlayerPosition: t.includePlayerPosition,
           americanEnglish: t.americanEnglish,
           removeDiacritics: t.removeDiacritics,
+          showPersonalityField: t.showPersonalityField,
+          showKeywordsField: t.showKeywordsField,
           separator: t.separator,
           creditFormat: t.creditFormat,
           bylineOptions: t.bylineOptions,
@@ -1082,6 +1115,8 @@ class _CaptionLayoutBuilderDialogState
           includePlayerPosition: t.includePlayerPosition,
           americanEnglish: t.americanEnglish,
           removeDiacritics: t.removeDiacritics,
+          showPersonalityField: t.showPersonalityField,
+          showKeywordsField: t.showKeywordsField,
           separator: t.separator,
           creditFormat: t.creditFormat,
           bylineOptions: t.bylineOptions,
@@ -1111,6 +1146,8 @@ class _CaptionLayoutBuilderDialogState
           includePlayerPosition: t.includePlayerPosition,
           americanEnglish: t.americanEnglish,
           removeDiacritics: t.removeDiacritics,
+          showPersonalityField: t.showPersonalityField,
+          showKeywordsField: t.showKeywordsField,
           separator: t.separator,
           creditFormat: t.creditFormat,
           bylineOptions: t.bylineOptions,
@@ -1536,12 +1573,12 @@ class _CaptionLayoutBuilderDialogState
         case WireStyle.imagn:
         case WireStyle.ap:
           final b = _draftOrBaseline(w);
-          _template = b;
-          _lastPreset = b;
+          _template = _withSessionSportGameId(b);
+          _lastPreset = _withSessionSportGameId(b);
           break;
         case WireStyle.custom:
           final ref = _lastPreset;
-          _template = CaptionTemplate.custom(
+          _template = _withSessionSportGameId(CaptionTemplate.custom(
             dateFormat: ref.dateFormat,
             dateExpression: ref.dateExpression,
             dateFormula: ref.dateFormula?.clone(),
@@ -1555,6 +1592,8 @@ class _CaptionLayoutBuilderDialogState
             includePlayerPosition: ref.includePlayerPosition,
             americanEnglish: ref.americanEnglish,
             removeDiacritics: ref.removeDiacritics,
+            showPersonalityField: ref.showPersonalityField,
+            showKeywordsField: ref.showKeywordsField,
             separator: ref.separator,
             creditFormat: ref.creditFormat,
             bylineOptions: ref.bylineOptions,
@@ -1568,7 +1607,8 @@ class _CaptionLayoutBuilderDialogState
             punctuationSnippets: ref.punctuationSnippets != null
                 ? List<String>.from(ref.punctuationSnippets!)
                 : null,
-          );
+            gameIdentifierText: ref.gameIdentifierText,
+          ));
           break;
       }
       _initGapControllers(_template);
@@ -1845,13 +1885,9 @@ class _CaptionLayoutBuilderDialogState
       _flushGapControllersIntoTemplate();
       final normalized = _template.normalizePerOccurrenceLists();
       final libId = _selectedSavedStyleId;
-      final keywords = _showKeywordsField;
-      final personality = _showPersonalityField;
       PreferencesService.getInstance().then((prefs) async {
         try {
           await prefs.saveCaptionTemplate(normalized);
-          await prefs.saveShowKeywordsField(keywords);
-          await prefs.saveShowPersonalityField(personality);
           if (libId != null) {
             await prefs.updateCaptionStyleTemplateInLibrary(
               id: libId,
@@ -2237,6 +2273,7 @@ class _CaptionLayoutBuilderDialogState
       seed: _captionSampleSeed,
       previewPlayers: CaptionSessionContext.previewPlayers,
       previewActions: CaptionSessionContext.previewActions,
+      sport: _sessionSport,
     );
     final rendered =
         '${_template.captionPrefix}$sampleCaption${_template.captionSuffix}';
@@ -2877,14 +2914,12 @@ class _CaptionLayoutBuilderDialogState
     );
   }
 
-  /// Session-only until the dialog Save button writes prefs.
   Future<void> _setShowKeywordsField(bool show) async {
-    setState(() => _showKeywordsField = show);
+    setState(() => _template = _template.copyWith(showKeywordsField: show));
   }
 
-  /// Session-only until the dialog Save button writes prefs.
   Future<void> _setShowPersonalityField(bool show) async {
-    setState(() => _showPersonalityField = show);
+    setState(() => _template = _template.copyWith(showPersonalityField: show));
   }
 
   Widget _layoutOptionalFieldRow({
@@ -3617,12 +3652,14 @@ class _CaptionLayoutBuilderDialogState
             seed: _captionSampleSeed,
             previewPlayers: previewPlayers,
             previewActions: previewActions,
+            sport: _sessionSport,
           )
         : (sessionBody != null && sessionBody.isNotEmpty
             ? sessionBody
             : CaptionFormulaRenderer.randomSinglePlayerCaption(
                 _template,
                 seed: _captionSampleSeed,
+                sport: _sessionSport,
               ));
     final playerPreviewText = CaptionFormulaRenderer.randomSinglePlayerPreview(
       _template,
@@ -3807,6 +3844,10 @@ class _CaptionLayoutBuilderDialogState
                                                                   _captionStyleDropdownTokens(),
                                                               initialItem:
                                                                   _captionStyleDropdownInitialToken(),
+                                                              excludeSelected:
+                                                                  false,
+                                                              hideSelectedFieldWhenExpanded:
+                                                                  true,
                                                               overlayHeight:
                                                                   () {
                                                                 final n =
@@ -3878,50 +3919,23 @@ class _CaptionLayoutBuilderDialogState
                                                                   item,
                                                                   isSelected,
                                                                   onItemSelect) {
-                                                                return InkWell(
-                                                                  onTap:
+                                                                return CaptionStyleDropdownListRow(
+                                                                  label:
+                                                                      _captionStyleMenuLabel(
+                                                                          item),
+                                                                  isSelected:
+                                                                      isSelected,
+                                                                  isFavorite:
+                                                                      _favoriteCaptionStyleToken ==
+                                                                          item,
+                                                                  showSavedIcon:
+                                                                      item.startsWith(
+                                                                          'saved:'),
+                                                                  onSelect:
                                                                       onItemSelect,
-                                                                  child:
-                                                                      Padding(
-                                                                    padding: const EdgeInsets
-                                                                        .symmetric(
-                                                                        horizontal:
-                                                                            8,
-                                                                        vertical:
-                                                                            4),
-                                                                    child: Row(
-                                                                      children: [
-                                                                        if (item
-                                                                            .startsWith('saved:'))
-                                                                          Padding(
-                                                                            padding:
-                                                                                const EdgeInsets.only(right: 6),
-                                                                            child:
-                                                                                Icon(
-                                                                              Icons.bookmark_outline,
-                                                                              size: 14,
-                                                                              color: Colors.grey.shade600,
-                                                                            ),
-                                                                          ),
-                                                                        Expanded(
-                                                                          child:
-                                                                              Text(
-                                                                            _captionStyleMenuLabel(item),
-                                                                            maxLines:
-                                                                                1,
-                                                                            overflow:
-                                                                                TextOverflow.ellipsis,
-                                                                            style:
-                                                                                TextStyle(
-                                                                              fontSize: 11,
-                                                                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                                                                              color: Colors.grey.shade800,
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
+                                                                  onToggleFavorite: () =>
+                                                                      _toggleFavoriteCaptionStyle(
+                                                                          item),
                                                                 );
                                                               },
                                                               decoration:
@@ -4314,16 +4328,16 @@ class _CaptionLayoutBuilderDialogState
                                                         _layoutOptionalFieldRow(
                                                           label:
                                                               'Show Personality Field:',
-                                                          value:
-                                                              _showPersonalityField,
+                                                          value: _template
+                                                              .showPersonalityField,
                                                           onSave:
                                                               _setShowPersonalityField,
                                                         ),
                                                         _layoutOptionalFieldRow(
                                                           label:
                                                               'Show Keywords Field:',
-                                                          value:
-                                                              _showKeywordsField,
+                                                          value: _template
+                                                              .showKeywordsField,
                                                           onSave:
                                                               _setShowKeywordsField,
                                                         ),

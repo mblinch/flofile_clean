@@ -1,7 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'app_styled_dialogs.dart';
 import 'package:path/path.dart' as p;
-import 'dart:io';
+import 'oriented_file_preview.dart';
 
 class ThumbnailPopupDialog extends StatefulWidget {
   final List<String> imagePaths;
@@ -348,23 +350,11 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                             // Thumbnail image
                             ClipRRect(
                               borderRadius: BorderRadius.circular(7),
-                              child: Image.file(
-                                File(imagePath),
-                                width: double.infinity,
-                                height: double.infinity,
+                              child: OrientedFilePreview(
+                                path: imagePath,
                                 fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Container(
-                                    width: double.infinity,
-                                    height: double.infinity,
-                                    color: Colors.grey.shade300,
-                                    child: const Icon(
-                                      Icons.broken_image,
-                                      color: Colors.grey,
-                                      size: 32,
-                                    ),
-                                  );
-                                },
+                                cacheWidth: 320,
+                                filterQuality: FilterQuality.high,
                               ),
                             ),
 

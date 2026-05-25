@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
 import '../services/mlb_api_service.dart';
+import '../services/mlb_inning_feature_gate.dart';
+import '../services/mlb_inning_from_timestamp_service.dart';
 import '../services/api_manager.dart';
 import '../services/ftpclient_service.dart';
 import '../services/camera_serial_service.dart';
@@ -19,6 +21,8 @@ import '../utils/default_verb_keywords.dart';
 import '../utils/home_run_type_ui.dart';
 import '../services/preferences_service.dart';
 import '../caption_style/caption_formula_renderer.dart';
+import '../caption_style/sport_verb_categories.dart';
+import '../caption_style/verb_caption_wording.dart';
 import '../caption_style/caption_session_context.dart';
 import '../caption_style/game_info.dart';
 import '../caption_style/caption_template.dart';
@@ -657,6 +661,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Additional verb building state
   int? _selectedRbiInning;
+  final MlbInningFromTimestampService _mlbInningFromTimestamp =
+      MlbInningFromTimestampService();
+  int _mlbInningResolveToken = 0;
+  /// When non-null and equal to [CaptionFieldsWidget.currentImagePath], the
+  /// current inning / prior-to-game state came from MLB play-by-play vs EXIF.
+  String? _mlbInningIndicatorPath;
   String? _selectedPeriod; // Track selected hockey period
   bool _showOvertimePeriods = false; // Track whether to show overtime periods
   bool _isDivingCatch = false;
@@ -738,242 +748,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
-  // Baseball verb categories
-  final Map<String, List<String>> baseballVerbCategories = {
-    'Offense': [
-      'Single',
-      'Double',
-      'Triple',
-      'Home Run',
-      'Sacrifice Fly',
-      'At Bat',
-      'Swings',
-      'Bunts',
-      'Hit by Pitch',
-    ],
-    'Defense': [
-      'Catches',
-      'Throws',
-      'Tags',
-      'Groundball',
-      'Fielding Position',
-      'Double Play',
-      'Triple Play',
-      '',
-      '',
-    ],
-    'Pitching': [
-      'Pitching',
-      'Pitching Change',
-      'Mound Visit',
-      '',
-      '',
-      '',
-      '',
-      '',
-      '',
-    ],
-    'Running': ['Steals', 'Slides', 'Runs', 'Rounds', '', '', '', '', ''],
-    'Reactions': [
-      'Celebrates',
-      'Dejection',
-      'Post Game Win',
-      'Post Game Loss',
-      '',
-      '',
-      '',
-      '',
-      '',
-    ],
-    'Non Game-Action': [
-      'Looks On',
-      'Batting Practice',
-      'Fielding Practice',
-      'Takes the Field',
-      'Comes Off the Field',
-      'National Anthem',
-      'Stretching',
-      'Warm Ups',
-      '',
-    ],
-  };
-
-  // Basketball verb categories
-  final Map<String, List<String>> basketballVerbCategories = {
-    'Offense': [
-      'Drives',
-      'Dribbles',
-      'Shoots',
-      'Scores',
-      'Dunks',
-      'Lays Up',
-      'Three-Pointer',
-      'Free Throw',
-    ],
-    'Defense': [
-      'Blocks',
-      'Steals the Ball',
-      'Defends',
-      'Contests',
-      'Rebounds',
-      '',
-      '',
-      '',
-      '',
-    ],
-    'Reactions': [
-      'Celebrates',
-      'Dejection',
-      'Post Game Win',
-      'Post Game Loss',
-      '',
-      '',
-      '',
-      '',
-      '',
-    ],
-    'Non Game-Action': [
-      'Looks On',
-      'Warm Ups',
-      'Takes the Court',
-      'Comes Off the Court',
-      'National Anthem',
-      'Stretching',
-      'Bench',
-      '',
-      '',
-    ],
-  };
-
-  // Soccer (MLS) verb categories — tuned for match & sideline captions
-  final Map<String, List<String>> soccerVerbCategories = {
-    'Offense': [
-      'Dribbles',
-      'Shoots',
-      'Kicks',
-      'Controls',
-      'Battles',
-      'Scores a Goal',
-      'Celebrates a Goal',
-    ],
-    'Defense': [
-      'Tackles',
-      'Blocks Shot',
-      'Clears',
-      'Intercepts',
-      'Marks',
-      'Headers Away',
-      '',
-      '',
-    ],
-    'Goalkeeper': [
-      'Saves',
-      'Punches',
-      'Catches Cross',
-      'Distribution',
-      'Comes Off Line',
-      'Smothers',
-      '',
-      '',
-    ],
-    'Set Pieces': [
-      'Corner Kick',
-      'Free Kick',
-      'Penalty Kick',
-      'Throw-In',
-      'Wall Defense',
-      '',
-      '',
-      '',
-    ],
-    'Non Game-Action': [
-      'Looks On',
-      'Warm Ups',
-      'Walkout',
-      'National Anthem',
-      'Stretching',
-      'Bench',
-      'Post Game Win',
-      'Post Game Loss',
-      'Dejection',
-    ],
-    'Reactions': [
-      'Celebrates',
-      'Celebrates a Goal',
-      'Dejection',
-      'Frustration',
-      'Post Game Win',
-      'Post Game Loss',
-      '',
-      '',
-    ],
-  };
-
-  // Hockey verb categories (aligned with classic verb list / player popup)
-  final Map<String, List<String>> hockeyVerbCategories = {
-    'Offense': [
-      'Skates',
-      'Shoots',
-      'Battles',
-      'Scores',
-      'Goes to the Net',
-      'Faceoff',
-      'Celebrates a Goal',
-      'Celebrates',
-    ],
-    'Defense': [
-      'Blocks',
-      'Clears',
-      'Checks',
-      'Defends',
-    ],
-    'Goalie': [
-      'Saves',
-      'Handles the Puck',
-      'Stands in Net',
-      'Guards the Net',
-    ],
-    'Non Game-Action': [
-      'Looks On',
-      'Warm Ups',
-      'Takes the Ice',
-      'Walks to the Ice',
-      'Comes Off the Ice',
-      'National Anthem',
-      'Stretching',
-      'Bench',
-      'Post Game Win',
-      'Post Game Loss',
-      'Dejection',
-    ],
-    'Reactions': [
-      'Celebrates',
-      'Celebrates a Goal',
-      'Dejection',
-      'Post Game Win',
-      'Post Game Loss',
-    ],
-  };
-
   /// Deep copy of static verb maps for [sport] (no user ordering).
-  Map<String, List<String>> _staticVerbMapForSport(String sport) {
-    Map<String, List<String>> src;
-    switch (sport) {
-      case 'hockey':
-        src = hockeyVerbCategories;
-        break;
-      case 'basketball':
-        src = basketballVerbCategories;
-        break;
-      case 'soccer':
-        src = soccerVerbCategories;
-        break;
-      case 'baseball':
-      default:
-        src = baseballVerbCategories;
-    }
-    return src.map((k, v) => MapEntry(k, List<String>.from(v)));
-  }
+  Map<String, List<String>> _staticVerbMapForSport(String sport) =>
+      SportVerbCategories.copyForSport(sport);
 
   /// Merges [saved] order onto [defaults]: keeps saved order for known verbs, appends new defaults at end.
   List<String> _mergeVerbOrderList(List<String> defaults, List<String>? saved) {
@@ -992,21 +769,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // Get verb categories based on current sport, filtering out deleted verbs
   Map<String, List<String>> get verbCategories {
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
-    Map<String, List<String>> base;
-    switch (sport) {
-      case 'hockey':
-        base = hockeyVerbCategories;
-        break;
-      case 'basketball':
-        base = basketballVerbCategories;
-        break;
-      case 'soccer':
-        base = soccerVerbCategories;
-        break;
-      case 'baseball':
-      default:
-        base = baseballVerbCategories;
-    }
+    final base = SportVerbCategories.forSport(sport);
     if (_deletedVerbs.isEmpty) return base;
     return base.map(
       (cat, verbs) => MapEntry(
@@ -1041,19 +804,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Expose current sport for child widgets (e.g. KeyboardFirePanel period picker).
   String get currentSportName => widget.sport?.toLowerCase() ?? 'baseball';
 
-  String _previewTimePhraseForSport() {
-    switch (_currentSport) {
-      case 'hockey':
-        return 'in the third period';
-      case 'basketball':
-        return 'in the fourth quarter';
-      case 'soccer':
-        return 'in the second half';
-      case 'baseball':
-      default:
-        return 'in the third inning';
-    }
-  }
+  String _previewTimePhraseForSport() =>
+      CaptionFormulaRenderer.previewTimePhraseForSport(_currentSport);
 
   List<CaptionPreviewPlayer> _buildPreviewPlayersForSession() {
     final home = selectedHomeTeam?.trim();
@@ -1099,7 +851,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       for (final verb in verbs) {
         final canonical = verb.trim();
         if (canonical.isEmpty || !seen.add(canonical)) continue;
-        final wording = _getVerbDisplayText(canonical).trim();
+        final wording = _verbPhraseForPreview(canonical).trim();
         if (wording.isEmpty) continue;
         actions.add('${wording.toLowerCase()} against the {opp} $phrase');
       }
@@ -2184,93 +1936,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return verb;
   }
 
-  // Helper method to get the true default wording (without checking custom wordings)
-  String _getTrueDefaultVerbWording(String verb) {
-    // Return the base action phrase that this verb writes (without "against the team" part)
-    switch (verb) {
-      case 'Home Run':
-        return 'home run';
-      case 'Single':
-        return 'single';
-      case 'Double':
-        return 'double';
-      case 'Triple':
-        return 'triple';
-      case 'Sacrifice Fly':
-        return 'sacrifice fly';
-      case 'Grand Slam':
-        return 'grand slam';
-      case 'At Bat':
-        return 'takes an at bat in his batting stance';
-      case 'Pitching':
-        return 'delivers a pitch';
-      case 'Mound Visit':
-        return 'mound visit';
-      case 'Swings':
-        return 'swings';
-      case 'Bunts':
-        return 'bunts';
-      case 'Hit by Pitch':
-        return 'is hit by a pitch';
-      case 'Walks':
-        return 'takes a walk';
-      case 'Fielding Position':
-        return 'takes fielding position';
-      case 'Looks On':
-        return 'looks on';
-      case 'Walks Off Field':
-        return 'walks off the field';
-      case 'Runs Off Field':
-        return 'runs off the field';
-      case 'Takes the Field':
-        return 'takes the field';
-      case 'Comes Off the Field':
-        return 'comes off the field';
-      case 'National Anthem':
-        return 'looks on during the national anthem prior to play';
-      case 'Stretching':
-        return 'stretches prior to play';
-      case 'Warm Ups':
-        return 'takes part in warm ups prior to play';
-      case 'Pitching Change':
-        return 'pitcher taken out of the game';
-      case 'Catches':
-        return 'catches a ball';
-      case 'Throws':
-        return 'throws a ball';
-      case 'Tags':
-        return 'tags a runner out';
-      case 'Groundball':
-        return 'fields a groundball';
-      case 'Double Play':
-        return 'turns a double play';
-      case 'Triple Play':
-        return 'turns a triple play';
-      case 'Steals':
-        return 'steals a base';
-      case 'Slides':
-        return 'slides into a base';
-      case 'Runs':
-        return 'runs to a base';
-      case 'Rounds':
-        return 'rounds a base';
-      case 'Celebrates':
-      case 'Celebration':
-        return 'celebrates';
-      case 'Celebrates a Goal':
-        return 'celebrates a goal';
-      case 'Goes to the Net':
-        return 'goes to the net against';
-      case 'Guards the Net':
-        return 'guards the net';
-      case 'Walks to the Ice':
-        return 'walks to the ice';
-      case 'Dejection':
-        return 'reacts with dejection';
-      default:
-        return _getVerbDisplayText(verb);
+  String _verbPhraseForPreview(String verb) {
+    final o = _verbOverrides[verb];
+    if (o != null) {
+      final vp = (o['verbPhrase'] as String?)?.trim();
+      if (vp != null && vp.isNotEmpty) return vp;
     }
+    final custom = _customVerbWordings[verb]?.trim();
+    if (custom != null && custom.isNotEmpty) return custom;
+    return VerbCaptionWording.defaultWording(verb);
   }
+
+  // Helper method to get the true default wording (without checking custom wordings)
+  String _getTrueDefaultVerbWording(String verb) =>
+      VerbCaptionWording.defaultWording(verb);
 
   // Helper method to prefill the edit dialog with what the verb writes
   String _getDefaultVerbWordingForEdit(String verb) {
@@ -2801,6 +2480,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Use sport from widget parameter, or load from preferences
     _currentSport = widget.sport?.toLowerCase() ??
         await _preferencesService.getCurrentSport();
+    if (_currentSport.isNotEmpty) {
+      await _preferencesService.saveCurrentSport(_currentSport);
+    }
 
     // Load category order for current sport (or use default for sport if not saved)
     final savedCategoryOrder =
@@ -3067,6 +2749,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         widget.personalityOverride != oldWidget.personalityOverride) {
       personalityController.text = widget.personalityOverride!;
     }
+    if (widget.currentImagePath != oldWidget.currentImagePath) {
+      _mlbInningIndicatorPath = null;
+    }
     // If the selected image changed, always clear reset-lock immediately so
     // incoming metadata for the new image can be bound.
     if (imageIdentityChanged && _hasBeenReset) {
@@ -3234,6 +2919,253 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         updateCaptionFromKeyboardFire();
       }
     }
+
+    _scheduleMlbInningFromPhotoTimestamp(meta);
+  }
+
+  void _mlbClockSnack(String message, bool userInitiated) {
+    if (!userInitiated || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: const TextStyle(fontSize: 13)),
+        duration: const Duration(seconds: 5),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Re-runs MLB play-by-play vs EXIF for the current image (used by the MLB button).
+  Future<void> applyMlbInningFromExifClock({bool userInitiated = false}) async {
+    final meta = widget.metadata;
+    if (meta == null) {
+      _mlbClockSnack('No metadata for this photo yet.', userInitiated);
+      return;
+    }
+    await _scheduleMlbInningFromPhotoTimestamp(
+      meta,
+      userInitiated: userInitiated,
+    );
+  }
+
+  /// Public for [KeyboardFirePanel]: compact MLB control (24px tall).
+  Widget buildMlbInningClockAffordanceForKeyboardFire() {
+    return buildMlbInningClockAffordance(height: 24);
+  }
+
+  /// Baseball: filled “MLB time” after a successful API match, or outlined “MLB” to run / retry.
+  Widget buildMlbInningClockAffordance({double height = 33}) {
+    if ((widget.sport ?? '').toLowerCase() != 'baseball') {
+      return const SizedBox.shrink();
+    }
+    if (showMlbInningFromClockIndicator) {
+      return _mlbInningFromClockChip(height: height);
+    }
+    return _mlbInningFromClockStubButton(height: height);
+  }
+
+  Widget _mlbInningFromClockStubButton({required double height}) {
+    final fontSize = height >= 28 ? 10.0 : 9.0;
+    return Tooltip(
+      message:
+          'Set inning or pre/post-game from MLB play-by-play using this photo’s '
+          'EXIF time, game date, and teams. Tap to run or refresh.',
+      child: SizedBox(
+        height: height,
+        child: OutlinedButton(
+          onPressed: () {
+            applyMlbInningFromExifClock(userInitiated: true);
+          },
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: Size(0, height),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            foregroundColor: const Color(0xFF002D72),
+            side: const BorderSide(color: Color(0xFF002D72)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          child: Text(
+            'MLB',
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// When the MLB inning-from-clock feature is enabled, sets inning / pre-game
+  /// from [statsapi.mlb.com](https://statsapi.mlb.com) play-by-play vs EXIF time.
+  Future<void> _scheduleMlbInningFromPhotoTimestamp(
+    Map<String, dynamic> meta, {
+    bool userInitiated = false,
+  }) async {
+    final path = widget.currentImagePath;
+    if (path == null || path.isEmpty) {
+      _mlbClockSnack('No image selected.', userInitiated);
+      return;
+    }
+    if ((widget.sport ?? '').toLowerCase() != 'baseball') {
+      _mlbClockSnack('Switch to baseball to use MLB inning from EXIF.', userInitiated);
+      return;
+    }
+
+    final home = selectedHomeTeam ?? widget.homeTeam;
+    final away = selectedAwayTeam ?? widget.awayTeam;
+    if (home == null ||
+        away == null ||
+        home.trim().isEmpty ||
+        away.trim().isEmpty) {
+      _mlbClockSnack('Select home and away teams first.', userInitiated);
+      return;
+    }
+
+    final syncId = await _preferencesService.getSyncAccountId();
+    if (!MlbInningFeatureGate.isEnabled(syncId)) {
+      _mlbClockSnack(
+        'MLB inning from EXIF is not enabled for this build or account. '
+        'Use a debug/profile build, or add your sync account id to the allowlist in '
+        'mlb_inning_feature_gate.dart.',
+        userInitiated,
+      );
+      return;
+    }
+
+    final wall =
+        MlbInningFromTimestampService.parseExifDateTimeOriginal(meta);
+    if (wall == null) {
+      _mlbClockSnack(
+        'No EXIF capture time found (DateTimeOriginal / CreateDate).',
+        userInitiated,
+      );
+      return;
+    }
+
+    final tzName = await _preferencesService.getMlbInningExifTimezone();
+    final utc =
+        MlbInningFromTimestampService.naiveWallClockToUtc(tzName, wall);
+    if (utc == null) {
+      _mlbClockSnack(
+        'Invalid “MLB inning (EXIF timezone)” in Preferences → Application.',
+        userInitiated,
+      );
+      return;
+    }
+
+    final gameInfo = await _preferencesService.getCaptionGameInfo();
+    final gameDay = gameInfo.gameDate ?? DateTime.now();
+
+    final token = ++_mlbInningResolveToken;
+    try {
+      final lookup = await _mlbInningFromTimestamp.lookupPhotoInning(
+        userHomeName: home,
+        userAwayName: away,
+        gameCalendarDay: gameDay,
+        photoTimeUtc: utc,
+      );
+      if (!mounted ||
+          widget.currentImagePath != path ||
+          token != _mlbInningResolveToken) {
+        return;
+      }
+      if (!lookup.hasScheduleMatch) {
+        _mlbClockSnack(
+          'No MLB game matched these teams on the caption game date.',
+          userInitiated,
+        );
+        return;
+      }
+      if (!lookup.hasPlayByPlay) {
+        _mlbClockSnack('No play-by-play timestamps for that game yet.', userInitiated);
+        return;
+      }
+
+      if (lookup.phase == MlbPhotoGametimePhase.live &&
+          lookup.inningNumber == null) {
+        _mlbClockSnack('Could not map this time to an inning.', userInitiated);
+        return;
+      }
+
+      setState(() {
+        switch (lookup.phase) {
+          case MlbPhotoGametimePhase.pregame:
+            _putRbiInning(null, mlbIndicatorForPath: path);
+            _selectedPeriod = 'Pre-Game';
+            _isPriorToGame = true;
+            _isPostGame = false;
+            break;
+          case MlbPhotoGametimePhase.postgame:
+            _putRbiInning(null, mlbIndicatorForPath: path);
+            _selectedPeriod = 'Post Game';
+            _isPriorToGame = false;
+            _isPostGame = true;
+            break;
+          case MlbPhotoGametimePhase.live:
+            _putRbiInning(lookup.inningNumber, mlbIndicatorForPath: path);
+            _selectedPeriod = null;
+            _isPriorToGame = false;
+            _isPostGame = false;
+            break;
+        }
+      });
+      // [_updateCaption] clears the caption when no players are selected. After
+      // metadata load we already bound IPTC text; auto MLB must not wipe it.
+      if (selectedHomePlayers.isNotEmpty || selectedAwayPlayers.isNotEmpty) {
+        await _updateCaption();
+      }
+      if (userInitiated && mounted) {
+        _mlbClockSnack('Inning updated from MLB.', true);
+      }
+    } catch (e) {
+      print('MLB inning from photo timestamp: $e');
+      _mlbClockSnack('MLB request failed: $e', userInitiated);
+    }
+  }
+
+  /// Updates [_selectedRbiInning]. Pass [mlbIndicatorForPath] only from the MLB
+  /// timestamp resolver so the UI can show a small “from MLB” chip.
+  void _putRbiInning(int? value, {String? mlbIndicatorForPath}) {
+    _selectedRbiInning = value;
+    if (mlbIndicatorForPath != null) {
+      _mlbInningIndicatorPath = mlbIndicatorForPath;
+    } else {
+      _mlbInningIndicatorPath = null;
+    }
+  }
+
+  Widget _mlbInningFromClockChip({double height = 33}) {
+    final fontSize = height >= 28 ? 10.0 : 9.0;
+    return Tooltip(
+      message:
+          'Pre-game, inning, or post-game was set from MLB play-by-play using '
+          'this photo’s EXIF time and your game date / teams.',
+      child: SizedBox(
+        height: height,
+        child: Container(
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: BoxDecoration(
+            color: const Color(0xFF002D72).withOpacity(0.08),
+            borderRadius: BorderRadius.circular(3),
+            border:
+                Border.all(color: const Color(0xFF002D72).withOpacity(0.35)),
+          ),
+          child: Text(
+            'MLB time',
+            style: TextStyle(
+              fontSize: fontSize,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF002D72),
+              letterSpacing: 0.2,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   /// After metadata refresh for the **same** image (e.g. save), clear player picks
@@ -4718,8 +4650,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                   !hasBareInningToken &&
                                                                   _selectedRbiInning !=
                                                                       null) {
-                                                                _selectedRbiInning =
-                                                                    null;
+                                                                _putRbiInning(null);
                                                                 anyChanged =
                                                                     true;
                                                               }
@@ -4843,8 +4774,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                 inningNum <=
                                                                     20) {
                                                               setState(() {
-                                                                _selectedRbiInning =
-                                                                    inningNum;
+                                                                _putRbiInning(inningNum);
                                                               });
                                                               _updateCaption();
                                                               return;
@@ -5187,8 +5117,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                   inningNum <=
                                                                       20) {
                                                                 setState(() {
-                                                                  _selectedRbiInning =
-                                                                      inningNum;
+                                                                  _putRbiInning(inningNum);
                                                                 });
                                                                 _updateCaption();
                                                                 return;
@@ -5276,8 +5205,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                 !hasBareInningToken &&
                                                                 _selectedRbiInning !=
                                                                     null) {
-                                                              _selectedRbiInning =
-                                                                  null;
+                                                              _putRbiInning(null);
                                                               anyChanged = true;
                                                             }
                                                           });
@@ -9427,12 +9355,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _selectedTagsAction = null;
         _selectedBase = null;
         _rbiCount = null;
-        _selectedRbiInning = null;
+        _putRbiInning(null);
         _popupCustomVerb = null;
         _selectedHittingAction = null;
       });
       if (!suppressCaptionUpdate) _updateCaption();
     } else {
+      final String? prevVerb = _selectedVerb;
       setState(() {
         _selectedVerb = verb;
         _selectedActionVerb = verb;
@@ -9443,7 +9372,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         if (verb != 'Tags') {
           _selectedTagsAction = null;
         }
-        if (!_hitVerbs.contains(verb)) {
+        final prevGroup = prevVerb == null
+            ? 0
+            : (_kbCelebrationHitVerbs.contains(prevVerb)
+                ? 1
+                : (_kbCelebrationRunVerbs.contains(prevVerb) ? 2 : 0));
+        final nextGroup = _kbCelebrationHitVerbs.contains(verb)
+            ? 1
+            : (_kbCelebrationRunVerbs.contains(verb) ? 2 : 0);
+        if (prevGroup == 0 ||
+            nextGroup == 0 ||
+            prevGroup != nextGroup) {
           _selectedHittingAction = null;
         }
       });
@@ -10576,7 +10515,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           _selectedTagsAction = null;
           _selectedBase = null;
           _rbiCount = null;
-          _selectedRbiInning = null;
+          _putRbiInning(null);
         });
         _updateCaption();
       } else {
@@ -10780,7 +10719,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               _selectedTagsAction = null;
               _selectedBase = null;
               _rbiCount = null;
-              _selectedRbiInning = null;
+              _putRbiInning(null);
             } else {
               _stickyVerb = verb;
               _selectedVerb = verb;
@@ -10789,7 +10728,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               _selectedTagsAction = null;
               _selectedBase = null;
               _rbiCount = null;
-              _selectedRbiInning = null;
+              _putRbiInning(null);
             }
           });
           _updateCaption();
@@ -10816,7 +10755,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedTagsAction = null;
             _selectedBase = null;
             _rbiCount = null;
-            _selectedRbiInning = null;
+            _putRbiInning(null);
           });
           _updateCaption();
           return;
@@ -10830,7 +10769,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           _selectedTagsAction = null;
           _selectedBase = null;
           _rbiCount = null;
-          _selectedRbiInning = null;
+          _putRbiInning(null);
         });
         _mergeVerbKeywordsIntoFieldIfEnabled(verb);
         _updateCaption();
@@ -11156,14 +11095,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedTagsAction = null; // Clear tags action when deselecting
             _selectedBase = null; // Clear selected base when deselecting
             _rbiCount = null;
-            _selectedRbiInning = null;
+            _putRbiInning(null);
             _isBatterRunning = false;
           } else {
             _selectedVerb = verb;
             _selectedActionVerb = verb; // Store for caption generation
             _selectedHomeRunType = null;
             _rbiCount = null;
-            _selectedRbiInning = null;
+            _putRbiInning(null);
             _isBatterRunning = false;
           }
         });
@@ -11424,13 +11363,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          Text(
-                                            'Inning',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.grey.shade600,
-                                            ),
+                                          Row(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              Text(
+                                                'Inning',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w500,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 6),
+                                              buildMlbInningClockAffordance(),
+                                            ],
                                           ),
                                           const SizedBox(height: 6),
                                           _buildInningGridForPopup(
@@ -12024,9 +11971,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           GestureDetector(
             onTap: () {
               setState(() {
+                _mlbInningIndicatorPath = null;
                 _isPriorToGame = !_isPriorToGame;
                 if (_isPriorToGame) {
-                  _selectedRbiInning = null;
+                  _putRbiInning(null);
                 }
                 _selectedVerb = verbName;
                 _selectedActionVerb = verbName;
@@ -12074,8 +12022,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   return GestureDetector(
                     onTap: () {
                       setState(() {
-                        _selectedRbiInning =
-                            _selectedRbiInning == inning ? null : inning;
+                        _putRbiInning(_selectedRbiInning == inning ? null : inning);
                         if (_selectedRbiInning != null) {
                           _isPriorToGame = false;
                           _selectedVerb = verbName;
@@ -12128,7 +12075,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         if (_extraInningsPage == 0) {
                           _showExtraInnings = false;
                         }
-                        _selectedRbiInning = null;
+                        _putRbiInning(null);
                         _isPriorToGame = false;
                       });
                       setDialogState(() {});
@@ -12166,7 +12113,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       setState(() {
                         _extraInningsPage++;
                         _showExtraInnings = true;
-                        _selectedRbiInning = null;
+                        _putRbiInning(null);
                         _isPriorToGame = false;
                       });
                       setDialogState(() {});
@@ -12519,13 +12466,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  'Inning',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade800,
-                                  ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Inning',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey.shade800,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    buildMlbInningClockAffordance(),
+                                  ],
                                 ),
                                 InkWell(
                                   onTap: () => Navigator.pop(context),
@@ -12585,11 +12539,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 return GestureDetector(
                                                   onTap: () {
                                                     setState(() {
-                                                      _selectedRbiInning =
-                                                          _selectedRbiInning ==
-                                                                  inning
-                                                              ? null
-                                                              : inning;
+                                                      _putRbiInning(_selectedRbiInning == inning ? null : inning);
                                                       if (_selectedRbiInning !=
                                                           null) {
                                                         _isPriorToGame = false;
@@ -12667,7 +12617,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         _showExtraInnings =
                                                             false;
                                                       }
-                                                      _selectedRbiInning = null;
+                                                      _putRbiInning(null);
                                                       _isPriorToGame = false;
                                                     });
                                                     setDialogState(() {});
@@ -12706,7 +12656,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     setState(() {
                                                       _extraInningsPage++;
                                                       _showExtraInnings = true;
-                                                      _selectedRbiInning = null;
+                                                      _putRbiInning(null);
                                                       _isPriorToGame = false;
                                                     });
                                                     setDialogState(() {});
@@ -12745,10 +12695,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               child: GestureDetector(
                                                 onTap: () {
                                                   setState(() {
+                                                    _mlbInningIndicatorPath =
+                                                        null;
                                                     _isPriorToGame =
                                                         !_isPriorToGame;
                                                     if (_isPriorToGame) {
-                                                      _selectedRbiInning = null;
+                                                      _putRbiInning(null);
                                                     }
                                                     // Set the action verb for caption generation but DON'T set _selectedVerb
                                                     // This prevents the UI from switching to the interface with Back button
@@ -13125,7 +13077,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedTagsAction = null; // Clear tags action when deselecting
             _selectedBase = null; // Clear selected base when deselecting
             _rbiCount = null;
-            _selectedRbiInning = null;
+            _putRbiInning(null);
             _isBatterRunning = false;
           } else {
             _selectedVerb = verb;
@@ -13133,7 +13085,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             // Reset other states when selecting a new verb
             _selectedHomeRunType = null;
             _rbiCount = null;
-            _selectedRbiInning = null;
+            _putRbiInning(null);
             _isBatterRunning = false;
           }
           _updateCaption();
@@ -13290,7 +13242,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Inning:', style: TextStyle(fontSize: 10)),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Text('Inning:', style: TextStyle(fontSize: 10)),
+                      const SizedBox(width: 6),
+                      buildMlbInningClockAffordance(height: 24),
+                    ],
+                  ),
                   const SizedBox(height: 2),
                   GestureDetector(
                     onTap: _showInningSelector,
@@ -13844,7 +13803,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               return GestureDetector(
                 onTap: () {
                   setState(() {
-                    _selectedRbiInning = inning;
+                    _putRbiInning(inning);
                   });
                   _updateCaption();
                   Navigator.pop(context);
@@ -14171,6 +14130,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: GestureDetector(
         onTap: () {
           setState(() {
+            _mlbInningIndicatorPath = null;
             _isPriorToGame = !_isPriorToGame;
             if (_isPriorToGame) {
               _selectedPeriod = null;
@@ -14611,7 +14571,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _selectedVerb = null;
       _selectedActionVerb = null;
       _rbiCount = null;
-      _selectedRbiInning = null;
+      _putRbiInning(null);
 
       // Clear player search state to prevent conflicts
       _filteredPlayers.clear();
@@ -15072,7 +15032,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Only set inning if explicitly provided in the input
         // Don't automatically set inning for shortcodes
         if (inning != null) {
-          _selectedRbiInning = inning;
+          _putRbiInning(inning);
         }
 
         // Apply Home Run type if provided
@@ -15457,7 +15417,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _selectedVerb = null;
       _selectedActionVerb = null;
       _rbiCount = null;
-      _selectedRbiInning = null;
+      _putRbiInning(null);
 
       // Clear player search state to prevent conflicts
       _filteredPlayers.clear();
@@ -15738,7 +15698,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Only set inning if explicitly provided in the input
         // Don't automatically set inning for shortcodes
         if (inning != null) {
-          _selectedRbiInning = inning;
+          _putRbiInning(inning);
         }
 
         // For shortcodes, interpret trailing numbers as RBI count, not inning
@@ -15777,7 +15737,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _selectedVerb = null;
       _selectedActionVerb = null;
       _rbiCount = null;
-      _selectedRbiInning = null;
+      _putRbiInning(null);
     });
 
     // Select the chosen player
@@ -16049,7 +16009,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       setState(() {
         _selectedVerb = action;
         _selectedActionVerb = action;
-        _selectedRbiInning = inning;
+        _putRbiInning(inning);
 
         // Only set RBI count if inning is provided
         if (inning != null &&
@@ -17061,7 +17021,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (priorToGameVerbs.contains(verb)) {
         _isPriorToGame = true;
         _selectedPeriod = null; // Clear period selection for prior to game
-        _selectedRbiInning = null; // Clear inning selection for prior to game
+        _putRbiInning(null); // Clear inning selection for prior to game
       } else {
         _isPriorToGame = false;
       }
@@ -17125,7 +17085,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       final isBaseball = widget.sport?.toLowerCase() == 'baseball';
       if (isBaseball &&
           (period == 'Pre-Game' || period == 'Post Game' || period == null)) {
-        _selectedRbiInning = null;
+        _putRbiInning(null);
       }
       if (period == 'Pre-Game') {
         // Pre-Game uses special "ahead of playing against" caption format
@@ -17154,7 +17114,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Baseball inning from the player popup / Keyboard Fire (1–27 in main UI).
   void updateInningFromPopup(int? inning) {
     setState(() {
-      _selectedRbiInning = inning;
+      _putRbiInning(inning);
       _selectedPeriod = null;
       if (inning != null) {
         _isPriorToGame = false;
@@ -17168,6 +17128,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// Current hockey period selection (for Keyboard Fire panel / popup).
   String? get selectedPeriod => _selectedPeriod;
+
+  /// True when the current inning / prior-to-game came from MLB vs EXIF time.
+  bool get showMlbInningFromClockIndicator =>
+      _mlbInningIndicatorPath != null &&
+      _mlbInningIndicatorPath == widget.currentImagePath &&
+      (widget.sport ?? '').toLowerCase() == 'baseball';
 
   /// Current baseball inning selection (for Keyboard Fire panel).
   int? get selectedRbiInning => _selectedRbiInning;
@@ -18823,7 +18789,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           false; // Reset teammates celebration selection
       _selectedAtBatAction = null;
       _selectedBattingAction = null;
-      _selectedRbiInning = null;
+      _putRbiInning(null);
 
       // Reset other verb-related state
       _rbiCount = null;
@@ -18907,7 +18873,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           false; // Reset teammates celebration selection
       _selectedAtBatAction = null;
       _selectedBattingAction = null;
-      _selectedRbiInning = null;
+      _putRbiInning(null);
 
       // Reset other verb-related state
       _rbiCount = null;
@@ -20618,6 +20584,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           final formattedPos = formatPositionLabelForCaption(
             pos,
             apStyle: template.wireStyle == WireStyle.ap,
+            imagnStyle: template.wireStyle == WireStyle.imagn,
             americanEnglish: template.americanEnglish,
             sport: sportName,
           );
@@ -20785,6 +20752,57 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
     return false; // Default: include "against"
+  }
+
+  /// Verbs where Keyboard Fire "Cele" uses hit-style RBI / home-run celebration captions.
+  static const Set<String> _kbCelebrationHitVerbs = {
+    'Single',
+    'Double',
+    'Triple',
+    'Home Run',
+    'Sacrifice Fly',
+    'Bunt',
+    'Hit by Pitch',
+  };
+
+  /// Verbs where Keyboard Fire "Cele" uses steal/slide/run/round celebration captions.
+  static const Set<String> _kbCelebrationRunVerbs = {
+    'Steals',
+    'Slides',
+    'Runs',
+    'Rounds',
+  };
+
+  /// Dugout / teammate / "against …" suffix for hitting-style celebrates captions.
+  String _baseballCelebrationHitAffixes() {
+    final teammates = _getTeammates();
+    final teammatePhrase = (_selectedHittingAction == 'celebrates_in_dugout' &&
+            teammates.isEmpty)
+        ? ''
+        : (teammates.isNotEmpty
+            ? ' with ${teammates.length == 1 ? 'teammate' : 'teammates'} ${_formatPlayerNames(teammates)}'
+            : '');
+    final opposingPlayers = _getOpposingPlayers();
+    final opposingTeam = _getOpposingTeamName();
+    final againstPhrase = opposingPlayers.isNotEmpty
+        ? ' against ${_formatPlayerNames(opposingPlayers)}${opposingTeam != null ? ' of the $opposingTeam' : ''}'
+        : (opposingTeam != null ? ' against the $opposingTeam' : '');
+    final dugoutPhrase =
+        _selectedHittingAction == 'celebrates_in_dugout' ? ' in the dugout' : '';
+    return '$dugoutPhrase$teammatePhrase$againstPhrase';
+  }
+
+  bool _isHittingCelebrationSelected() {
+    return _selectedHittingAction == 'celebrates' ||
+        _selectedHittingAction == 'celebrates_in_dugout';
+  }
+
+  /// When Cele is on for steal/slide/run/round, replace factual line with [core] + affixes.
+  /// Tagged-out outcomes keep the factual line.
+  String _withRunningVerbCelebration(String factualLine, String celebratoryCore) {
+    if (!_isHittingCelebrationSelected()) return factualLine;
+    if (factualLine.contains('tagged out')) return factualLine;
+    return '$celebratoryCore${_baseballCelebrationHitAffixes()}';
   }
 
   String _buildActionPhrase({CaptionTemplate? template}) {
@@ -21264,9 +21282,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             final baseName = _selectedBaseBeforeTaggedOut != null
                 ? _getFullBaseName(_selectedBaseBeforeTaggedOut!)
                 : 'a base';
+            final mainCol = _getMainSubjectPlayersList();
+            final passive = _taggedOutUsePassiveRunnerByFielder(
+              mainCol,
+              opposingPlayers,
+            );
             if (opposingPlayers.isNotEmpty) {
-              final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'is tagged out attempting to steal $baseName by $playerNames';
+              if (passive) {
+                final playerNames = _formatPlayersWithTeam(opposingPlayers);
+                return 'is tagged out attempting to steal $baseName by $playerNames';
+              }
+              return 'tags ${_formatPlayersWithTeam(opposingPlayers)} out attempting to steal $baseName';
             } else {
               return 'is tagged out attempting to steal $baseName by the ${_getOpposingTeamName()}';
             }
@@ -21274,18 +21300,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             final baseName = _getFullBaseName(_selectedBase!);
             if (opposingPlayers.isNotEmpty) {
               final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'steals $baseName against $playerNames';
+              final factual = 'steals $baseName against $playerNames';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates a steal of $baseName');
             } else {
-              return 'steals $baseName against the ${_getOpposingTeamName()}';
+              final factual =
+                  'steals $baseName against the ${_getOpposingTeamName()}';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates a steal of $baseName');
             }
           }
         } else {
           final opposingPlayers = _getOpposingPlayers();
           if (opposingPlayers.isNotEmpty) {
             final playerNames = _formatPlayersWithTeam(opposingPlayers);
-            return 'steals a base against $playerNames';
+            final factual = 'steals a base against $playerNames';
+            return _withRunningVerbCelebration(
+                factual, 'celebrates a stolen base');
           } else {
-            return 'steals a base against the ${_getOpposingTeamName()}';
+            final factual =
+                'steals a base against the ${_getOpposingTeamName()}';
+            return _withRunningVerbCelebration(
+                factual, 'celebrates a stolen base');
           }
         }
       case 'Slides':
@@ -21295,9 +21331,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             final baseName = _selectedBaseBeforeTaggedOut != null
                 ? _getFullBaseName(_selectedBaseBeforeTaggedOut!)
                 : 'a base';
+            final mainCol = _getMainSubjectPlayersList();
+            final passive = _taggedOutUsePassiveRunnerByFielder(
+              mainCol,
+              opposingPlayers,
+            );
             if (opposingPlayers.isNotEmpty) {
-              final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'gets tagged out sliding into $baseName by $playerNames';
+              if (passive) {
+                final playerNames = _formatPlayersWithTeam(opposingPlayers);
+                return 'gets tagged out sliding into $baseName by $playerNames';
+              }
+              return 'tags ${_formatPlayersWithTeam(opposingPlayers)} out sliding into $baseName';
             } else {
               return 'gets tagged out sliding into $baseName by the ${_getOpposingTeamName()}';
             }
@@ -21305,27 +21349,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             final baseName = _getFullBaseName(_selectedBase!);
             if (opposingPlayers.isNotEmpty) {
               final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'slides safely into $baseName against $playerNames';
+              final factual = 'slides safely into $baseName against $playerNames';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates sliding safely into $baseName');
             } else {
-              return 'slides safely into $baseName against the ${_getOpposingTeamName()}';
+              final factual =
+                  'slides safely into $baseName against the ${_getOpposingTeamName()}';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates sliding safely into $baseName');
             }
           }
         } else {
           final opposingPlayers = _getOpposingPlayers();
           if (opposingPlayers.isNotEmpty) {
             final playerNames = _formatPlayersWithTeam(opposingPlayers);
-            return 'slides into a base against $playerNames';
+            final factual = 'slides into a base against $playerNames';
+            return _withRunningVerbCelebration(
+                factual, 'celebrates sliding into a base');
           } else {
-            return 'slides into a base against the ${_getOpposingTeamName()}';
+            final factual =
+                'slides into a base against the ${_getOpposingTeamName()}';
+            return _withRunningVerbCelebration(
+                factual, 'celebrates sliding into a base');
           }
         }
       case 'Runs':
         if (_selectedBase != null) {
           final opposingPlayers = _getOpposingPlayers();
           if (_selectedBase == 'Tagged Out') {
+            final mainCol = _getMainSubjectPlayersList();
+            final passive = _taggedOutUsePassiveRunnerByFielder(
+              mainCol,
+              opposingPlayers,
+            );
             if (opposingPlayers.isNotEmpty) {
-              final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'gets tagged out running by $playerNames';
+              if (passive) {
+                final playerNames = _formatPlayersWithTeam(opposingPlayers);
+                return 'gets tagged out running by $playerNames';
+              }
+              return 'tags ${_formatPlayersWithTeam(opposingPlayers)} out running the bases';
             } else {
               return 'gets tagged out running by the ${_getOpposingTeamName()}';
             }
@@ -21333,18 +21395,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             final baseName = _getFullBaseName(_selectedBase!);
             if (opposingPlayers.isNotEmpty) {
               final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'runs to $baseName against $playerNames';
+              final factual = 'runs to $baseName against $playerNames';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates running to $baseName');
             } else {
-              return 'runs to $baseName against the ${_getOpposingTeamName()}';
+              final factual =
+                  'runs to $baseName against the ${_getOpposingTeamName()}';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates running to $baseName');
             }
           }
         } else {
           final opposingPlayers = _getOpposingPlayers();
           if (opposingPlayers.isNotEmpty) {
             final playerNames = _formatPlayersWithTeam(opposingPlayers);
-            return 'runs to a base against $playerNames';
+            final factual = 'runs to a base against $playerNames';
+            return _withRunningVerbCelebration(
+                factual, 'celebrates running the bases');
           } else {
-            return 'runs to a base against the ${_getOpposingTeamName()}';
+            final factual =
+                'runs to a base against the ${_getOpposingTeamName()}';
+            return _withRunningVerbCelebration(
+                factual, 'celebrates running the bases');
           }
         }
       case 'Rounds':
@@ -21353,18 +21425,31 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           if (_selectedBase == 'Home') {
             if (opposingPlayers.isNotEmpty) {
               final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'crosses home plate to score against $playerNames';
+              final factual = 'crosses home plate to score against $playerNames';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates crossing home plate to score');
             } else {
-              return 'crosses home plate to score against the ${_getOpposingTeamName()}';
+              final factual =
+                  'crosses home plate to score against the ${_getOpposingTeamName()}';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates crossing home plate to score');
             }
           } else if (_selectedBase == 'Tagged Out') {
             // Use the stored base that was selected before Tagged Out
             final baseName = _selectedBaseBeforeTaggedOut != null
                 ? _getFullBaseName(_selectedBaseBeforeTaggedOut!)
                 : 'a base';
+            final mainCol = _getMainSubjectPlayersList();
+            final passive = _taggedOutUsePassiveRunnerByFielder(
+              mainCol,
+              opposingPlayers,
+            );
             if (opposingPlayers.isNotEmpty) {
-              final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'is tagged out attempting to round $baseName by $playerNames';
+              if (passive) {
+                final playerNames = _formatPlayersWithTeam(opposingPlayers);
+                return 'is tagged out attempting to round $baseName by $playerNames';
+              }
+              return 'tags ${_formatPlayersWithTeam(opposingPlayers)} out attempting to round $baseName';
             } else {
               return 'is tagged out attempting to round $baseName by the ${_getOpposingTeamName()}';
             }
@@ -21372,18 +21457,28 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             final baseName = _getFullBaseName(_selectedBase!);
             if (opposingPlayers.isNotEmpty) {
               final playerNames = _formatPlayersWithTeam(opposingPlayers);
-              return 'rounds $baseName against $playerNames';
+              final factual = 'rounds $baseName against $playerNames';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates rounding $baseName');
             } else {
-              return 'rounds $baseName against the ${_getOpposingTeamName()}';
+              final factual =
+                  'rounds $baseName against the ${_getOpposingTeamName()}';
+              return _withRunningVerbCelebration(
+                  factual, 'celebrates rounding $baseName');
             }
           }
         } else {
           final opposingPlayers = _getOpposingPlayers();
           if (opposingPlayers.isNotEmpty) {
             final playerNames = _formatPlayersWithTeam(opposingPlayers);
-            return 'rounds a base against $playerNames';
+            final factual = 'rounds a base against $playerNames';
+            return _withRunningVerbCelebration(
+                factual, 'celebrates rounding the bases');
           } else {
-            return 'rounds a base against the ${_getOpposingTeamName()}';
+            final factual =
+                'rounds a base against the ${_getOpposingTeamName()}';
+            return _withRunningVerbCelebration(
+                factual, 'celebrates rounding the bases');
           }
         }
       case 'Celebration':
@@ -21967,10 +22062,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       baseAction = resolvedVerbPhrase!;
     }
 
-    // Build the hit phrase
+    // Build the hit phrase. Home Run / Grand Slam use solo / two-run / … / grand slam
+    // wording in [baseAction]; [_rbiCount] may mirror runs for UI but must not become "RBI" text.
     String hitPhrase = '';
-    final bool isHomeRunAction = originalVerb == 'Home Run';
-    if (!isHomeRunAction && _rbiCount != null && _rbiCount! > 0) {
+    final bool homeRunStyleRunsNotRbi =
+        originalVerb == 'Home Run' || originalVerb == 'Grand Slam';
+    if (!homeRunStyleRunsNotRbi && _rbiCount != null && _rbiCount! > 0) {
       final rbiText =
           _rbiCount == 1 ? 'RBI' : '${_numberToWord(_rbiCount!)}-RBI';
       hitPhrase = 'hits a $rbiText $baseAction';
@@ -21982,36 +22079,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       switch (_selectedHittingAction!) {
         case 'celebrates':
         case 'celebrates_in_dugout':
-          // Get teammates (other players from the same team as the main player)
-          final teammates = _getTeammates();
-
-          // For dugout celebration, if no teammates, don't include teammate phrase
-          final teammatePhrase = (_selectedHittingAction ==
-                      'celebrates_in_dugout' &&
-                  teammates.isEmpty)
-              ? ''
-              : (teammates.isNotEmpty
-                  ? ' with ${teammates.length == 1 ? 'teammate' : 'teammates'} ${_formatPlayerNames(teammates)}'
-                  : '');
-
-          // Include opposing players if selected, otherwise use opposing team
-          final opposingPlayers = _getOpposingPlayers();
-          final opposingTeam = _getOpposingTeamName();
-          final againstPhrase = opposingPlayers.isNotEmpty
-              ? ' against ${_formatPlayerNames(opposingPlayers)}${opposingTeam != null ? ' of the $opposingTeam' : ''}'
-              : (opposingTeam != null ? ' against the $opposingTeam' : '');
-
           const celebrationType = 'celebrates';
-          final dugoutPhrase = _selectedHittingAction == 'celebrates_in_dugout'
-              ? ' in the dugout'
-              : '';
+          final affixes = _baseballCelebrationHitAffixes();
 
-          if (_rbiCount != null && _rbiCount! > 0) {
+          if (!homeRunStyleRunsNotRbi &&
+              _rbiCount != null &&
+              _rbiCount! > 0) {
             final rbiText =
                 _rbiCount == 1 ? 'RBI' : '${_numberToWord(_rbiCount!)}-RBI';
-            return '$celebrationType a $rbiText $baseAction$dugoutPhrase$teammatePhrase$againstPhrase';
+            return '$celebrationType a $rbiText $baseAction$affixes';
           } else {
-            return '$celebrationType a $baseAction$dugoutPhrase$teammatePhrase$againstPhrase';
+            return '$celebrationType a $baseAction$affixes';
           }
         case 'runs_base_paths':
           return 'runs the base path on $baseAction';
@@ -22229,6 +22307,45 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return isHomeTeamMainSubject
         ? selectedAwayPlayers.toList()
         : selectedHomePlayers.toList();
+  }
+
+  /// Players on the "main" side of the caption (first team column selected when both teams).
+  /// Inverse of [_getOpposingPlayers] for two-team selections.
+  List<String> _getMainSubjectPlayersList() {
+    if (selectedAwayPlayers.isNotEmpty && selectedHomePlayers.isEmpty) {
+      return selectedAwayPlayers.toList();
+    }
+    if (selectedHomePlayers.isNotEmpty && selectedAwayPlayers.isEmpty) {
+      return selectedHomePlayers.toList();
+    }
+    if (selectedHomePlayers.isNotEmpty && selectedAwayPlayers.isNotEmpty) {
+      return _firstTeamSelected == true
+          ? selectedHomePlayers.toList()
+          : selectedAwayPlayers.toList();
+    }
+    return [];
+  }
+
+  /// First player tapped = fielder applying the tag. If they are on the opponent column,
+  /// use passive voice ("runner … by fielder"). If they are on the main column, use
+  /// active voice ("fielder tags runner …") so the tagger leads the sentence.
+  bool _taggedOutUsePassiveRunnerByFielder(
+    List<String> mainColumnPlayers,
+    List<String> otherColumnPlayers,
+  ) {
+    final fn = _firstPlayerSelected;
+    if (fn == null) return true;
+    if (otherColumnPlayers.any(
+      (p) => _removeJerseyNumberFromName(p) == fn,
+    )) {
+      return true;
+    }
+    if (mainColumnPlayers.any(
+      (p) => _removeJerseyNumberFromName(p) == fn,
+    )) {
+      return false;
+    }
+    return true;
   }
 
   String _formatPlayerNames(List<String> players) {
@@ -22767,7 +22884,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               // Go back to regular innings
                               _showExtraInnings = false;
                               _extraInningsPage = 0;
-                              _selectedRbiInning = null;
+                              _putRbiInning(null);
                             }
                           });
                         },
@@ -22802,8 +22919,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       return GestureDetector(
                         onTap: () {
                           setState(() {
-                            _selectedRbiInning =
-                                _selectedRbiInning == inning ? null : inning;
+                            _putRbiInning(_selectedRbiInning == inning ? null : inning);
                           });
                           _updateCaption();
                         },
@@ -22844,13 +22960,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               // Go back to regular innings
                               _showExtraInnings = false;
                               _extraInningsPage = 0;
-                              _selectedRbiInning = null;
+                              _putRbiInning(null);
                             }
                           } else {
                             // Start showing extra innings
                             _showExtraInnings = true;
                             _extraInningsPage = 0;
-                            _selectedRbiInning = null;
+                            _putRbiInning(null);
                           }
                         });
                       },
@@ -23391,7 +23507,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               // Close when clicking outside the overlay
               setState(() {
                 _selectedVerb = null;
-                _selectedRbiInning = null;
+                _putRbiInning(null);
               });
             },
             child: Container(color: Colors.transparent),
@@ -23453,7 +23569,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Grand Slam':
         return customHr != null && customHr.isNotEmpty
             ? 'grand slam ${customHr.trim()}'
-            : 'grand slam home run';
+            : 'grand slam';
       default:
         return customHr?.trim() ?? 'home run';
     }
@@ -24196,6 +24312,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final formattedPos = formatPositionLabelForCaption(
       posRaw,
       apStyle: template.wireStyle == WireStyle.ap,
+      imagnStyle: template.wireStyle == WireStyle.imagn,
       americanEnglish: template.americanEnglish,
       sport: widget.sport?.toLowerCase(),
     ).trim();
@@ -24206,9 +24323,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final baseName = trailingNumber == null
         ? normalized.trim()
         : normalized.substring(0, trailingNumber.start).trim();
-    final apTeamPositionPlayer = template.wireStyle == WireStyle.ap &&
-        template.captionTeamOrder == CaptionTeamOrder.teamBefore;
-    if (apTeamPositionPlayer) {
+    final positionBeforePlayer =
+        template.captionTeamOrder == CaptionTeamOrder.teamBefore &&
+            (template.wireStyle == WireStyle.ap ||
+                template.wireStyle == WireStyle.imagn);
+    if (positionBeforePlayer) {
       return '$formattedPos $baseName$numberSuffix';
     }
     return '$baseName $formattedPos$numberSuffix';
@@ -25137,7 +25256,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     _cameFromCelebration = false; // Reset the flag
                     // Reset all menu items
                     _rbiCount = null;
-                    _selectedRbiInning = null;
+                    _putRbiInning(null);
                     _showExtraInnings = false;
                     _extraInningsPage = 0;
                   } else {
@@ -25147,7 +25266,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         null; // Reset action verb to clear caption
                     _selectedHittingAction = null;
                     _rbiCount = null;
-                    _selectedRbiInning = null;
+                    _putRbiInning(null);
                     _showExtraInnings = false;
                     _extraInningsPage = 0;
                   }
@@ -25258,8 +25377,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     return GestureDetector(
                       onTap: () {
                         setState(() {
-                          _selectedRbiInning =
-                              _selectedRbiInning == inning ? null : inning;
+                          _putRbiInning(_selectedRbiInning == inning ? null : inning);
                           if (_selectedRbiInning != null) {
                             _isPriorToGame = false;
                           }
@@ -25303,8 +25421,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               if (_extraInningsPage == 0) {
                                 _showExtraInnings = false;
                               }
-                              _selectedRbiInning =
-                                  null; // Clear selection when switching
+                              _putRbiInning(null); // Clear selection when switching
                               _isPriorToGame = false; // Clear prior selection
                             });
                             _updateCaption();
@@ -25341,8 +25458,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             setState(() {
                               _extraInningsPage++;
                               _showExtraInnings = true;
-                              _selectedRbiInning =
-                                  null; // Clear selection when switching
+                              _putRbiInning(null); // Clear selection when switching
                               _isPriorToGame = false; // Clear prior selection
                             });
                             _updateCaption();
@@ -25383,9 +25499,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 GestureDetector(
                   onTap: () {
                     setState(() {
+                      _mlbInningIndicatorPath = null;
                       _isPriorToGame = !_isPriorToGame;
                       if (_isPriorToGame) {
-                        _selectedRbiInning = null;
+                        _putRbiInning(null);
                       }
                     });
                     _updateCaption();

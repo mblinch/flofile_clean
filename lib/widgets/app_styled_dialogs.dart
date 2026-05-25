@@ -94,7 +94,8 @@ Future<bool?> showAppConfirmDialog({
 }
 
 
-/// App-wide right-click context menu style used across panels.
+/// App-wide right-click context menu (square corners, white surface — matches
+/// [showAppConfirmDialog] and Keyboard Fire menus).
 Future<T?> showAppContextMenu<T>({
   required BuildContext context,
   required RelativeRect position,
@@ -106,11 +107,115 @@ Future<T?> showAppContextMenu<T>({
     context: context,
     position: position,
     items: items,
-    color: color ?? Colors.grey.shade50,
-    elevation: elevation ?? 3,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(4),
-      side: BorderSide(color: Colors.grey.shade300),
+    color: color ?? Colors.white,
+    elevation: elevation ?? 0,
+    surfaceTintColor: Colors.transparent,
+    shadowColor: Colors.black.withValues(alpha: 0.12),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.zero,
+      side: BorderSide(color: Color(0xFFD0D0D0)),
     ),
   );
+}
+
+/// Grey bordered action used on startup (Pick folder, Metadata Preset, etc.).
+class AppSecondaryButton extends StatelessWidget {
+  const AppSecondaryButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.icon,
+    this.enabled = true,
+    this.fullWidth = true,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+  final IconData? icon;
+  final bool enabled;
+  final bool fullWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final child = Container(
+      width: fullWidth ? double.infinity : null,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: enabled ? Colors.grey.shade100 : Colors.grey.shade300,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(
+              icon,
+              size: 11,
+              color: enabled ? Colors.grey.shade700 : Colors.grey.shade600,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: enabled ? Colors.grey.shade700 : Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (!enabled || onTap == null) return child;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(onTap: onTap, child: child),
+    );
+  }
+}
+
+/// Compact [PopupMenuItem] rows for [showAppContextMenu].
+class AppPopupMenu {
+  AppPopupMenu._();
+
+  static PopupMenuItem<T> tile<T>({
+    required T value,
+    required String label,
+    IconData? icon,
+    bool destructive = false,
+    double height = 34,
+  }) {
+    final Color c =
+        destructive ? const Color(0xFFC62828) : Colors.black87;
+    return PopupMenuItem<T>(
+      value: value,
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 15, color: c),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: c,
+                height: 1.2,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

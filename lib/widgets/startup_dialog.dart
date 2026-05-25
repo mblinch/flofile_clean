@@ -8,8 +8,10 @@ import 'package:dropdown_flutter/custom_dropdown.dart';
 import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_compact_checkbox.dart';
+import 'app_styled_dialogs.dart';
 import 'metadata_preset_dialog.dart';
 import '../services/preferences_service.dart';
+import 'startup_caption_layout_preview.dart';
 
 // Custom button widget with cursor styling (matching the one in caption_fields_widget.dart)
 class CustomButton extends StatelessWidget {
@@ -1002,11 +1004,77 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   /// Match button width to full Away + @ + Home row width.
-  Widget _buildTeamRowWidth({required Widget child}) {
-    return FractionallySizedBox(
-      widthFactor: 1.0,
-      alignment: Alignment.centerLeft,
-      child: child,
+  Widget _sectionCard({
+    required String label,
+    required List<Widget> children,
+    Widget? trailing,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.grey.shade800,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              if (trailing != null) ...[
+                const Spacer(),
+                trailing,
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _pill({
+    required IconData icon,
+    required String text,
+    double iconSize = 11,
+    Color? iconColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: iconSize, color: iconColor ?? Colors.grey.shade600),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.grey.shade700,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1027,18 +1095,21 @@ class _StartupDialogState extends State<StartupDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final mq = MediaQuery.sizeOf(context);
+    final dialogWidth = (mq.width - 64).clamp(600.0, 1220.0);
+    final dialogHeight = (mq.height - 64).clamp(500.0, 760.0);
     return Material(
-      color: Colors.black.withOpacity(0.5), // Semi-transparent overlay
+      color: Colors.black.withOpacity(0.5),
       child: Center(
         child: Dialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
           child: Container(
-            width: 720,
-            height: 600,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: Colors.white, // Added white background
+            width: dialogWidth,
+            height: dialogHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            color: Colors.white,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1216,398 +1287,202 @@ class _StartupDialogState extends State<StartupDialog> {
                     ),
                   ],
                 ] else if (currentQuestion == 2) ...[
-                  // Team selection
                   if (!isLoadingTeams) ...[
-                    // Pick Images Folder option
-                    _buildTeamRowWidth(
-                      child: CustomButton(
-                        onTap: isLoadingFolder ? null : _pickFolder,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: isLoadingFolder
-                                ? Colors.grey.shade300
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              isLoadingFolder
-                                  ? const SizedBox(
-                                      width: 14,
-                                      height: 14,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    )
-                                  : Icon(Icons.folder_open,
-                                      size: 11, color: Colors.grey.shade700),
-                              const SizedBox(width: 4),
-                              Text(
-                                isLoadingFolder
-                                    ? 'Loading...'
-                                    : 'Pick Images Folder',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isLoadingFolder
-                                      ? Colors.grey.shade600
-                                      : Colors.grey.shade700,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-
-                    // Display selected folder path if exists (no box)
-                    if (selectedFolderPath != null) ...[
-                      Row(
-                        children: [
-                          Text(
-                            'Current Folder: ',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade800,
-                              fontSize: 11,
-                            ),
-                          ),
-                          Expanded(
-                            child: Text(
-                              selectedFolderPath!,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      if (selectedGameDate != null) ...[
-                        Row(
-                          children: [
-                            Text(
-                              'Date detected: ',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey.shade800,
-                                fontSize: 11,
-                              ),
-                            ),
-                            Text(
-                              _formatDate(selectedGameDate!),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Container(
-                          width: double.infinity,
-                          height: 1,
-                          color: Colors.grey.shade300,
-                        ),
-                        const SizedBox(height: 10),
-                      ] else ...[
-                        const SizedBox(height: 6),
-                      ],
-                    ],
-
-                    // Team selection header
-                    Row(
+                    // ── IMAGES FOLDER card ──
+                    _sectionCard(
+                      label: 'IMAGES FOLDER',
                       children: [
-                        Text(
-                          _teamSelectionText +
-                              (_isTypingTeamSelection ? '|' : ''),
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
-                          ),
+                        AppSecondaryButton(
+                          label: isLoadingFolder ? 'Loading...' : 'Pick images folder',
+                          icon: Icons.folder_open,
+                          onTap: isLoadingFolder ? () {} : _pickFolder,
+                          enabled: !isLoadingFolder,
+                          fullWidth: false,
                         ),
-                        if (_isOffline) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.orange.shade100,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.orange.shade300),
-                            ),
-                            child: const Text(
-                              'Offline',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.orange,
-                                fontWeight: FontWeight.w500,
+                        if (selectedFolderPath != null) ...[
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            children: [
+                              _pill(
+                                icon: Icons.folder_outlined,
+                                text: selectedFolderPath!,
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          TextButton(
-                            onPressed: isLoadingTeams ? null : _retryLoadTeams,
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 6),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            child: Text(
-                              isLoadingTeams ? 'Loading…' : 'Retry',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.blue.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
+                              if (selectedGameDate != null)
+                                _pill(
+                                  icon: Icons.circle,
+                                  iconSize: 6,
+                                  iconColor: Colors.green,
+                                  text: _formatDate(selectedGameDate!),
+                                ),
+                            ],
                           ),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 10),
 
-                    // Show team dropdowns only after typewriter is done
-                    if (!_isTypingTeamSelection) ...[
-                      // Away + Home Team on one line (home shown last)
-                      FractionallySizedBox(
-                        widthFactor: 1.0,
-                        alignment: Alignment.centerLeft,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text('Away Team:',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.grey.shade800,
-                                        fontSize: 11,
-                                      )),
-                                ),
-                                const SizedBox(width: 28),
-                                Expanded(
-                                  child: Text('Home Team:',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.grey.shade800,
-                                        fontSize: 11,
-                                      )),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 3),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildTeamDropdownWithFavoriteIndicator(
-                                          isHome: false,
-                                          hintText: 'Away team',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                SizedBox(
-                                  width: 28,
-                                  child: Center(
-                                    child: Text(
-                                      '@',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildTeamDropdownWithFavoriteIndicator(
-                                          isHome: true,
-                                          hintText: 'Home team',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            if (_showStartupCoachInfo) ...[
-                              const SizedBox(height: 4),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: _buildStartupCoachRichText(
-                                      role: _awayCoachRole,
-                                      loading: _awayCoachLoading,
-                                      nameOrStatus: _awayCoachName,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 28),
-                                  Expanded(
-                                    child: _buildStartupCoachRichText(
-                                      role: _homeCoachRole,
-                                      loading: _homeCoachLoading,
-                                      nameOrStatus: _homeCoachName,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                          if (selectedAwayTeam != null) ...[
-                        const SizedBox(height: 6),
-                        Container(
-                          width: double.infinity,
-                          height: 1,
-                          color: Colors.grey.shade300,
-                        ),
-                        const SizedBox(height: 6),
-                      ] else ...[
-                        const SizedBox(height: 8),
-                      ],
-
-                      // Date already shown under Current Folder when available
-
-                      // Error message if same team selected
-                      if (selectedHomeTeam != null &&
-                          selectedAwayTeam != null &&
-                          selectedHomeTeam == selectedAwayTeam)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.red.shade50,
-                            border: Border.all(color: Colors.red.shade200),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.error,
-                                  color: Colors.red, size: 16),
-                              SizedBox(width: 6),
-                              Text(
-                                'Home and away teams must be different',
-                                style: TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: 6),
-
-                      // Go Time — above optional metadata / API controls
-                      _buildTeamRowWidth(
-                        child: CustomButton(
-                          onTap: () {
-                            if (_canProceed) {
-                              setState(() => _goTimeWarningText = null);
-                              widget.onConfigurationComplete(
-                                selectedFolderPath!,
-                                selectedHomeTeam,
-                                selectedAwayTeam,
-                              );
-                              return;
-                            }
-
-                            final missingTeams =
-                                selectedHomeTeam == null ||
-                                    selectedAwayTeam == null;
-                            final sameTeam = selectedHomeTeam != null &&
-                                selectedAwayTeam != null &&
-                                selectedHomeTeam == selectedAwayTeam;
-
-                            String message = 'Complete setup before continuing.';
-                            if (missingTeams) {
-                              message = 'Select both Away and Home teams.';
-                            } else if (sameTeam) {
-                              message = 'Home and away teams must be different.';
-                            }
-                            setState(() => _goTimeWarningText = message);
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: _canProceed
-                                  ? const Color(0xFF0052CC)
-                                  : Colors.grey.shade300,
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: _canProceed
-                                    ? const Color(0xFF0052CC)
-                                    : Colors.grey.shade400,
-                              ),
-                            ),
-                            child: Column(
+                    // ── TEAMS card ──
+                    _sectionCard(
+                      label: 'TEAMS',
+                      trailing: _isOffline
+                          ? Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(
-                                      Icons.rocket_launch,
-                                      size: 11,
-                                      color: _canProceed
-                                          ? Colors.white
-                                          : Colors.grey.shade600,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Go Time',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: _canProceed
-                                            ? Colors.white
-                                            : Colors.grey.shade600,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                if (_goTimeWarningText != null) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _goTimeWarningText!,
-                                    textAlign: TextAlign.center,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.shade100,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border:
+                                        Border.all(color: Colors.orange.shade300),
+                                  ),
+                                  child: const Text(
+                                    'Offline',
                                     style: TextStyle(
                                       fontSize: 10,
-                                      color: Colors.red.shade600,
+                                      color: Colors.orange,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
-                                ],
+                                ),
+                                const SizedBox(width: 6),
+                                TextButton(
+                                  onPressed:
+                                      isLoadingTeams ? null : _retryLoadTeams,
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                  child: Text(
+                                    isLoadingTeams ? 'Loading…' : 'Retry',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : null,
+                      children: [
+                        if (!_isTypingTeamSelection) ...[
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: _buildTeamDropdownWithFavoriteIndicator(
+                                  isHome: false,
+                                  hintText: 'Away team',
+                                ),
+                              ),
+                              SizedBox(
+                                width: 28,
+                                child: Center(
+                                  child: Text(
+                                    '@',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: _buildTeamDropdownWithFavoriteIndicator(
+                                  isHome: true,
+                                  hintText: 'Home team',
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_showStartupCoachInfo) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _buildStartupCoachRichText(
+                                    role: _awayCoachRole,
+                                    loading: _awayCoachLoading,
+                                    nameOrStatus: _awayCoachName,
+                                  ),
+                                ),
+                                const SizedBox(width: 28),
+                                Expanded(
+                                  child: _buildStartupCoachRichText(
+                                    role: _homeCoachRole,
+                                    loading: _homeCoachLoading,
+                                    nameOrStatus: _homeCoachName,
+                                  ),
+                                ),
                               ],
                             ),
+                          ],
+                          if (selectedHomeTeam != null &&
+                              selectedAwayTeam != null &&
+                              selectedHomeTeam == selectedAwayTeam) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                border: Border.all(color: Colors.red.shade200),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.error,
+                                      color: Colors.red, size: 16),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Home and away teams must be different',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ] else ...[
+                          Text(
+                            _teamSelectionText +
+                                (_isTypingTeamSelection ? '|' : ''),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                            ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildTeamRowWidth(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+
+                    // ── CAPTION LAYOUT card ──
+                    _sectionCard(
+                      label: 'CAPTION LAYOUT',
+                      children: [
+                        StartupCaptionLayoutPreview(sport: widget.sport),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── OPTIONAL card ──
+                    _sectionCard(
+                      label: 'OPTIONAL',
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             AppCompactCheckbox(
                               value: _burstDetectionEnabled,
@@ -1617,24 +1492,25 @@ class _StartupDialogState extends State<StartupDialog> {
                                 setState(() => _burstDetectionEnabled = v);
                               },
                             ),
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Burst sequence detection when saving',
+                                    'Burst sequence detection',
                                     style: TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.w600,
                                       color: Colors.grey.shade800,
                                     ),
                                   ),
+                                  const SizedBox(height: 1),
                                   Text(
                                     'Offer to caption following frames only (≤1s apart, not earlier shots). Off by default.',
                                     style: TextStyle(
-                                      fontSize: 8,
-                                      color: Colors.grey.shade600,
+                                      fontSize: 9,
+                                      color: Colors.grey.shade500,
                                     ),
                                   ),
                                 ],
@@ -1642,81 +1518,120 @@ class _StartupDialogState extends State<StartupDialog> {
                             ),
                           ],
                         ),
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        width: double.infinity,
-                        height: 1,
-                        color: Colors.grey.shade300,
-                      ),
-                      const SizedBox(height: 14),
-
-                      // Optional: metadata preset
-                      const Text('Optional:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                            fontSize: 11,
-                          )),
-                      const SizedBox(height: 4),
-                      _buildTeamRowWidth(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 10),
+                        AppSecondaryButton(
+                          label: 'Metadata preset',
+                          icon: Icons.description_outlined,
+                          onTap: _openMetadataPreset,
+                          fullWidth: false,
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
                           children: [
-                            CustomButton(
-                              onTap: _openMetadataPreset,
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 5),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade100,
-                                  borderRadius: BorderRadius.circular(4),
-                                  border:
-                                      Border.all(color: Colors.grey.shade300),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.description,
-                                        size: 11, color: Colors.grey.shade700),
-                                    const SizedBox(width: 4),
-                                    Text('Metadata Preset',
-                                        style: TextStyle(
-                                            fontSize: 11,
-                                            color: Colors.grey.shade700,
-                                            fontWeight: FontWeight.w500)),
-                                  ],
+                            AppCompactCheckbox(
+                              value: _applyPresetToAllImages,
+                              onChanged: (v) {
+                                setState(() {
+                                  _applyPresetToAllImages = v;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Apply preset to all images in session',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade600,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                AppCompactCheckbox(
-                                  value: _applyPresetToAllImages,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      _applyPresetToAllImages = v;
-                                    });
-                                  },
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    'Apply preset to all images in session',
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // ── GO TIME button ──
+                    Center(
+                      child: CustomButton(
+                        onTap: () {
+                          if (_canProceed) {
+                            setState(() => _goTimeWarningText = null);
+                            widget.onConfigurationComplete(
+                              selectedFolderPath!,
+                              selectedHomeTeam,
+                              selectedAwayTeam,
+                            );
+                            return;
+                          }
+                          final missingTeams =
+                              selectedHomeTeam == null ||
+                                  selectedAwayTeam == null;
+                          final sameTeam = selectedHomeTeam != null &&
+                              selectedAwayTeam != null &&
+                              selectedHomeTeam == selectedAwayTeam;
+                          String message = 'Complete setup before continuing.';
+                          if (missingTeams) {
+                            message = 'Select both Away and Home teams.';
+                          } else if (sameTeam) {
+                            message = 'Home and away teams must be different.';
+                          }
+                          setState(() => _goTimeWarningText = message);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 28, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _canProceed
+                                ? const Color(0xFF1A1A1A)
+                                : Colors.grey.shade300,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.play_arrow_rounded,
+                                    size: 16,
+                                    color: _canProceed
+                                        ? Colors.white
+                                        : Colors.grey.shade600,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Go Time',
                                     style: TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.grey.shade700,
+                                      fontSize: 13,
+                                      color: _canProceed
+                                          ? Colors.white
+                                          : Colors.grey.shade600,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: 0.3,
                                     ),
+                                  ),
+                                ],
+                              ),
+                              if (_goTimeWarningText != null) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  _goTimeWarningText!,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: Colors.red.shade400,
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ],
+                    ),
                   ] else ...[
                     const Center(
                       child: CircularProgressIndicator(),

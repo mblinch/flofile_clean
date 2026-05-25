@@ -504,16 +504,49 @@ class CaptionFormulaRenderer {
     return out;
   }
 
+  /// Time phrase for layout/startup previews (matches live caption fields).
+  static String previewTimePhraseForSport(String? sport) {
+    switch ((sport ?? 'baseball').toLowerCase().trim()) {
+      case 'hockey':
+        return 'in the third period';
+      case 'basketball':
+        return 'in the fourth quarter';
+      case 'soccer':
+        return 'in the second half';
+      case 'baseball':
+      default:
+        return 'during the third inning';
+    }
+  }
+
+  static String defaultPreviewActionForSport(String? sport) {
+    final phrase = previewTimePhraseForSport(sport);
+    final s = (sport ?? '').toLowerCase();
+    switch (s) {
+      case 'hockey':
+        return 'scores a goal against the {opp} $phrase';
+      case 'basketball':
+        return 'dunks against the {opp} $phrase';
+      case 'soccer':
+        return 'scores a goal against the {opp} $phrase';
+      case 'baseball':
+      default:
+        return 'hits a home run against the {opp} $phrase';
+    }
+  }
+
   static String sampleDynamicCaption(
     CaptionTemplate template, {
     List<CaptionPreviewPlayer>? previewPlayers,
     List<String>? previewActions,
+    String? sport,
   }) {
     return randomSinglePlayerCaption(
       template,
       seed: 0,
       previewPlayers: previewPlayers,
       previewActions: previewActions,
+      sport: sport,
     );
   }
 
@@ -540,6 +573,7 @@ class CaptionFormulaRenderer {
         ? ' ${formatPositionLabelForCaption(
             player.position,
             apStyle: template.wireStyle == WireStyle.ap,
+            imagnStyle: template.wireStyle == WireStyle.imagn,
             americanEnglish: template.americanEnglish,
             sport: 'baseball',
           )}'
@@ -547,7 +581,7 @@ class CaptionFormulaRenderer {
     final teamPossessive = _possessiveTeam(teamName);
     switch (template.captionTeamOrder) {
       case CaptionTeamOrder.teamAfter:
-        return '$playerName $numText of $teamName$position';
+        return '$playerName $numText of the $teamName$position';
       case CaptionTeamOrder.teamBefore:
         if (template.includePlayerPosition) {
           return '$teamName$position $playerName $numText';
@@ -578,6 +612,7 @@ class CaptionFormulaRenderer {
     int seed = 0,
     List<CaptionPreviewPlayer>? previewPlayers,
     List<String>? previewActions,
+    String? sport,
   }) {
     final rand = Random(seed);
     final players = (previewPlayers != null && previewPlayers.isNotEmpty)
@@ -585,7 +620,7 @@ class CaptionFormulaRenderer {
         : _samplePlayers;
     final actions = (previewActions != null && previewActions.isNotEmpty)
         ? previewActions
-        : _sampleActions;
+        : _previewActionsForSport(sport);
     final player = players[rand.nextInt(players.length)];
     final lead = _singlePlayerLead(template, player);
     final actionTemplate = actions[rand.nextInt(actions.length)];
@@ -593,18 +628,20 @@ class CaptionFormulaRenderer {
     if (template.removeDiacritics) {
       opp = CaptionTextNormalize.stripDiacritics(opp);
     }
-    final action = actionTemplate.replaceAll('{opp}', opp);
+    var action = _normalizePreviewInningPhrase(
+      actionTemplate.replaceAll('{opp}', opp),
+    );
     var line = '$lead $action';
     // Preview should always read with a game segment (inning, half-inning,
     // quarter, or half) — append if an action template ever omits one.
     final hasGameSegment = RegExp(
-      r'\b(inning|innings|quarter|quarters|halftime)\b|'
+      r'\b(inning|innings|quarter|quarters|period|periods|halftime)\b|'
       r'\b(first|second)\s+half\b|'
       r'\b(top|bottom)\s+of\s+the\b',
       caseSensitive: false,
     ).hasMatch(line);
     if (!hasGameSegment) {
-      line = '$line in the third inning';
+      line = '$line ${previewTimePhraseForSport(sport)}';
     }
     if (template.removeDiacritics) {
       line = CaptionTextNormalize.stripDiacritics(line);
@@ -613,45 +650,45 @@ class CaptionFormulaRenderer {
   }
 
   static const List<CaptionPreviewPlayer> _samplePlayers = [
-    CaptionPreviewPlayer('Toronto Blue Jays', 'SP', 'Vladimir Guerrero Jr.', 27,
-        'Atlanta Braves'),
     CaptionPreviewPlayer(
-        'Toronto Blue Jays', 'CF', 'George Springer', 4, 'Atlanta Braves'),
+        'Los Angeles Boulevards', 'CF', 'Heater Ace', 24, 'New York Avenues'),
     CaptionPreviewPlayer(
-        'Toronto Blue Jays', 'SS', 'Bo Bichette', 11, 'Atlanta Braves'),
-    CaptionPreviewPlayer(
-        'Toronto Blue Jays', 'C', 'Danny Jansen', 9, 'Atlanta Braves'),
-    CaptionPreviewPlayer(
-        'Toronto Blue Jays', 'RF', 'Teoscar Hernández', 37, 'Atlanta Braves'),
-    CaptionPreviewPlayer(
-        'Atlanta Braves', 'SP', 'Max Fried', 54, 'Toronto Blue Jays'),
-    CaptionPreviewPlayer(
-        'Atlanta Braves', '3B', 'Austin Riley', 27, 'Toronto Blue Jays'),
-    CaptionPreviewPlayer(
-        'Atlanta Braves', 'RF', 'Ronald Acuña Jr.', 13, 'Toronto Blue Jays'),
-    CaptionPreviewPlayer(
-        'Atlanta Braves', 'C', 'Travis d\'Arnaud', 16, 'Toronto Blue Jays'),
-    CaptionPreviewPlayer(
-        'Atlanta Braves', 'SS', 'Dansby Swanson', 7, 'Toronto Blue Jays'),
+        'New York Avenues', 'SS', 'Clutch Buckets', 7, 'Los Angeles Boulevards'),
   ];
 
-  static const List<String> _sampleActions = [
-    'celebrates after hitting a home run against the {opp} in the bottom of the eighth inning',
-    'pitches during the third inning against the {opp}',
-    'fields a ground ball against the {opp} during the fifth inning',
-    'rounds third base against the {opp} during the seventh inning',
-    'reacts after striking out against the {opp} in the ninth inning',
-    'slides into second base against the {opp} during the fourth inning',
-    'warms up in the bullpen during the second inning before facing the {opp}',
-    'celebrates with teammates after scoring against the {opp} in the top of the sixth inning',
-    'takes a swing against the {opp} in the bottom of the third inning',
-    'throws to first base against the {opp} during the first inning',
-    'checks the runner at first against the {opp} in the top of the fifth inning',
-    'reaches on an error against the {opp} in the bottom of the second inning',
-    // Non-baseball time phrases (still paired with MLB sample names for layout preview).
-    'works against the {opp} during the third quarter',
-    'battles for space against the {opp} in the second half',
-  ];
+  /// Rewrites preview-only inning phrasing (top/bottom half, bare "in the Nth").
+  static String _normalizePreviewInningPhrase(String text) {
+    var s = text;
+    s = s.replaceAllMapped(
+      RegExp(
+        r'\bin the (?:top|bottom) of the ([a-z]+) inning\b',
+        caseSensitive: false,
+      ),
+      (m) => 'during the ${m.group(1)} inning',
+    );
+    s = s.replaceAllMapped(
+      RegExp(r'\bin the ([a-z]+) inning\b', caseSensitive: false),
+      (m) => 'during the ${m.group(1)} inning',
+    );
+    return s;
+  }
+
+  /// Layout/startup previews when no session verbs are loaded.
+  static List<String> _previewActionsForSport(String? sport) {
+    final phrase = previewTimePhraseForSport(sport);
+    final s = (sport ?? '').toLowerCase();
+    switch (s) {
+      case 'hockey':
+        return ['scores a goal against the {opp} $phrase'];
+      case 'basketball':
+        return ['dunks against the {opp} $phrase'];
+      case 'soccer':
+        return ['scores a goal against the {opp} $phrase'];
+      case 'baseball':
+      default:
+        return ['hits a home run against the {opp} $phrase'];
+    }
+  }
 
   static String render({
     required CaptionTemplate template,

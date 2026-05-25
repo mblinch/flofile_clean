@@ -7,8 +7,10 @@ import 'package:path/path.dart' as p;
 import 'package:extended_image/extended_image.dart';
 import '../utils/exiftool_helper.dart';
 import '../flo_layout_constants.dart';
+import 'app_styled_dialogs.dart';
 import 'caption_fields_widget.dart' show CustomButton;
 import 'thumbnail_popup_dialog.dart';
+import 'oriented_file_preview.dart';
 
 class ThumbnailGridWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -789,8 +791,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       _handleThumbnailTap(imagePath);
                     },
                     onSecondaryTapDown: (TapDownDetails details) {
-                      _showContextMenu(
-                          context, imagePath, details.globalPosition);
+                      unawaited(_showContextMenu(
+                          context, imagePath, details.globalPosition));
                     },
                     child: Container(
                       decoration: BoxDecoration(
@@ -1108,201 +1110,126 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       width: double.infinity,
       height: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.white,
         borderRadius: BorderRadius.zero,
       ),
-      child: ExtendedImage.file(
-        File(imagePath),
+      child: OrientedFilePreview(
+        path: imagePath,
         fit: BoxFit.contain,
         cacheWidth: cacheWidthPx,
-        // Let height scale automatically for speed; request higher quality at larger sizes
         filterQuality: FilterQuality.high,
-        loadStateChanged: (state) {
-          if (state.extendedImageLoadState == LoadState.completed ||
-              state.extendedImageLoadState == LoadState.failed) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _onThumbnailLoaded();
-            });
-          }
-          return null;
-        },
+        onLoaded: _onThumbnailLoaded,
       ),
     );
   }
 
   // Removed dimension probing to speed up thumbnail rendering
 
-  void _showContextMenu(
-      BuildContext context, String imagePath, Offset tapPosition) {
-    // Check if we're in multi-selection mode
+  Future<void> _showContextMenu(
+      BuildContext context, String imagePath, Offset tapPosition) async {
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(tapPosition, tapPosition),
+      Offset.zero & overlay.size,
+    );
+
     final isMultiSelect = _selectedImages.isNotEmpty;
     final selectedCount = _selectedImages.length;
 
-    // Position the menu at the tap location
-    final double menuWidth = 200.0;
-    final double menuHeight =
-        isMultiSelect ? 200.0 : 300.0; // Smaller for multi-select
-
-    // Ensure menu doesn't go off screen
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-    final Size screenSize = overlay.size;
-
-    double x = tapPosition.dx;
-    double y = tapPosition.dy;
-
-    // Adjust if menu would go off the right edge
-    if (x + menuWidth > screenSize.width) {
-      x = screenSize.width - menuWidth - 10;
-    }
-
-    // Adjust if menu would go off the bottom edge
-    if (y + menuHeight > screenSize.height) {
-      y = screenSize.height - menuHeight - 10;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.transparent,
-      useSafeArea: false,
-      builder: (BuildContext context) {
-        return Stack(
-          children: [
-            // Transparent overlay to capture taps outside
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-            // Context menu positioned at tap location
-            Positioned(
-              left: x,
-              top: y,
-              child: Material(
-                elevation: 8,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: menuWidth,
-                  constraints: BoxConstraints(maxHeight: menuHeight),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: isMultiSelect
-                        ? [
-                            // Multi-selection menu items
-                            _buildMenuItem(
-                                'paste_metadata',
-                                'Paste Metadata ($selectedCount)',
-                                Icons.paste,
-                                imagePath,
-                                tapPosition),
-                            const Divider(height: 1),
-                            _buildMenuItem(
-                                'ftp_images',
-                                'FTP Images ($selectedCount)',
-                                Icons.cloud_upload,
-                                imagePath,
-                                tapPosition),
-                            const Divider(height: 1),
-                            _buildMenuItem(
-                                'delete_images',
-                                'Delete Images ($selectedCount)',
-                                Icons.delete,
-                                imagePath,
-                                tapPosition,
-                                isDestructive: true),
-                          ]
-                        : [
-                            // Single selection menu items
-                            _buildMenuItem('copy_metadata', 'Copy Metadata',
-                                Icons.copy, imagePath, tapPosition),
-                            _buildMenuItem('paste_metadata', 'Paste Metadata',
-                                Icons.paste, imagePath, tapPosition),
-                            _buildMenuItem(
-                                'apply_iptc_template',
-                                'Apply IPTC Template',
-                                Icons.description,
-                                imagePath,
-                                tapPosition),
-                            if (widget.onEditMetadata != null)
-                              _buildMenuItem('edit_iptc', 'Edit IPTC',
-                                  Icons.edit, imagePath, tapPosition),
-                            if (widget.onEditInPhotoshop != null)
-                              _buildMenuItem(
-                                  'edit_photoshop',
-                                  'Edit in Photoshop',
-                                  Icons.brush,
-                                  imagePath,
-                                  tapPosition),
-                            const Divider(height: 1),
-                            if (widget.uploadedImages.contains(imagePath))
-                              _buildMenuItem('remove_ftp', 'Remove FTP Status',
-                                  Icons.cloud_upload, imagePath, tapPosition),
-                            if (!widget.uploadedImages.contains(imagePath))
-                              _buildMenuItem('ftp_image', 'FTP Image',
-                                  Icons.cloud_upload, imagePath, tapPosition),
-                            const Divider(height: 1),
-                            _buildMenuItem('open', 'Open in Finder',
-                                Icons.open_in_new, imagePath, tapPosition),
-                            const Divider(height: 1),
-                            _buildMenuItem('rename', 'Rename Image', Icons.edit,
-                                imagePath, tapPosition),
-                            const Divider(height: 1),
-                            _buildMenuItem('delete', 'Delete Image',
-                                Icons.delete, imagePath, tapPosition,
-                                isDestructive: true),
-                          ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildMenuItem(String value, String text, IconData icon,
-      String imagePath, Offset tapPosition,
-      {bool isDestructive = false}) {
-    return InkWell(
-      onTap: () {
-        Navigator.of(context).pop();
-        _handleContextMenuAction(value, imagePath, tapPosition);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 14,
-              color: isDestructive ? Colors.red : Colors.black87,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              text,
-              style: TextStyle(
-                color: isDestructive ? Colors.red : Colors.black87,
-                fontSize: 12,
-              ),
-            ),
-          ],
+    final List<PopupMenuEntry<String>> entries;
+    if (isMultiSelect) {
+      entries = [
+        AppPopupMenu.tile(
+          value: 'paste_metadata',
+          label: 'Paste Metadata ($selectedCount)',
+          icon: Icons.paste_outlined,
         ),
-      ),
+        const PopupMenuDivider(height: 1),
+        AppPopupMenu.tile(
+          value: 'ftp_images',
+          label: 'FTP Images ($selectedCount)',
+          icon: Icons.cloud_upload_outlined,
+        ),
+        const PopupMenuDivider(height: 1),
+        AppPopupMenu.tile(
+          value: 'delete_images',
+          label: 'Delete Images ($selectedCount)',
+          icon: Icons.delete_outline,
+          destructive: true,
+        ),
+      ];
+    } else {
+      entries = [
+        AppPopupMenu.tile(
+          value: 'copy_metadata',
+          label: 'Copy Metadata',
+          icon: Icons.copy_outlined,
+        ),
+        AppPopupMenu.tile(
+          value: 'paste_metadata',
+          label: 'Paste Metadata',
+          icon: Icons.paste_outlined,
+        ),
+        AppPopupMenu.tile(
+          value: 'apply_iptc_template',
+          label: 'Apply IPTC Template',
+          icon: Icons.description_outlined,
+        ),
+        if (widget.onEditMetadata != null)
+          AppPopupMenu.tile(
+            value: 'edit_iptc',
+            label: 'Edit IPTC',
+            icon: Icons.edit_outlined,
+          ),
+        if (widget.onEditInPhotoshop != null)
+          AppPopupMenu.tile(
+            value: 'edit_photoshop',
+            label: 'Edit in Photoshop',
+            icon: Icons.brush_outlined,
+          ),
+        const PopupMenuDivider(height: 1),
+        if (widget.uploadedImages.contains(imagePath))
+          AppPopupMenu.tile(
+            value: 'remove_ftp',
+            label: 'Remove FTP Status',
+            icon: Icons.cloud_done_outlined,
+          )
+        else
+          AppPopupMenu.tile(
+            value: 'ftp_image',
+            label: 'FTP Image',
+            icon: Icons.cloud_upload_outlined,
+          ),
+        const PopupMenuDivider(height: 1),
+        AppPopupMenu.tile(
+          value: 'open',
+          label: 'Open in Finder',
+          icon: Icons.open_in_new,
+        ),
+        const PopupMenuDivider(height: 1),
+        AppPopupMenu.tile(
+          value: 'rename',
+          label: 'Rename Image',
+          icon: Icons.drive_file_rename_outline,
+        ),
+        const PopupMenuDivider(height: 1),
+        AppPopupMenu.tile(
+          value: 'delete',
+          label: 'Delete Image',
+          icon: Icons.delete_outline,
+          destructive: true,
+        ),
+      ];
+    }
+
+    final result = await showAppContextMenu<String>(
+      context: context,
+      position: position,
+      items: entries,
     );
+    if (!context.mounted || result == null) return;
+    _handleContextMenuAction(result, imagePath, tapPosition);
   }
 
   void _handleContextMenuAction(

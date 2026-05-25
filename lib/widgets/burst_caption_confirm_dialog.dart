@@ -1,12 +1,13 @@
 import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:extended_image/extended_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../services/preferences_service.dart';
 import 'app_styled_dialogs.dart';
+import 'oriented_file_preview.dart';
 
 /// User choice after a burst (rapid sequence) is detected on save.
 enum BurstCaptionSaveChoice {
@@ -143,6 +144,8 @@ class _BurstCaptionConfirmDialogBody extends StatefulWidget {
 
 class _BurstCaptionConfirmDialogBodyState
     extends State<_BurstCaptionConfirmDialogBody> {
+  final FocusNode _focusNode = FocusNode();
+
   /// Normalized paths the user chose to skip (see [_normKey]).
   final Set<String> _excludedNormalized = {};
 
@@ -158,6 +161,24 @@ class _BurstCaptionConfirmDialogBodyState
       }
     }
     return out;
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _applyToAll() {
+    final count = _pathsToApply.length;
+    if (count == 0) return;
+    Navigator.pop(
+      context,
+      BurstCaptionDialogResult(
+        choice: BurstCaptionSaveChoice.applyToAll,
+        pathsToApply: _pathsToApply,
+      ),
+    );
   }
 
   void _toggleExclude(String path) {
@@ -247,23 +268,11 @@ class _BurstCaptionConfirmDialogBodyState
                     maxWidth: previewMaxW,
                     maxHeight: previewMaxH,
                   ),
-                  child: ExtendedImage.file(
-                    File(path),
+                  child: OrientedFilePreview(
+                    path: path,
                     fit: BoxFit.contain,
                     cacheWidth: previewCacheW,
                     filterQuality: FilterQuality.high,
-                    loadStateChanged: (state) {
-                      if (state.extendedImageLoadState == LoadState.failed) {
-                        return ColoredBox(
-                          color: Colors.grey.shade800,
-                          child: const Center(
-                            child: Icon(Icons.broken_image_outlined,
-                                size: 48, color: Colors.white54),
-                          ),
-                        );
-                      }
-                      return null;
-                    },
                   ),
                 ),
               ],
@@ -282,7 +291,18 @@ class _BurstCaptionConfirmDialogBodyState
     final dialogW = math.min(880.0, screenW * 0.92);
     final applyCount = _pathsToApply.length;
 
-    return AlertDialog(
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.enter) {
+          _applyToAll();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: AlertDialog(
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.zero,
       ),
@@ -444,25 +464,11 @@ class _BurstCaptionConfirmDialogBodyState
                                   fit: StackFit.expand,
                                   children: [
                                     ColoredBox(color: Colors.grey.shade50),
-                                    ExtendedImage.file(
-                                      File(path),
+                                    OrientedFilePreview(
+                                      path: path,
                                       fit: BoxFit.contain,
                                       cacheWidth: cacheThumbW,
                                       filterQuality: FilterQuality.high,
-                                      loadStateChanged: (state) {
-                                        if (state.extendedImageLoadState ==
-                                            LoadState.failed) {
-                                          return ColoredBox(
-                                            color: Colors.grey.shade100,
-                                            child: Icon(
-                                              Icons.broken_image_outlined,
-                                              size: 28,
-                                              color: Colors.grey.shade500,
-                                            ),
-                                          );
-                                        }
-                                        return null;
-                                      },
                                     ),
                                   if (excluded)
                                     Container(
@@ -612,15 +618,7 @@ class _BurstCaptionConfirmDialogBodyState
                   borderRadius: BorderRadius.zero,
                 ),
               ),
-              onPressed: applyCount == 0
-                  ? null
-                  : () => Navigator.pop(
-                        context,
-                        BurstCaptionDialogResult(
-                          choice: BurstCaptionSaveChoice.applyToAll,
-                          pathsToApply: _pathsToApply,
-                        ),
-                      ),
+              onPressed: applyCount == 0 ? null : _applyToAll,
               child: Text(
                 applyCount == n
                     ? 'Apply to all $n'
@@ -631,6 +629,7 @@ class _BurstCaptionConfirmDialogBodyState
           ],
         ),
       ],
+    ),
     );
   }
 }

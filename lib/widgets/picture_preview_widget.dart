@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_styled_dialogs.dart';
-import 'package:extended_image/extended_image.dart';
+import 'color_managed_file_preview.dart';
+import 'oriented_file_preview.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -498,7 +499,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       decoration: BoxDecoration(
                         border: Border.all(
                             color: Colors.grey.shade300, width: 0.5),
-                        color: Colors.grey.shade50,
+                        color: Colors.white,
                       ),
                       clipBehavior: Clip.hardEdge,
                       child: Stack(
@@ -509,11 +510,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                               padding: const EdgeInsets.fromLTRB(
                                   2, 2, 2, 16),
                               child: ClipRect(
-                                child: ExtendedImage.file(
-                                  File(imgPath),
+                                child: OrientedFilePreview(
+                                  path: imgPath,
                                   fit: BoxFit.contain,
-                                  alignment: Alignment.center,
                                   cacheWidth: cacheW,
+                                  filterQuality: FilterQuality.high,
                                 ),
                               ),
                             ),
@@ -642,6 +643,14 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
           final double _mainImageHeight = constraints.maxHeight -
               chromeBarsH -
               (_imageVerticalPadding * 2);
+          final double dpr = MediaQuery.devicePixelRatioOf(context);
+          final int colorManagedMaxPx = (math.max(
+                    constraints.maxWidth,
+                    _mainImageHeight,
+                  ) *
+                  dpr)
+              .round()
+              .clamp(1200, 8192);
           return Column(
             children: [
               // Top bar: Filename, pixel size, date and time
@@ -821,45 +830,20 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     // Main image with right-click and double-click support
                     GestureDetector(
                       onSecondaryTapDown: (details) {
-                        _showContextMenu(
-                            context, currentImagePath, details.globalPosition);
+                        unawaited(_showContextMenu(
+                            context, currentImagePath, details.globalPosition));
                       },
                       onDoubleTap: widget.onEditMetadata != null
                           ? () => widget.onEditMetadata!()
                           : null,
-                      child: ExtendedImage.file(
-                        File(currentImagePath),
+                      child: ColorManagedFilePreview(
+                        path: currentImagePath,
+                        maxPixelDimension: colorManagedMaxPx,
                         fit: BoxFit.contain,
                         alignment: Alignment.center,
                         width: double.infinity,
                         height: double.infinity,
-                        loadStateChanged: (ExtendedImageState state) {
-                          switch (state.extendedImageLoadState) {
-                            case LoadState.loading:
-                              print(
-                                  'DEBUG: ExtendedImage loading: $currentImagePath');
-                              return Container(
-                                color: Colors.grey.shade200,
-                                child: const Center(
-                                    child: CircularProgressIndicator()),
-                              );
-                            case LoadState.completed:
-                              print(
-                                  'DEBUG: ExtendedImage completed: $currentImagePath');
-                              return null; // Use default completed state
-                            case LoadState.failed:
-                              print(
-                                  'DEBUG: ExtendedImage failed: $currentImagePath');
-                              return Container(
-                                color: Colors.grey.shade200,
-                                child: const Center(
-                                  child: Icon(Icons.error,
-                                      color: Colors.red, size: 48),
-                                ),
-                              );
-                          }
-                        },
-                        mode: ExtendedImageMode.none, // No zoom/pan for speed
+                        filterQuality: FilterQuality.high,
                       ),
                     ),
 
@@ -1051,18 +1035,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       maxWidth: MediaQuery.of(context).size.width * 0.9,
                       maxHeight: MediaQuery.of(context).size.height * 0.9,
                     ),
-                    child: ExtendedImage.file(
-                      File(imagePath),
+                    child: ColorManagedFilePreview(
+                      path: imagePath,
+                      maxPixelDimension: 4096,
                       fit: BoxFit.contain,
-                      mode: ExtendedImageMode.gesture, // Enable zoom/pan
-                      initGestureConfigHandler: (state) {
-                        return GestureConfig(
-                          minScale: 0.5,
-                          maxScale: 3.0,
-                          animationMinScale: 0.5,
-                          animationMaxScale: 3.0,
-                        );
-                      },
+                      filterQuality: FilterQuality.high,
                     ),
                   ),
                 ),
@@ -1096,138 +1073,85 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     );
   }
 
-  // Show context menu for right-click
-  void _showContextMenu(
-      BuildContext context, String imagePath, Offset tapPosition) {
-    // Position the menu at the tap location
-    final double menuWidth = 200.0;
-    final double menuHeight = 300.0;
-
-    // Ensure menu doesn't go off screen
-    final RenderBox overlay =
+  // Show context menu for right-click (matches app / Keyboard Fire menu chrome).
+  Future<void> _showContextMenu(
+      BuildContext context, String imagePath, Offset tapPosition) async {
+    final overlay =
         Overlay.of(context).context.findRenderObject() as RenderBox;
-    final Size screenSize = overlay.size;
-
-    double x = tapPosition.dx;
-    double y = tapPosition.dy;
-
-    // Adjust if menu would go off the right edge
-    if (x + menuWidth > screenSize.width) {
-      x = screenSize.width - menuWidth - 10;
-    }
-
-    // Adjust if menu would go off the bottom edge
-    if (y + menuHeight > screenSize.height) {
-      y = screenSize.height - menuHeight - 10;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierColor: Colors.transparent,
-      useSafeArea: false,
-      builder: (BuildContext context) {
-        return Stack(
-          children: [
-            // Transparent overlay to capture taps outside
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => Navigator.of(context).pop(),
-                child: Container(color: Colors.transparent),
-              ),
-            ),
-            // Context menu
-            Positioned(
-              left: x,
-              top: y,
-              child: Material(
-                elevation: 8,
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: menuWidth,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildMenuItem('copy_metadata', 'Copy Metadata',
-                          Icons.copy, imagePath, tapPosition),
-                      _buildMenuItem('paste_metadata', 'Paste Metadata',
-                          Icons.paste, imagePath, tapPosition),
-                      _buildMenuItem(
-                          'apply_iptc_template',
-                          'Apply IPTC Template',
-                          Icons.description,
-                          imagePath,
-                          tapPosition),
-                      if (widget.onEditMetadata != null)
-                        _buildMenuItem('edit_iptc', 'Edit IPTC', Icons.edit,
-                            imagePath, tapPosition),
-                      if (widget.onEditInPhotoshop != null)
-                        _buildMenuItem('edit_photoshop', 'Edit in Photoshop',
-                            Icons.brush, imagePath, tapPosition),
-                      const Divider(height: 1),
-                      if (widget.uploadedImages?.contains(imagePath) ?? false)
-                        _buildMenuItem('remove_ftp', 'Remove FTP Status',
-                            Icons.rocket_launch, imagePath, tapPosition),
-                      if (!(widget.uploadedImages?.contains(imagePath) ??
-                          false))
-                        _buildMenuItem('ftp_image', 'FTP Image',
-                            Icons.rocket_launch, imagePath, tapPosition),
-                      const Divider(height: 1),
-                      _buildMenuItem('open', 'Open in Finder',
-                          Icons.open_in_new, imagePath, tapPosition),
-                      const Divider(height: 1),
-                      _buildMenuItem('rename', 'Rename Image', Icons.edit,
-                          imagePath, tapPosition),
-                      const Divider(height: 1),
-                      _buildMenuItem('delete', 'Delete Image', Icons.delete,
-                          imagePath, tapPosition,
-                          isDestructive: true),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    final position = RelativeRect.fromRect(
+      Rect.fromPoints(tapPosition, tapPosition),
+      Offset.zero & overlay.size,
     );
-  }
 
-  // Build menu item widget
-  Widget _buildMenuItem(String value, String text, IconData icon,
-      String imagePath, Offset tapPosition,
-      {bool isDestructive = false}) {
-    return InkWell(
-      onTap: () {
-        Navigator.of(context).pop();
-        _handleContextMenuAction(value, imagePath, tapPosition);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 14,
-              color: isDestructive ? Colors.red : Colors.black87,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              text,
-              style: TextStyle(
-                color: isDestructive ? Colors.red : Colors.black87,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
+    final entries = <PopupMenuEntry<String>>[
+      AppPopupMenu.tile(
+        value: 'copy_metadata',
+        label: 'Copy Metadata',
+        icon: Icons.copy_outlined,
       ),
+      AppPopupMenu.tile(
+        value: 'paste_metadata',
+        label: 'Paste Metadata',
+        icon: Icons.paste_outlined,
+      ),
+      AppPopupMenu.tile(
+        value: 'apply_iptc_template',
+        label: 'Apply IPTC Template',
+        icon: Icons.description_outlined,
+      ),
+      if (widget.onEditMetadata != null)
+        AppPopupMenu.tile(
+          value: 'edit_iptc',
+          label: 'Edit IPTC',
+          icon: Icons.edit_outlined,
+        ),
+      if (widget.onEditInPhotoshop != null)
+        AppPopupMenu.tile(
+          value: 'edit_photoshop',
+          label: 'Edit in Photoshop',
+          icon: Icons.brush_outlined,
+        ),
+      const PopupMenuDivider(height: 1),
+      if (widget.uploadedImages?.contains(imagePath) ?? false)
+        AppPopupMenu.tile(
+          value: 'remove_ftp',
+          label: 'Remove FTP Status',
+          icon: Icons.cloud_done_outlined,
+        )
+      else
+        AppPopupMenu.tile(
+          value: 'ftp_image',
+          label: 'FTP Image',
+          icon: Icons.cloud_upload_outlined,
+        ),
+      const PopupMenuDivider(height: 1),
+      AppPopupMenu.tile(
+        value: 'open',
+        label: 'Open in Finder',
+        icon: Icons.open_in_new,
+      ),
+      const PopupMenuDivider(height: 1),
+      AppPopupMenu.tile(
+        value: 'rename',
+        label: 'Rename Image',
+        icon: Icons.drive_file_rename_outline,
+      ),
+      const PopupMenuDivider(height: 1),
+      AppPopupMenu.tile(
+        value: 'delete',
+        label: 'Delete Image',
+        icon: Icons.delete_outline,
+        destructive: true,
+      ),
+    ];
+
+    final result = await showAppContextMenu<String>(
+      context: context,
+      position: position,
+      items: entries,
     );
+    if (!context.mounted || result == null) return;
+    _handleContextMenuAction(result, imagePath, tapPosition);
   }
 
   // Handle context menu actions

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
+
+import 'oriented_file_preview.dart';
 
 class FilmstripWidget extends StatelessWidget {
   final List<String> imagePaths;
@@ -105,23 +106,15 @@ class FilmstripWidget extends StatelessWidget {
                         // Thumbnail image
                         ClipRRect(
                           borderRadius: BorderRadius.circular(3),
-                          child: Image.file(
-                            File(imagePath),
+                          child: SizedBox(
                             width: 70,
                             height: 80,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return Container(
-                                width: 70,
-                                height: 80,
-                                color: Colors.grey.shade300,
-                                child: const Icon(
-                                  Icons.broken_image,
-                                  color: Colors.grey,
-                                  size: 24,
-                                ),
-                              );
-                            },
+                            child: OrientedFilePreview(
+                              path: imagePath,
+                              fit: BoxFit.cover,
+                              cacheWidth: 140,
+                              filterQuality: FilterQuality.high,
+                            ),
                           ),
                         ),
                         

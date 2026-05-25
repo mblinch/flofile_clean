@@ -754,6 +754,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     // Configure API Manager for the selected sport
     _apiManager.setSport(sport);
+    unawaited(
+      PreferencesService.getInstance()
+          .then((p) => p.saveCurrentSport(sport.toLowerCase())),
+    );
   }
 
   void _handleStartupComplete(
