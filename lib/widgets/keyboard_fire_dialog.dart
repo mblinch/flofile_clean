@@ -4,9 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app_styled_dialogs.dart';
 import 'package:flutter/services.dart';
-import '../caption_style/caption_formula_renderer.dart';
-import '../caption_style/caption_template.dart';
-import '../services/caption_preview_data_service.dart';
 import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
 import '../services/api_manager.dart';
@@ -595,8 +592,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   bool _showKeywordsField = false;
   bool _showPersonalityField = true;
 
-  CaptionTemplate? _captionPreviewTemplate;
-  final int _captionPreviewSeed = DateTime.now().millisecondsSinceEpoch;
 
   bool _applyVerbKeywordsEnabledKb = true;
   bool _applyPlayerNamesToKeywordsEnabledKb = true;
@@ -904,10 +899,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       });
       p.captionFieldVisibilityRevision
           .addListener(_onKeyboardFireCaptionFieldVisibilityRevision);
-      p.getCaptionTemplate().then((t) {
-        if (!mounted) return;
-        setState(() => _captionPreviewTemplate = t);
-      });
     });
     // Defer state changes to avoid setState() during build (CaptionFieldsWidget).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1536,45 +1527,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
-  String? _fullCaptionPreviewText() {
-    final template = _captionPreviewTemplate;
-    if (template == null) return null;
-    String sport = 'baseball';
-    try {
-      sport = (widget.captionState as dynamic).currentSportName as String? ??
-          'baseball';
-    } catch (_) {}
-    final snap = CaptionPreviewDataService.load(sport: sport);
-    final body = CaptionFormulaRenderer.randomSinglePlayerCaption(
-      template,
-      seed: _captionPreviewSeed,
-      sport: sport,
-      previewPlayers: snap.players,
-      previewActions: snap.actions,
-    );
-    CreditSampleAgency agency;
-    switch (template.wireStyle) {
-      case WireStyle.imagn:
-        agency = CreditSampleAgency.imagn;
-        break;
-      case WireStyle.ap:
-      case WireStyle.cp:
-        agency = CreditSampleAgency.ap;
-        break;
-      case WireStyle.getty:
-      case WireStyle.gettyInternational:
-      case WireStyle.custom:
-        agency = CreditSampleAgency.gettyImages;
-        break;
-    }
-    return CaptionFormulaRenderer.render(
-      template: template,
-      game: snap.gameInfo,
-      sampleAgency: agency,
-      captionOverride: body,
-    );
-  }
-
   /// Editable caption field bound to captionState's caption controller.
   Widget _buildCaptionField() {
     return Builder(builder: (context) {
@@ -1868,14 +1820,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         _showHeadlineField || _showKeywordsField || _showPersonalityField;
 
     Widget _captionStyleBtn() => GestureDetector(
-      onTap: () async {
-        await CaptionLayoutBuilderDialog.show(context);
-        final p = _prefsService;
-        if (p != null && mounted) {
-          final t = await p.getCaptionTemplate();
-          if (mounted) setState(() => _captionPreviewTemplate = t);
-        }
-      },
+      onTap: () => CaptionLayoutBuilderDialog.show(context),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1894,43 +1839,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       ),
     );
 
-    Widget captionFieldWithPreview() {
-      final preview = _fullCaptionPreviewText();
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: _buildCaptionField()),
-          if (preview != null && preview.isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
-              margin: const EdgeInsets.fromLTRB(2, 0, 2, 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(4),
-                border: Border(
-                  left: BorderSide(color: Colors.grey.shade400, width: 2.5),
-                ),
-              ),
-              child: Text(
-                preview,
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10,
-                  height: 1.4,
-                  color: Colors.grey.shade600,
-                  fontFamily: 'Menlo',
-                  fontFamilyFallback: const ['Consolas', 'Courier New', 'monospace'],
-                ),
-              ),
-            ),
-        ],
-      );
-    }
-
     if (!hasSecondary) {
-      return _buildKbLabeledBox('Caption', captionFieldWithPreview(),
+      return _buildKbLabeledBox('Caption', _buildCaptionField(),
           trailingAction: _captionStyleBtn());
     }
 
@@ -1956,7 +1866,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       children: [
         Expanded(
           flex: 13,
-          child: _buildKbLabeledBox('Caption', captionFieldWithPreview(),
+          child: _buildKbLabeledBox('Caption', _buildCaptionField(),
               trailingAction: _captionStyleBtn()),
         ),
         const SizedBox(width: 8),
