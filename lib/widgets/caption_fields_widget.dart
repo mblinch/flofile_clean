@@ -924,11 +924,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final dropdown = Material(
       elevation: 2.0,
       color: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
       child: Container(
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300, width: 1.0),
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           color: Colors.white,
         ),
         child: PopupMenuButton<String>(
@@ -1527,7 +1527,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: Row(
@@ -2028,7 +2028,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           builder: (context, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
               ),
               titlePadding: EdgeInsets.zero,
               title: Container(
@@ -2087,15 +2087,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         isDense: true,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                       ),
@@ -2105,7 +2105,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                         border: Border.all(color: Colors.grey.shade200),
                       ),
                       child: Column(
@@ -2165,7 +2165,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
                   child: const Text(
@@ -2182,7 +2182,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
                   child: const Text(
@@ -2311,7 +2311,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                     ),
                   ),
                   child: const Text(
@@ -3967,13 +3967,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 1, bottom: 0),
+          padding: const EdgeInsets.only(left: 1, bottom: 2),
           child: Text(
             label,
             style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
               color: Colors.black87,
+              letterSpacing: 0.8,
             ),
           ),
         ),
@@ -3981,22 +3982,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           controller: controller,
           minLines: 1,
           maxLines: 1,
-          style: const TextStyle(fontSize: 10),
+          style: const TextStyle(fontSize: 12),
           decoration: InputDecoration(
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(3),
               borderSide: BorderSide(
                 color: Colors.grey.shade400,
               ),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(3),
               borderSide: BorderSide(
                 color: Colors.grey.shade400,
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.zero,
+              borderRadius: BorderRadius.circular(3),
               borderSide: BorderSide(
                 color: Colors.blue.shade400,
                 width: 2,
@@ -4047,22 +4048,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget build(BuildContext context) {
     return Container(
       margin: EdgeInsets.zero,
-      decoration: BoxDecoration(color: Colors.white),
-      child: Column(
+      decoration: const BoxDecoration(color: Colors.white),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Top nav/firebar removed
-          const SizedBox.shrink(),
-          // Caption Builder Section
+          // Main content area
           Expanded(
-            child: Row(
+            child: Column(
               children: [
-                // Left side: Caption, Personality, and Player/Verb area (70%)
+                const SizedBox.shrink(),
                 Expanded(
-                  flex: 8,
-                  child: Column(
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 8,
+                        child: Column(
                     children: [
                       // Caption ~65% width vs. Personality/Headline/Keywords stack ~35%.
                       Expanded(
+                        flex: 2,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -4088,8 +4092,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 'CAPTION',
                                               style: TextStyle(
                                                 fontSize: 11,
-                                                fontWeight: FontWeight.w500,
+                                                fontWeight: FontWeight.w600,
                                                 color: Colors.black87,
+                                                letterSpacing: 0.8,
                                               ),
                                             ),
                                             const Spacer(),
@@ -4155,11 +4160,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       TextAlignVertical.top,
                                                   onChanged: _onCaptionChanged,
                                                   style: const TextStyle(
-                                                      fontSize: 11),
+                                                      fontSize: 13),
                                                   decoration: InputDecoration(
                                                     border: OutlineInputBorder(
                                                       borderRadius:
-                                                          BorderRadius.zero,
+                                                          BorderRadius.circular(3),
                                                       borderSide: BorderSide(
                                                         color: Colors
                                                             .grey.shade400,
@@ -4168,7 +4173,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     enabledBorder:
                                                         OutlineInputBorder(
                                                       borderRadius:
-                                                          BorderRadius.zero,
+                                                          BorderRadius.circular(3),
                                                       borderSide: BorderSide(
                                                         color: Colors
                                                             .grey.shade400,
@@ -4177,7 +4182,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     focusedBorder:
                                                         OutlineInputBorder(
                                                       borderRadius:
-                                                          BorderRadius.zero,
+                                                          BorderRadius.circular(3),
                                                       borderSide: BorderSide(
                                                         color: Colors
                                                             .blue.shade400,
@@ -5282,13 +5287,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                       // Player and Verb Selection Area (hidden for certain layouts)
                       if (!widget.hidePlayerPicker)
-                        Expanded(child: _buildCaptionBuildingSection()),
+                        Expanded(flex: 5, child: _buildCaptionBuildingSection()),
                     ],
                   ),
                 ),
 
                 // Right side removed - personality box is now beside caption box
               ],
+            ),
+          ),
+        ],
             ),
           ),
         ],
@@ -5365,15 +5373,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         style: const TextStyle(fontSize: 11),
                         decoration: InputDecoration(
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             borderSide: BorderSide(color: Colors.blue.shade400),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
@@ -5475,25 +5483,135 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
-  Widget _buildCaptionBuildingSection() {
+  Widget _buildInlineInningBar() {
+    final sport = _currentSport.toLowerCase();
+    String label;
+    int count;
+    switch (sport) {
+      case 'hockey':
+        label = 'Period';
+        count = 3;
+        break;
+      case 'basketball':
+        label = 'Quarter';
+        count = 4;
+        break;
+      case 'soccer':
+        label = 'Half';
+        count = 2;
+        break;
+      case 'baseball':
+      default:
+        label = 'Inning';
+        count = 9;
+        break;
+    }
+
     return Container(
-      padding: const EdgeInsets.only(top: 4),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: Colors.white,
+        color: Colors.grey.shade100,
+        border: Border(
+          top: BorderSide(color: Colors.grey.shade300),
+          bottom: BorderSide(color: Colors.grey.shade300),
+        ),
       ),
       child: Row(
         children: [
-          // Left Team (Home or Away depending on _homeOnLeft) - Fixed width
-          SizedBox(
-            width: 340,
-            child: _buildCompactTeamColumn(_homeOnLeft ? true : false),
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+              color: Colors.grey.shade600,
+            ),
           ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (int i = 1; i <= count; i++)
+                  _inningPill(i.toString(), i),
+                if (sport == 'baseball')
+                  _inningPill('Extra', count + 1),
+                if (sport == 'hockey')
+                  _inningPill('OT', count + 1),
+                if (sport == 'basketball')
+                  _inningPill('OT', count + 1),
+                if (sport == 'soccer')
+                  _inningPill('ET', count + 1),
+                _inningPill('Pre', 0),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-          const SizedBox(width: 4),
+  Widget _inningPill(String text, int value) {
+    return GestureDetector(
+      onTap: () {
+        _showCompactInningSelector();
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFE4E3DF)),
+          ),
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF555555),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-          // Verbs (Center) - Takes remaining space
-          Expanded(child: _buildCompactVerbColumn()),
+  Widget _buildCaptionBuildingSection() {
+    return Container(
+      padding: const EdgeInsets.only(top: 0),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(0),
+        color: Colors.white,
+      ),
+      child: Column(
+        children: [
+          // Inline inning/period bar
+          _buildInlineInningBar(),
+          // 3-panel roster: Away | Verbs | Home
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Away team
+                Expanded(
+                  child: _buildCompactTeamColumn(false),
+                ),
+                // Verbs (center)
+                SizedBox(
+                  width: 140,
+                  child: _buildCompactVerbColumn(),
+                ),
+                // Home team
+                Expanded(
+                  child: _buildCompactTeamColumn(true),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -5591,7 +5709,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           color: Colors.grey.shade50,
                         ),
                         child: Row(
@@ -5717,7 +5835,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               border: Border.all(color: Colors.grey.shade300),
             ),
             child: Text(
@@ -5758,7 +5876,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: Row(
@@ -5798,7 +5916,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     decoration: BoxDecoration(
                       color: Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: Row(
@@ -5847,7 +5965,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF4A90E2),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                         border: Border.all(color: const Color(0xFF4A90E2)),
                       ),
                       child: Center(
@@ -5875,14 +5993,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: _disableFtp
-                          ? Colors.grey.shade300
-                          : const Color(0xFF0052CC),
-                      borderRadius: BorderRadius.circular(4),
+                      gradient: _disableFtp
+                          ? null
+                          : const LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+                            ),
+                      color: _disableFtp ? Colors.grey.shade300 : null,
+                      borderRadius: BorderRadius.circular(3),
                       border: Border.all(
                         color: _disableFtp
                             ? Colors.grey.shade300
-                            : const Color(0xFF0052CC),
+                            : const Color(0xFF3A5F78),
                       ),
                     ),
                     child: Row(
@@ -6701,7 +6824,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   color: isSelected
                       ? (isHomePlayer ? Colors.grey.shade700 : Colors.white)
                       : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(
                     color: isSelected
                         ? (isHomePlayer
@@ -6803,7 +6926,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 height: 33,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(color: Colors.grey.shade200, width: 0.5),
                 ),
                 child: Container(), // Empty placeholder square
@@ -7036,14 +7159,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               : () {
                   _showPlayerEditDialog(isHome: isHome);
                 },
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
             decoration: BoxDecoration(
               color: Colors.blue.shade50,
               border: Border.all(color: Colors.blue.shade200),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -7150,15 +7273,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 7),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
                     ),
@@ -7195,15 +7318,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 7),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
                     ),
@@ -7496,7 +7619,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(color: Colors.grey.shade200, width: 0.5),
         ),
         child: Center(
@@ -7569,7 +7692,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   color: isSelected
                       ? (isHome ? Colors.blue.shade100 : Colors.red.shade100)
                       : Colors.white,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(
                     color: isSelected
                         ? (isHome ? Colors.blue.shade400 : Colors.red.shade400)
@@ -7618,7 +7741,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               margin: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
                 border: Border.all(color: Colors.grey.shade200, width: 0.5),
               ),
             ),
@@ -7645,7 +7768,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(color: Colors.grey.shade200, width: 0.5),
         ),
         child: Center(
@@ -7785,7 +7908,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   color: isSelected
                       ? (isHome ? Colors.grey.shade700 : Colors.white)
                       : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(
                     color: isSelected
                         ? (isHome ? Colors.grey.shade700 : Colors.grey.shade400)
@@ -7881,7 +8004,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 height: 33,
                 decoration: BoxDecoration(
                   color: Colors.grey.shade50,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(color: Colors.grey.shade200, width: 0.5),
                 ),
                 child: Container(), // Empty placeholder square
@@ -8278,7 +8401,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(color: Colors.grey.shade200, width: 0.5),
         ),
         child: Center(
@@ -8298,7 +8421,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       height: 200,
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(3),
       ),
       child: ListView.builder(
         itemCount: allPlayers.length,
@@ -8430,7 +8553,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         margin: const EdgeInsets.all(4),
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(color: Colors.grey.shade200, width: 0.5),
         ),
         child: Center(
@@ -8450,7 +8573,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       height: 200,
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(3),
       ),
       child: ListView.builder(
         itemCount: allPlayers.length,
@@ -8696,12 +8819,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                             elevation:
                                                                                 8,
                                                                             borderRadius:
-                                                                                BorderRadius.circular(4),
+                                                                                BorderRadius.circular(3),
                                                                             child:
                                                                                 Container(
                                                                               decoration: BoxDecoration(
                                                                                 color: Colors.white,
-                                                                                borderRadius: BorderRadius.circular(4),
+                                                                                borderRadius: BorderRadius.circular(3),
                                                                                 border: Border.all(color: Colors.grey.shade300),
                                                                               ),
                                                                               child: Column(
@@ -9876,7 +9999,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
             return Dialog(
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   side: const BorderSide(color: Colors.black, width: 1)),
               child: Container(
                 width: 500,
@@ -9885,7 +10008,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(4)),
+                    borderRadius: BorderRadius.circular(3)),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -9905,7 +10028,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         decoration: InputDecoration(
                           hintText: 'e.g., Skates',
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4)),
+                              borderRadius: BorderRadius.circular(3)),
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 8),
                           isDense: true,
@@ -9923,7 +10046,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         decoration: InputDecoration(
                           hintText: 'e.g., skates, battles, shoots',
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4)),
+                              borderRadius: BorderRadius.circular(3)),
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 8),
                           isDense: true,
@@ -9934,7 +10057,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           border: Border.all(color: Colors.blue.shade200),
                         ),
                         child: Column(
@@ -9989,7 +10112,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         decoration: InputDecoration(
                           hintText: 'e.g., skate, battle, shoot',
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(4)),
+                              borderRadius: BorderRadius.circular(3)),
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 8),
                           isDense: true,
@@ -10000,7 +10123,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           border: Border.all(color: Colors.green.shade200),
                         ),
                         child: Column(
@@ -10051,7 +10174,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           'e.g., pitch, pitcher, pitching (comma-separated)',
                                       border: OutlineInputBorder(
                                           borderRadius:
-                                              BorderRadius.circular(4)),
+                                              BorderRadius.circular(3)),
                                       contentPadding:
                                           const EdgeInsets.symmetric(
                                               horizontal: 8, vertical: 8),
@@ -10065,7 +10188,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     decoration: BoxDecoration(
                                       border: Border.all(
                                           color: Colors.grey.shade300),
-                                      borderRadius: BorderRadius.circular(4),
+                                      borderRadius: BorderRadius.circular(3),
                                       color: Colors.grey.shade50,
                                     ),
                                     child: Text(
@@ -10118,7 +10241,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         padding: const EdgeInsets.symmetric(horizontal: 8),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
@@ -10940,7 +11063,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               TextSpan(
                                 text: _getVerbDisplayText(verb),
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 13,
                                   fontWeight: isSelected
                                       ? FontWeight.w600
                                       : FontWeight.w500,
@@ -10952,7 +11075,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               TextSpan(
                                 text: ' 🔥$shortcutLetters',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                   color: isSelected
                                       ? const Color(0xFF0052CC)
@@ -10963,7 +11086,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 TextSpan(
                                   text: ' ⭐',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 13,
                                     color: Colors.amber.shade600,
                                   ),
                                 ),
@@ -10977,7 +11100,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               TextSpan(
                                 text: _getVerbDisplayText(verb),
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   fontWeight: isSelected
                                       ? FontWeight.w600
                                       : FontWeight.w500,
@@ -10990,7 +11113,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 TextSpan(
                                   text: ' ⭐',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 13,
                                     color: Colors.amber.shade600,
                                   ),
                                 ),
@@ -11011,7 +11134,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               TextSpan(
                                 text: _getVerbDisplayText(verb),
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 13,
                                   fontWeight: isSelected
                                       ? FontWeight.w600
                                       : FontWeight.w500,
@@ -11023,7 +11146,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               TextSpan(
                                 text: ' 🔥$shortcutLetters',
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                   color: isSelected
                                       ? const Color(0xFF0052CC)
@@ -11034,7 +11157,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 TextSpan(
                                   text: ' ⭐',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 13,
                                     color: Colors.amber.shade600,
                                   ),
                                 ),
@@ -11049,7 +11172,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               TextSpan(
                                 text: _getVerbDisplayText(verb),
                                 style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 13,
                                   fontWeight: isSelected
                                       ? FontWeight.w600
                                       : FontWeight.w500,
@@ -11062,7 +11185,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 TextSpan(
                                   text: ' ⭐',
                                   style: TextStyle(
-                                    fontSize: 11,
+                                    fontSize: 13,
                                     color: Colors.amber.shade600,
                                   ),
                                 ),
@@ -11298,11 +11421,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   top: top,
                   child: Material(
                     elevation: 8,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(3),
                     child: Container(
                       width: dialogWidth,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                         color: Colors.white,
                       ),
                       child: Column(
@@ -11332,7 +11455,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                                 InkWell(
                                   onTap: () => Navigator.pop(context),
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(3),
                                   child: Container(
                                     width: 20,
                                     height: 20,
@@ -11782,7 +11905,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       vertical: 8),
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
-                                                    BorderRadius.circular(4),
+                                                    BorderRadius.circular(3),
                                               ),
                                               alignment: Alignment.centerLeft,
                                             ),
@@ -12194,7 +12317,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   top: top,
                   child: Material(
                     elevation: 8,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(3),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -12224,7 +12347,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 onTap: () {
                                   Navigator.pop(context);
                                 },
-                                borderRadius: BorderRadius.circular(4),
+                                borderRadius: BorderRadius.circular(3),
                                 child: Container(
                                   width: 20,
                                   height: 20,
@@ -12275,7 +12398,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 8, vertical: 8),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(4),
+                                      borderRadius: BorderRadius.circular(3),
                                     ),
                                   ),
                                   child: Row(
@@ -12307,7 +12430,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 12, vertical: 8),
                                     shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(4),
+                                      borderRadius: BorderRadius.circular(3),
                                     ),
                                     alignment: Alignment.centerLeft,
                                   ),
@@ -12443,10 +12566,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   top: top,
                   child: Material(
                     elevation: 8,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(3),
                     child: Container(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                         color: Colors.white,
                       ),
                       child: Column(
@@ -12483,7 +12606,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                                 InkWell(
                                   onTap: () => Navigator.pop(context),
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(3),
                                   child: Container(
                                     width: 20,
                                     height: 20,
@@ -12781,7 +12904,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         vertical: 8),
                                                 shape: RoundedRectangleBorder(
                                                   borderRadius:
-                                                      BorderRadius.circular(4),
+                                                      BorderRadius.circular(3),
                                                 ),
                                               ),
                                               child: Row(
@@ -12823,7 +12946,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         vertical: 8),
                                                 shape: RoundedRectangleBorder(
                                                   borderRadius:
-                                                      BorderRadius.circular(4),
+                                                      BorderRadius.circular(3),
                                                 ),
                                               ),
                                               child: Row(
@@ -12861,7 +12984,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 horizontal: 12, vertical: 8),
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                                  BorderRadius.circular(4),
+                                                  BorderRadius.circular(3),
                                             ),
                                             alignment: Alignment.centerLeft,
                                           ),
@@ -12971,7 +13094,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               border: Border.all(color: Colors.grey.shade300),
             ),
             child: Text(
@@ -13260,7 +13383,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       ),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                       ),
                       child: Row(
                         children: [
@@ -13342,10 +13465,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   top: top,
                   child: Material(
                     elevation: 8,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(3),
                     child: Container(
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(3),
                         color: Colors.white,
                       ),
                       child: IntrinsicWidth(
@@ -13378,7 +13501,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   ),
                                   InkWell(
                                     onTap: () => Navigator.pop(context),
-                                    borderRadius: BorderRadius.circular(4),
+                                    borderRadius: BorderRadius.circular(3),
                                     child: Container(
                                       width: 20,
                                       height: 20,
@@ -14046,7 +14169,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       color: isSelected
                           ? (isHomeTeam ? Colors.grey.shade700 : Colors.white)
                           : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                       border: Border.all(
                         color: isSelected
                             ? (isHomeTeam
@@ -14114,7 +14237,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 backgroundColor: Colors.blue.shade600,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                 ),
               ),
             ),
@@ -15234,7 +15357,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                 ),
                 child: const Column(
                   children: [
@@ -17503,7 +17626,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         context: context,
         builder: (context) => Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(3),
             side: const BorderSide(color: Colors.black, width: 1),
           ),
           backgroundColor: Colors.white,
@@ -17512,7 +17635,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             constraints: const BoxConstraints(maxWidth: 400),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               border: Border.all(color: Colors.black, width: 1),
             ),
             child: Column(
@@ -17548,7 +17671,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           border: Border.all(color: Colors.grey.shade300),
                         ),
                         child: Text(
@@ -17571,7 +17694,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           border: Border.all(color: Colors.grey.shade300),
                         ),
                         child: Text(
@@ -18145,7 +18268,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               border: Border.all(color: Colors.blue.shade200),
             ),
             child: Row(
@@ -18200,7 +18323,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
                 child: Row(
@@ -18231,7 +18354,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
                 child: Row(
@@ -18260,7 +18383,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
                 child: Row(
@@ -18296,7 +18419,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 decoration: BoxDecoration(
                   color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
                 child: Row(
@@ -19305,7 +19428,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               border: Border.all(color: Colors.grey.shade300),
             ),
             child: Column(
@@ -19700,7 +19823,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               border: Border.all(color: Colors.grey.shade300),
             ),
             child: Column(
@@ -23874,7 +23997,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Fixed roster list/grid metrics (no window-based scaling).
   Map<String, double> _getDynamicSizing() {
     return {
-      'fontSize': 10.0,
+      'fontSize': 12.0,
       'verticalPadding': 2.0,
       'rowHorizontalPadding': 6.0,
       'rowHorizontalPaddingWide': 8.0,
@@ -24673,15 +24796,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ? 'Press H for Home or V for Away'
                               : '',
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             borderSide: BorderSide(color: Colors.grey.shade300),
                           ),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             borderSide: BorderSide(color: Colors.blue.shade400),
                           ),
                         ),
@@ -24797,7 +24920,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     widget.currentIndex! > 0)
                                 ? Colors.grey.shade100
                                 : Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             border: Border.all(
                               color: (widget.currentIndex != null &&
                                       widget.currentIndex! > 0)
@@ -24850,7 +24973,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Row(
@@ -24891,7 +25014,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Row(
@@ -24932,7 +25055,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Row(
@@ -24989,7 +25112,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         widget.totalImages! - 1)
                                 ? Colors.grey.shade100
                                 : Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             border: Border.all(
                               color: (widget.currentIndex != null &&
                                       widget.totalImages != null &&
@@ -25044,14 +25167,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: _disableFtp
-                                ? Colors.grey.shade300
-                                : const Color(0xFF0052CC),
-                            borderRadius: BorderRadius.circular(4),
+                            gradient: _disableFtp
+                                ? null
+                                : const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+                                  ),
+                            color: _disableFtp ? Colors.grey.shade300 : null,
+                            borderRadius: BorderRadius.circular(3),
                             border: Border.all(
                               color: _disableFtp
                                   ? Colors.grey.shade300
-                                  : const Color(0xFF0052CC),
+                                  : const Color(0xFF3A5F78),
                             ),
                           ),
                           child: Row(
@@ -25110,7 +25238,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: const Color(0xFF4A90E2),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             border: Border.all(color: const Color(0xFF4A90E2)),
                           ),
                           child: Row(
@@ -25151,7 +25279,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(3),
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Row(
@@ -25186,6 +25314,217 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  // ── Right sidebar (mockup-style action panel) ──
+
+  Widget _buildRightSidebar() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sidebarLabel('Save'),
+          const SizedBox(height: 7),
+          _sidebarButtonGrid([
+            _sidebarBtn(
+              label: '‹ Prev',
+              onTap: (widget.currentIndex != null && widget.currentIndex! > 0)
+                  ? () async {
+                      _storeCurrentMetadata();
+                      widget.onSaveIptc?.call();
+                      widget.onPreviousImage?.call();
+                    }
+                  : null,
+            ),
+            _sidebarBtn(
+              label: 'Save ›',
+              primary: true,
+              onTap: (widget.currentIndex != null &&
+                      widget.totalImages != null &&
+                      widget.currentIndex! < widget.totalImages! - 1)
+                  ? () async {
+                      _storeCurrentMetadata();
+                      widget.onSaveIptc?.call();
+                      widget.onNextImage?.call();
+                    }
+                  : null,
+            ),
+          ]),
+          const SizedBox(height: 5),
+          _sidebarBtn(
+            label: '⇧ FTP (${_currentFtpProfile ?? "Photoshelter"})',
+            ftp: true,
+            fullWidth: true,
+            onTap: _disableFtp ? null : _onFtpPressed,
+          ),
+          _sidebarDivider(),
+
+          _sidebarLabel('Edit'),
+          const SizedBox(height: 7),
+          _sidebarButtonGrid([
+            _sidebarBtn(label: 'Copy', onTap: _copyMetadataFromCaptionWidget),
+            _sidebarBtn(label: 'Paste', onTap: _pasteMetadataToCaptionWidget),
+          ]),
+          const SizedBox(height: 5),
+          _sidebarBtn(
+            label: 'Paste prev',
+            fullWidth: true,
+            onTap: _pasteLastCaption,
+          ),
+          const SizedBox(height: 5),
+          _sidebarBtn(
+            label: 'Reset caption',
+            danger: true,
+            fullWidth: true,
+            onTap: _fullReset,
+          ),
+          _sidebarDivider(),
+
+          _sidebarLabel('Shortcuts'),
+          const SizedBox(height: 7),
+          _shortcutRow('⌘S', 'Save & next'),
+          const SizedBox(height: 5),
+          _shortcutRow('⌘↵', 'Save, FTP & next'),
+          const SizedBox(height: 5),
+          _shortcutRow('⌘⇧V', 'Paste prev'),
+        ],
+      ),
+    );
+  }
+
+  Widget _sidebarLabel(String text) {
+    return Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.8,
+        color: Color(0xFFBBBBBB),
+      ),
+    );
+  }
+
+  Widget _sidebarDivider() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Container(
+        height: 1,
+        color: const Color(0xFFF0EFEC),
+      ),
+    );
+  }
+
+  Widget _sidebarButtonGrid(List<Widget> children) {
+    return Row(
+      children: children
+          .expand((w) => [Expanded(child: w), const SizedBox(width: 5)])
+          .toList()
+        ..removeLast(),
+    );
+  }
+
+  Widget _sidebarBtn({
+    required String label,
+    VoidCallback? onTap,
+    bool primary = false,
+    bool ftp = false,
+    bool danger = false,
+    bool fullWidth = false,
+  }) {
+    final enabled = onTap != null;
+    Color? bg;
+    Color textColor;
+    Color borderColor;
+    LinearGradient? gradient;
+    if (ftp) {
+      bg = null;
+      gradient = enabled
+          ? const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+            )
+          : null;
+      bg = enabled ? null : Colors.grey.shade300;
+      textColor = enabled ? Colors.white : Colors.grey.shade600;
+      borderColor = enabled ? const Color(0xFF3A5F78) : Colors.grey.shade300;
+    } else if (primary) {
+      bg = enabled ? const Color(0xFF1A1A1A) : Colors.grey.shade300;
+      textColor = enabled ? Colors.white : Colors.grey.shade600;
+      borderColor = bg!;
+    } else if (danger) {
+      bg = Colors.white;
+      textColor = const Color(0xFFC0392B);
+      borderColor = const Color(0xFFF5C6C6);
+    } else {
+      bg = Colors.white;
+      textColor = enabled ? const Color(0xFF555555) : Colors.grey.shade400;
+      borderColor = const Color(0xFFE4E3DF);
+    }
+
+    final child = GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor:
+            enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: Container(
+          width: fullWidth ? double.infinity : null,
+          padding: EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: ftp ? 9 : 7,
+          ),
+          decoration: BoxDecoration(
+            color: gradient != null ? null : bg,
+            gradient: gradient,
+            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Center(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: ftp ? 12 : 11,
+                fontWeight: ftp ? FontWeight.w500 : FontWeight.w400,
+                color: textColor,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    return child;
+  }
+
+  Widget _shortcutRow(String key, String desc) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF7F6F3),
+            border: Border.all(color: const Color(0xFFE4E3DF)),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: Text(
+            key,
+            style: const TextStyle(
+              fontSize: 10,
+              fontFamily: 'Menlo',
+              fontFamilyFallback: ['SF Mono', 'Consolas', 'monospace'],
+              color: Color(0xFF555555),
+            ),
+          ),
+        ),
+        Text(
+          desc,
+          style: const TextStyle(fontSize: 10, color: Color(0xFFAAAAAA)),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCompactActionButtons() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
@@ -25199,7 +25538,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
                 border: Border.all(color: Colors.grey.shade300),
               ),
               child: Row(
@@ -25277,7 +25616,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             padding: const EdgeInsets.symmetric(vertical: 8),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               border: Border.all(color: Colors.grey.shade300),
             ),
             child: Row(
@@ -25803,11 +26142,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       decoration: InputDecoration(
                         // hint removed
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade500),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
@@ -25946,11 +26285,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       decoration: InputDecoration(
                         // hint removed
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade500),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
@@ -27022,13 +27361,13 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
     final preview = _previewByline;
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
       backgroundColor: Colors.grey.shade50,
       child: Container(
         width: 380,
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(color: Colors.grey.shade300),
         ),
         child: Column(
@@ -27039,7 +27378,7 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
             Container(
               padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                color: Colors.grey.shade100,
                 borderRadius: const BorderRadius.only(
                   topLeft: Radius.circular(4),
                   topRight: Radius.circular(4),
@@ -27047,13 +27386,6 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
                 border: Border(
                   bottom: BorderSide(color: Colors.grey.shade300, width: 1),
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.07),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
               ),
               child: Row(
                 children: [
@@ -27399,7 +27731,7 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
             color: const Color(0xFFE8F0FE),
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(3),
             border: Border.all(color: const Color(0xFFBBCEFA)),
           ),
           child: Row(

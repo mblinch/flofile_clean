@@ -88,6 +88,8 @@ class KeyboardFirePanel extends StatefulWidget {
   final int? totalImages;
   final bool ftpDisabled;
   final String? currentFtpProfile;
+  /// Optional widget injected to the right of the teams/verbs row.
+  final Widget? trailingSidebar;
 
   const KeyboardFirePanel({
     super.key,
@@ -112,6 +114,7 @@ class KeyboardFirePanel extends StatefulWidget {
     this.totalImages,
     this.ftpDisabled = false,
     this.currentFtpProfile,
+    this.trailingSidebar,
   });
 
   @override
@@ -300,7 +303,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w600,
                       color: Colors.grey.shade900,
                     ),
                   ),
@@ -385,8 +388,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     '$verbNum',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
                       color: Colors.grey.shade900,
                     ),
                   ),
@@ -396,7 +399,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: Text(
                     label,
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: Colors.grey.shade900,
                     ),
@@ -580,7 +583,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   double _keyboardFireListRosterFontSize(double listViewportHeight) {
     final rowH = _keyboardFireListRosterRowHeight(listViewportHeight);
     // Slightly smaller cap than before so compact rows don’t keep oversized type.
-    return (rowH * 0.82).clamp(7.5, 9.5);
+    return (rowH * 0.82).clamp(8.5, 10.5);
   }
 
   /// Shared roster text size used as the typography baseline for verbs/categories.
@@ -1551,7 +1554,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           textAlignVertical: TextAlignVertical.top,
           cursorHeight: 12,
           cursorColor: Colors.black87,
-          style: const TextStyle(fontSize: 11),
+          style: const TextStyle(fontSize: 13),
           decoration: InputDecoration(
             isDense: true,
             hintText: 'Caption will appear here as you add players and a verb.',
@@ -1572,7 +1575,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 11),
+        style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Caption will appear here as you add players and a verb.',
@@ -1633,76 +1636,69 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   Widget _buildKbLabeledBox(String label, Widget child,
       {Widget? trailingAction}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          width: double.infinity,
-          height: kFloChromeHeaderHeight,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-          alignment: Alignment.centerLeft,
-          decoration: BoxDecoration(
-            color: Colors.grey.shade50,
-            borderRadius: BorderRadius.zero,
-            border: Border(
-              left: BorderSide(color: Colors.grey.shade300, width: 1),
-              top: BorderSide(color: Colors.grey.shade300, width: 1),
-              right: BorderSide(color: Colors.grey.shade300, width: 1),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 2,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          child: trailingAction != null
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade700,
-                        height: 1.0,
-                      ),
-                    ),
-                    const Spacer(),
-                    trailingAction,
-                  ],
-                )
-              : Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade700,
-                    height: 1.0,
-                  ),
-                ),
-        ),
-        Expanded(
-          child: Container(
+    final TextStyle _headerStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      color: Colors.grey.shade700,
+      height: 1.0,
+      letterSpacing: 0.8,
+    );
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            width: double.infinity,
+            height: kFloChromeHeaderHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+            alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
-              color: _panelBackgroundLight,
-              borderRadius: BorderRadius.zero,
-              border: Border.all(color: Colors.grey.shade300, width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
+              color: Colors.grey.shade100,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(5),
+                topRight: Radius.circular(5),
+              ),
+              border: Border(
+                left: BorderSide(color: Colors.grey.shade300, width: 1),
+                top: BorderSide(color: Colors.grey.shade300, width: 1),
+                right: BorderSide(color: Colors.grey.shade300, width: 1),
+              ),
             ),
-            padding: const EdgeInsets.all(3),
-            child: child,
+            child: trailingAction != null
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(label, style: _headerStyle),
+                      const Spacer(),
+                      trailingAction,
+                    ],
+                  )
+                : Text(label, style: _headerStyle),
           ),
-        ),
-      ],
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: _panelBackgroundLight,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(5),
+                  bottomRight: Radius.circular(5),
+                ),
+                border: Border.all(color: Colors.grey.shade300, width: 1),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(3),
+              child: child,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1719,7 +1715,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 11),
+        style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Headline',
@@ -1740,7 +1736,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 11),
+        style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Headline',
@@ -1767,7 +1763,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 11),
+        style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Keywords',
@@ -1788,7 +1784,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 11),
+        style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Keywords',
@@ -1816,7 +1812,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 11),
+        style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Personality',
@@ -1837,7 +1833,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 11),
+        style: const TextStyle(fontSize: 13),
         decoration: InputDecoration(
           isDense: true,
           border: InputBorder.none,
@@ -1858,8 +1854,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         _showHeadlineField || _showKeywordsField || _showPersonalityField;
 
     if (!hasSecondary) {
-      return _buildKbLabeledBox('Caption', _buildCaptionField(),
-          trailingAction: _buildBylineButton());
+      return _buildKbLabeledBox('Caption', _buildCaptionField());
     }
 
     final cards = <Widget>[];
@@ -1884,8 +1879,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       children: [
         Expanded(
           flex: 13,
-          child: _buildKbLabeledBox('Caption', _buildCaptionField(),
-              trailingAction: _buildBylineButton()),
+          child: _buildKbLabeledBox('Caption', _buildCaptionField()),
         ),
         const SizedBox(width: 4),
         Expanded(
@@ -1983,15 +1977,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 7),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
                     ),
@@ -2028,15 +2022,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 7),
                         enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                           borderSide: BorderSide(color: Colors.grey.shade400),
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
                     ),
@@ -2210,7 +2204,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     List<Player> roster,
     bool isHomeTeam, {
     String? barText,
-    double listFontSize = 12.0,
+    double listFontSize = 13.0,
     /// When set (Keyboard Fire list column), each row is this tall (capped) so the
     /// roster stays dense; font tracks row height.
     double? listRowHeight,
@@ -2296,6 +2290,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   displayName,
                   style: TextStyle(
                     fontSize: listFontSize,
+
+
                     height: listRowHeight != null ? 1.0 : 1.06,
                     color:
                         isPicked ? const Color(0xFF0052CC) : Colors.black87,
@@ -2353,7 +2349,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   _showAwayCoachingPanel = true;
                 }
               }),
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(3),
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -2369,7 +2365,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     Text(
                       'Coaching',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: FontWeight.w600,
                         color: Colors.grey.shade600,
                       ),
@@ -2402,7 +2398,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               child: Text(
                 'Coaching',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.w700,
                   color: Colors.black87,
                   height: 1.15,
@@ -2419,7 +2415,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     _showAwayCoachingPanel = false;
                   }
                 }),
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(3),
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -2493,14 +2489,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final nameText = name == 'data missing' ? 'data missing' : name;
     // Match _buildRosterRows jersey + display name styles (no letterSpacing / height overrides).
     final titleStyle = TextStyle(
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: FontWeight.w600,
       color: isPicked
           ? const Color(0xFF0052CC)
           : Colors.grey.shade800,
     );
     final nameStyle = TextStyle(
-      fontSize: 12,
+      fontSize: 11,
       color: isPicked
           ? const Color(0xFF0052CC)
           : (name == 'data missing'
@@ -3090,18 +3086,18 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       decoration: InputDecoration(
         isDense: true,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFFF7F6F3),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
+          borderRadius: BorderRadius.circular(3),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
+          borderRadius: BorderRadius.circular(3),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
-        focusedBorder: const OutlineInputBorder(
-          borderRadius: BorderRadius.zero,
-          borderSide: BorderSide(color: Colors.black87, width: 1),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(3),
+          borderSide: const BorderSide(color: Colors.black87, width: 1),
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
@@ -3199,6 +3195,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       await _prefsService?.saveShowKeywordsField(shouldShow);
     } catch (_) {}
   }
+
+  /// Called externally (e.g. from sidebar) to sync internal keyword state.
+  Future<void> setKeywordVerbsEnabled(bool enabled) => _setApplyVerbKeywordsKb(enabled);
+  Future<void> setKeywordNamesEnabled(bool enabled) => _setApplyPlayerNamesToKeywordsKb(enabled);
 
   Future<void> _setApplyVerbKeywordsKb(bool enabled) async {
     if (_applyVerbKeywordsEnabledKb == enabled) return;
@@ -4999,9 +4999,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               highlightColor: Colors.white.withOpacity(0.15),
               child: Ink(
                 decoration: BoxDecoration(
-                  color: _ftpButtonBlue,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+                  ),
                   borderRadius: BorderRadius.zero,
-                  border: Border.all(color: _ftpButtonBlue),
+                  border: Border.all(color: const Color(0xFF3A5F78)),
                 ),
                 child: Padding(
                   padding:
@@ -5247,10 +5251,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 child: Material(
                   color: Colors.grey.shade50,
                   elevation: 6,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(3),
                   child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(3),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
                     padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
@@ -5496,8 +5500,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 color: isSelected ? Colors.blue.shade500 : Colors.grey.shade400,
               ),
               backgroundColor: isSelected ? Colors.blue.shade50 : Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
             child: Text(
@@ -5562,26 +5566,27 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         child: Container(
           decoration: BoxDecoration(
             color: _panelBackgroundLight,
-            borderRadius: BorderRadius.zero,
+            borderRadius: BorderRadius.circular(5),
             border: Border.all(color: Colors.grey.shade300, width: 1),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 2,
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 3,
                 offset: const Offset(0, 1),
               ),
             ],
           ),
-          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+          padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
                 headerLabel,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: Colors.grey.shade700,
+                  letterSpacing: 0.8,
                 ),
               ),
               if (isBaseball) ...[
@@ -5636,26 +5641,27 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         child: Container(
           decoration: BoxDecoration(
             color: _panelBackgroundLight,
-            borderRadius: BorderRadius.zero,
+            borderRadius: BorderRadius.circular(5),
             border: Border.all(color: Colors.grey.shade300, width: 1),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 2,
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 3,
                 offset: const Offset(0, 1),
               ),
             ],
           ),
-          padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+          padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
                 headerLabel,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                   color: Colors.grey.shade700,
+                  letterSpacing: 0.8,
                 ),
               ),
               const SizedBox(width: 6),
@@ -5684,26 +5690,27 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       child: Container(
         decoration: BoxDecoration(
           color: _panelBackgroundLight,
-          borderRadius: BorderRadius.zero,
+          borderRadius: BorderRadius.circular(5),
           border: Border.all(color: Colors.grey.shade300, width: 1),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 2,
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 3,
               offset: const Offset(0, 1),
             ),
           ],
         ),
-        padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+        padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Text(
               headerLabel,
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: Colors.grey.shade700,
+                letterSpacing: 0.8,
               ),
             ),
             const SizedBox(width: 6),
@@ -5958,7 +5965,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: 150,
+          height: 124,
           child: _buildKeyboardFireCaptionStrip(),
         ),
         if (!widget.showDialogActions) _buildPeriodPicker(),
@@ -5971,15 +5978,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             children: [
               // ── 1: Home roster (title, then box: number bar + list) ───────
               Expanded(
-                child: Column(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(4, 2, 4, 1),
+                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 1),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.zero,
+                        color: Colors.grey.shade100,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(5),
+                          topRight: Radius.circular(5),
+                        ),
                         border: Border(
                           left:
                               BorderSide(color: Colors.grey.shade300, width: 1),
@@ -5988,13 +6000,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           right:
                               BorderSide(color: Colors.grey.shade300, width: 1),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -6008,9 +6013,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
                                     color: Colors.grey.shade700,
+                                    letterSpacing: 0.8,
                                   ),
                                 ),
                               ),
@@ -6023,7 +6029,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: _panelBackgroundLight,
-                          borderRadius: BorderRadius.zero,
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(5),
+                            bottomRight: Radius.circular(5),
+                          ),
                           border: Border.all(
                             color: _isFirebarColumnActive(0)
                                 ? Colors.red
@@ -6032,8 +6041,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
+                              color: Colors.black.withOpacity(0.06),
+                              blurRadius: 3,
                               offset: const Offset(0, 1),
                             ),
                           ],
@@ -6063,13 +6072,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       ),
                                     ),
                                   ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
-                                      child: _buildPlayerNamesKeywordsToggleKb(),
-                                    ),
-                                  ),
                                 ],
                               ),
                               const SizedBox(height: 3),
@@ -6096,20 +6098,26 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       ),
                     ),
                   ],
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
               // ── 2: Categories + verbs (one bar: 2 digits = cat + verb) ───
               Expanded(
-                child: Column(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(4, 2, 4, 1),
+                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 1),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.zero,
+                        color: Colors.grey.shade100,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(5),
+                          topRight: Radius.circular(5),
+                        ),
                         border: Border(
                           left:
                               BorderSide(color: Colors.grey.shade300, width: 1),
@@ -6118,20 +6126,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           right:
                               BorderSide(color: Colors.grey.shade300, width: 1),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
                       ),
                       child: Text(
                         'Verbs',
                         style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                           color: Colors.grey.shade700,
+                          letterSpacing: 0.8,
                         ),
                       ),
                     ),
@@ -6139,7 +6141,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: _panelBackgroundLight,
-                          borderRadius: BorderRadius.zero,
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(5),
+                            bottomRight: Radius.circular(5),
+                          ),
                           border: Border.all(
                             color: _isFirebarColumnActive(2)
                                 ? Colors.red
@@ -6148,8 +6153,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
+                              color: Colors.black.withOpacity(0.06),
+                              blurRadius: 3,
                               offset: const Offset(0, 1),
                             ),
                           ],
@@ -6170,16 +6175,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 },
                               ),
                               const SizedBox(height: 3),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerRight,
-                                    child: _buildApplyKeywordsToggleKb(),
-                                  ),
-                                ],
-                              ),
                               Expanded(
                                 child: ValueListenableBuilder<TextEditingValue>(
                                   valueListenable: _categoryBarController,
@@ -6194,35 +6189,32 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       ),
                     ),
                   ],
+                  ),
                 ),
               ),
               const SizedBox(width: 6),
               // ── 3: Away roster (title, then box: number bar + list) ───────
               Expanded(
-                child: Column(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(5),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(4, 2, 4, 1),
+                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 1),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.zero,
+                        color: Colors.grey.shade100,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(5),
+                          topRight: Radius.circular(5),
+                        ),
                         border: Border(
                           left:
                               BorderSide(color: Colors.grey.shade300, width: 1),
                           top:
                               BorderSide(color: Colors.grey.shade300, width: 1),
-                          right:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -6236,9 +6228,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
                                     color: Colors.grey.shade700,
+                                    letterSpacing: 0.8,
                                   ),
                                 ),
                               ),
@@ -6251,17 +6244,34 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: Container(
                         decoration: BoxDecoration(
                           color: _panelBackgroundLight,
-                          borderRadius: BorderRadius.zero,
-                          border: Border.all(
-                            color: _isFirebarColumnActive(1)
-                                ? Colors.red
-                                : Colors.grey.shade300,
-                            width: _isFirebarColumnActive(1) ? 2 : 1,
+                          borderRadius: const BorderRadius.only(
+                            bottomLeft: Radius.circular(5),
+                            bottomRight: Radius.circular(5),
+                          ),
+                          border: Border(
+                            left: BorderSide(
+                              color: _isFirebarColumnActive(1)
+                                  ? Colors.red
+                                  : Colors.grey.shade300,
+                              width: _isFirebarColumnActive(1) ? 2 : 1,
+                            ),
+                            top: BorderSide(
+                              color: _isFirebarColumnActive(1)
+                                  ? Colors.red
+                                  : Colors.grey.shade300,
+                              width: _isFirebarColumnActive(1) ? 2 : 1,
+                            ),
+                            bottom: BorderSide(
+                              color: _isFirebarColumnActive(1)
+                                  ? Colors.red
+                                  : Colors.grey.shade300,
+                              width: _isFirebarColumnActive(1) ? 2 : 1,
+                            ),
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
+                              color: Colors.black.withOpacity(0.06),
+                              blurRadius: 3,
                               offset: const Offset(0, 1),
                             ),
                           ],
@@ -6291,13 +6301,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       ),
                                     ),
                                   ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Align(
-                                      alignment: Alignment.centerRight,
-                                      child: _buildPlayerNamesKeywordsToggleKb(),
-                                    ),
-                                  ),
                                 ],
                               ),
                               const SizedBox(height: 3),
@@ -6324,254 +6327,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       ),
                     ),
                   ],
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
-              // ── 4: Actions (Save Prev/Next, Paste, Copy, etc.) ─────────────────────
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.zero,
-                        border: Border(
-                          left:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                          top:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                          right:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        'Actions',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.fromLTRB(6, 4, 6, 5),
-                        decoration: BoxDecoration(
-                          color: _panelBackgroundLight,
-                          borderRadius: BorderRadius.zero,
-                          border: Border.all(
-                            color: Colors.grey.shade300,
-                            width: 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.1),
-                              blurRadius: 2,
-                              offset: const Offset(0, 1),
-                            ),
-                          ],
-                        ),
-                        child: SingleChildScrollView(
-                          child: Column(
-                            key: _verbColumnKey,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _btn(
-                                      width: double.infinity,
-                                      onTap: (widget.currentIndex != null &&
-                                              widget.currentIndex! > 0)
-                                          ? () async {
-                                              if (widget.onSaveIptc != null)
-                                                widget.onSaveIptc!();
-                                              widget.onPreviousImage?.call();
-                                            }
-                                          : null,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.chevron_left,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                          const SizedBox(width: 2),
-                                          Flexible(
-                                            child: FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: Text(_bulkSaveLabel(),
-                                                  maxLines: 1,
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      color:
-                                                          Colors.grey.shade700,
-                                                      fontWeight:
-                                                          FontWeight.w500)),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: _btn(
-                                      width: double.infinity,
-                                      onTap: (widget.currentIndex != null &&
-                                              widget.totalImages != null &&
-                                              widget.currentIndex! <
-                                                  widget.totalImages! - 1)
-                                          ? () async {
-                                              if (widget.onSaveIptc != null)
-                                                widget.onSaveIptc!();
-                                              widget.onNextImage?.call();
-                                            }
-                                          : null,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Flexible(
-                                            child: FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              child: Text(_bulkSaveLabel(),
-                                                  maxLines: 1,
-                                                  style: TextStyle(
-                                                      fontSize: 10,
-                                                      color:
-                                                          Colors.grey.shade700,
-                                                      fontWeight:
-                                                          FontWeight.w500)),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 2),
-                                          Icon(Icons.chevron_right,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              Row(
-                                children: [
-                                  if (widget.onCopy != null)
-                                    Expanded(
-                                      child: _btn(
-                                        width: double.infinity,
-                                        onTap: widget.onCopy,
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.copy,
-                                                size: 12,
-                                                color: Colors.grey.shade700),
-                                            const SizedBox(width: 2),
-                                            Text('Copy',
-                                                style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: Colors.grey.shade700,
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  if (widget.onCopy != null)
-                                    const SizedBox(width: 4),
-                                  Expanded(
-                                    child: _btn(
-                                      width: double.infinity,
-                                      onTap: widget.onPaste,
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
-                                        children: [
-                                          Icon(Icons.content_paste,
-                                              size: 12,
-                                              color: Colors.grey.shade700),
-                                          const SizedBox(width: 2),
-                                          Text('Paste',
-                                              style: TextStyle(
-                                                  fontSize: 10,
-                                                  color: Colors.grey.shade700,
-                                                  fontWeight: FontWeight.w500)),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              _btn(
-                                width: double.infinity,
-                                onTap: widget.onPastePrevious,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.history,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 2),
-                                    Text('Paste Prev',
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.grey.shade700,
-                                            fontWeight: FontWeight.w500)),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              _btn(
-                                width: double.infinity,
-                                onTapDown: (d) =>
-                                    _resetCaptionTapAnchor = d.globalPosition,
-                                onTap: _onResetPressed,
-                                bg: Colors.grey.shade200,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.refresh,
-                                        size: 12, color: Colors.grey.shade700),
-                                    const SizedBox(width: 2),
-                                    Text('Reset Caption',
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.grey.shade700,
-                                            fontWeight: FontWeight.w500)),
-                                  ],
-                                ),
-                              ),
-                              if (!widget.ftpDisabled &&
-                                  widget.onFtp != null) ...[
-                                const SizedBox(height: 3),
-                                _buildFtpButtonWithContextMenu(),
-                              ],
-                              _buildKeywordShortcutChipsKb(),
-                              _buildKeyboardShortcutsHelpSection(),
-                              const SizedBox(height: 2),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              // Trailing sidebar injected from parent (e.g. save/ftp buttons)
+              if (widget.trailingSidebar != null) widget.trailingSidebar!,
             ],
           ),
         ),
@@ -6757,13 +6517,13 @@ class _KeywordShortcutEditorDialogState
     final label = _labelCtrl.text.trim();
 
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
       backgroundColor: Colors.grey.shade50,
       child: Container(
         width: 360,
         decoration: BoxDecoration(
           color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(3),
           border: Border.all(color: Colors.grey.shade300),
         ),
         child: Column(

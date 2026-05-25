@@ -28,6 +28,11 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final VoidCallback? onOpenFtpSettings;
   /// Burst detection toggled from the title bar; keeps [CaptionBuilderScreen] in sync.
   final ValueChanged<bool>? onBurstDetectionChanged;
+  /// Current image path, index, total, and EXIF data for title bar display.
+  final String? currentImagePath;
+  final int currentIndex;
+  final int totalImages;
+  final Map<String, dynamic>? currentExifData;
 
   const AppHeaderWidget({
     super.key,
@@ -42,6 +47,10 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
     this.onPreferencesClosed,
     this.onOpenFtpSettings,
     this.onBurstDetectionChanged,
+    this.currentImagePath,
+    this.currentIndex = 0,
+    this.totalImages = 0,
+    this.currentExifData,
   });
 
   @override
@@ -254,91 +263,47 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     );
   }
 
+  Widget _topbarBadge(String label, {Color? color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: (color ?? const Color(0xFFF7F6F3)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE4E3DF)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF555555),
+          height: 1.0,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AdaptiveAppBar(
       toolbarHeight: 34,
       titleSpacing: 0,
-      backgroundColor: Colors.grey.shade200,
+      centerTitle: false,
+      backgroundColor: Colors.white,
       elevation: 0,
       automaticallyImplyLeading: false,
-      title: Padding(
-        padding: const EdgeInsets.only(left: 12, right: 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  'FLO FILE Beta',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade700,
-                    letterSpacing: -0.5,
-                    height: 1.0,
-                  ),
-                ),
-              ),
-            ),
-            const Expanded(child: SizedBox.shrink()),
-          ],
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(1),
+        child: Container(
+          height: 1,
+          color: const Color(0xFFE4E3DF),
         ),
       ),
+      title: Padding(
+        padding: const EdgeInsets.only(left: 10, right: 6),
+        child: _buildFileInfoTitle(),
+      ),
       actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _headerHelpHint(context, _kTooltipSerialBylines),
-                  const Text(
-                    'Serial bylines',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      height: 1.0,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 4),
-              _headerPrefsCheckbox(
-                isOn: _serialNumberBylinesEnabled,
-                onApply: _applySerialNumberBylines,
-              ),
-              const SizedBox(width: 14),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  _headerHelpHint(context, _kTooltipBurstDetection),
-                  const Text(
-                    'Burst detection',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      height: 1.0,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(width: 4),
-              _headerPrefsCheckbox(
-                isOn: _burstDetectionEnabled,
-                onApply: _applyBurstDetection,
-              ),
-            ],
-          ),
-        ),
         IconButton(
           onPressed: () async {
             await showDialog(
@@ -353,13 +318,208 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             widget.onBurstDetectionChanged?.call(_burstDetectionEnabled);
             widget.onPreferencesClosed?.call();
           },
-          icon: Icon(Icons.settings, color: Colors.grey.shade800),
+          icon: const Icon(Icons.settings, color: Color(0xFF555555)),
           tooltip: 'Preferences',
-          iconSize: 18,
+          iconSize: 16,
           padding: const EdgeInsets.all(4),
           constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
           style: IconButton.styleFrom(
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFileInfoTitle() {
+    final exif = widget.currentExifData;
+    final path = widget.currentImagePath;
+    final total = widget.totalImages;
+    final idx = widget.currentIndex;
+
+    if (path == null || total == 0) {
+      // No file loaded — show app name
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'FLO FILE',
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A1A1A),
+              letterSpacing: 0.5,
+              height: 1.0,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _topbarBadge('Beta'),
+        ],
+      );
+    }
+
+    final fileName = path.split('/').last;
+
+    // Format date/time from EXIF
+    String dateTime = '';
+    if (exif != null && exif['DateTimeOriginal'] != null) {
+      final raw = exif['DateTimeOriginal'].toString();
+      // EXIF format: "2024:01:15 14:32:00"
+      final parts = raw.split(' ');
+      if (parts.length == 2) {
+        final dateParts = parts[0].split(':');
+        final timeParts = parts[1].split(':');
+        if (dateParts.length == 3 && timeParts.length == 3) {
+          const months = [
+            'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+          ];
+          final year = dateParts[0];
+          final monthIdx = int.tryParse(dateParts[1]) ?? 0;
+          final day = int.tryParse(dateParts[2]) ?? 0;
+          final monthName = (monthIdx >= 1 && monthIdx <= 12)
+              ? months[monthIdx - 1]
+              : dateParts[1];
+          final hour24 = int.tryParse(timeParts[0]) ?? 0;
+          final minute = timeParts[1];
+          final second = timeParts[2];
+          final ampm = hour24 >= 12 ? 'PM' : 'AM';
+          final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+          // Append sub-second if available
+          final subSec = exif?['SubSecTimeOriginal']?.toString() ?? '';
+          final ms = subSec.isNotEmpty ? '.$subSec' : '';
+          dateTime = '$monthName $day, $year at $hour12:$minute:$second${ms} $ampm';
+        } else {
+          dateTime = raw;
+        }
+      } else {
+        dateTime = raw;
+      }
+    }
+
+    // Resolution
+    String resolution = '';
+    if (exif != null && exif['ImageWidth'] != null && exif['ImageHeight'] != null) {
+      resolution = '${exif['ImageWidth']}×${exif['ImageHeight']}';
+    }
+
+    // Camera
+    String camera = '';
+    if (exif != null) {
+      final make = exif['Make']?.toString() ?? '';
+      final model = exif['Model']?.toString() ?? '';
+      camera = '$make $model'.trim();
+    }
+
+    // Lens
+    String lens = '';
+    if (exif != null) {
+      lens = (exif['LensModel'] ?? exif['Lens'] ?? exif['LensID'] ?? '').toString().trim();
+    }
+
+    // Exposure parts split individually so each gets its own separator
+    String shutterStr = '';
+    String apertureStr = '';
+    String focalStr = '';
+    String isoStr = '';
+    if (exif != null) {
+      if (exif['ShutterSpeed'] != null) {
+        final s = exif['ShutterSpeed'].toString();
+        if (s.contains('/')) {
+          shutterStr = s;
+        } else {
+          final d = double.tryParse(s);
+          if (d != null && d > 0) {
+            shutterStr = d < 1 ? '1/${(1 / d).round()}s' : '${d.toStringAsFixed(1)}s';
+          } else {
+            shutterStr = s;
+          }
+        }
+      }
+      if (exif['FNumber'] != null) {
+        final f = double.tryParse(exif['FNumber'].toString());
+        if (f != null) apertureStr = 'f/${f.toStringAsFixed(1)}';
+      }
+      if (exif['FocalLength'] != null) {
+        final raw = exif['FocalLength'].toString().replaceAll(RegExp(r'm+$'), '').trim();
+        final d = double.tryParse(raw);
+        focalStr = d != null ? '${d.toInt()}mm' : '${raw}mm';
+      }
+      if (exif['ISO'] != null) isoStr = 'ISO ${exif['ISO']}';
+    }
+
+    const sep = TextSpan(
+      text: '    |    ',
+      style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14, fontWeight: FontWeight.w200),
+    );
+
+    const sepStrong = sep;
+
+    const TextStyle _bold = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: Color(0xFF1A1A1A),
+      height: 1.0,
+    );
+
+    const TextStyle _regular = TextStyle(
+      fontSize: 10,
+      fontWeight: FontWeight.w400,
+      color: Color(0xFF1A1A1A),
+      height: 1.0,
+    );
+
+    // keep _val/_dim as aliases so the spans below compile unchanged
+    TextStyle _val({double size = 10}) => _regular;
+    final TextStyle _dim = _regular;
+
+    final spans = <InlineSpan>[
+      // File name
+      TextSpan(text: fileName, style: _bold),
+      if (dateTime.isNotEmpty) ...[sep, TextSpan(text: dateTime, style: _val())],
+      if (resolution.isNotEmpty) ...[sepStrong, TextSpan(text: resolution, style: _dim)],
+      if (camera.isNotEmpty) ...[sep, TextSpan(text: camera, style: _val())],
+      if (lens.isNotEmpty) ...[sep, TextSpan(text: lens, style: _dim)],
+      if (shutterStr.isNotEmpty || apertureStr.isNotEmpty) ...[
+        sep,
+        TextSpan(
+          text: [shutterStr, apertureStr].where((s) => s.isNotEmpty).join('  '),
+          style: _regular,
+        ),
+      ],
+      if (focalStr.isNotEmpty) ...[sep, TextSpan(text: focalStr, style: _regular)],
+      if (isoStr.isNotEmpty) ...[sep, TextSpan(text: isoStr, style: _regular)],
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Counter badge on the far left
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: const Color(0xFF2D3748),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            '${idx + 1} / $total',
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              height: 1.0,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        // Remaining file info
+        Flexible(
+          child: RichText(
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            text: TextSpan(children: spans),
           ),
         ),
       ],

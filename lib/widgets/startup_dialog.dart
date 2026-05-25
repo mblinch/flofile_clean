@@ -1121,7 +1121,7 @@ class _StartupDialogState extends State<StartupDialog> {
                       'FLO FILE',
                       style: TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w800,
                         color: Colors.black,
                         letterSpacing: -0.5,
                       ),
@@ -1583,9 +1583,14 @@ class _StartupDialogState extends State<StartupDialog> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 28, vertical: 10),
                           decoration: BoxDecoration(
-                            color: _canProceed
-                                ? const Color(0xFF1A1A1A)
-                                : Colors.grey.shade300,
+                            gradient: _canProceed
+                                ? const LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+                                  )
+                                : null,
+                            color: _canProceed ? null : Colors.grey.shade300,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Column(

@@ -209,7 +209,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
   /// Toolbar row: same fill as the image preview filename/EXIF bars (`grey.shade50`).
   Widget _buildThumbnailToolbar() {
-    final bar = Colors.grey.shade50;
+    final bar = Colors.grey.shade100;
     return Material(
       color: Colors.transparent,
       child: Row(
@@ -272,14 +272,14 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   onTap: () => _adjustThumbSizeStep(-1),
                   borderRadius: BorderRadius.zero,
                   splashFactory: NoSplash.splashFactory,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 14,
                     height: 14,
                     child: Center(
                       child: Icon(
                         Icons.remove,
                         size: 10,
-                        color: Color(0xFF424242),
+                        color: Colors.grey.shade700,
                       ),
                     ),
                   ),
@@ -293,7 +293,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   style: TextStyle(
                     fontSize: 8,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
+                    color: Colors.grey.shade700,
                     height: 1.0,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
@@ -306,14 +306,14 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   onTap: () => _adjustThumbSizeStep(1),
                   borderRadius: BorderRadius.zero,
                   splashFactory: NoSplash.splashFactory,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 14,
                     height: 14,
                     child: Center(
                       child: Icon(
                         Icons.add,
                         size: 10,
-                        color: Color(0xFF424242),
+                        color: Colors.grey.shade700,
                       ),
                     ),
                   ),
@@ -679,27 +679,27 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         decoration: BoxDecoration(
           border: Border.all(color: Colors.grey.shade300, width: 1.0),
           borderRadius: BorderRadius.zero,
-          color: Colors.white,
+          color: Colors.grey.shade50,
         ),
-        child: Center(
+        child: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
               Text(
                 'Generating thumbnails...',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.grey.shade600,
+                  color: Colors.grey,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: 8),
               Text(
-                '$_loadedThumbnails / ${widget.imagePaths.length}',
+                'Loading...',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey.shade500,
+                  color: Colors.grey,
                 ),
               ),
             ],
@@ -744,13 +744,6 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
         borderRadius: BorderRadius.zero,
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
       ),
       child: Column(
         children: [
@@ -759,7 +752,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: Colors.grey.shade50,
+              color: Colors.grey.shade100,
               border: Border(
                 bottom: BorderSide(color: Colors.grey.shade300, width: 1),
               ),
@@ -811,7 +804,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 stops: const [0.0, 0.52],
                               )
                             : null,
-                        borderRadius: BorderRadius.zero,
+                        borderRadius: BorderRadius.circular(2),
                         border: Border.all(
                           color: isMultiSelected
                               ? Colors.blue
@@ -1106,19 +1099,21 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     final double targetLogicalWidth = (_thumbSize - 8).clamp(80.0, 2000.0);
     final int cacheWidthPx = (targetLogicalWidth * devicePixelRatio).round();
 
-    return Container(
-      width: double.infinity,
-      height: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.zero,
-      ),
-      child: OrientedFilePreview(
-        path: imagePath,
-        fit: BoxFit.contain,
-        cacheWidth: cacheWidthPx,
-        filterQuality: FilterQuality.high,
-        onLoaded: _onThumbnailLoaded,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(2),
+      child: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+        ),
+        child: OrientedFilePreview(
+          path: imagePath,
+          fit: BoxFit.contain,
+          cacheWidth: cacheWidthPx,
+          filterQuality: FilterQuality.high,
+          onLoaded: _onThumbnailLoaded,
+        ),
       ),
     );
   }
@@ -1544,7 +1539,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 hintText:
                                     'Enter new filename (without extension)',
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(4),
+                                  borderRadius: BorderRadius.circular(2),
                                 ),
                                 suffixText: extension,
                               ),

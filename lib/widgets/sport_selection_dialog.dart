@@ -87,7 +87,7 @@ class SportSelectionDialog extends StatelessWidget {
                   'FLO FILE',
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w800,
                     color: Colors.black,
                     letterSpacing: -0.5,
                   ),

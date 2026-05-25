@@ -46,6 +46,7 @@ class PicturePreviewWidget extends StatefulWidget {
   final List<String> multiSelectedPaths;
 
   final VoidCallback? onEditMetadata;
+  final void Function(Map<String, dynamic>)? onExifLoaded;
 
   const PicturePreviewWidget({
     super.key,
@@ -76,6 +77,7 @@ class PicturePreviewWidget extends StatefulWidget {
     this.lockedPaths,
     this.multiSelectedPaths = const [],
     this.onEditMetadata,
+    this.onExifLoaded,
   });
 
   @override
@@ -139,6 +141,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         _isLoadingExif = false;
         _lastLoadedImagePath = imagePath;
       });
+      widget.onExifLoaded?.call(_exifCache[imagePath]!);
       return;
     }
 
@@ -156,6 +159,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         '-ImageHeight',
         '-ShutterSpeed',
         '-DateTimeOriginal',
+        '-SubSecTimeOriginal',
         '-FNumber',
         '-ISO',
         '-LensID',
@@ -181,6 +185,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
             _exifData = exifData;
             _isLoadingExif = false;
           });
+          widget.onExifLoaded?.call(exifData);
         } else {
           print('DEBUG: No EXIF data returned for $imagePath');
           // Cache empty result to avoid repeated failed attempts
@@ -626,22 +631,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         border: Border.all(color: Colors.grey.shade300, width: 1.0),
         borderRadius: BorderRadius.zero,
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
       ),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           const double _imageVerticalPadding = 6;
-          final showExifBars = _exifData != null || _isLoadingExif;
-          final double chromeBarsH =
-              showExifBars ? (2 * kFloChromeHeaderHeight) : 0;
           final double _mainImageHeight = constraints.maxHeight -
-              chromeBarsH -
               (_imageVerticalPadding * 2);
           final double dpr = MediaQuery.devicePixelRatioOf(context);
           final int colorManagedMaxPx = (math.max(
@@ -653,172 +647,6 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
               .clamp(1200, 8192);
           return Column(
             children: [
-              // Top bar: Filename, pixel size, date and time
-              if (_exifData != null || _isLoadingExif)
-                Container(
-                  height: kFloChromeHeaderHeight,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.zero,
-                    border: Border(
-                      bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-                    ),
-                  ),
-                  child: _isLoadingExif
-                      ? const Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : Row(
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            // Left: Filename
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    p.basename(
-                                        widget.imagePaths[widget.currentIndex]),
-                                    style: const TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.normal,
-                                      color: Colors.black87,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            // Center: Pixel size
-                            if (_exifData!['ImageWidth'] != null &&
-                                _exifData!['ImageHeight'] != null)
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
-                                  child: Text(
-                                    '${_exifData!['ImageWidth']} × ${_exifData!['ImageHeight']}',
-                                    textAlign: TextAlign.center,
-                                    style: const TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.normal,
-                                      color: Colors.black87,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                  ),
-                                ),
-                              ),
-
-                            // Right: Navigation buttons
-                            Expanded(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  // Previous button
-                                  IconButton(
-                                    onPressed: widget.currentIndex > 0
-                                        ? () async {
-                                            // Save in background without waiting
-                                            if (widget.onSaveIptcBackground !=
-                                                null) {
-                                              try {
-                                                await widget
-                                                    .onSaveIptcBackground!();
-                                              } catch (e) {
-                                                print(
-                                                    'Background save error: $e');
-                                              }
-                                            }
-                                            // Prefer quick navigation if provided (no extra reloads)
-                                            if (widget.onQuickPreviousImage !=
-                                                null) {
-                                              print(
-                                                  'DEBUG: Using quick previous navigation');
-                                              widget.onQuickPreviousImage!();
-                                            } else {
-                                              print(
-                                                  'DEBUG: Using regular previous navigation');
-                                              widget.onPreviousImage();
-                                            }
-                                          }
-                                        : null,
-                                    icon: Icon(
-                                      Icons.chevron_left,
-                                      color: Colors.black87,
-                                      size: 12,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                        minWidth: 16, minHeight: 16),
-                                  ),
-
-                                  // Image counter between arrows
-                                  Text(
-                                    '${widget.currentIndex + 1}/$imageCount',
-                                    style: const TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.normal,
-                                      color: Colors.black87,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                    softWrap: false,
-                                  ),
-
-                                  // Next button
-                                  IconButton(
-                                    onPressed: widget.currentIndex <
-                                            imageCount - 1
-                                        ? () async {
-                                            // Save in background without waiting
-                                            if (widget.onSaveIptcBackground !=
-                                                null) {
-                                              try {
-                                                await widget
-                                                    .onSaveIptcBackground!();
-                                              } catch (e) {
-                                                print(
-                                                    'Background save error: $e');
-                                              }
-                                            }
-                                            // Prefer quick navigation if provided (no extra reloads)
-                                            if (widget.onQuickNextImage !=
-                                                null) {
-                                              print(
-                                                  'DEBUG: Using quick next navigation');
-                                              widget.onQuickNextImage!();
-                                            } else {
-                                              print(
-                                                  'DEBUG: Using regular next navigation');
-                                              widget.onNextImage();
-                                            }
-                                          }
-                                        : null,
-                                    icon: Icon(
-                                      Icons.chevron_right,
-                                      color: Colors.black87,
-                                      size: 12,
-                                    ),
-                                    padding: EdgeInsets.zero,
-                                    constraints: const BoxConstraints(
-                                        minWidth: 16, minHeight: 16),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
 
               // Main image area with padding so image doesn't touch outline
               Padding(
@@ -930,84 +758,6 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                 ),
               ),
 
-              // Bottom bar: Camera model, shutter speed, focal length, and navigation
-              if (_exifData != null || _isLoadingExif)
-                Container(
-                  height: kFloChromeHeaderHeight,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.zero,
-                    border: Border(
-                      top: BorderSide(color: Colors.grey.shade300, width: 1),
-                    ),
-                  ),
-                  child: _isLoadingExif
-                      ? const Center(
-                          child: SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : Row(
-                          children: [
-                            // Left: Camera model and lens
-                            if (_exifData!['Make'] != null ||
-                                _exifData!['Model'] != null)
-                              Expanded(
-                                child: Text(
-                                  _buildCameraAndLensText(),
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.normal,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-
-                            // Center: Natural language camera settings
-                            Expanded(
-                              child: Center(
-                                child: Text(
-                                  _buildNaturalLanguageSettings(),
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.normal,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-
-                            // Right: Date and time
-                            if (_exifData != null &&
-                                _exifData!['DateTimeOriginal'] != null)
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      _formatDateTime(
-                                          _exifData!['DateTimeOriginal']),
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.normal,
-                                        color: Colors.grey.shade600,
-                                      ),
-                                      textAlign: TextAlign.right,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        ),
-                ),
             ],
           );
         },

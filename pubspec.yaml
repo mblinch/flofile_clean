@@ -63,6 +63,7 @@ dependencies:
   # Tighter, styled checkbox than Material (avoids huge default control + padding)
   custom_checkbox_plus: ^1.0.0
   timezone: ^0.10.1
+  google_fonts: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -76,6 +77,14 @@ flutter:
   assets:
     - assets/images/
     - assets/images/rocket_icon_white_only.svg
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: fonts/Inter-Variable.ttf
+    - family: Lora
+      fonts:
+        - asset: fonts/Lora-Variable.ttf
 
 flutter_launcher_icons:
   android: "launcher_icon"

@@ -1370,6 +1370,31 @@ class _CaptionLayoutBuilderDialogState
     });
   }
 
+  /// Removes the snippet at [index] from [segmentOrder].
+  void _removeSegmentSnippet(int index) {
+    setState(() {
+      final order = List<CaptionSegment>.from(_template.segmentOrder);
+      if (index < 0 || index >= order.length) return;
+      order.removeAt(index);
+      var next = _template.copyWith(
+        segmentOrder: order,
+        customSeparators: null,
+      );
+      next = next.copyWith(
+        customSeparators: List<String>.from(
+          CaptionFormulaRenderer.effectiveSegmentGaps(next),
+        ),
+      );
+      _template = next.normalizePerOccurrenceLists();
+      _initGapControllers(_template);
+      if (_activeFormulaIndex == index) {
+        _activeFormulaIndex = null;
+      } else if (_activeFormulaIndex != null && _activeFormulaIndex! > index) {
+        _activeFormulaIndex = _activeFormulaIndex! - 1;
+      }
+    });
+  }
+
   /// Reorders [CaptionTemplate.segmentOrder] when the user drags one preview
   /// snippet onto another ("drop at target index" semantics, same as byline).
   void _reorderPreviewSegment(int fromIndex, int toIndex) {
@@ -2631,6 +2656,17 @@ class _CaptionLayoutBuilderDialogState
                     ),
                   ),
                 ),
+                const SizedBox(width: 4),
+                _BylineChipIconButton(
+                  tooltip: 'Remove',
+                  onTap: () => _removeBylineFieldAtView(viewIndex),
+                  background: Colors.white,
+                  child: Icon(
+                    Icons.close,
+                    size: 11,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
               ],
             ],
           ),
@@ -3451,6 +3487,7 @@ class _CaptionLayoutBuilderDialogState
         tooltipLabel: _segmentDisplayLabel(seg, i),
         titleLeading: _previewSegmentDragHandle(i),
         onSnippetTap: () => _activateFormulaEditor(index: i, segment: seg),
+        onRemove: seg == CaptionSegment.caption ? null : () => _removeSegmentSnippet(i),
       );
 
       final snippetRow = DragTarget<int>(
@@ -3511,6 +3548,7 @@ class _CaptionLayoutBuilderDialogState
     required String tooltipLabel,
     Widget? titleLeading,
     VoidCallback? onSnippetTap,
+    VoidCallback? onRemove,
   }) {
     final tint = _segmentTints[seg];
     Color bg;
@@ -3538,7 +3576,7 @@ class _CaptionLayoutBuilderDialogState
         break;
     }
 
-    final chip = Container(
+    final chipContent = Container(
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(4),
@@ -3584,6 +3622,31 @@ class _CaptionLayoutBuilderDialogState
         ],
       ),
     );
+
+    final chip = onRemove != null
+        ? Stack(
+            clipBehavior: Clip.none,
+            children: [
+              chipContent,
+              Positioned(
+                top: -4,
+                right: -4,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade600,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close, size: 8, color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
+          )
+        : chipContent;
 
     Widget body = Tooltip(
       message: tooltipLabel,
@@ -5508,10 +5571,27 @@ class _BylineLabeledInput extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 6),
-        Expanded(
-          child: SizedBox(
-            height: 28,
-            child: _GapSeparatorField(controller: controller),
+        SizedBox(
+          width: 180,
+          height: 24,
+          child: TextField(
+            controller: controller,
+            style: const TextStyle(fontSize: 11),
+            textAlign: TextAlign.left,
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+              filled: true,
+              fillColor: Colors.white,
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(4),
+                borderSide: BorderSide(color: Colors.grey.shade500),
+              ),
+            ),
           ),
         ),
       ],
