@@ -572,7 +572,7 @@ class CaptionFormulaRenderer {
     final position = template.includePlayerPosition
         ? ' ${formatPositionLabelForCaption(
             player.position,
-            apStyle: template.wireStyle == WireStyle.ap,
+            apStyle: template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp,
             imagnStyle: template.wireStyle == WireStyle.imagn,
             americanEnglish: template.americanEnglish,
             sport: 'baseball',
@@ -820,7 +820,7 @@ class CaptionFormulaRenderer {
           return formatLocationLine(
             game,
             locationLineOptionsForOccurrence(template, occ),
-            apStyleCaption: template.wireStyle == WireStyle.ap,
+            apStyleCaption: template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp,
           );
         case CaptionSegment.date:
           final occ = segmentOccurrenceIndex(
@@ -861,7 +861,7 @@ class CaptionFormulaRenderer {
             agencyName: game.agencyName,
             iptcMetadata: game.iptcMetadata,
             sampleAgency: sampleAgency,
-            apShortParen: template.wireStyle == WireStyle.ap,
+            apShortParen: template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp,
             customTexts: template.bylineOptions.customTexts,
           );
       }
@@ -954,6 +954,7 @@ class CaptionFormulaRenderer {
         }
         return '; ';
       case WireStyle.ap:
+      case WireStyle.cp:
         if (_segmentPairEither(
             a, b, CaptionSegment.location, CaptionSegment.date)) {
           return ' (';

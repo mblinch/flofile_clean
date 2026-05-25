@@ -110,6 +110,7 @@ class _CaptionLayoutBuilderDialogState
   CaptionTemplate? _gettyWireDefault;
   CaptionTemplate? _imagnWireDefault;
   CaptionTemplate? _apWireDefault;
+  CaptionTemplate? _cpWireDefault;
   CaptionTemplate? _gettyIntlWireDefault;
   final Map<WireStyle, CaptionTemplate> _wireDrafts = {};
 
@@ -118,6 +119,7 @@ class _CaptionLayoutBuilderDialogState
   String? _gettyWireLabel;
   String? _imagnWireLabel;
   String? _apWireLabel;
+  String? _cpWireLabel;
   String? _gettyIntlWireLabel;
   WireStyle _selectedWire = WireStyle.getty;
   bool _locationEditorOpen = false;
@@ -159,6 +161,7 @@ class _CaptionLayoutBuilderDialogState
   static const String _menuTokGetty = 'wire:getty';
   static const String _menuTokImagn = 'wire:imagn';
   static const String _menuTokAp = 'wire:ap';
+  static const String _menuTokCp = 'wire:cp';
   static const String _menuTokGettyIntl = 'wire:getty_international';
   static const String _menuTokCustom = 'wire:custom';
 
@@ -690,12 +693,14 @@ class _CaptionLayoutBuilderDialogState
     final gettyDef = await prefs.getCaptionTemplateWireDefault(WireStyle.getty);
     final imagnDef = await prefs.getCaptionTemplateWireDefault(WireStyle.imagn);
     final apDef = await prefs.getCaptionTemplateWireDefault(WireStyle.ap);
+    final cpDef = await prefs.getCaptionTemplateWireDefault(WireStyle.cp);
     final gettyIntlDef =
         await prefs.getCaptionTemplateWireDefault(WireStyle.gettyInternational);
     final styleLib = await prefs.getCaptionStyleLibrary();
     final gettyLabel = await prefs.getCaptionWireLabel(WireStyle.getty);
     final imagnLabel = await prefs.getCaptionWireLabel(WireStyle.imagn);
     final apLabel = await prefs.getCaptionWireLabel(WireStyle.ap);
+    final cpLabel = await prefs.getCaptionWireLabel(WireStyle.cp);
     final gettyIntlLabel =
         await prefs.getCaptionWireLabel(WireStyle.gettyInternational);
     if (!mounted) return;
@@ -704,10 +709,12 @@ class _CaptionLayoutBuilderDialogState
       _gettyWireDefault = gettyDef;
       _imagnWireDefault = imagnDef;
       _apWireDefault = apDef;
+      _cpWireDefault = cpDef;
       _gettyIntlWireDefault = gettyIntlDef;
       _gettyWireLabel = gettyLabel;
       _imagnWireLabel = imagnLabel;
       _apWireLabel = apLabel;
+      _cpWireLabel = cpLabel;
       _gettyIntlWireLabel = gettyIntlLabel;
       _captionStyleLibrary = styleLib;
       _template = template;
@@ -827,6 +834,7 @@ class _CaptionLayoutBuilderDialogState
       case WireStyle.imagn:
         return CreditSampleAgency.imagn;
       case WireStyle.ap:
+      case WireStyle.cp:
         return CreditSampleAgency.ap;
       case WireStyle.custom:
         return CreditSampleAgency.gettyImages;
@@ -841,6 +849,8 @@ class _CaptionLayoutBuilderDialogState
         return 'Imagn';
       case WireStyle.ap:
         return 'AP';
+      case WireStyle.cp:
+        return 'CP';
       case WireStyle.gettyInternational:
         return 'Getty International';
       case WireStyle.custom:
@@ -856,6 +866,8 @@ class _CaptionLayoutBuilderDialogState
         return _imagnWireLabel;
       case WireStyle.ap:
         return _apWireLabel;
+      case WireStyle.cp:
+        return _cpWireLabel;
       case WireStyle.gettyInternational:
         return _gettyIntlWireLabel;
       case WireStyle.custom:
@@ -877,6 +889,8 @@ class _CaptionLayoutBuilderDialogState
         return _menuTokImagn;
       case WireStyle.ap:
         return _menuTokAp;
+      case WireStyle.cp:
+        return _menuTokCp;
       case WireStyle.gettyInternational:
         return _menuTokGettyIntl;
       case WireStyle.custom:
@@ -890,6 +904,8 @@ class _CaptionLayoutBuilderDialogState
         return WireStyle.imagn;
       case _menuTokAp:
         return WireStyle.ap;
+      case _menuTokCp:
+        return WireStyle.cp;
       case _menuTokGettyIntl:
         return WireStyle.gettyInternational;
       case _menuTokCustom:
@@ -905,6 +921,7 @@ class _CaptionLayoutBuilderDialogState
       _menuTokGetty,
       _menuTokImagn,
       _menuTokAp,
+      _menuTokCp,
       _menuTokGettyIntl,
       _menuTokCustom,
       ..._captionStyleLibrary.map((e) => 'saved:${e.id}'),
@@ -955,6 +972,8 @@ class _CaptionLayoutBuilderDialogState
         return _wireStyleDropdownLabel(WireStyle.imagn);
       case _menuTokAp:
         return _wireStyleDropdownLabel(WireStyle.ap);
+      case _menuTokCp:
+        return _wireStyleDropdownLabel(WireStyle.cp);
       case _menuTokGettyIntl:
         return _wireStyleDropdownLabel(WireStyle.gettyInternational);
       case _menuTokCustom:
@@ -1057,6 +1076,8 @@ class _CaptionLayoutBuilderDialogState
         return apply(_imagnWireDefault, CaptionTemplate.imagn());
       case WireStyle.ap:
         return apply(_apWireDefault, CaptionTemplate.ap());
+      case WireStyle.cp:
+        return apply(_cpWireDefault, CaptionTemplate.cp());
       case WireStyle.gettyInternational:
         return apply(
             _gettyIntlWireDefault, CaptionTemplate.gettyInternational());
@@ -1131,7 +1152,8 @@ class _CaptionLayoutBuilderDialogState
               : null,
         );
       case WireStyle.ap:
-        return _wiredBaseline(WireStyle.ap).copyWith(
+      case WireStyle.cp:
+        return _wiredBaseline(t.wireStyle).copyWith(
           segmentOrder: List<CaptionSegment>.from(t.segmentOrder),
           dateFormat: t.dateFormat,
           dateExpression: t.dateExpression,
@@ -1282,6 +1304,7 @@ class _CaptionLayoutBuilderDialogState
       WireStyle.getty,
       WireStyle.imagn,
       WireStyle.ap,
+      WireStyle.cp,
       WireStyle.gettyInternational,
     ];
 
@@ -1299,6 +1322,7 @@ class _CaptionLayoutBuilderDialogState
       _gettyWireDefault = nextDefaults[WireStyle.getty];
       _imagnWireDefault = nextDefaults[WireStyle.imagn];
       _apWireDefault = nextDefaults[WireStyle.ap];
+      _cpWireDefault = nextDefaults[WireStyle.cp];
       _gettyIntlWireDefault = nextDefaults[WireStyle.gettyInternational];
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1597,6 +1621,7 @@ class _CaptionLayoutBuilderDialogState
         case WireStyle.gettyInternational:
         case WireStyle.imagn:
         case WireStyle.ap:
+        case WireStyle.cp:
           final b = _draftOrBaseline(w);
           _template = _withSessionSportGameId(b);
           _lastPreset = _withSessionSportGameId(b);
@@ -1754,6 +1779,9 @@ class _CaptionLayoutBuilderDialogState
                 break;
               case WireStyle.ap:
                 _apWireLabel = trimmed;
+                break;
+              case WireStyle.cp:
+                _cpWireLabel = trimmed;
                 break;
               case WireStyle.gettyInternational:
                 _gettyIntlWireLabel = trimmed;
@@ -3391,7 +3419,7 @@ class _CaptionLayoutBuilderDialogState
       agencyName: _previewGameInfo.agencyName,
       iptcMetadata: _previewGameInfo.iptcMetadata,
       sampleAgency: sampleAgency,
-      apShortParen: _template.wireStyle == WireStyle.ap,
+      apShortParen: _template.wireStyle == WireStyle.ap || _template.wireStyle == WireStyle.cp,
       customTexts: _template.bylineOptions.customTexts,
       includeCustomInCredit: !omitCustomInCredit,
     );
@@ -3406,7 +3434,7 @@ class _CaptionLayoutBuilderDialogState
             _previewGameInfo,
             CaptionFormulaRenderer.locationLineOptionsForOccurrence(
                 _template, occ),
-            apStyleCaption: _template.wireStyle == WireStyle.ap,
+            apStyleCaption: _template.wireStyle == WireStyle.ap || _template.wireStyle == WireStyle.cp,
           );
         case CaptionSegment.date:
           final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(

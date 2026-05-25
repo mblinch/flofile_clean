@@ -4,6 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'app_styled_dialogs.dart';
 import 'package:flutter/services.dart';
+import '../caption_style/caption_formula_renderer.dart';
+import '../caption_style/caption_template.dart';
+import '../services/caption_preview_data_service.dart';
 import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
 import '../services/api_manager.dart';
@@ -13,6 +16,7 @@ import 'verb_keyword_quick_bar.dart';
 import '../flo_layout_constants.dart';
 import '../utils/baseball_tags_popup_rows.dart';
 import 'app_compact_checkbox.dart';
+import 'caption_layout_builder_dialog.dart';
 
 /// Intents for global H/V firebar shortcut (only when not in a text field).
 class _FirebarHIntent extends Intent {
@@ -282,14 +286,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 color: isFavs ? Colors.amber.shade400 : Colors.blue.shade300,
                 width: 1.5,
               ),
-              borderRadius: BorderRadius.circular(5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+              borderRadius: BorderRadius.circular(5)
             ),
             child: Row(
               children: [
@@ -368,14 +365,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 color: Colors.blue.shade300,
                 width: 1.5,
               ),
-              borderRadius: BorderRadius.circular(5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.12),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
-                ),
-              ],
+              borderRadius: BorderRadius.circular(5)
             ),
             child: Row(
               children: [
@@ -568,8 +558,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     return height.clamp(120.0, 640.0);
   }
 
-  static const double _kKbRosterRowHeightMin = 12.5;
-  static const double _kKbRosterRowHeightMax = 18.5;
+  static const double _kKbRosterRowHeightMin = 14.0;
+  static const double _kKbRosterRowHeightMax = 20.0;
 
   double _keyboardFireListRosterRowHeight(double listViewportHeight) {
     const verticalScrollPad = 2.0 + 3.0; // `fromLTRB(3, 2, 3, 3)` top + bottom
@@ -583,7 +573,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   double _keyboardFireListRosterFontSize(double listViewportHeight) {
     final rowH = _keyboardFireListRosterRowHeight(listViewportHeight);
     // Slightly smaller cap than before so compact rows don’t keep oversized type.
-    return (rowH * 0.82).clamp(8.5, 10.5);
+    return (rowH * 0.82).clamp(10.5, 12.5);
   }
 
   /// Shared roster text size used as the typography baseline for verbs/categories.
@@ -604,6 +594,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   bool _showHeadlineField = false;
   bool _showKeywordsField = false;
   bool _showPersonalityField = true;
+
+  CaptionTemplate? _captionPreviewTemplate;
+  final int _captionPreviewSeed = DateTime.now().millisecondsSinceEpoch;
 
   bool _applyVerbKeywordsEnabledKb = true;
   bool _applyPlayerNamesToKeywordsEnabledKb = true;
@@ -911,6 +904,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       });
       p.captionFieldVisibilityRevision
           .addListener(_onKeyboardFireCaptionFieldVisibilityRevision);
+      p.getCaptionTemplate().then((t) {
+        if (!mounted) return;
+        setState(() => _captionPreviewTemplate = t);
+      });
     });
     // Defer state changes to avoid setState() during build (CaptionFieldsWidget).
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1539,6 +1536,45 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
+  String? _fullCaptionPreviewText() {
+    final template = _captionPreviewTemplate;
+    if (template == null) return null;
+    String sport = 'baseball';
+    try {
+      sport = (widget.captionState as dynamic).currentSportName as String? ??
+          'baseball';
+    } catch (_) {}
+    final snap = CaptionPreviewDataService.load(sport: sport);
+    final body = CaptionFormulaRenderer.randomSinglePlayerCaption(
+      template,
+      seed: _captionPreviewSeed,
+      sport: sport,
+      previewPlayers: snap.players,
+      previewActions: snap.actions,
+    );
+    CreditSampleAgency agency;
+    switch (template.wireStyle) {
+      case WireStyle.imagn:
+        agency = CreditSampleAgency.imagn;
+        break;
+      case WireStyle.ap:
+      case WireStyle.cp:
+        agency = CreditSampleAgency.ap;
+        break;
+      case WireStyle.getty:
+      case WireStyle.gettyInternational:
+      case WireStyle.custom:
+        agency = CreditSampleAgency.gettyImages;
+        break;
+    }
+    return CaptionFormulaRenderer.render(
+      template: template,
+      game: snap.gameInfo,
+      sampleAgency: agency,
+      captionOverride: body,
+    );
+  }
+
   /// Editable caption field bound to captionState's caption controller.
   Widget _buildCaptionField() {
     return Builder(builder: (context) {
@@ -1554,7 +1590,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           textAlignVertical: TextAlignVertical.top,
           cursorHeight: 12,
           cursorColor: Colors.black87,
-          style: const TextStyle(fontSize: 13),
+          style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
           decoration: InputDecoration(
             isDense: true,
             hintText: 'Caption will appear here as you add players and a verb.',
@@ -1575,7 +1611,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Caption will appear here as you add players and a verb.',
@@ -1636,35 +1672,28 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   Widget _buildKbLabeledBox(String label, Widget child,
       {Widget? trailingAction}) {
-    final TextStyle _headerStyle = TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w600,
-      color: Colors.grey.shade700,
+    const TextStyle _headerStyle = TextStyle(
+      fontSize: 16,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF3A3A3A),
       height: 1.0,
-      letterSpacing: 0.8,
+      letterSpacing: -0.45,
+      fontVariations: [
+        FontVariation('wght', 700),
+        FontVariation('opsz', 32),
+      ],
     );
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(5),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            width: double.infinity,
-            height: kFloChromeHeaderHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-            alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(5),
-                topRight: Radius.circular(5),
-              ),
-              border: Border(
-                left: BorderSide(color: Colors.grey.shade300, width: 1),
-                top: BorderSide(color: Colors.grey.shade300, width: 1),
-                right: BorderSide(color: Colors.grey.shade300, width: 1),
-              ),
-            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(7, 6, 8, 7),
             child: trailingAction != null
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -1677,23 +1706,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 : Text(label, style: _headerStyle),
           ),
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: _panelBackgroundLight,
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(5),
-                  bottomRight: Radius.circular(5),
-                ),
-                border: Border.all(color: Colors.grey.shade300, width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.06),
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(3),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(2, 0, 2, 2),
               child: child,
             ),
           ),
@@ -1715,7 +1729,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Headline',
@@ -1736,7 +1750,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Headline',
@@ -1763,7 +1777,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Keywords',
@@ -1784,7 +1798,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Keywords',
@@ -1812,7 +1826,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Personality',
@@ -1833,7 +1847,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 13),
+        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
         decoration: InputDecoration(
           isDense: true,
           border: InputBorder.none,
@@ -1853,8 +1867,71 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final hasSecondary =
         _showHeadlineField || _showKeywordsField || _showPersonalityField;
 
+    Widget _captionStyleBtn() => GestureDetector(
+      onTap: () async {
+        await CaptionLayoutBuilderDialog.show(context);
+        final p = _prefsService;
+        if (p != null && mounted) {
+          final t = await p.getCaptionTemplate();
+          if (mounted) setState(() => _captionPreviewTemplate = t);
+        }
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.edit_outlined, size: 11, color: Colors.grey.shade500),
+          const SizedBox(width: 4),
+          Text(
+            'Caption Style',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey.shade500,
+              letterSpacing: -0.1,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    Widget captionFieldWithPreview() {
+      final preview = _fullCaptionPreviewText();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _buildCaptionField()),
+          if (preview != null && preview.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
+              margin: const EdgeInsets.fromLTRB(2, 0, 2, 2),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(4),
+                border: Border(
+                  left: BorderSide(color: Colors.grey.shade400, width: 2.5),
+                ),
+              ),
+              child: Text(
+                preview,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  height: 1.4,
+                  color: Colors.grey.shade600,
+                  fontFamily: 'Menlo',
+                  fontFamilyFallback: const ['Consolas', 'Courier New', 'monospace'],
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+
     if (!hasSecondary) {
-      return _buildKbLabeledBox('Caption', _buildCaptionField());
+      return _buildKbLabeledBox('Caption', captionFieldWithPreview(),
+          trailingAction: _captionStyleBtn());
     }
 
     final cards = <Widget>[];
@@ -1870,7 +1947,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
     final rightChildren = <Widget>[];
     for (var i = 0; i < cards.length; i++) {
-      if (i > 0) rightChildren.add(const SizedBox(height: 4));
+      if (i > 0) rightChildren.add(const SizedBox(height: 8));
       rightChildren.add(Expanded(child: cards[i]));
     }
 
@@ -1879,9 +1956,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       children: [
         Expanded(
           flex: 13,
-          child: _buildKbLabeledBox('Caption', _buildCaptionField()),
+          child: _buildKbLabeledBox('Caption', captionFieldWithPreview(),
+              trailingAction: _captionStyleBtn()),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 8),
         Expanded(
           flex: 7,
           child: Column(
@@ -1922,14 +2000,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               decoration: BoxDecoration(
                 color: Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: Colors.grey.shade300),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.15),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+                border: Border.all(color: Colors.grey.shade300)
               ),
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Column(
@@ -1956,13 +2027,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   const SizedBox(height: 3),
                   Container(
                     decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 3,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
                     ),
                     child: TextField(
                       controller: numberController,
@@ -2002,13 +2066,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   const SizedBox(height: 3),
                   Container(
                     decoration: BoxDecoration(
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 3,
-                          offset: const Offset(0, 1),
-                        ),
-                      ],
                     ),
                     child: TextField(
                       controller: fullNameController,
@@ -2279,9 +2336,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     fontSize: listFontSize,
                     height: listRowHeight != null ? 1.0 : 1.06,
                     fontWeight: FontWeight.w600,
+                    letterSpacing: -0.1,
                     color: isPicked
                         ? const Color(0xFF0052CC)
-                        : Colors.grey.shade800,
+                        : const Color(0xFF1A1A1A),
                   ),
                 ),
               ),
@@ -2290,13 +2348,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   displayName,
                   style: TextStyle(
                     fontSize: listFontSize,
-
-
                     height: listRowHeight != null ? 1.0 : 1.06,
+                    letterSpacing: -0.1,
                     color:
-                        isPicked ? const Color(0xFF0052CC) : Colors.black87,
+                        isPicked ? const Color(0xFF0052CC) : const Color(0xFF1A1A1A),
                     fontWeight:
-                        isPicked ? FontWeight.w600 : FontWeight.normal,
+                        isPicked ? FontWeight.w600 : FontWeight.w400,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -2487,22 +2544,41 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         : (isHovered ? Colors.grey.shade200 : null);
 
     final nameText = name == 'data missing' ? 'data missing' : name;
-    // Match _buildRosterRows jersey + display name styles (no letterSpacing / height overrides).
+
+    String _abbrevTitle(String t) {
+      final lower = t.toLowerCase().trim();
+      if (lower == 'manager') return 'MGR:';
+      if (lower == 'pitching coach') return 'PIC:';
+      if (lower == 'first base coach') return '1BC:';
+      if (lower == 'third base coach') return '3BC:';
+      if (lower == 'hitting coach') return 'HIT:';
+      if (lower == 'bench coach') return 'BNC:';
+      if (lower == 'bullpen coach') return 'BPC:';
+      final words = t.split(' ');
+      if (words.length >= 2) {
+        return '${words.map((w) => w.isNotEmpty ? w[0].toUpperCase() : '').join()}:';
+      }
+      return '${t.substring(0, t.length.clamp(0, 3)).toUpperCase()}:';
+    }
+
+    final abbrev = _abbrevTitle(title);
     final titleStyle = TextStyle(
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: FontWeight.w600,
+      letterSpacing: -0.1,
       color: isPicked
           ? const Color(0xFF0052CC)
-          : Colors.grey.shade800,
+          : Colors.grey.shade500,
     );
     final nameStyle = TextStyle(
-      fontSize: 11,
+      fontSize: 12,
+      letterSpacing: -0.1,
       color: isPicked
           ? const Color(0xFF0052CC)
           : (name == 'data missing'
               ? Colors.grey.shade500
-              : Colors.black87),
-      fontWeight: isPicked ? FontWeight.w600 : FontWeight.normal,
+              : const Color(0xFF1A1A1A)),
+      fontWeight: isPicked ? FontWeight.w600 : FontWeight.w400,
       fontStyle:
           name == 'data missing' ? FontStyle.italic : FontStyle.normal,
     );
@@ -2513,8 +2589,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
-          Text(title, style: titleStyle),
-          const SizedBox(width: 7),
+          SizedBox(
+            width: 32,
+            child: Text(abbrev, style: titleStyle),
+          ),
+          const SizedBox(width: 4),
           Expanded(
             child: Text(
               nameText,
@@ -2997,16 +3076,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             width: double.infinity,
             padding: const EdgeInsets.fromLTRB(6, 6, 6, 4),
             decoration: BoxDecoration(
-              color: _panelBackgroundLight,
-              borderRadius: BorderRadius.zero,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
-                  blurRadius: 2,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(5),
+              ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -3086,7 +3158,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       decoration: InputDecoration(
         isDense: true,
         filled: true,
-        fillColor: const Color(0xFFF7F6F3),
+        fillColor: Colors.white,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(3),
           borderSide: BorderSide(color: Colors.grey.shade300),
@@ -3358,7 +3430,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(3, 0, 3, 3),
+          padding: const EdgeInsets.fromLTRB(2, 0, 2, 2),
           child: _buildRosterCoachScrollSuffix(isHomeTeam),
         ),
       ],
@@ -4618,7 +4690,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           Row(
             children: primaryBases.map(baseChip).toList(),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Row(
             children: [
               baseChip(taggedOutBase),
@@ -4950,7 +5022,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   static const Color _ftpButtonBlue = Color(0xFF0052CC);
 
   /// Very light grey, one step above white (for column bodies, caption, personality).
-  static const Color _panelBackgroundLight = Color(0xFFFCFCFC);
+  static const Color _panelBackgroundLight = Colors.white;
 
   Widget _buildFtpButtonWithContextMenu() {
     return SizedBox(
@@ -5441,10 +5513,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       final isSelected = selected == label;
       final isWide = wideLabels.contains(label);
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
         child: SizedBox(
-          width: isWide ? widePeriodButtonWidth : 24,
-          height: 24,
+          width: isWide ? widePeriodButtonWidth : 28,
+          height: 26,
           child: OutlinedButton(
             onPressed: () => _onPeriodSelect(label),
             style: OutlinedButton.styleFrom(
@@ -5452,11 +5524,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               minimumSize: const Size(0, 0),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               side: BorderSide(
-                color: isSelected ? Colors.blue.shade500 : Colors.grey.shade400,
+                color: isSelected ? const Color(0xFF3A5F78) : const Color(0xFFE0E0E0),
               ),
-              backgroundColor: isSelected ? Colors.blue.shade50 : Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
+              backgroundColor: isSelected ? const Color(0xFF3A5F78) : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5),
               ),
             ),
             child: Center(
@@ -5467,10 +5539,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 softWrap: false,
                 overflow: TextOverflow.clip,
                 style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color:
-                      isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  letterSpacing: -0.1,
+                  color: isSelected ? Colors.white : const Color(0xFF3A3A3A),
                 ),
               ),
             ),
@@ -5486,10 +5558,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       final isSelected = sel == inningNum;
       final label = '$inningNum';
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 2),
         child: SizedBox(
           width: baseballInningCellW,
-          height: 24,
+          height: 26,
           child: OutlinedButton(
             onPressed: () => _onInningSelect(isSelected ? null : inningNum),
             style: OutlinedButton.styleFrom(
@@ -5497,20 +5569,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               minimumSize: const Size(0, 0),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               side: BorderSide(
-                color: isSelected ? Colors.blue.shade500 : Colors.grey.shade400,
+                color: isSelected ? const Color(0xFF3A5F78) : const Color(0xFFE0E0E0),
               ),
-              backgroundColor: isSelected ? Colors.blue.shade50 : Colors.white,
+              backgroundColor: isSelected ? const Color(0xFF3A5F78) : Colors.white,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(3),
+                borderRadius: BorderRadius.circular(5),
               ),
             ),
             child: Text(
               label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 9,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                letterSpacing: -0.1,
+                color: isSelected ? Colors.white : const Color(0xFF3A3A3A),
               ),
             ),
           ),
@@ -5565,35 +5638,33 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Container(
           decoration: BoxDecoration(
-            color: _panelBackgroundLight,
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 3,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
           ),
-          padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+          padding: const EdgeInsets.fromLTRB(7, 6, 8, 7),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
                 headerLabel,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                  letterSpacing: 0.8,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF3A3A3A),
+                  height: 1.0,
+                  letterSpacing: -0.45,
+                  fontVariations: [
+                    FontVariation('wght', 700),
+                    FontVariation('opsz', 32),
+                  ],
                 ),
               ),
               if (isBaseball) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: 10),
                 _baseballKeyboardFireMlbControl(),
               ],
-              const SizedBox(width: 6),
+              const SizedBox(width: 10),
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
@@ -5640,28 +5711,26 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Container(
           decoration: BoxDecoration(
-            color: _panelBackgroundLight,
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 3,
-                offset: const Offset(0, 1),
-              ),
-            ],
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
           ),
-          padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+          padding: const EdgeInsets.fromLTRB(7, 6, 8, 7),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
                 headerLabel,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade700,
-                  letterSpacing: 0.8,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF3A3A3A),
+                  height: 1.0,
+                  letterSpacing: -0.45,
+                  fontVariations: [
+                    FontVariation('wght', 700),
+                    FontVariation('opsz', 32),
+                  ],
                 ),
               ),
               const SizedBox(width: 6),
@@ -5689,39 +5758,37 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Container(
         decoration: BoxDecoration(
-          color: _panelBackgroundLight,
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: Colors.grey.shade300, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 3,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              headerLabel,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: Colors.grey.shade700,
-                letterSpacing: 0.8,
+          color: Colors.white,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+          ),
+          padding: const EdgeInsets.fromLTRB(7, 6, 8, 7),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                headerLabel,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF3A3A3A),
+                  height: 1.0,
+                  letterSpacing: -0.45,
+                  fontVariations: [
+                    FontVariation('wght', 700),
+                    FontVariation('opsz', 32),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    ...periodLabels.map(periodButton),
+              const SizedBox(width: 6),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      ...periodLabels.map(periodButton),
                     const SizedBox(width: 3),
                     SizedBox(
                       width: 24,
@@ -5978,360 +6045,206 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             children: [
               // ── 1: Home roster (title, then box: number bar + list) ───────
               Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 1),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(5),
-                          topRight: Radius.circular(5),
-                        ),
-                        border: Border(
-                          left:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                          top:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                          right:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  homeName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _panelBackgroundLight,
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(5),
-                            bottomRight: Radius.circular(5),
-                          ),
-                          border: Border.all(
-                            color: _isFirebarColumnActive(0)
-                                ? Colors.red
-                                : Colors.grey.shade300,
-                            width: _isFirebarColumnActive(0) ? 2 : 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
-                              blurRadius: 3,
-                              offset: const Offset(0, 1),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 7),
+                          decoration: const BoxDecoration(color: Colors.white),
+                          child: Text(
+                            homeName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF3A3A3A),
+                              height: 1.0,
+                              letterSpacing: -0.45,
+                              fontVariations: [
+                                FontVariation('wght', 700),
+                                FontVariation('opsz', 32),
+                              ],
                             ),
+                          ),
+                        ),
+                        _buildColumnBar(
+                          controller: _homeBarController,
+                          focusNode: _homeBarFocus,
+                          onSubmitted: _onHomeBarSubmit,
+                          rosterForGhostNames: _homeRosterView,
+                        ),
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: _buildPlayerViewModeToggle(),
+                            ),
+                            const Spacer(),
+                            _buildKbAddPlayerIconButton(true),
                           ],
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(3),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildColumnBar(
-                                controller: _homeBarController,
-                                focusNode: _homeBarFocus,
-                                onSubmitted: _onHomeBarSubmit,
-                                rosterForGhostNames: _homeRosterView,
-                              ),
-                              const SizedBox(height: 3),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    flex: 1,
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        alignment: Alignment.centerLeft,
-                                        child: _buildPlayerViewModeToggle(),
+                        const SizedBox(height: 1),
+                        Expanded(
+                          child: _useSquarePlayerView
+                              ? _buildRosterSquareGrid(_homeRosterView, true)
+                              : ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: _homeBarController,
+                                  builder: (_, value, __) =>
+                                      _buildRosterColumnContent(
+                                        _homeRosterView,
+                                        true,
+                                        barText: value.text,
                                       ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              _buildKbAddPlayerIconButton(true),
-                              const SizedBox(height: 1),
-                              Expanded(
-                                child: _useSquarePlayerView
-                                    ? _buildRosterSquareGrid(
-                                        _homeRosterView, true)
-                                    : ValueListenableBuilder<
-                                        TextEditingValue>(
-                                        valueListenable: _homeBarController,
-                                        builder: (_, value, __) =>
-                                            _buildRosterColumnContent(
-                                              _homeRosterView,
-                                              true,
-                                              barText: value.text,
-                                            ),
-                                      ),
-                              ),
-                            ],
-                          ),
+                                ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               // ── 2: Categories + verbs (one bar: 2 digits = cat + verb) ───
               Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 1),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(5),
-                          topRight: Radius.circular(5),
-                        ),
-                        border: Border(
-                          left:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                          top:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                          right:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                        ),
-                      ),
-                      child: Text(
-                        'Verbs',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.grey.shade700,
-                          letterSpacing: 0.8,
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _panelBackgroundLight,
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(5),
-                            bottomRight: Radius.circular(5),
-                          ),
-                          border: Border.all(
-                            color: _isFirebarColumnActive(2)
-                                ? Colors.red
-                                : Colors.grey.shade300,
-                            width: _isFirebarColumnActive(2) ? 2 : 1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
-                              blurRadius: 3,
-                              offset: const Offset(0, 1),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 7),
+                          decoration: const BoxDecoration(color: Colors.white),
+                          child: const Text(
+                            'Verbs',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF3A3A3A),
+                              height: 1.0,
+                              letterSpacing: -0.45,
+                              fontVariations: [
+                                FontVariation('wght', 700),
+                                FontVariation('opsz', 32),
+                              ],
                             ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(3),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildColumnBar(
-                                controller: _categoryBarController,
-                                focusNode: _categoryBarFocus,
-                                onSubmitted: _onCategoryVerbBarSubmit,
-                                onChanged: (v) {
-                                  if (RegExp(r'^\d{2}$').hasMatch(v.trim())) {
-                                    _onVerbBarInput(v.trim());
-                                  }
-                                },
-                              ),
-                              const SizedBox(height: 3),
-                              Expanded(
-                                child: ValueListenableBuilder<TextEditingValue>(
-                                  valueListenable: _categoryBarController,
-                                  builder: (_, value, __) =>
-                                      _buildCategoriesWithVerbsContent(
-                                          barText: value.text),
-                                ),
-                              ),
-                            ],
                           ),
                         ),
-                      ),
+                        _buildColumnBar(
+                          controller: _categoryBarController,
+                          focusNode: _categoryBarFocus,
+                          onSubmitted: _onCategoryVerbBarSubmit,
+                          onChanged: (v) {
+                            if (RegExp(r'^\d{2}$').hasMatch(v.trim())) {
+                              _onVerbBarInput(v.trim());
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 3),
+                        Expanded(
+                          child: ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _categoryBarController,
+                            builder: (_, value, __) =>
+                                _buildCategoriesWithVerbsContent(
+                                    barText: value.text),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
                   ),
                 ),
               ),
-              const SizedBox(width: 6),
+              const SizedBox(width: 8),
               // ── 3: Away roster (title, then box: number bar + list) ───────
               Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(5),
-                  child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(6, 2, 6, 1),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(5),
-                          topRight: Radius.circular(5),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 7),
+                          decoration: const BoxDecoration(color: Colors.white),
+                          child: Text(
+                            awayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF3A3A3A),
+                              height: 1.0,
+                              letterSpacing: -0.45,
+                              fontVariations: [
+                                FontVariation('wght', 700),
+                                FontVariation('opsz', 32),
+                              ],
+                            ),
+                          ),
                         ),
-                        border: Border(
-                          left:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
-                          top:
-                              BorderSide(color: Colors.grey.shade300, width: 1),
+                        _buildColumnBar(
+                          controller: _awayBarController,
+                          focusNode: _awayBarFocus,
+                          onSubmitted: _onAwayBarSubmit,
+                          rosterForGhostNames: _awayRosterView,
                         ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  awayName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade700,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _panelBackgroundLight,
-                          borderRadius: const BorderRadius.only(
-                            bottomLeft: Radius.circular(5),
-                            bottomRight: Radius.circular(5),
-                          ),
-                          border: Border(
-                            left: BorderSide(
-                              color: _isFirebarColumnActive(1)
-                                  ? Colors.red
-                                  : Colors.grey.shade300,
-                              width: _isFirebarColumnActive(1) ? 2 : 1,
+                        const SizedBox(height: 3),
+                        Row(
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: _buildPlayerViewModeToggle(),
                             ),
-                            top: BorderSide(
-                              color: _isFirebarColumnActive(1)
-                                  ? Colors.red
-                                  : Colors.grey.shade300,
-                              width: _isFirebarColumnActive(1) ? 2 : 1,
-                            ),
-                            bottom: BorderSide(
-                              color: _isFirebarColumnActive(1)
-                                  ? Colors.red
-                                  : Colors.grey.shade300,
-                              width: _isFirebarColumnActive(1) ? 2 : 1,
-                            ),
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.06),
-                              blurRadius: 3,
-                              offset: const Offset(0, 1),
-                            ),
+                            const Spacer(),
+                            _buildKbAddPlayerIconButton(false),
                           ],
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(3),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              _buildColumnBar(
-                                controller: _awayBarController,
-                                focusNode: _awayBarFocus,
-                                onSubmitted: _onAwayBarSubmit,
-                                rosterForGhostNames: _awayRosterView,
-                              ),
-                              const SizedBox(height: 3),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    flex: 1,
-                                    child: Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        alignment: Alignment.centerLeft,
-                                        child: _buildPlayerViewModeToggle(),
+                        const SizedBox(height: 1),
+                        Expanded(
+                          child: _useSquarePlayerView
+                              ? _buildRosterSquareGrid(_awayRosterView, false)
+                              : ValueListenableBuilder<TextEditingValue>(
+                                  valueListenable: _awayBarController,
+                                  builder: (_, value, __) =>
+                                      _buildRosterColumnContent(
+                                        _awayRosterView,
+                                        false,
+                                        barText: value.text,
                                       ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 3),
-                              _buildKbAddPlayerIconButton(false),
-                              const SizedBox(height: 1),
-                              Expanded(
-                                child: _useSquarePlayerView
-                                    ? _buildRosterSquareGrid(
-                                        _awayRosterView, false)
-                                    : ValueListenableBuilder<
-                                        TextEditingValue>(
-                                        valueListenable: _awayBarController,
-                                        builder: (_, value, __) =>
-                                            _buildRosterColumnContent(
-                                              _awayRosterView,
-                                              false,
-                                              barText: value.text,
-                                            ),
-                                      ),
-                              ),
-                            ],
-                          ),
+                                ),
                         ),
-                      ),
+                      ],
                     ),
-                  ],
                   ),
                 ),
               ),
               // Trailing sidebar injected from parent (e.g. save/ftp buttons)
-              if (widget.trailingSidebar != null) widget.trailingSidebar!,
+              if (widget.trailingSidebar != null) ...[
+                const SizedBox(width: 8),
+                widget.trailingSidebar!,
+              ],
             ],
           ),
         ),
@@ -6371,9 +6284,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           widget.showDialogActions ? const BoxConstraints(maxWidth: 780) : null,
       padding: widget.showDialogActions
           ? const EdgeInsets.all(16)
-          : const EdgeInsets.fromLTRB(10, 3, 10, 16),
+          : const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: widget.showDialogActions ? Colors.white : const Color(0xFFF8F8F8),
         borderRadius: BorderRadius.zero,
         border: widget.showDialogActions
             ? Border.all(color: Colors.grey.shade400)
@@ -6541,14 +6454,7 @@ class _KeywordShortcutEditorDialogState
                 ),
                 border: Border(
                   bottom: BorderSide(color: Colors.grey.shade300, width: 1),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.07),
-                    blurRadius: 2,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
+                )
               ),
               child: Row(
                 children: [
@@ -6618,7 +6524,7 @@ class _KeywordShortcutEditorDialogState
                     padding: const EdgeInsets.symmetric(
                         horizontal: 8, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFCFCFC),
+                      color: Colors.white,
                       border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: Column(
@@ -6633,7 +6539,7 @@ class _KeywordShortcutEditorDialogState
                             letterSpacing: 0.6,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [

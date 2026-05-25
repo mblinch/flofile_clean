@@ -105,6 +105,7 @@ class _StartupCaptionLayoutPreviewState
       case WireStyle.imagn:
         return CreditSampleAgency.imagn;
       case WireStyle.ap:
+      case WireStyle.cp:
         return CreditSampleAgency.ap;
       case WireStyle.getty:
       case WireStyle.gettyInternational:

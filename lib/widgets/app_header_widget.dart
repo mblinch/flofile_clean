@@ -267,16 +267,16 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: (color ?? const Color(0xFFF7F6F3)),
+        color: (color ?? Colors.white.withOpacity(0.15)),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE4E3DF)),
+        border: Border.all(color: Colors.white24),
       ),
       child: Text(
         label,
         style: const TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w500,
-          color: Color(0xFF555555),
+          color: Colors.white70,
           height: 1.0,
         ),
       ),
@@ -289,14 +289,16 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       toolbarHeight: 34,
       titleSpacing: 0,
       centerTitle: false,
-      backgroundColor: Colors.white,
+      backgroundColor: Colors.transparent,
       elevation: 0,
       automaticallyImplyLeading: false,
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(1),
-        child: Container(
-          height: 1,
-          color: const Color(0xFFE4E3DF),
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+          ),
         ),
       ),
       title: Padding(
@@ -318,7 +320,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             widget.onBurstDetectionChanged?.call(_burstDetectionEnabled);
             widget.onPreferencesClosed?.call();
           },
-          icon: const Icon(Icons.settings, color: Color(0xFF555555)),
+          icon: const Icon(Icons.settings, color: Colors.white70),
           tooltip: 'Preferences',
           iconSize: 16,
           padding: const EdgeInsets.all(4),
@@ -347,7 +349,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: Color(0xFF1A1A1A),
+              color: Colors.white,
               letterSpacing: 0.5,
               height: 1.0,
             ),
@@ -450,7 +452,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
     const sep = TextSpan(
       text: '    |    ',
-      style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 14, fontWeight: FontWeight.w200),
+      style: TextStyle(color: Colors.white38, fontSize: 14, fontWeight: FontWeight.w200),
     );
 
     const sepStrong = sep;
@@ -458,14 +460,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     const TextStyle _bold = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: Color(0xFF1A1A1A),
+      color: Colors.white,
       height: 1.0,
     );
 
     const TextStyle _regular = TextStyle(
       fontSize: 10,
       fontWeight: FontWeight.w400,
-      color: Color(0xFF1A1A1A),
+      color: Colors.white70,
       height: 1.0,
     );
 
@@ -493,13 +495,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.baseline,
+      textBaseline: TextBaseline.alphabetic,
       children: [
         // Counter badge on the far left
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: const Color(0xFF2D3748),
+            color: Colors.white.withOpacity(0.15),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(

@@ -21,17 +21,20 @@ class CaptionStyleCatalog {
     required this.gettyWireDefault,
     required this.imagnWireDefault,
     required this.apWireDefault,
+    required this.cpWireDefault,
     required this.gettyIntlWireDefault,
     required this.library,
     required this.wireLabelGetty,
     required this.wireLabelImagn,
     required this.wireLabelAp,
+    required this.wireLabelCp,
     required this.wireLabelGettyIntl,
   });
 
   static const String tokGetty = 'wire:getty';
   static const String tokImagn = 'wire:imagn';
   static const String tokAp = 'wire:ap';
+  static const String tokCp = 'wire:cp';
   static const String tokGettyIntl = 'wire:getty_international';
   static const String tokCustom = 'wire:custom';
 
@@ -41,11 +44,13 @@ class CaptionStyleCatalog {
   final CaptionTemplate? gettyWireDefault;
   final CaptionTemplate? imagnWireDefault;
   final CaptionTemplate? apWireDefault;
+  final CaptionTemplate? cpWireDefault;
   final CaptionTemplate? gettyIntlWireDefault;
   final List<CaptionStyleLibraryEntry> library;
   final String? wireLabelGetty;
   final String? wireLabelImagn;
   final String? wireLabelAp;
+  final String? wireLabelCp;
   final String? wireLabelGettyIntl;
 
   String labelFor(String token) {
@@ -68,6 +73,7 @@ class CaptionStyleCatalog {
     final gettyDef = await prefs.getCaptionTemplateWireDefault(WireStyle.getty);
     final imagnDef = await prefs.getCaptionTemplateWireDefault(WireStyle.imagn);
     final apDef = await prefs.getCaptionTemplateWireDefault(WireStyle.ap);
+    final cpDef = await prefs.getCaptionTemplateWireDefault(WireStyle.cp);
     final gettyIntlDef =
         await prefs.getCaptionTemplateWireDefault(WireStyle.gettyInternational);
     final lib = await prefs.getCaptionStyleLibrary();
@@ -76,6 +82,7 @@ class CaptionStyleCatalog {
     final gettyLabel = await prefs.getCaptionWireLabel(WireStyle.getty);
     final imagnLabel = await prefs.getCaptionWireLabel(WireStyle.imagn);
     final apLabel = await prefs.getCaptionWireLabel(WireStyle.ap);
+    final cpLabel = await prefs.getCaptionWireLabel(WireStyle.cp);
     final gettyIntlLabel =
         await prefs.getCaptionWireLabel(WireStyle.gettyInternational);
 
@@ -86,11 +93,13 @@ class CaptionStyleCatalog {
       gettyWireDefault: gettyDef,
       imagnWireDefault: imagnDef,
       apWireDefault: apDef,
+      cpWireDefault: cpDef,
       gettyIntlWireDefault: gettyIntlDef,
       library: lib,
       wireLabelGetty: gettyLabel,
       wireLabelImagn: imagnLabel,
       wireLabelAp: apLabel,
+      wireLabelCp: cpLabel,
       wireLabelGettyIntl: gettyIntlLabel,
     );
 
@@ -98,6 +107,7 @@ class CaptionStyleCatalog {
       tokGetty,
       tokImagn,
       tokAp,
+      tokCp,
       tokGettyIntl,
       tokCustom,
       ...lib.map((e) => 'saved:${e.id}'),
@@ -117,11 +127,13 @@ class CaptionStyleCatalog {
       gettyWireDefault: gettyDef,
       imagnWireDefault: imagnDef,
       apWireDefault: apDef,
+      cpWireDefault: cpDef,
       gettyIntlWireDefault: gettyIntlDef,
       library: lib,
       wireLabelGetty: gettyLabel,
       wireLabelImagn: imagnLabel,
       wireLabelAp: apLabel,
+      wireLabelCp: cpLabel,
       wireLabelGettyIntl: gettyIntlLabel,
     );
   }
@@ -147,6 +159,7 @@ class CaptionStyleCatalog {
       case WireStyle.gettyInternational:
       case WireStyle.imagn:
       case WireStyle.ap:
+      case WireStyle.cp:
         return _withSport(_wiredBaseline(wire));
       case WireStyle.custom:
         final ref = refForCustom ?? CaptionTemplate.getty();
@@ -207,6 +220,8 @@ class CaptionStyleCatalog {
         return apply(imagnWireDefault, CaptionTemplate.imagn());
       case WireStyle.ap:
         return apply(apWireDefault, CaptionTemplate.ap());
+      case WireStyle.cp:
+        return apply(cpWireDefault, CaptionTemplate.cp());
       case WireStyle.gettyInternational:
         return apply(gettyIntlWireDefault, CaptionTemplate.gettyInternational());
       case WireStyle.custom:
@@ -258,6 +273,8 @@ class CaptionStyleCatalog {
         return _wireLabel(WireStyle.imagn, 'Imagn');
       case tokAp:
         return _wireLabel(WireStyle.ap, 'AP');
+      case tokCp:
+        return _wireLabel(WireStyle.cp, 'CP');
       case tokGettyIntl:
         return _wireLabel(WireStyle.gettyInternational, 'Getty International');
       case tokCustom:
@@ -278,6 +295,9 @@ class CaptionStyleCatalog {
         break;
       case WireStyle.ap:
         override = wireLabelAp;
+        break;
+      case WireStyle.cp:
+        override = wireLabelCp;
         break;
       case WireStyle.gettyInternational:
         override = wireLabelGettyIntl;
@@ -315,6 +335,8 @@ class CaptionStyleCatalog {
         return tokImagn;
       case WireStyle.ap:
         return tokAp;
+      case WireStyle.cp:
+        return tokCp;
       case WireStyle.gettyInternational:
         return tokGettyIntl;
       case WireStyle.custom:
@@ -328,6 +350,8 @@ class CaptionStyleCatalog {
         return WireStyle.imagn;
       case tokAp:
         return WireStyle.ap;
+      case tokCp:
+        return WireStyle.cp;
       case tokGettyIntl:
         return WireStyle.gettyInternational;
       case tokCustom:

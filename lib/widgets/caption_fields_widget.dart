@@ -3971,10 +3971,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           child: Text(
             label,
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Colors.black87,
-              letterSpacing: 0.8,
+              color: Color(0xFF999999),
+              letterSpacing: 0.7,
             ),
           ),
         ),
@@ -4091,10 +4091,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               const Text(
                                                 'CAPTION',
                                               style: TextStyle(
-                                                fontSize: 11,
+                                                fontSize: 10,
                                                 fontWeight: FontWeight.w600,
-                                                color: Colors.black87,
-                                                letterSpacing: 0.8,
+                                                color: Color(0xFF999999),
+                                                letterSpacing: 0.7,
                                               ),
                                             ),
                                             const Spacer(),
@@ -5520,12 +5520,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Row(
         children: [
           Text(
-            label.toUpperCase(),
-            style: TextStyle(
+            label,
+            style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              letterSpacing: 0.8,
-              color: Colors.grey.shade600,
+              color: Color(0xFF999999),
+              letterSpacing: 0.7,
             ),
           ),
           const SizedBox(width: 10),
@@ -17065,6 +17065,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         sampleAgency = CreditSampleAgency.imagn;
         break;
       case WireStyle.ap:
+      case WireStyle.cp:
         sampleAgency = CreditSampleAgency.ap;
         break;
       case WireStyle.getty:
@@ -20457,7 +20458,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     int day,
     CaptionTemplate template,
   ) {
-    final isApCaption = template.wireStyle == WireStyle.ap;
+    final isApCaption = template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp;
     if (_isGameInUnitedStates()) {
       if (isApCaption) {
         final apState = _apStyleStateOrFallback(stateOrProvince);
@@ -20477,7 +20478,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String formattedDate,
     CaptionTemplate template,
   ) {
-    final isApCaption = template.wireStyle == WireStyle.ap;
+    final isApCaption = template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp;
     if (_isGameInUnitedStates()) {
       if (isApCaption) {
         final apState = _apStyleStateOrFallback(stateOrProvince);
@@ -20706,7 +20707,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         if (pos != null && pos.isNotEmpty) {
           final formattedPos = formatPositionLabelForCaption(
             pos,
-            apStyle: template.wireStyle == WireStyle.ap,
+            apStyle: template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp,
             imagnStyle: template.wireStyle == WireStyle.imagn,
             americanEnglish: template.americanEnglish,
             sport: sportName,
@@ -24434,7 +24435,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (posRaw == null || posRaw.trim().isEmpty) return normalized;
     final formattedPos = formatPositionLabelForCaption(
       posRaw,
-      apStyle: template.wireStyle == WireStyle.ap,
+      apStyle: template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp,
       imagnStyle: template.wireStyle == WireStyle.imagn,
       americanEnglish: template.americanEnglish,
       sport: widget.sport?.toLowerCase(),
@@ -24449,6 +24450,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final positionBeforePlayer =
         template.captionTeamOrder == CaptionTeamOrder.teamBefore &&
             (template.wireStyle == WireStyle.ap ||
+                template.wireStyle == WireStyle.cp ||
                 template.wireStyle == WireStyle.imagn);
     if (positionBeforePlayer) {
       return '$formattedPos $baseName$numberSuffix';

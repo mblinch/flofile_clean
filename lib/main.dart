@@ -169,7 +169,7 @@ class MyApp extends StatelessWidget {
               seedColor: const Color(0xFF2E3A59),
               brightness: Brightness.light,
             ),
-            scaffoldBackgroundColor: Colors.white,
+            scaffoldBackgroundColor: const Color(0xFFF8F8F8),
             useMaterial3: true,
             fontFamily: 'Inter',
           ),

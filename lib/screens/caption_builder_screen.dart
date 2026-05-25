@@ -4344,11 +4344,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return Container(
       width: 172,
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(
-          left: BorderSide(color: Color(0xFFE4E3DF)),
-          top: BorderSide(color: Color(0xFFE4E3DF)),
-        ),
+        color: Color(0xFFF8F8F8),
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
@@ -4647,8 +4643,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F6F3),
-          border: Border.all(color: const Color(0xFFE4E3DF)),
+          color: const Color(0xFFF2F2F2),
+          border: Border.all(color: const Color(0xFFE0E0E0)),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Text(key, style: const TextStyle(fontSize: 11, fontFamily: 'Menlo', fontFamilyFallback: ['SF Mono', 'Consolas', 'monospace'], color: Color(0xFF555555))),

@@ -73,6 +73,8 @@ class PreferencesService {
       'caption_template_default_imagn_json';
   static const String _keyCaptionTemplateDefaultApJson =
       'caption_template_default_ap_json';
+  static const String _keyCaptionTemplateDefaultCpJson =
+      'caption_template_default_cp_json';
   static const String _keyCaptionTemplateDefaultGettyInternationalJson =
       'caption_template_default_getty_international_json';
   /// Named snapshots from “Save new caption style” in the layout builder.
@@ -85,6 +87,7 @@ class PreferencesService {
   static const String _keyCaptionWireLabelImagn =
       'caption_wire_label_imagn';
   static const String _keyCaptionWireLabelAp = 'caption_wire_label_ap';
+  static const String _keyCaptionWireLabelCp = 'caption_wire_label_cp';
   static const String _keyCaptionWireLabelGettyInternational =
       'caption_wire_label_getty_international';
   /// One-time migration flag — true once the legacy "Getty International"
@@ -960,6 +963,8 @@ class PreferencesService {
         await getCaptionTemplateWireDefault(WireStyle.imagn);
     final captionWireDefaultAp =
         await getCaptionTemplateWireDefault(WireStyle.ap);
+    final captionWireDefaultCp =
+        await getCaptionTemplateWireDefault(WireStyle.cp);
     final captionWireDefaultGettyIntl =
         await getCaptionTemplateWireDefault(WireStyle.gettyInternational);
     return {
@@ -993,6 +998,7 @@ class PreferencesService {
         if (captionWireDefaultImagn != null)
           'imagn': captionWireDefaultImagn.toJson(),
         if (captionWireDefaultAp != null) 'ap': captionWireDefaultAp.toJson(),
+        if (captionWireDefaultCp != null) 'cp': captionWireDefaultCp.toJson(),
         if (captionWireDefaultGettyIntl != null)
           'gettyInternational': captionWireDefaultGettyIntl.toJson(),
       },
@@ -1176,6 +1182,7 @@ class PreferencesService {
           'getty',
           'imagn',
           'ap',
+          'cp',
           'gettyInternational',
         ]) {
           final entry = raw[name];
@@ -1295,6 +1302,8 @@ class PreferencesService {
         return _keyCaptionTemplateDefaultImagnJson;
       case WireStyle.ap:
         return _keyCaptionTemplateDefaultApJson;
+      case WireStyle.cp:
+        return _keyCaptionTemplateDefaultCpJson;
       case WireStyle.gettyInternational:
         return _keyCaptionTemplateDefaultGettyInternationalJson;
       case WireStyle.custom:
@@ -1339,6 +1348,8 @@ class PreferencesService {
         return _keyCaptionWireLabelImagn;
       case WireStyle.ap:
         return _keyCaptionWireLabelAp;
+      case WireStyle.cp:
+        return _keyCaptionWireLabelCp;
       case WireStyle.gettyInternational:
         return _keyCaptionWireLabelGettyInternational;
       case WireStyle.custom:

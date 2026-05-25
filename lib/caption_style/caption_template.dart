@@ -10,7 +10,7 @@ import 'date_formula.dart';
 /// Country location line. Added values are appended at the end so
 /// previously-serialised templates — which round-trip via `.name` — still
 /// decode correctly.
-enum WireStyle { getty, imagn, ap, custom, gettyInternational }
+enum WireStyle { getty, imagn, ap, custom, gettyInternational, cp }
 
 /// Legacy enum — migrated into [LocationLineOptions] when reading old JSON.
 enum LocationFormat {
@@ -885,6 +885,40 @@ class CaptionTemplate {
         id: 'preset_ap',
         name: 'Associated Press',
         wireStyle: WireStyle.ap,
+        dateFormat: 'MMM d, yyyy',
+        dateExpression: '',
+        locationOptions:
+            LocationLineOptions.fromLegacyFormat(LocationFormat.city_region),
+        numberFormat: NumberFormatStyle.parens,
+        captionTeamOrder: CaptionTeamOrder.teamBefore,
+        includePlayerPosition: true,
+        americanEnglish: true,
+        removeDiacritics: true,
+        separator: ' — ',
+        creditFormat: CreditFormat.photo_by,
+        bylineOptions: BylineOptions.ap(),
+        segmentOrder: const [
+          CaptionSegment.location,
+          CaptionSegment.punctuation,
+          CaptionSegment.date,
+          CaptionSegment.punctuation,
+          CaptionSegment.caption,
+          CaptionSegment.separator,
+          CaptionSegment.venue,
+          CaptionSegment.punctuation,
+          CaptionSegment.credit,
+        ],
+        customSeparators: const ['', '', '', '', '', '', '', ''],
+        separatorSnippets: const [' at '],
+        punctuationSnippets: const [' (', ') — ', '. '],
+        locationOptionsByOccurrence: null,
+        dateFormulasByOccurrence: null,
+      );
+
+  factory CaptionTemplate.cp() => CaptionTemplate(
+        id: 'preset_cp',
+        name: 'Canadian Press',
+        wireStyle: WireStyle.cp,
         dateFormat: 'MMM d, yyyy',
         dateExpression: '',
         locationOptions:
