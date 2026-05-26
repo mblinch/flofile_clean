@@ -4529,26 +4529,22 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     Color textColor;
     Color borderColor;
     LinearGradient? gradient;
+    const _grad = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF4A7A96), Color(0xFF2A4858)]);
     if (ftp) {
-      gradient = enabled ? const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF3A5F78), Color(0xFF2A4858)]) : null;
+      gradient = enabled ? _grad : null;
       bg = enabled ? null : Colors.grey.shade300;
       textColor = enabled ? Colors.white : Colors.grey.shade600;
-      borderColor = enabled ? const Color(0xFF3A5F78) : Colors.grey.shade300;
-    } else if (primary) {
-      gradient = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF4A5568), Color(0xFF2D3748)]);
-      bg = null;
-      textColor = enabled ? Colors.white : Colors.white54;
-      borderColor = const Color(0xFF4A5568);
+      borderColor = enabled ? const Color(0xFF4A7A96) : Colors.grey.shade300;
     } else if (danger) {
-      gradient = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF4A5568), Color(0xFF2D3748)]);
+      gradient = _grad;
       bg = null;
       textColor = enabled ? const Color(0xFFE57373) : Colors.white54;
-      borderColor = const Color(0xFF4A5568);
+      borderColor = const Color(0xFF4A7A96);
     } else {
-      gradient = const LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF4A5568), Color(0xFF2D3748)]);
+      gradient = _grad;
       bg = null;
       textColor = enabled ? Colors.white : Colors.white54;
-      borderColor = const Color(0xFF4A5568);
+      borderColor = const Color(0xFF4A7A96);
     }
     return GestureDetector(
       onTap: onTap,
@@ -4561,8 +4557,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             color: gradient != null ? null : bg, gradient: gradient,
             border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(6),
           ),
-          child: Center(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: ftp ? 12 : 11, fontWeight: ftp ? FontWeight.w500 : FontWeight.w400, color: textColor),
+          child: Center(child: Text(label.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontFamily: 'Inter', letterSpacing: 0, fontSize: ftp ? 12 : 11, fontWeight: FontWeight.w700, color: textColor),
           )),
         ),
       ),

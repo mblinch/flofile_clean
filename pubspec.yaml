@@ -79,6 +79,24 @@ flutter:
     - assets/images/rocket_icon_white_only.svg
 
   fonts:
+    - family: Manrope
+      fonts:
+        - asset: fonts/Manrope-Variable.ttf
+    - family: SpaceGrotesk
+      fonts:
+        - asset: fonts/SpaceGrotesk-Variable.ttf
+    - family: PlusJakartaSans
+      fonts:
+        - asset: fonts/PlusJakartaSans-Variable.ttf
+    - family: DMSans
+      fonts:
+        - asset: fonts/DMSans-Variable.ttf
+    - family: Outfit
+      fonts:
+        - asset: fonts/Outfit-Variable.ttf
+    - family: Geist
+      fonts:
+        - asset: fonts/Geist-Variable.ttf
     - family: Inter
       fonts:
         - asset: fonts/Inter-Variable.ttf

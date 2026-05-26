@@ -297,7 +297,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+            colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
           ),
         ),
       ),

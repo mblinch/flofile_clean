@@ -1542,7 +1542,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           textAlignVertical: TextAlignVertical.top,
           cursorHeight: 12,
           cursorColor: Colors.black87,
-          style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
+          style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
           decoration: InputDecoration(
             isDense: true,
             hintText: 'Caption will appear here as you add players and a verb.',
@@ -1563,7 +1563,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
+        style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Caption will appear here as you add players and a verb.',
@@ -1625,7 +1625,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   Widget _buildKbLabeledBox(String label, Widget child,
       {Widget? trailingAction}) {
     const TextStyle _headerStyle = TextStyle(
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: FontWeight.w700,
       color: Color(0xFF3A3A3A),
       height: 1.0,
@@ -1645,7 +1645,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(7, 6, 8, 7),
+            padding: const EdgeInsets.fromLTRB(7, 7, 8, 7),
             child: trailingAction != null
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -1681,7 +1681,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
+        style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Headline',
@@ -1702,7 +1702,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
+        style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Headline',
@@ -1729,7 +1729,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
+        style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Keywords',
@@ -1750,7 +1750,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
+        style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Keywords',
@@ -1778,7 +1778,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
+        style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Personality',
@@ -1799,7 +1799,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 12, letterSpacing: -0.1),
+        style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
         decoration: InputDecoration(
           isDense: true,
           border: InputBorder.none,
@@ -2243,10 +2243,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 child: Text(
                   num,
                   style: TextStyle(
-                    fontSize: listFontSize,
-                    height: listRowHeight != null ? 1.0 : 1.06,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.1,
+                    fontSize: 11.5,
+                    height: 1.4,
+                    fontWeight: FontWeight.w100,
+                    letterSpacing: 0,
                     color: isPicked
                         ? const Color(0xFF0052CC)
                         : const Color(0xFF1A1A1A),
@@ -2257,13 +2257,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 child: Text(
                   displayName,
                   style: TextStyle(
-                    fontSize: listFontSize,
-                    height: listRowHeight != null ? 1.0 : 1.06,
-                    letterSpacing: -0.1,
+                    fontSize: 11.5,
+                    height: 1.4,
+                    letterSpacing: 0,
                     color:
                         isPicked ? const Color(0xFF0052CC) : const Color(0xFF1A1A1A),
-                    fontWeight:
-                        isPicked ? FontWeight.w600 : FontWeight.w400,
+                    fontWeight: FontWeight.w100,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -2473,16 +2472,18 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
     final abbrev = _abbrevTitle(title);
     final titleStyle = TextStyle(
-      fontSize: 12,
+      fontSize: 11.5,
       fontWeight: FontWeight.w600,
-      letterSpacing: -0.1,
+      letterSpacing: 0,
+      height: 1.4,
       color: isPicked
           ? const Color(0xFF0052CC)
           : Colors.grey.shade500,
     );
     final nameStyle = TextStyle(
-      fontSize: 12,
-      letterSpacing: -0.1,
+      fontSize: 11.5,
+      letterSpacing: 0,
+      height: 1.4,
       color: isPicked
           ? const Color(0xFF0052CC)
           : (name == 'data missing'
@@ -2629,6 +2630,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   style: TextStyle(
                     fontSize: jerseyFontSize,
                     fontWeight: isPicked ? FontWeight.w600 : FontWeight.w500,
+                    letterSpacing: -0.2,
                     color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
                   ),
                 ),
@@ -2638,6 +2640,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     fontSize: lastNameFontSize,
                     fontWeight: FontWeight.w500,
                     height: 1.0,
+                    letterSpacing: -0.2,
                     color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
                   ),
                   maxLines: 1,
@@ -2812,6 +2815,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             fontSize: 11,
                             fontWeight:
                                 isPicked ? FontWeight.w600 : FontWeight.w500,
+                            letterSpacing: -0.2,
                             color: isPicked
                                 ? const Color(0xFF0052CC)
                                 : Colors.black87,
@@ -2823,6 +2827,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             fontSize: 8,
                             fontWeight: FontWeight.w500,
                             height: 1.05,
+                            letterSpacing: -0.2,
                             color: isPicked
                                 ? const Color(0xFF0052CC)
                                 : Colors.black87,
@@ -2859,9 +2864,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           child: Text(
             teamLabel,
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade700,
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF3A3A3A),
+              letterSpacing: -0.45,
             ),
           ),
         ),
@@ -3483,8 +3489,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         '$catNum',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
+                          letterSpacing: -0.45,
                           color: (isSelected || isCurrent)
                               ? Colors.grey.shade900
                               : Colors.grey.shade800,
@@ -3496,9 +3503,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: Text(
                         name,
                         style: TextStyle(
-                          fontSize: rosterTextSize,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: Colors.grey.shade800,
+                          letterSpacing: -0.45,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -3885,7 +3893,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           ? Colors.blue.shade100
                           : isDragOver
                               ? Colors.blue.shade50
-                              : Colors.grey.shade100,
+                              : Colors.white,
                       border: Border(
                         top: isDragOver
                             ? BorderSide(color: Colors.blue.shade400, width: 2)
@@ -3912,8 +3920,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               '$catNum',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                  fontSize: 11,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.45,
                                   color: Colors.grey.shade800),
                             ),
                           ),
@@ -3922,8 +3931,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             child: Text(
                               name,
                               style: TextStyle(
-                                  fontSize: rosterTextSize,
+                                  fontSize: 14,
                                   fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.45,
                                   color: Colors.grey.shade800),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -4885,23 +4895,30 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           );
   }
 
+  static const LinearGradient _btnGradient = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
+  );
+
   Widget _btn({
     required Widget child,
     required VoidCallback? onTap,
     void Function(TapDownDetails)? onTapDown,
     Color? bg,
+    bool useGradient = false,
     double width = 60,
   }) {
     final enabled = onTap != null;
-    final color = bg ?? (enabled ? Colors.grey.shade100 : Colors.grey.shade200);
-    final borderColor = enabled ? Colors.grey.shade300 : Colors.grey.shade400;
+    final color = useGradient ? null : (bg ?? (enabled ? Colors.grey.shade100 : Colors.grey.shade200));
+    final borderColor = useGradient ? Colors.transparent : (enabled ? Colors.grey.shade300 : Colors.grey.shade400);
     return SizedBox(
       width: width,
       height: 28,
       child: Theme(
         data: Theme.of(context).copyWith(
           splashFactory: InkRipple.splashFactory,
-          highlightColor: Colors.black.withOpacity(0.06),
+          highlightColor: useGradient ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.06),
         ),
         child: Material(
           color: Colors.transparent,
@@ -4909,11 +4926,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             onTapDown: enabled ? onTapDown : null,
             onTap: enabled ? onTap : null,
             borderRadius: BorderRadius.zero,
-            splashColor: Colors.black.withOpacity(0.08),
-            highlightColor: Colors.black.withOpacity(0.05),
+            splashColor: useGradient ? Colors.white.withOpacity(0.25) : Colors.black.withOpacity(0.08),
+            highlightColor: useGradient ? Colors.white.withOpacity(0.15) : Colors.black.withOpacity(0.05),
             child: Ink(
               decoration: BoxDecoration(
                 color: color,
+                gradient: useGradient ? _btnGradient : null,
                 borderRadius: BorderRadius.zero,
                 border: Border.all(color: borderColor),
               ),
@@ -4984,10 +5002,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   gradient: const LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+                    colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
                   ),
                   borderRadius: BorderRadius.zero,
-                  border: Border.all(color: const Color(0xFF3A5F78)),
+                  border: Border.all(color: const Color(0xFF4A7A96)),
                 ),
                 child: Padding(
                   padding:
@@ -5038,6 +5056,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           // ← Save Prev
           _btn(
             width: saveW,
+            useGradient: true,
             onTap: hasPrev
                 ? () async {
                     if (widget.onSaveIptc != null) widget.onSaveIptc!();
@@ -5047,17 +5066,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.chevron_left,
-                    size: 12, color: Colors.grey.shade700),
+                const Icon(Icons.chevron_left,
+                    size: 12, color: Colors.white),
                 const SizedBox(width: 2),
                 Flexible(
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(_bulkSaveLabel(),
                         maxLines: 1,
-                        style: TextStyle(
+                        style: const TextStyle(
                             fontSize: 10,
-                            color: Colors.grey.shade700,
+                            color: Colors.white,
                             fontWeight: FontWeight.w500)),
                   ),
                 ),
@@ -5067,6 +5086,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           // Save → Next
           _btn(
             width: saveW,
+            useGradient: true,
             onTap: hasNext
                 ? () async {
                     if (widget.onSaveIptc != null) widget.onSaveIptc!();
@@ -5081,32 +5101,33 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     fit: BoxFit.scaleDown,
                     child: Text(_bulkSaveLabel(),
                         maxLines: 1,
-                        style: TextStyle(
+                        style: const TextStyle(
                             fontSize: 10,
-                            color: Colors.grey.shade700,
+                            color: Colors.white,
                             fontWeight: FontWeight.w500)),
                   ),
                 ),
                 const SizedBox(width: 2),
-                Icon(Icons.chevron_right,
-                    size: 12, color: Colors.grey.shade700),
+                const Icon(Icons.chevron_right,
+                    size: 12, color: Colors.white),
               ],
             ),
           ),
           // Paste
           _btn(
             width: 55,
+            useGradient: true,
             onTap: widget.onPaste,
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.content_paste,
-                    size: 12, color: Colors.grey.shade700),
-                const SizedBox(width: 2),
+                    size: 12, color: Colors.white),
+                SizedBox(width: 2),
                 Text('Paste',
                     style: TextStyle(
                         fontSize: 10,
-                        color: Colors.grey.shade700,
+                        color: Colors.white,
                         fontWeight: FontWeight.w500)),
               ],
             ),
@@ -5114,16 +5135,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           // Paste Prev
           _btn(
             width: 90,
+            useGradient: true,
             onTap: widget.onPastePrevious,
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.history, size: 12, color: Colors.grey.shade700),
-                const SizedBox(width: 2),
+                Icon(Icons.history, size: 12, color: Colors.white),
+                SizedBox(width: 2),
                 Text('Paste Prev',
                     style: TextStyle(
                         fontSize: 10,
-                        color: Colors.grey.shade700,
+                        color: Colors.white,
                         fontWeight: FontWeight.w500)),
               ],
             ),
@@ -5131,16 +5153,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           // FTP Settings
           _btn(
             width: 100,
+            useGradient: true,
             onTap: widget.onFtpSettings,
-            bg: const Color(0xFF4A90E2),
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.settings,
+                Icon(Icons.settings,
                     size: 12, color: Colors.white),
-                const SizedBox(width: 4),
+                SizedBox(width: 4),
                 Text('FTP Settings',
-                    style: const TextStyle(
+                    style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
                         color: Colors.white)),
@@ -5150,19 +5172,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           // Reset
           _btn(
             width: 60,
+            useGradient: true,
             onTapDown: (d) => _resetCaptionTapAnchor = d.globalPosition,
             onTap: _onResetPressed,
-            bg: Colors.grey.shade200,
-            child: Row(
+            child: const Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.refresh,
-                    size: 12, color: Colors.grey.shade700),
-                const SizedBox(width: 2),
+                    size: 12, color: Colors.white),
+                SizedBox(width: 2),
                 Text('Reset Caption',
                     style: TextStyle(
                         fontSize: 10,
-                        color: Colors.grey.shade700,
+                        color: Colors.white,
                         fontWeight: FontWeight.w500)),
               ],
             ),
@@ -5559,7 +5581,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               Text(
                 headerLabel,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF3A3A3A),
                   height: 1.0,
@@ -5632,7 +5654,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               Text(
                 headerLabel,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF3A3A3A),
                   height: 1.0,
@@ -5679,7 +5701,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               Text(
                 headerLabel,
                 style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFF3A3A3A),
                   height: 1.0,
@@ -5974,7 +5996,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: Color(0xFF3A3A3A),
                               height: 1.0,
@@ -6043,7 +6065,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           child: const Text(
                             'Verbs',
                             style: TextStyle(
-                              fontSize: 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: Color(0xFF3A3A3A),
                               height: 1.0,
@@ -6101,7 +6123,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: 16,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: Color(0xFF3A3A3A),
                               height: 1.0,
