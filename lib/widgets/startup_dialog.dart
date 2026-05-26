@@ -1128,21 +1128,10 @@ class _StartupDialogState extends State<StartupDialog> {
                     ),
                     if (widget.onBackToSportSelection != null) ...[
                       const Spacer(),
-                      TextButton(
+                      ElevatedGreyButton(
+                        label: '← Back to sports selection',
+                        fontSize: 11,
                         onPressed: widget.onBackToSportSelection,
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: Text(
-                          '← Back to sports selection',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
                       ),
                     ],
                   ],
@@ -1179,111 +1168,32 @@ class _StartupDialogState extends State<StartupDialog> {
                   FractionallySizedBox(
                     widthFactor: 0.75,
                     alignment: Alignment.centerLeft,
-                    child: CustomButton(
-                      onTap: isLoadingFolder ? null : _pickFolder,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: isLoadingFolder
-                              ? Colors.grey.shade300
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            isLoadingFolder
-                                ? const SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : Icon(Icons.folder_open,
-                                    size: 11, color: Colors.grey.shade700),
-                            const SizedBox(width: 4),
-                            Text(
-                              isLoadingFolder
-                                  ? 'Loading...'
-                                  : 'Pick Images Folder',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: isLoadingFolder
-                                    ? Colors.grey.shade600
-                                    : Colors.grey.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    child: ElevatedGreyButton(
+                      label: isLoadingFolder ? 'Loading...' : 'Pick Images Folder',
+                      fontSize: 11,
+                      icon: Icons.folder_open,
+                      fullWidth: true,
+                      onPressed: isLoadingFolder ? null : _pickFolder,
                     ),
                   ),
                   const SizedBox(height: 10),
                 ] else if (currentQuestion == 1) ...[
                   // Date selection (only show if no date was extracted from images)
                   if (selectedGameDate == null) ...[
-                    CustomButton(
-                      onTap: _selectDate,
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.calendar_today,
-                                size: 11, color: Colors.grey.shade700),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Select Game Date',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade600,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    ElevatedGreyButton(
+                      label: 'Select Game Date',
+                      fontSize: 11,
+                      icon: Icons.calendar_today,
+                      fullWidth: true,
+                      onPressed: _selectDate,
                     ),
                     const SizedBox(height: 12),
-                    CustomButton(
-                      onTap: () => _nextQuestion(),
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.arrow_forward,
-                                size: 11, color: Colors.grey.shade700),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Next',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    ElevatedGreyButton(
+                      label: 'Skip →',
+                      fontSize: 11,
+                      icon: Icons.arrow_forward,
+                      fullWidth: true,
+                      onPressed: () => _nextQuestion(),
                     ),
                   ],
                 ] else if (currentQuestion == 2) ...[
@@ -1292,12 +1202,11 @@ class _StartupDialogState extends State<StartupDialog> {
                     _sectionCard(
                       label: 'IMAGES FOLDER',
                       children: [
-                        AppSecondaryButton(
+                        ElevatedGreyButton(
                           label: isLoadingFolder ? 'Loading...' : 'Pick images folder',
+                          fontSize: 11,
                           icon: Icons.folder_open,
-                          onTap: isLoadingFolder ? () {} : _pickFolder,
-                          enabled: !isLoadingFolder,
-                          fullWidth: false,
+                          onPressed: isLoadingFolder ? null : _pickFolder,
                         ),
                         if (selectedFolderPath != null) ...[
                           const SizedBox(height: 8),
@@ -1349,24 +1258,10 @@ class _StartupDialogState extends State<StartupDialog> {
                                   ),
                                 ),
                                 const SizedBox(width: 6),
-                                TextButton(
-                                  onPressed:
-                                      isLoadingTeams ? null : _retryLoadTeams,
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  child: Text(
-                                    isLoadingTeams ? 'Loading…' : 'Retry',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.blue.shade700,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
+                                ElevatedGreyButton(
+                                  label: isLoadingTeams ? 'Loading…' : 'Retry',
+                                  fontSize: 11,
+                                  onPressed: isLoadingTeams ? null : _retryLoadTeams,
                                 ),
                               ],
                             )
@@ -1519,11 +1414,11 @@ class _StartupDialogState extends State<StartupDialog> {
                           ],
                         ),
                         const SizedBox(height: 10),
-                        AppSecondaryButton(
+                        ElevatedGreyButton(
                           label: 'Metadata preset',
+                          fontSize: 11,
                           icon: Icons.description_outlined,
-                          onTap: _openMetadataPreset,
-                          fullWidth: false,
+                          onPressed: _openMetadataPreset,
                         ),
                         const SizedBox(height: 6),
                         Row(

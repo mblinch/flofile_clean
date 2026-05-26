@@ -683,18 +683,25 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
     if (widget.imagePaths.isEmpty) {
       return Container(
-        margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 16),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
-          borderRadius: BorderRadius.circular(7),
-          color: Colors.grey.shade50,
-        ),
-        child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.grid_view, size: 48, color: Colors.grey),
+      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+        borderRadius: BorderRadius.circular(7),
+        color: Colors.grey.shade50,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.grid_view, size: 48, color: Colors.grey),
               SizedBox(height: 8),
               Text(
                 'No Images',
@@ -720,18 +727,25 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     // Show loading state while thumbnails are being generated
     if (_isLoadingThumbnails) {
       return Container(
-        margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 16),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
-          borderRadius: BorderRadius.circular(7),
-          color: Colors.grey.shade50,
-        ),
-        child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
+      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+        borderRadius: BorderRadius.circular(7),
+        color: Colors.grey.shade50,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
               SizedBox(height: 16),
               Text(
                 'Generating thumbnails...',
@@ -785,12 +799,19 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         }
 
         return Container(
-      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 16),
+      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
         borderRadius: BorderRadius.circular(7),
         color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -1456,19 +1477,20 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Cancel',
+                            fontSize: 11,
                             onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
                           ),
                           const SizedBox(width: 16),
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Delete',
+                            fontSize: 11,
+                            isDanger: true,
                             onPressed: () {
                               Navigator.of(context).pop();
                               _executeMultipleDeletions();
                             },
-                            style: TextButton.styleFrom(
-                                foregroundColor: Colors.red),
-                            child: const Text('Delete'),
                           ),
                         ],
                       ),
@@ -1610,12 +1632,16 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Cancel',
+                            fontSize: 11,
                             onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
                           ),
                           const SizedBox(width: 16),
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Rename',
+                            fontSize: 11,
+                            isPrimary: true,
                             onPressed: () {
                               final newName = controller.text.trim();
                               if (newName.isNotEmpty) {
@@ -1623,9 +1649,6 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 Navigator.of(context).pop();
                               }
                             },
-                            style: TextButton.styleFrom(
-                                foregroundColor: Colors.blue),
-                            child: const Text('Rename'),
                           ),
                         ],
                       ),
@@ -1698,19 +1721,20 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Cancel',
+                            fontSize: 11,
                             onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
                           ),
                           const SizedBox(width: 16),
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Delete',
+                            fontSize: 11,
+                            isDanger: true,
                             onPressed: () {
                               Navigator.of(context).pop();
                               _deleteImage(imagePath);
                             },
-                            style: TextButton.styleFrom(
-                                foregroundColor: Colors.red),
-                            child: const Text('Delete'),
                           ),
                         ],
                       ),

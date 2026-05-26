@@ -588,43 +588,35 @@ class _BurstCaptionConfirmDialogBodyState
               ),
             ),
             const Spacer(),
-            TextButton(
+            ElevatedGreyButton(
+              label: 'Cancel',
+              fontSize: 11,
               onPressed: () => Navigator.pop(
                 context,
                 const BurstCaptionDialogResult(
                   choice: BurstCaptionSaveChoice.cancel,
                 ),
               ),
-              child: const Text('Cancel', style: TextStyle(fontSize: 11)),
             ),
-            TextButton(
+            const SizedBox(width: 8),
+            ElevatedGreyButton(
+              label: 'First photo only',
+              fontSize: 11,
               onPressed: () => Navigator.pop(
                 context,
                 const BurstCaptionDialogResult(
                   choice: BurstCaptionSaveChoice.thisImageOnly,
                 ),
               ),
-              child: const Text('First photo only', style: TextStyle(fontSize: 11)),
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: _kKeyboardFireFtpBlue,
-                disabledBackgroundColor: Colors.grey.shade300,
-                foregroundColor: Colors.white,
-                disabledForegroundColor: Colors.grey.shade400,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.zero,
-                ),
-              ),
+            const SizedBox(width: 8),
+            ElevatedGreyButton(
+              label: applyCount == n
+                  ? 'Apply to all $n'
+                  : 'Apply to $applyCount photo${applyCount == 1 ? '' : 's'}',
+              fontSize: 11,
+              isPrimary: true,
               onPressed: applyCount == 0 ? null : _applyToAll,
-              child: Text(
-                applyCount == n
-                    ? 'Apply to all $n'
-                    : 'Apply to $applyCount photo${applyCount == 1 ? '' : 's'}',
-                style: const TextStyle(fontSize: 11),
-              ),
             ),
           ],
         ),

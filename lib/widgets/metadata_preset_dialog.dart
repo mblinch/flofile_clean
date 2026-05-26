@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../utils/exiftool_helper.dart';
 import 'app_compact_checkbox.dart';
+import 'app_styled_dialogs.dart';
 
 class MetadataPresetDialog extends StatefulWidget {
   final Map<String, String>? currentPreset;
@@ -214,29 +215,22 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(
+                    ElevatedGreyButton(
+                      label: 'Cancel',
+                      fontSize: 10,
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel',
-                          style:
-                              TextStyle(fontSize: 10, color: Colors.black87)),
                     ),
                     const SizedBox(width: 8),
-                    ElevatedButton(
+                    ElevatedGreyButton(
+                      label: 'Save',
+                      fontSize: 10,
+                      isPrimary: true,
                       onPressed: () {
                         final name = nameController.text.trim();
                         if (name.isNotEmpty) {
                           Navigator.of(context).pop(name);
                         }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.grey.shade200,
-                        foregroundColor: Colors.black87,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(2)),
-                      ),
-                      child: const Text('Save', style: TextStyle(fontSize: 10)),
                     ),
                   ],
                 ),
@@ -566,33 +560,16 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                 ),
                 const SizedBox(width: 8),
                 // Save as Template button
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Save as Template',
+                  fontSize: 11,
                   onPressed: _savePreset,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade200,
-                    foregroundColor: Colors.black87,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
-                  child: const Text('Save as Template',
-                      style: TextStyle(fontSize: 11)),
                 ),
                 const SizedBox(width: 8),
-                // Load IPTC from JPG button
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Load IPTC from JPG',
+                  fontSize: 11,
                   onPressed: _loadIptcFromJpg,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade200,
-                    foregroundColor: Colors.black87,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
-                  child: const Text('Load IPTC from JPG',
-                      style: TextStyle(fontSize: 11)),
                 ),
               ],
             ),
@@ -736,18 +713,10 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.start,
               children: [
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Generate Caption from IPTC',
+                  fontSize: 11,
                   onPressed: _generateCaption,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade200,
-                    foregroundColor: Colors.black87,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
-                  child: const Text('Generate Caption from IPTC',
-                      style: TextStyle(fontSize: 11)),
                 ),
                 if (detectedDate != null) ...[
                   const SizedBox(width: 12),
@@ -845,24 +814,17 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(
+                ElevatedGreyButton(
+                  label: 'Cancel',
+                  fontSize: 11,
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel',
-                      style: TextStyle(fontSize: 11, color: Colors.black87)),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Apply Template',
+                  fontSize: 11,
+                  isPrimary: true,
                   onPressed: _saveSettings,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade200,
-                    foregroundColor: Colors.black87,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
-                  child: const Text('Apply Template',
-                      style: TextStyle(fontSize: 11)),
                 ),
               ],
             ),

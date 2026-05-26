@@ -7,6 +7,7 @@ import 'dart:async';
 import '../services/api_manager.dart';
 import '../services/preferences_service.dart';
 import 'preferences_dialog.dart';
+import 'app_styled_dialogs.dart';
 import '../services/camera_serial_service.dart';
 import 'app_compact_checkbox.dart';
 
@@ -129,9 +130,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           ],
         ),
         actions: [
-          TextButton(
+          ElevatedGreyButton(
+            label: 'Got it!',
+            fontSize: 11,
             onPressed: () => Navigator.pop(context),
-            child: const Text('Got it!'),
           ),
         ],
       ),
@@ -295,14 +297,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       flexibleSpace: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
             colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
           ),
         ),
       ),
       title: Padding(
-        padding: const EdgeInsets.only(left: 10, right: 6),
+        padding: const EdgeInsets.only(left: 20, right: 6),
         child: _buildFileInfoTitle(),
       ),
       actions: [
@@ -348,8 +350,8 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             'FLO FILE',
             style: const TextStyle(
               fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
+              fontWeight: FontWeight.w400,
+              color: Colors.white70,
               letterSpacing: 0.5,
               height: 1.0,
             ),
@@ -460,7 +462,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     const TextStyle _bold = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: Colors.white,
+      color: Colors.white70,
       height: 1.0,
     );
 
@@ -766,9 +768,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           ),
         ),
         actions: [
-          TextButton(
+          ElevatedGreyButton(
+            label: 'Done',
+            fontSize: 11,
             onPressed: () => Navigator.pop(context),
-            child: const Text('Done'),
           ),
         ],
       ),
@@ -777,15 +780,11 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
   Widget _buildStyledButton(String text, VoidCallback onPressed,
       {bool isBlue = false}) {
-    return ElevatedButton(
+    return ElevatedGreyButton(
+      label: text,
+      fontSize: 13,
+      isPrimary: isBlue,
       onPressed: onPressed,
-      style: ElevatedButton.styleFrom(
-        backgroundColor: isBlue ? Colors.blue : Colors.grey.shade300,
-        foregroundColor: isBlue ? Colors.white : Colors.black87,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-      ),
-      child: Text(text),
     );
   }
 

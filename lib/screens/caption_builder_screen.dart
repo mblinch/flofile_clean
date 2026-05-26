@@ -19,6 +19,7 @@ import '../widgets/startup_dialog.dart';
 import '../widgets/sport_selection_dialog.dart';
 import '../widgets/keyboard_fire_dialog.dart';
 import '../widgets/burst_caption_confirm_dialog.dart';
+import '../widgets/app_styled_dialogs.dart';
 import '../widgets/update_notes_dialog.dart';
 import '../app_update_notes.dart';
 
@@ -98,6 +99,7 @@ class _ConditionalArrowAction extends CallbackAction<Intent> {
 /// selection to the first frame after the saved chain.
 class _IptcInternalSaveResult {
   final bool cancelled;
+
   /// When non-null, select this index after a successful save (burst apply-all).
   final int? selectIndexAfterSave;
 
@@ -142,6 +144,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Precomputed EXIF times for thumbnails
   Map<String, String> _exifTimes = {};
+
   /// Capture DateTime per path (for burst-chain detection); filled in _loadExifTimesAndSort.
   Map<String, DateTime> _captureDateTimeByPath = {};
   // XMP metadata for rating and color label
@@ -1051,6 +1054,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       args.addAll(imageFiles);
       final proc = await ExiftoolHelper.run(args);
       final Map<String, DateTime> times = {};
+
       /// Raw EXIF `DateTimeOriginal` string per file (for caption date prefs / IPTC preview).
       final Map<String, String> rawDateTimeOriginalByPath = {};
       final Map<String, String> formatted = {};
@@ -1394,8 +1398,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     _useKeyboardFireAsDefault = captionMode == 'keyboard_fire';
     _burstDetectionEnabled =
         await preferencesService.getBurstDetectionEnabled();
-    _serialBylinesEnabled =
-        await preferencesService.getSerialNumberBylines();
+    _serialBylinesEnabled = await preferencesService.getSerialNumberBylines();
     _keywordVerbsEnabled = await preferencesService.getApplyVerbKeywords();
     _keywordNamesEnabled =
         await preferencesService.getApplyPlayerNamesToKeywords();
@@ -1628,7 +1631,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           captionValues['IPTC:Keywords'] ?? captionValues['Keywords'];
       _appendKeywordsExifArgs(tagAndFlags, keywordsValue);
 
-      tagAndFlags.addAll(['-overwrite_original', '-P', '-m', '-charset', 'iptc=UTF8']);
+      tagAndFlags
+          .addAll(['-overwrite_original', '-P', '-m', '-charset', 'iptc=UTF8']);
 
       // Nothing to write (same guard as before, but per-field list).
       if (tagAndFlags.length <= 5) {
@@ -1637,7 +1641,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
 
       // One exiftool run per file so only [targets] are written (burst “skip” cannot pick up strays).
-      print('Saving caption to ${targets.length} images (one process per file)...');
+      print(
+          'Saving caption to ${targets.length} images (one process per file)...');
       int ok = 0;
       final succeeded = <String>[];
       for (final target in targets) {
@@ -1791,14 +1796,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         if (targets.isEmpty) {
           return _IptcInternalSaveResult.cancelled();
         }
-        await _saveIptcToMultipleImages(targets, preCapturedValues: frozenValues);
+        await _saveIptcToMultipleImages(targets,
+            preCapturedValues: frozenValues);
         _clearPopupSelections();
         final after = _selectionIndexAfterBurstApply(chain, targets);
         return _IptcInternalSaveResult.saved(selectIndexAfterSave: after);
       }
       if (dialogResult.choice == BurstCaptionSaveChoice.thisImageOnly) {
         if (!mounted) return _IptcInternalSaveResult.cancelled();
-        await _saveIptcToMultipleImages([anchor], preCapturedValues: frozenValues);
+        await _saveIptcToMultipleImages([anchor],
+            preCapturedValues: frozenValues);
         _clearPopupSelections();
         return _IptcInternalSaveResult.saved();
       }
@@ -2532,29 +2539,32 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           content: const Text(
               'You have unsaved changes to the current image. Do you want to save them before switching?'),
           actions: [
-            TextButton(
+            ElevatedGreyButton(
+              label: 'Don\'t Save',
+              fontSize: 11,
               onPressed: () {
                 Navigator.of(context).pop();
-                // Don't save, just switch
                 _switchToImage(newIndex);
               },
-              child: const Text('Don\'t Save'),
             ),
-            TextButton(
+            const SizedBox(width: 8),
+            ElevatedGreyButton(
+              label: 'Cancel',
+              fontSize: 11,
               onPressed: () {
                 Navigator.of(context).pop();
-                // Cancel the switch
               },
-              child: const Text('Cancel'),
             ),
-            ElevatedButton(
+            const SizedBox(width: 8),
+            ElevatedGreyButton(
+              label: 'Save',
+              fontSize: 11,
+              isPrimary: true,
               onPressed: () async {
                 Navigator.of(context).pop();
-                // Save changes first, then switch
                 await _saveCurrentMetadata();
                 _switchToImage(newIndex);
               },
-              child: const Text('Save'),
             ),
           ],
         );
@@ -4000,7 +4010,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return Scaffold(
       appBar: AppHeaderWidget(
         cameraService: _cameraService,
-        currentImagePath: imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+        currentImagePath:
+            imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
         currentIndex: currentIndex,
         totalImages: imagePaths.length,
         currentExifData: _currentExifData,
@@ -4072,89 +4083,88 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         },
       ),
       body: Shortcuts(
-          shortcuts: const <ShortcutActivator, Intent>{
-            SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
-                _PastePreviousCaptionIntent(),
-            SingleActivator(LogicalKeyboardKey.enter, meta: true):
-                _SaveAndNextIntent(),
-            SingleActivator(LogicalKeyboardKey.arrowLeft):
-                _PreviousImageIntent(),
-            SingleActivator(LogicalKeyboardKey.arrowUp): _PreviousRowIntent(),
-            SingleActivator(LogicalKeyboardKey.arrowRight): _NextImageIntent(),
-            SingleActivator(LogicalKeyboardKey.arrowDown): _NextRowIntent(),
-          },
-          child: Actions(
-            actions: <Type, Action<Intent>>{
-              _PastePreviousCaptionIntent:
-                  CallbackAction<_PastePreviousCaptionIntent>(
-                onInvoke: (_) {
-                  final state = _captionFieldsKey2.currentState;
-                  (state as dynamic)?.pasteLastCaption();
-                  return null;
-                },
-              ),
-              _SaveAndNextIntent: CallbackAction<_SaveAndNextIntent>(
-                onInvoke: (_) async {
-                  await _saveCurrentMetadata();
-                  if (!mounted) return null;
-                  if (currentIndex < imagePaths.length - 1) {
-                    setState(() {
-                      currentIndex = currentIndex + 1;
-                    });
-                    _loadMetadata();
-                  }
-                  return null;
-                },
-              ),
-              _PreviousImageIntent: _ConditionalArrowAction(
-                consumesKeyWhen: () => !_isTextInputFocused(),
-                onInvoke: (_) {
-                  if (_isTextInputFocused()) return null;
-                  if (imagePaths.isEmpty) return null;
-                  _clearMultiSelection();
-                  if (currentIndex > 0) {
-                    setState(() => _thumbCenterRequestId++);
-                    _onImageSelected(currentIndex - 1);
-                  }
-                  return null;
-                },
-              ),
-              _NextImageIntent: _ConditionalArrowAction(
-                consumesKeyWhen: () => !_isTextInputFocused(),
-                onInvoke: (_) {
-                  if (_isTextInputFocused()) return null;
-                  if (imagePaths.isEmpty) return null;
-                  _clearMultiSelection();
-                  if (currentIndex < imagePaths.length - 1) {
-                    setState(() => _thumbCenterRequestId++);
-                    _onImageSelected(currentIndex + 1);
-                  }
-                  return null;
-                },
-              ),
-              _PreviousRowIntent: _ConditionalArrowAction(
-                consumesKeyWhen: () => !_isTextInputFocused(),
-                onInvoke: (_) {
-                  if (_isTextInputFocused()) return null;
-                  _clearMultiSelection();
-                  return _handleArrowUpDownByRow(up: true);
-                },
-              ),
-              _NextRowIntent: _ConditionalArrowAction(
-                consumesKeyWhen: () => !_isTextInputFocused(),
-                onInvoke: (_) {
-                  if (_isTextInputFocused()) return null;
-                  _clearMultiSelection();
-                  return _handleArrowUpDownByRow(up: false);
-                },
-              ),
-            },
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(8.0, 1.0, 4.0, 0.0),
-              child: _buildLayout(),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
+              _PastePreviousCaptionIntent(),
+          SingleActivator(LogicalKeyboardKey.enter, meta: true):
+              _SaveAndNextIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowLeft): _PreviousImageIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowUp): _PreviousRowIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowRight): _NextImageIntent(),
+          SingleActivator(LogicalKeyboardKey.arrowDown): _NextRowIntent(),
+        },
+        child: Actions(
+          actions: <Type, Action<Intent>>{
+            _PastePreviousCaptionIntent:
+                CallbackAction<_PastePreviousCaptionIntent>(
+              onInvoke: (_) {
+                final state = _captionFieldsKey2.currentState;
+                (state as dynamic)?.pasteLastCaption();
+                return null;
+              },
             ),
+            _SaveAndNextIntent: CallbackAction<_SaveAndNextIntent>(
+              onInvoke: (_) async {
+                await _saveCurrentMetadata();
+                if (!mounted) return null;
+                if (currentIndex < imagePaths.length - 1) {
+                  setState(() {
+                    currentIndex = currentIndex + 1;
+                  });
+                  _loadMetadata();
+                }
+                return null;
+              },
+            ),
+            _PreviousImageIntent: _ConditionalArrowAction(
+              consumesKeyWhen: () => !_isTextInputFocused(),
+              onInvoke: (_) {
+                if (_isTextInputFocused()) return null;
+                if (imagePaths.isEmpty) return null;
+                _clearMultiSelection();
+                if (currentIndex > 0) {
+                  setState(() => _thumbCenterRequestId++);
+                  _onImageSelected(currentIndex - 1);
+                }
+                return null;
+              },
+            ),
+            _NextImageIntent: _ConditionalArrowAction(
+              consumesKeyWhen: () => !_isTextInputFocused(),
+              onInvoke: (_) {
+                if (_isTextInputFocused()) return null;
+                if (imagePaths.isEmpty) return null;
+                _clearMultiSelection();
+                if (currentIndex < imagePaths.length - 1) {
+                  setState(() => _thumbCenterRequestId++);
+                  _onImageSelected(currentIndex + 1);
+                }
+                return null;
+              },
+            ),
+            _PreviousRowIntent: _ConditionalArrowAction(
+              consumesKeyWhen: () => !_isTextInputFocused(),
+              onInvoke: (_) {
+                if (_isTextInputFocused()) return null;
+                _clearMultiSelection();
+                return _handleArrowUpDownByRow(up: true);
+              },
+            ),
+            _NextRowIntent: _ConditionalArrowAction(
+              consumesKeyWhen: () => !_isTextInputFocused(),
+              onInvoke: (_) {
+                if (_isTextInputFocused()) return null;
+                _clearMultiSelection();
+                return _handleArrowUpDownByRow(up: false);
+              },
+            ),
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8.0, 1.0, 4.0, 0.0),
+            child: _buildLayout(),
           ),
         ),
+      ),
     );
   }
 
@@ -4248,91 +4258,91 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     if (!_useKeyboardFireAsDefault) {
       entry = captionWidget;
     } else {
-    final cs = _captionFieldsKey2.currentState;
-    // If the CaptionFieldsWidget hasn't mounted yet (first frame), schedule a
-    // rebuild so KeyboardFirePanel receives a non-null captionState immediately
-    // after mount — without this, the caption text field in the panel renders
-    // as a disconnected fallback and manual typing is never saved.
-    if (cs == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) setState(() {});
-      });
-    }
-    final dynamic state = cs;
-    entry = Stack(
-      fit: StackFit.expand,
-      children: [
-        Offstage(offstage: true, child: captionWidget),
-        KeyboardFirePanel(
-          key: _kbPanelKey,
-          homeRoster: _cachedHomeRoster,
-          awayRoster: _cachedAwayRoster,
-          homeTeamName: selectedHomeTeam,
-          awayTeamName: selectedAwayTeam,
-          captionState: cs,
-          showDialogActions: false,
-          currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-          totalImages: imagePaths.length,
-          trailingSidebar: _buildRightSidebar(),
-          onPreviousImage: () {
-            if (currentIndex > 0) {
-              setState(() => _thumbCenterRequestId++);
-              _onImageSelected(currentIndex - 1);
-            }
-          },
-          onNextImage: () {
-            if (currentIndex < imagePaths.length - 1) {
-              setState(() => _thumbCenterRequestId++);
-              _onImageSelected(currentIndex + 1);
-            }
-          },
-          onSaveIptc: _saveIptcMetadata,
-          bulkSaveCount: _bulkSaveCount,
-          onFtp: cs != null
-              ? () {
-                  try {
-                    state.triggerFtp();
-                  } catch (_) {}
-                }
-              : null,
-          onFtpSettings: cs != null
-              ? () {
-                  try {
-                    state.showFtpSettings();
-                  } catch (_) {}
-                }
-              : null,
-          onReset: _handleReset,
-          onCopy: _onKeyboardFireCopy,
-          onPaste: _onKeyboardFirePaste,
-          onPastePrevious: cs != null
-              ? () {
-                  try {
-                    state.pastePreviousCaption();
-                  } catch (_) {}
-                }
-              : null,
-          ftpDisabled: cs != null
-              ? (() {
-                  try {
-                    return state.isFtpDisabled as bool;
-                  } catch (_) {
-                    return false;
+      final cs = _captionFieldsKey2.currentState;
+      // If the CaptionFieldsWidget hasn't mounted yet (first frame), schedule a
+      // rebuild so KeyboardFirePanel receives a non-null captionState immediately
+      // after mount — without this, the caption text field in the panel renders
+      // as a disconnected fallback and manual typing is never saved.
+      if (cs == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() {});
+        });
+      }
+      final dynamic state = cs;
+      entry = Stack(
+        fit: StackFit.expand,
+        children: [
+          Offstage(offstage: true, child: captionWidget),
+          KeyboardFirePanel(
+            key: _kbPanelKey,
+            homeRoster: _cachedHomeRoster,
+            awayRoster: _cachedAwayRoster,
+            homeTeamName: selectedHomeTeam,
+            awayTeamName: selectedAwayTeam,
+            captionState: cs,
+            showDialogActions: false,
+            currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+            totalImages: imagePaths.length,
+            trailingSidebar: _buildRightSidebar(),
+            onPreviousImage: () {
+              if (currentIndex > 0) {
+                setState(() => _thumbCenterRequestId++);
+                _onImageSelected(currentIndex - 1);
+              }
+            },
+            onNextImage: () {
+              if (currentIndex < imagePaths.length - 1) {
+                setState(() => _thumbCenterRequestId++);
+                _onImageSelected(currentIndex + 1);
+              }
+            },
+            onSaveIptc: _saveIptcMetadata,
+            bulkSaveCount: _bulkSaveCount,
+            onFtp: cs != null
+                ? () {
+                    try {
+                      state.triggerFtp();
+                    } catch (_) {}
                   }
-                })()
-              : false,
-          currentFtpProfile: cs != null
-              ? (() {
-                  try {
-                    return state.currentFtpProfile as String?;
-                  } catch (_) {
-                    return null;
+                : null,
+            onFtpSettings: cs != null
+                ? () {
+                    try {
+                      state.showFtpSettings();
+                    } catch (_) {}
                   }
-                })()
-              : null,
-        ),
-      ],
-    );
+                : null,
+            onReset: _handleReset,
+            onCopy: _onKeyboardFireCopy,
+            onPaste: _onKeyboardFirePaste,
+            onPastePrevious: cs != null
+                ? () {
+                    try {
+                      state.pastePreviousCaption();
+                    } catch (_) {}
+                  }
+                : null,
+            ftpDisabled: cs != null
+                ? (() {
+                    try {
+                      return state.isFtpDisabled as bool;
+                    } catch (_) {
+                      return false;
+                    }
+                  })()
+                : false,
+            currentFtpProfile: cs != null
+                ? (() {
+                    try {
+                      return state.currentFtpProfile as String?;
+                    } catch (_) {
+                      return null;
+                    }
+                  })()
+                : null,
+          ),
+        ],
+      );
     }
     return ColoredBox(
       color: Colors.grey.shade50,
@@ -4345,8 +4355,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
     return Container(
       width: 172,
-      decoration: const BoxDecoration(
-        color: Color(0xFFF8F8F8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(12),
@@ -4354,8 +4373,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(children: [
-              Expanded(child: _sbBtn(
-                label: '‹ Prev',
+              Expanded(
+                  child: _sbBtn(
+                label: '‹ Save',
                 primary: true,
                 onTap: (currentIndex > 0)
                     ? () {
@@ -4367,7 +4387,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     : null,
               )),
               const SizedBox(width: 5),
-              Expanded(child: _sbBtn(
+              Expanded(
+                  child: _sbBtn(
                 label: 'Save ›',
                 primary: true,
                 onTap: (currentIndex < imagePaths.length - 1)
@@ -4387,38 +4408,92 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               fullWidth: true,
               onTap: cs != null
                   ? () {
-                      try { cs.triggerFtp(); } catch (_) {}
+                      try {
+                        cs.triggerFtp();
+                      } catch (_) {}
                     }
                   : null,
             ),
-            _sbDivider(),
-
+            if (cs != null) ...[
+              GestureDetector(
+                onTap: () {
+                  try {
+                    cs.showFtpSettings();
+                  } catch (_) {}
+                },
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6, bottom: 0, left: 4),
+                    child: Text(
+                      (() {
+                        try {
+                          final profile = cs.currentFtpProfile as String?;
+                          return 'FTP Profile: ${profile ?? 'None'}';
+                        } catch (_) {
+                          return 'FTP Profile: None';
+                        }
+                      })(),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 9,
+                        color: Colors.grey.shade600,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Container(height: 1, color: const Color(0xFFF0EFEC)),
+            ),
+            _sbBtn(
+              label: 'Paste Previous',
+              fullWidth: true,
+              onTap: cs != null
+                  ? () {
+                      try {
+                        cs.pastePreviousCaption();
+                      } catch (_) {}
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 5),
             Row(children: [
-              Expanded(child: _sbBtn(
+              Expanded(
+                  child: _sbBtn(
                 label: 'Copy',
-                onTap: cs != null ? () { try { cs.copyCaption(); } catch (_) {} } : null,
+                onTap: cs != null
+                    ? () {
+                        try {
+                          cs.copyCaption();
+                        } catch (_) {}
+                      }
+                    : null,
               )),
               const SizedBox(width: 5),
-              Expanded(child: _sbBtn(
+              Expanded(
+                  child: _sbBtn(
                 label: 'Paste',
-                onTap: cs != null ? () { try { cs.pasteCaption(); } catch (_) {} } : null,
+                onTap: cs != null
+                    ? () {
+                        try {
+                          cs.pasteCaption();
+                        } catch (_) {}
+                      }
+                    : null,
               )),
             ]),
             const SizedBox(height: 5),
             _sbBtn(
-              label: 'Paste prev',
-              fullWidth: true,
-              onTap: cs != null ? () { try { cs.pastePreviousCaption(); } catch (_) {} } : null,
-            ),
-            const SizedBox(height: 5),
-            _sbBtn(
-              label: 'Reset caption',
+              label: 'Reset Caption',
               danger: true,
               fullWidth: true,
               onTap: () => _handleReset(),
             ),
             _sbDivider(),
-
             _sbToggleRow(
               label: 'Keyword mode',
               value: _keywordModeEnabled,
@@ -4431,7 +4506,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 value: _keywordVerbsEnabled,
                 onChanged: (v) async {
                   setState(() => _keywordVerbsEnabled = v);
-                  (_kbPanelKey.currentState as dynamic)?.setKeywordVerbsEnabled(v);
+                  (_kbPanelKey.currentState as dynamic)
+                      ?.setKeywordVerbsEnabled(v);
                   (_captionFieldsKey2.currentState as dynamic)
                       ?.setApplyVerbKeywordsEnabled(v);
                 },
@@ -4442,7 +4518,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 value: _keywordNamesEnabled,
                 onChanged: (v) async {
                   setState(() => _keywordNamesEnabled = v);
-                  (_kbPanelKey.currentState as dynamic)?.setKeywordNamesEnabled(v);
+                  (_kbPanelKey.currentState as dynamic)
+                      ?.setKeywordNamesEnabled(v);
                   (_captionFieldsKey2.currentState as dynamic)
                       ?.setApplyPlayerNamesToKeywordsEnabled(v);
                 },
@@ -4469,7 +4546,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               },
             ),
             _sbDivider(),
-
             _sbBtn(
               label: 'Shortcuts',
               fullWidth: true,
@@ -4482,14 +4558,18 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   }
 
   Widget _sbLabel(String text) => Text(
-    text.toUpperCase(),
-    style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.8, color: Color(0xFFBBBBBB)),
-  );
+        text.toUpperCase(),
+        style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+            color: Color(0xFFBBBBBB)),
+      );
 
   Widget _sbDivider() => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 12),
-    child: Container(height: 1, color: const Color(0xFFF0EFEC)),
-  );
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Container(height: 1, color: const Color(0xFFF0EFEC)),
+      );
 
   Widget _sbToggleRow({
     required String label,
@@ -4525,46 +4605,70 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     );
   }
 
-  Widget _sbBtn({required String label, VoidCallback? onTap, bool primary = false, bool ftp = false, bool danger = false, bool fullWidth = false}) {
+  Widget _sbBtn(
+      {required String label,
+      VoidCallback? onTap,
+      bool primary = false,
+      bool ftp = false,
+      bool danger = false,
+      bool fullWidth = false}) {
     final enabled = onTap != null;
-    Color? bg;
-    Color textColor;
-    Color borderColor;
-    LinearGradient? gradient;
-    const _tealGrad = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF4A7A96), Color(0xFF2A4858)]);
-    const _greyGrad = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF3A3A3A), Color(0xFF222222)]);
+
+    // FTP keeps its teal gradient style
     if (ftp) {
-      gradient = enabled ? _tealGrad : null;
-      bg = enabled ? null : Colors.grey.shade300;
-      textColor = enabled ? Colors.white : Colors.grey.shade600;
-      borderColor = enabled ? const Color(0xFF4A7A96) : Colors.grey.shade300;
-    } else if (danger) {
-      gradient = enabled ? _greyGrad : null;
-      bg = enabled ? null : Colors.grey.shade300;
-      textColor = enabled ? const Color(0xFFE57373) : Colors.white54;
-      borderColor = enabled ? const Color(0xFF555555) : Colors.grey.shade300;
-    } else {
-      gradient = enabled ? _greyGrad : null;
-      bg = enabled ? null : const Color(0xFF888888);
-      textColor = enabled ? Colors.white : Colors.white70;
-      borderColor = enabled ? const Color(0xFF555555) : const Color(0xFF888888);
-    }
-    return GestureDetector(
-      onTap: onTap,
-      child: MouseRegion(
-        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        child: Container(
-          width: fullWidth ? double.infinity : null,
-          padding: EdgeInsets.symmetric(horizontal: 6, vertical: ftp ? 9 : 7),
-          decoration: BoxDecoration(
-            color: gradient != null ? null : bg, gradient: gradient,
-            border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(6),
+      const tealGrad = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [Color(0xFF4A7A96), Color(0xFF2A4858)]);
+      return GestureDetector(
+        onTap: onTap,
+        child: MouseRegion(
+          cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+            decoration: BoxDecoration(
+              gradient: enabled ? tealGrad : null,
+              color: enabled ? null : Colors.grey.shade300,
+              border: Border.all(
+                  color:
+                      enabled ? const Color(0xFF4A7A96) : Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(6),
+              boxShadow: enabled
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Center(
+                child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontFamily: 'Inter',
+                  letterSpacing: -0.25,
+                  fontSize: 12,
+                  fontVariations: const [FontVariation('wght', 500)],
+                  color: enabled ? Colors.white : Colors.grey.shade600),
+            )),
           ),
-          child: Center(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontFamily: 'Inter', letterSpacing: -0.25, fontSize: ftp ? 12 : 11, fontVariations: const [FontVariation('wght', 500)], color: textColor),
-          )),
         ),
-      ),
+      );
+    }
+
+    // All other buttons use ElevatedGreyButton style
+    return ElevatedGreyButton(
+      label: label,
+      fontSize: 11,
+      fullWidth: fullWidth,
+      isDanger: danger,
+      isPrimary: primary,
+      onPressed: onTap,
     );
   }
 
@@ -4600,12 +4704,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     Expanded(
                       child: Text(
                         'Keyboard Shortcuts',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey.shade800),
                       ),
                     ),
                     GestureDetector(
                       onTap: () => Navigator.of(ctx).pop(),
-                      child: Icon(Icons.close, size: 14, color: Colors.grey.shade500),
+                      child: Icon(Icons.close,
+                          size: 14, color: Colors.grey.shade500),
                     ),
                   ],
                 ),
@@ -4636,22 +4744,28 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   }
 
   Widget _shortcutDialogRow(String key, String desc) => Row(
-    children: [
-      Container(
-        width: 56,
-        alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF2F2F2),
-          border: Border.all(color: const Color(0xFFE0E0E0)),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Text(key, style: const TextStyle(fontSize: 11, fontFamily: 'Menlo', fontFamilyFallback: ['SF Mono', 'Consolas', 'monospace'], color: Color(0xFF555555))),
-      ),
-      const SizedBox(width: 12),
-      Text(desc, style: const TextStyle(fontSize: 11, color: Color(0xFF666666))),
-    ],
-  );
+        children: [
+          Container(
+            width: 56,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF2F2F2),
+              border: Border.all(color: const Color(0xFFE0E0E0)),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(key,
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontFamily: 'Menlo',
+                    fontFamilyFallback: ['SF Mono', 'Consolas', 'monospace'],
+                    color: Color(0xFF555555))),
+          ),
+          const SizedBox(width: 12),
+          Text(desc,
+              style: const TextStyle(fontSize: 11, color: Color(0xFF666666))),
+        ],
+      );
 
   // Current layout: 3-column mockup layout
   Widget _buildPlayersListLeftLayout() {
@@ -4677,7 +4791,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     imagePaths: imagePaths,
                     currentIndex: currentIndex,
                     multiSelectedPaths: _multiSelectedImages,
-                    backgroundColor: _thumbnailsExpanded ? const Color(0xFFE0E0E0) : null,
+                    backgroundColor:
+                        _thumbnailsExpanded ? const Color(0xFFE0E0E0) : null,
                     onImageSelected: _onImageSelected,
                     onNextImage: () {
                       if (currentIndex < imagePaths.length - 1) {
@@ -4764,7 +4879,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     onEditMetadata: _showMetadataPopup,
                     onEditInPhotoshop: _launchPhotoshop,
                     isExpanded: _thumbnailsExpanded,
-                    onToggleExpand: () => setState(() => _thumbnailsExpanded = !_thumbnailsExpanded),
+                    onToggleExpand: () => setState(
+                        () => _thumbnailsExpanded = !_thumbnailsExpanded),
                     onColumnsComputed: (cols) {
                       if (_lastThumbColumns != cols) {
                         setState(() => _lastThumbColumns = cols);
@@ -4786,73 +4902,73 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               Expanded(
                 child: _buildCaptionEntryWidget(
                   CaptionFieldsWidget(
-                          key: _captionFieldsKey2,
-                          metadata: currentMetadata,
-                          cameraService: _cameraService,
-                          onMetadataUpdated: (metadata) {
-                            setState(() {
-                              currentMetadata = metadata;
-                            });
-                          },
-                          onVerbOverridesChanged: () => setState(() {}),
-                          getCurrentMetadataValues: () {
-                            return {};
-                          },
-                          homeTeam: selectedHomeTeam,
-                          awayTeam: selectedAwayTeam,
-                          sport: _selectedSport,
-                          onNextImage: () {
-                            if (currentIndex < imagePaths.length - 1) {
-                              setState(() {
-                                _thumbCenterRequestId++;
-                              });
-                              _onImageSelected(currentIndex + 1);
-                            }
-                          },
-                          onPreviousImage: () {
-                            if (currentIndex > 0) {
-                              setState(() {
-                                _thumbCenterRequestId++;
-                              });
-                              _onImageSelected(currentIndex - 1);
-                            }
-                          },
-                          onReset: _handleReset,
-                          personalityOverride: _personalityOverride,
-                          onImagesLoaded: (files) {
-                            print(
-                                'DEBUG: onImagesLoaded called with ${files.length} files');
-                            setState(() {
-                              imagePaths = files;
-                              currentIndex = 0;
-                            });
-                          },
-                          onStartFolderWatcher: _startFolderWatcher,
-                          preloadedHomeRoster:
-                              _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
-                          preloadedAwayRoster:
-                              _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
-                          currentImagePath:
-                              imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-                          currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
-                          totalImages: imagePaths.length,
-                          onSaveIptc: _saveIptcMetadata,
-                          bulkSaveCount: _bulkSaveCount,
-                          onImageUploaded: (imagePath) {
-                            if (!_currentlyUploading.contains(imagePath)) {
-                              setState(() {
-                                _uploadedImages.add(imagePath);
-                                _uploadProgress[imagePath] = 1.0;
-                              });
-                            }
-                          },
-                          onUploadProgress: (imagePath, progress) {
-                            setState(() {
-                              _uploadProgress[imagePath] = progress;
-                            });
-                          },
-                        ),
-                      ),
+                    key: _captionFieldsKey2,
+                    metadata: currentMetadata,
+                    cameraService: _cameraService,
+                    onMetadataUpdated: (metadata) {
+                      setState(() {
+                        currentMetadata = metadata;
+                      });
+                    },
+                    onVerbOverridesChanged: () => setState(() {}),
+                    getCurrentMetadataValues: () {
+                      return {};
+                    },
+                    homeTeam: selectedHomeTeam,
+                    awayTeam: selectedAwayTeam,
+                    sport: _selectedSport,
+                    onNextImage: () {
+                      if (currentIndex < imagePaths.length - 1) {
+                        setState(() {
+                          _thumbCenterRequestId++;
+                        });
+                        _onImageSelected(currentIndex + 1);
+                      }
+                    },
+                    onPreviousImage: () {
+                      if (currentIndex > 0) {
+                        setState(() {
+                          _thumbCenterRequestId++;
+                        });
+                        _onImageSelected(currentIndex - 1);
+                      }
+                    },
+                    onReset: _handleReset,
+                    personalityOverride: _personalityOverride,
+                    onImagesLoaded: (files) {
+                      print(
+                          'DEBUG: onImagesLoaded called with ${files.length} files');
+                      setState(() {
+                        imagePaths = files;
+                        currentIndex = 0;
+                      });
+                    },
+                    onStartFolderWatcher: _startFolderWatcher,
+                    preloadedHomeRoster:
+                        _cachedHomeRoster.isNotEmpty ? _cachedHomeRoster : null,
+                    preloadedAwayRoster:
+                        _cachedAwayRoster.isNotEmpty ? _cachedAwayRoster : null,
+                    currentImagePath:
+                        imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+                    currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
+                    totalImages: imagePaths.length,
+                    onSaveIptc: _saveIptcMetadata,
+                    bulkSaveCount: _bulkSaveCount,
+                    onImageUploaded: (imagePath) {
+                      if (!_currentlyUploading.contains(imagePath)) {
+                        setState(() {
+                          _uploadedImages.add(imagePath);
+                          _uploadProgress[imagePath] = 1.0;
+                        });
+                      }
+                    },
+                    onUploadProgress: (imagePath, progress) {
+                      setState(() {
+                        _uploadProgress[imagePath] = progress;
+                      });
+                    },
+                  ),
+                ),
               ),
             ],
           ),
@@ -4860,7 +4976,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       ],
     );
   }
-
 
   // Build compact player picker with numbers only
   Widget _buildCompactPlayerPicker() {

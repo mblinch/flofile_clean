@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../utils/native_file_picker.dart';
 import '../services/ftpclient_service.dart';
+import 'app_styled_dialogs.dart';
 
 class FtpUploadWidget extends StatefulWidget {
   const FtpUploadWidget({super.key});
@@ -189,10 +190,7 @@ class _FtpUploadWidgetState extends State<FtpUploadWidget> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _pickFile,
-                  child: const Text('Pick File'),
-                ),
+                ElevatedGreyButton(label: 'Pick File', onPressed: _pickFile),
               ],
             ),
             const SizedBox(height: 8),
@@ -204,10 +202,7 @@ class _FtpUploadWidgetState extends State<FtpUploadWidget> {
               ),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _isUploading ? null : _uploadFile,
-              child: Text(_isUploading ? 'Uploading...' : 'Upload File'),
-            ),
+            ElevatedGreyButton(label: _isUploading ? 'Uploading...' : 'Upload File', onPressed: _isUploading ? null : _uploadFile),
             const SizedBox(height: 16),
             if (_isUploading || _statusText.isNotEmpty)
               Column(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_update_notes.dart';
+import 'app_styled_dialogs.dart';
 
 /// One-shot “What’s new” after [package_info_plus] build increases.
 class UpdateNotesDialog extends StatelessWidget {
@@ -49,9 +50,10 @@ class UpdateNotesDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        TextButton(
+        ElevatedGreyButton(
+          label: 'OK',
+          fontSize: 11,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('OK'),
         ),
       ],
     );

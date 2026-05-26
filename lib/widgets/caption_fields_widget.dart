@@ -1461,11 +1461,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
               ),
               actions: [
-                TextButton(
+                ElevatedGreyButton(
+                  label: 'Cancel',
+                  fontSize: 11,
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel', style: TextStyle(fontSize: 11)),
                 ),
-                TextButton(
+                const SizedBox(width: 8),
+                ElevatedGreyButton(
+                  label: 'Save',
+                  fontSize: 11,
+                  isPrimary: true,
                   onPressed: () {
                     final List<Player> updated = [];
                     for (int i = 0; i < tempRoster.length; i++) {
@@ -1513,7 +1518,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     _updateCaption();
                     Navigator.of(context).pop();
                   },
-                  child: const Text('Save', style: TextStyle(fontSize: 11)),
                 ),
                 const SizedBox(width: 8),
                 // Reset button (to the right of FTP Settings)
@@ -2135,9 +2139,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               ),
               actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               actions: [
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Reset to Default',
+                  fontSize: 11,
                   onPressed: () async {
-                    // Reset to default
                     await _preferencesService.removeCustomVerbWording(verb,
                         sport: _currentSport);
 
@@ -2159,38 +2164,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       ),
                     );
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade100,
-                    foregroundColor: Colors.grey.shade700,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  child: const Text(
-                    'Reset to Default',
-                    style: TextStyle(fontSize: 11),
-                  ),
                 ),
                 const Spacer(),
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Cancel',
+                  fontSize: 11,
                   onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey.shade100,
-                    foregroundColor: Colors.grey.shade700,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  child: const Text(
-                    'Cancel',
-                    style: TextStyle(fontSize: 11),
-                  ),
                 ),
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Save',
+                  fontSize: 11,
+                  isPrimary: true,
                   onPressed: () async {
                     print('DEBUG: ========== SAVE BUTTON CLICKED ==========');
                     print('DEBUG: Button onPressed handler started');
@@ -2206,7 +2190,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         'DEBUG: areEqual = ${customWording == originalWording}');
 
                     if (customWording.isEmpty) {
-                      // Remove custom wording if empty
                       await _preferencesService.removeCustomVerbWording(verb,
                           sport: _currentSport);
 
@@ -2228,7 +2211,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                       );
                     } else {
-                      // Always save the custom wording (unless it matches the true default)
                       final trueDefaultWording =
                           _getTrueDefaultVerbWording(verb);
                       final isDefault =
@@ -2244,7 +2226,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                       try {
                         if (isDefault) {
-                          // If it matches the default, remove any custom wording
                           print(
                               'DEBUG: Removing custom wording (matches default)');
                           await _preferencesService.removeCustomVerbWording(
@@ -2254,13 +2235,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             _customVerbWordings.remove(verb);
                           });
                         } else {
-                          // Save custom verb wording to preferences
                           print('DEBUG: Saving custom wording to preferences');
                           await _preferencesService.saveCustomVerbWording(
                               verb, customWording,
                               sport: _currentSport);
 
-                          // Verify it was saved
                           final saved = await _preferencesService
                               .getCustomVerbWordings(sport: _currentSport);
                           print('DEBUG: Verification - saved wordings: $saved');
@@ -2307,17 +2286,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       }
                     }
                   },
-                  style: ElevatedButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  child: const Text(
-                    'Save',
-                    style: TextStyle(fontSize: 11),
-                  ),
                 ),
               ],
             );
@@ -2949,11 +2917,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// Public for [KeyboardFirePanel]: compact MLB control (24px tall).
   Widget buildMlbInningClockAffordanceForKeyboardFire() {
-    return buildMlbInningClockAffordance(height: 24);
+    return buildMlbInningClockAffordance(height: kFloInningButtonHeight);
   }
 
   /// Baseball: filled “MLB time” after a successful API match, or outlined “MLB” to run / retry.
-  Widget buildMlbInningClockAffordance({double height = 33}) {
+  Widget buildMlbInningClockAffordance({double height = kFloInningButtonHeight}) {
     if ((widget.sport ?? '').toLowerCase() != 'baseball') {
       return const SizedBox.shrink();
     }
@@ -2969,28 +2937,43 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       message:
           'Set inning or pre/post-game from MLB play-by-play using this photo’s '
           'EXIF time, game date, and teams. Tap to run or refresh.',
-      child: SizedBox(
+      child: Container(
         height: height,
-        child: OutlinedButton(
-          onPressed: () {
-            applyMlbInningFromExifClock(userInitiated: true);
-          },
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: Size(0, height),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: const Color(0xFF002D72),
-            side: const BorderSide(color: Color(0xFF002D72)),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(3),
-            ),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+          gradient: const LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
           ),
-          child: Text(
-            'MLB',
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.2,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              applyMlbInningFromExifClock(userInitiated: true);
+            },
+            borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Center(
+                child: Text(
+                  'MLB Time Stamp',
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -3150,7 +3133,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             color: const Color(0xFF002D72).withOpacity(0.08),
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(kFloInningButtonRadius),
             border:
                 Border.all(color: const Color(0xFF002D72).withOpacity(0.35)),
           ),
@@ -3973,7 +3956,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF999999),
+              color: Color(0xFFBBBBBB),
               letterSpacing: 0.7,
             ),
           ),
@@ -4038,9 +4021,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (i > 0) children.add(const SizedBox(height: 4));
       children.add(Expanded(child: cards[i]));
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: children,
+    return Container(
+      margin: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
     );
   }
 
@@ -4072,7 +4071,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           children: [
                                 Expanded(
                                   flex: 13,
-                                  child: Column(
+                                  child: Container(
+                                    margin: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.18),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
@@ -4093,7 +4106,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               style: TextStyle(
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w600,
-                                                color: Color(0xFF999999),
+                                                color: Color(0xFFBBBBBB),
                                                 letterSpacing: 0.7,
                                               ),
                                             ),
@@ -4276,6 +4289,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         ),
                                       ),
                                     ],
+                                  ),
                                   ),
                                 ),
                                 if (_showHeadlineField ||
@@ -5306,7 +5320,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildCaptionBuildingSectionWithNav() {
     return Container(
-      padding: const EdgeInsets.only(top: 4, left: 0, right: 0),
+      padding: const EdgeInsets.only(top: 4, left: 3, right: 3, bottom: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
         color: Colors.white,
@@ -5524,7 +5538,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF999999),
+              color: Color(0xFFBBBBBB),
               letterSpacing: 0.7,
             ),
           ),
@@ -5582,7 +5596,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildCaptionBuildingSection() {
     return Container(
-      padding: const EdgeInsets.only(top: 0),
+      padding: const EdgeInsets.only(top: 0, left: 3, right: 3, bottom: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(0),
         color: Colors.white,
@@ -5600,11 +5614,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 Expanded(
                   child: _buildCompactTeamColumn(false),
                 ),
+                const SizedBox(width: 4),
                 // Verbs (center)
                 SizedBox(
                   width: 140,
                   child: _buildCompactVerbColumn(),
                 ),
+                const SizedBox(width: 4),
                 // Home team
                 Expanded(
                   child: _buildCompactTeamColumn(true),
@@ -6090,10 +6106,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     return Container(
       width: double.infinity,
+      margin: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400),
         borderRadius: BorderRadius.circular(6),
         color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -7354,22 +7378,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
+                      ElevatedGreyButton(
+                        label: 'Cancel',
+                        fontSize: 11,
                         onPressed: () => Navigator.of(ctx).pop(),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 9),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero),
-                        ),
-                        child: Text('Cancel',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade700)),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton(
+                      ElevatedGreyButton(
+                        label: 'Add',
+                        fontSize: 11,
+                        isPrimary: true,
                         onPressed: () {
                           final number = numberController.text.trim();
                           final fullName = fullNameController.text.trim();
@@ -7394,18 +7412,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             'jersey': number,
                           });
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0052CC),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero),
-                        ),
-                        child:
-                            const Text('Save', style: TextStyle(fontSize: 11)),
                       ),
                     ],
                   ),
@@ -8689,10 +8695,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(4),
+      margin: const EdgeInsets.all(3),
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade400),
         borderRadius: BorderRadius.circular(6),
         color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -10303,14 +10317,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Cancel',
+                            fontSize: 11,
                             onPressed: () => Navigator.of(context).pop(),
-                            child: Text('Cancel',
-                                style: TextStyle(
-                                    fontSize: 11, color: Colors.grey.shade600)),
                           ),
                           const SizedBox(width: 8),
-                          ElevatedButton(
+                          ElevatedGreyButton(
+                            label: 'Save',
+                            fontSize: 11,
+                            isPrimary: true,
                             onPressed: () async {
                               final newLabel = labelController.text.trim();
                               final newSingular =
@@ -10347,14 +10363,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               widget.onVerbOverridesChanged?.call();
                               if (context.mounted) Navigator.of(context).pop();
                             },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0052CC),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 8),
-                            ),
-                            child: const Text('Save',
-                                style: TextStyle(
-                                    fontSize: 11, color: Colors.white)),
                           ),
                         ],
                       ),
@@ -11800,86 +11808,36 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           children: [
                                             SizedBox(
                                               width: 90,
-                                              height: 49,
-                                              child: ElevatedButton(
+                                              child: ElevatedGreyButton(
+                                                label: 'Copy',
+                                                fontSize: 10,
+                                                icon: Icons.copy,
                                                 onPressed: () {
-                                                  // Copy metadata to clipboard
                                                   if (widget.onCopyMetadata !=
                                                       null) {
                                                     widget.onCopyMetadata!();
                                                   }
                                                 },
-                                                style: ElevatedButton.styleFrom(
-                                                  foregroundColor:
-                                                      Colors.grey.shade700,
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 8),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            4),
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: const [
-                                                    Icon(Icons.copy, size: 14),
-                                                    SizedBox(width: 4),
-                                                    Text('Copy',
-                                                        style: TextStyle(
-                                                            fontSize: 10)),
-                                                  ],
-                                                ),
                                               ),
                                             ),
                                             const SizedBox(width: 8),
                                             SizedBox(
                                               width: 90,
-                                              height: 49,
-                                              child: ElevatedButton(
+                                              child: ElevatedGreyButton(
+                                                label: _iptcSaveLabel(),
+                                                fontSize: 10,
+                                                icon: Icons.arrow_forward,
                                                 onPressed: () async {
-                                                  // Save IPTC metadata
                                                   if (widget.onSaveIptc !=
                                                       null) {
                                                     await widget.onSaveIptc!();
                                                   }
-                                                  // Close the popup
                                                   Navigator.pop(context);
-                                                  // Move to next image
                                                   if (widget.onNextImage !=
                                                       null) {
                                                     widget.onNextImage!();
                                                   }
                                                 },
-                                                style: ElevatedButton.styleFrom(
-                                                  foregroundColor:
-                                                      Colors.grey.shade700,
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 8),
-                                                  shape: RoundedRectangleBorder(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            4),
-                                                  ),
-                                                ),
-                                                child: Row(
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    Text(_iptcSaveLabel(),
-                                                        style: const TextStyle(
-                                                            fontSize: 10)),
-                                                    const SizedBox(width: 4),
-                                                    const Icon(
-                                                        Icons.arrow_forward,
-                                                        size: 14),
-                                                  ],
-                                                ),
                                               ),
                                             ),
                                           ],
@@ -12107,7 +12065,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             },
             child: Container(
               width: double.infinity,
-              height: 33,
+              height: kFloInningButtonHeight,
               margin: const EdgeInsets.only(bottom: 8),
               alignment: Alignment.center,
               decoration: BoxDecoration(
@@ -12138,7 +12096,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ...List.generate(3, (colIndex) {
                   final inningIndex = (rowIndex * 3) + colIndex;
                   if (inningIndex >= inningsToShow.length) {
-                    return const SizedBox(width: 36, height: 33); // Empty space
+                    return SizedBox(width: 36, height: kFloInningButtonHeight); // Empty space
                   }
                   final inning = inningsToShow[inningIndex];
                   final isSelected = _selectedRbiInning == inning;
@@ -12157,14 +12115,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     },
                     child: Container(
                       width: 36,
-                      height: 33,
+                      height: kFloInningButtonHeight,
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: isSelected
                             ? Colors.grey.shade300
                             : Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                         border:
                             Border.all(color: Colors.grey.shade300, width: 0.5),
                       ),
@@ -12207,14 +12165,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   : null,
               child: Container(
                 width: 36,
-                height: 33,
+                height: kFloInningButtonHeight,
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: currentPage > 0
                       ? Colors.grey.shade50
                       : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
                 child: Text(
@@ -12245,14 +12203,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   : null,
               child: Container(
                 width: 36,
-                height: 33,
+                height: kFloInningButtonHeight,
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
                   color: currentPage < 2
                       ? Colors.grey.shade50
                       : Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(3),
+                  borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                   border: Border.all(color: Colors.grey.shade300),
                 ),
                 child: Text(
@@ -12369,50 +12327,27 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(
-                                width: double.infinity,
-                                height: 40,
-                                child: ElevatedButton(
-                                  onPressed: () async {
-                                    // Set verb so chip stays highlighted and caption updates
-                                    setState(() {
-                                      _selectedVerb = verbName;
-                                      _selectedActionVerb = verbName;
-                                    });
-                                    _mergeVerbKeywordsIntoFieldIfEnabled(
-                                        verbName);
-                                    _updateCaption();
-                                    // Save IPTC metadata
-                                    if (widget.onSaveIptc != null) {
-                                      await widget.onSaveIptc!();
-                                    }
-                                    // Close the popup
-                                    Navigator.pop(context);
-                                    // Move to next image
-                                    if (widget.onNextImage != null) {
-                                      widget.onNextImage!();
-                                    }
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    foregroundColor: Colors.grey.shade700,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 8),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(3),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(_iptcSaveLabel(),
-                                          style:
-                                              const TextStyle(fontSize: 10)),
-                                      const SizedBox(width: 4),
-                                      const Icon(Icons.arrow_forward,
-                                          size: 14),
-                                    ],
-                                  ),
-                                ),
+                              ElevatedGreyButton(
+                                label: _iptcSaveLabel(),
+                                fontSize: 10,
+                                icon: Icons.arrow_forward,
+                                fullWidth: true,
+                                onPressed: () async {
+                                  setState(() {
+                                    _selectedVerb = verbName;
+                                    _selectedActionVerb = verbName;
+                                  });
+                                  _mergeVerbKeywordsIntoFieldIfEnabled(
+                                      verbName);
+                                  _updateCaption();
+                                  if (widget.onSaveIptc != null) {
+                                    await widget.onSaveIptc!();
+                                  }
+                                  Navigator.pop(context);
+                                  if (widget.onNextImage != null) {
+                                    widget.onNextImage!();
+                                  }
+                                },
                               ),
                               const SizedBox(height: 8),
                               SizedBox(
@@ -12649,10 +12584,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     (rowIndex * 3) + colIndex;
                                                 if (inningIndex >=
                                                     inningsToShow.length) {
-                                                  return const SizedBox(
+                                                  return SizedBox(
                                                       width: 36,
                                                       height:
-                                                          33); // Empty space
+                                                          kFloInningButtonHeight); // Empty space
                                                 }
                                                 final inning =
                                                     inningsToShow[inningIndex];
@@ -12686,7 +12621,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   },
                                                   child: Container(
                                                     width: 36,
-                                                    height: 33,
+                                                    height: kFloInningButtonHeight,
                                                     margin: const EdgeInsets
                                                         .symmetric(
                                                         horizontal: 2),
@@ -12697,7 +12632,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                           : Colors.grey.shade50,
                                                       borderRadius:
                                                           BorderRadius.circular(
-                                                              3),
+                                                              kFloInningButtonRadius),
                                                       border: Border.all(
                                                         color: Colors
                                                             .grey.shade300,
@@ -12749,7 +12684,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 : null,
                                             child: Container(
                                               width: 20,
-                                              height: 20,
+                                              height: kFloInningButtonHeight,
                                               margin: const EdgeInsets.only(
                                                   right: 4),
                                               alignment: Alignment.center,
@@ -12788,7 +12723,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 : null,
                                             child: Container(
                                               width: 20,
-                                              height: 20,
+                                              height: kFloInningButtonHeight,
                                               margin: const EdgeInsets.only(
                                                   right: 4),
                                               alignment: Alignment.center,
@@ -12886,81 +12821,35 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         children: [
                                           SizedBox(
                                             width: 90,
-                                            height: 49,
-                                            child: ElevatedButton(
+                                            child: ElevatedGreyButton(
+                                              label: 'Copy',
+                                              fontSize: 10,
+                                              icon: Icons.copy,
                                               onPressed: () {
-                                                // Copy metadata to clipboard
                                                 if (widget.onCopyMetadata !=
                                                     null) {
                                                   widget.onCopyMetadata!();
                                                 }
                                               },
-                                              style: ElevatedButton.styleFrom(
-                                                foregroundColor:
-                                                    Colors.grey.shade700,
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 8),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                ),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: const [
-                                                  Icon(Icons.copy, size: 14),
-                                                  SizedBox(width: 4),
-                                                  Text('Copy',
-                                                      style: TextStyle(
-                                                          fontSize: 10)),
-                                                ],
-                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 8),
                                           SizedBox(
                                             width: 90,
-                                            height: 49,
-                                            child: ElevatedButton(
+                                            child: ElevatedGreyButton(
+                                              label: _iptcSaveLabel(),
+                                              fontSize: 10,
+                                              icon: Icons.arrow_forward,
                                               onPressed: () async {
-                                                // Save IPTC metadata
                                                 if (widget.onSaveIptc != null) {
                                                   await widget.onSaveIptc!();
                                                 }
-                                                // Close the popup
                                                 Navigator.pop(context);
-                                                // Move to next image
                                                 if (widget.onNextImage !=
                                                     null) {
                                                   widget.onNextImage!();
                                                 }
                                               },
-                                              style: ElevatedButton.styleFrom(
-                                                foregroundColor:
-                                                    Colors.grey.shade700,
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 8),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(3),
-                                                ),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(_iptcSaveLabel(),
-                                                      style: const TextStyle(
-                                                          fontSize: 10)),
-                                                  const SizedBox(width: 4),
-                                                  const Icon(
-                                                      Icons.arrow_forward,
-                                                      size: 14),
-                                                ],
-                                              ),
                                             ),
                                           ),
                                         ],
@@ -13370,7 +13259,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     children: [
                       const Text('Inning:', style: TextStyle(fontSize: 10)),
                       const SizedBox(width: 6),
-                      buildMlbInningClockAffordance(height: 24),
+                      buildMlbInningClockAffordance(height: kFloInningButtonHeight),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -13598,7 +13487,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                         },
                                                         child: Container(
                                                           width: 36,
-                                                          height: 33,
+                                                          height: kFloInningButtonHeight,
                                                           alignment:
                                                               Alignment.center,
                                                           decoration:
@@ -13614,7 +13503,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             borderRadius:
                                                                 BorderRadius
                                                                     .circular(
-                                                                        3),
+                                                                        kFloInningButtonRadius),
                                                             border: Border.all(
                                                               color: Colors.grey
                                                                   .shade300,
@@ -13996,11 +13885,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         },
         child: Container(
           width: 36,
-          height: 33,
+          height: kFloInningButtonHeight,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: isSelected ? Colors.grey.shade400 : Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(kFloInningButtonRadius),
             border: Border.all(
               color: Colors.grey.shade300,
               width: 0.5,
@@ -14028,12 +13917,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       },
       child: Container(
         width: 36,
-        height: 33,
+        height: kFloInningButtonHeight,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color:
               _showOvertimePeriods ? Colors.grey.shade400 : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(kFloInningButtonRadius),
           border: Border.all(
             color: Colors.grey.shade300,
             width: 0.5,
@@ -14266,11 +14155,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         },
         child: Container(
           width: 36,
-          height: 33,
+          height: kFloInningButtonHeight,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: _isPriorToGame ? Colors.grey.shade400 : Colors.grey.shade50,
-            borderRadius: BorderRadius.circular(3),
+            borderRadius: BorderRadius.circular(kFloInningButtonRadius),
             border: Border.all(
               color: Colors.grey.shade300,
               width: 0.5,
@@ -25470,9 +25359,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: Container(
           width: fullWidth ? double.infinity : null,
-          padding: EdgeInsets.symmetric(
+          padding: const EdgeInsets.symmetric(
             horizontal: 6,
-            vertical: ftp ? 9 : 7,
+            vertical: 5,
           ),
           decoration: BoxDecoration(
             color: gradient != null ? null : bg,
@@ -25727,13 +25616,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       child: Container(
                         width: 36,
-                        height: 33,
+                        height: kFloInningButtonHeight,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: isSelected
                               ? Colors.grey.shade300
                               : Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(3),
+                          borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                           border: Border.all(
                             color: Colors.grey.shade300,
                             width: 0.5,
@@ -25770,13 +25659,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         : null,
                     child: Container(
                       width: 36,
-                      height: 33,
+                      height: kFloInningButtonHeight,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: currentPage > 0
                             ? Colors.grey.shade50
                             : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
                       child: Text(
@@ -25807,13 +25696,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         : null,
                     child: Container(
                       width: 36,
-                      height: 33,
+                      height: kFloInningButtonHeight,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: currentPage < 2
                             ? Colors.grey.shade50
                             : Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
                       child: Text(

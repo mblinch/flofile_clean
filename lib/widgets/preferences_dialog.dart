@@ -263,12 +263,9 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                       },
                     ),
                     const SizedBox(width: 12),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
+                    ElevatedGreyButton(
+                      label: 'Update Serial Number List',
+                      fontSize: 11,
                       onPressed: () async {
                         final cameraService = CameraSerialService();
                         await cameraService.initialize();
@@ -278,7 +275,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                           builder: (context) => CameraSerialDialog(cameraService: cameraService),
                         );
                       },
-                      child: Text('Update Serial Number List', style: TextStyle(fontSize: 11, color: _prefsBlue)),
                     ),
                   ],
                 ),
@@ -427,12 +423,9 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
+                    ElevatedGreyButton(
+                      label: 'Browse',
+                      fontSize: 11,
                       onPressed: () async {
                         final path = await NativeFilePicker.pickFile(allowedExtensions: ['app']);
                         if (path == null || path.isEmpty || !mounted) return;
@@ -440,7 +433,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                         await _preferencesService.savePhotoshopPath(path);
                         await _loadCurrentPreferences();
                       },
-                      child: Text('Browse', style: TextStyle(fontSize: 11, color: _prefsBlue)),
                     ),
                   ],
                 ),
@@ -534,11 +526,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 10),
-                AppSecondaryButton(
+                ElevatedGreyButton(
                   label: 'Caption Layout',
+                  fontSize: 11,
                   icon: Icons.view_agenda_outlined,
-                  fullWidth: false,
-                  onTap: () async {
+                  onPressed: () async {
                     await CaptionLayoutBuilderDialog.show(context);
                     if (!mounted) return;
                     await _loadCurrentPreferences();

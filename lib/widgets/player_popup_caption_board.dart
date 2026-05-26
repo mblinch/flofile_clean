@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
+import '../flo_layout_constants.dart';
 import '../utils/default_verb_keywords.dart';
 import 'package:flutter/services.dart';
 import '../services/mlb_api_service.dart';
@@ -723,7 +724,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: SizedBox(
           width: isWide ? 58 : inningCellW,
-          height: 22,
+          height: kFloInningButtonHeight,
           child: OutlinedButton(
             onPressed: () => _handleHeaderPeriodSelect(label),
             style: OutlinedButton.styleFrom(
@@ -737,8 +738,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               ),
               backgroundColor:
                   isSelected ? Colors.blue.shade50 : Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(kFloInningButtonRadius),
               ),
             ),
             child: Text(
@@ -768,7 +769,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: SizedBox(
           width: inningCellW,
-          height: 22,
+          height: kFloInningButtonHeight,
           child: OutlinedButton(
             onPressed: onPressed,
             style: OutlinedButton.styleFrom(
@@ -781,8 +782,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                     : Colors.grey.shade300,
               ),
               backgroundColor: enabled ? Colors.white : Colors.grey.shade100,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(kFloInningButtonRadius),
               ),
             ),
             child: Icon(
@@ -885,7 +886,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 1),
                         child: SizedBox(
-                          height: 22,
+                          height: kFloInningButtonHeight,
                           child: OutlinedButton(
                             onPressed: () => _handleHeaderPeriodSelect(label),
                             style: OutlinedButton.styleFrom(
@@ -900,8 +901,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               backgroundColor: isSelected
                                   ? Colors.blue.shade50
                                   : Colors.white,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                               ),
                             ),
                             child: Text(
@@ -930,7 +931,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
               padding: const EdgeInsets.symmetric(horizontal: 1),
               child: SizedBox(
                 width: 24,
-                height: 22,
+                height: kFloInningButtonHeight,
                 child: OutlinedButton(
                   onPressed: () {
                     setState(() {
@@ -949,8 +950,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                     backgroundColor: _showPlayoffOvertimes
                         ? Colors.blue.shade50
                         : Colors.white,
-                    shape: const RoundedRectangleBorder(
-                      borderRadius: BorderRadius.zero,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                     ),
                   ),
                   child: Icon(
@@ -983,7 +984,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 1),
                         child: SizedBox(
-                          height: 22,
+                          height: kFloInningButtonHeight,
                           child: OutlinedButton(
                             onPressed: () => _handleHeaderPeriodSelect(label),
                             style: OutlinedButton.styleFrom(
@@ -998,8 +999,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               backgroundColor: isSelected
                                   ? Colors.blue.shade50
                                   : Colors.white,
-                              shape: const RoundedRectangleBorder(
-                                borderRadius: BorderRadius.zero,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(kFloInningButtonRadius),
                               ),
                             ),
                             child: Text(

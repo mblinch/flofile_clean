@@ -57,33 +57,17 @@ Future<bool?> showAppConfirmDialog({
             actionsAlignment: MainAxisAlignment.end,
             actionsOverflowAlignment: OverflowBarAlignment.end,
             actions: [
-              TextButton(
+              ElevatedGreyButton(
+                label: cancelLabel,
+                fontSize: 11,
                 onPressed: () => Navigator.pop(ctx, false),
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.black87,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
-                child: Text(cancelLabel, style: const TextStyle(fontSize: 11)),
               ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: kAppDialogPrimaryBlue,
-                  disabledBackgroundColor: Colors.grey.shade300,
-                  foregroundColor: Colors.white,
-                  disabledForegroundColor: Colors.grey.shade400,
-                  elevation: 0,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: const RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                  ),
-                ),
+              const SizedBox(width: 8),
+              ElevatedGreyButton(
+                label: confirmLabel,
+                fontSize: 11,
+                isPrimary: true,
                 onPressed: () => Navigator.pop(ctx, true),
-                child: Text(confirmLabel, style: const TextStyle(fontSize: 11)),
               ),
             ],
           ),
@@ -174,6 +158,137 @@ class AppSecondaryButton extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(onTap: onTap, child: child),
+    );
+  }
+}
+
+/// Elevated grey button with hover lift, press feedback, and optional danger state.
+class ElevatedGreyButton extends StatefulWidget {
+  final String label;
+  final VoidCallback? onPressed;
+  final bool isPrimary;
+  final bool isDanger;
+  final bool fullWidth;
+  final double fontSize;
+  final IconData? icon;
+
+  const ElevatedGreyButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.isPrimary = false,
+    this.isDanger = false,
+    this.fullWidth = false,
+    this.fontSize = 13,
+    this.icon,
+  });
+
+  @override
+  State<ElevatedGreyButton> createState() => _ElevatedGreyButtonState();
+}
+
+class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
+  bool _pressed = false;
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+    final danger = widget.isDanger && _hovered && enabled;
+
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+      onExit: enabled ? (_) => setState(() => _hovered = false) : null,
+      child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          width: widget.fullWidth ? double.infinity : null,
+          transform: Matrix4.translationValues(
+              0, enabled && !_pressed && _hovered ? -1 : 0, 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: !enabled
+                  ? const Color(0x1A000000)
+                  : danger
+                      ? const Color(0x33C0392B)
+                      : const Color(0x2E000000),
+              width: 0.5,
+            ),
+            gradient: !enabled
+                ? null
+                : LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: _pressed
+                        ? [const Color(0xFFE0E0E0), const Color(0xFFF0F0F0)]
+                        : danger
+                            ? [const Color(0xFFFFF5F5), const Color(0xFFFFE8E8)]
+                            : _hovered
+                                ? [const Color(0xFFFFFFFF), const Color(0xFFFAFAFA)]
+                                : [const Color(0xFFFFFFFF), const Color(0xFFFAFAFA)],
+                  ),
+            color: !enabled ? const Color(0xFFF0F0F0) : null,
+            boxShadow: !enabled
+                ? null
+                : _pressed
+                    ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 1.5,
+                          offset: const Offset(0, 0.75),
+                        )
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: _hovered ? 0.18 : 0.13),
+                          blurRadius: _hovered ? 4.5 : 2.5,
+                          offset: Offset(0, _hovered ? 1.5 : 1.25),
+                        ),
+                      ],
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: widget.isPrimary ? 10 : 8,
+            vertical: 5,
+          ),
+          child: Row(
+            mainAxisSize: widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (widget.icon != null) ...[
+                Icon(widget.icon, size: widget.fontSize, color: !enabled
+                    ? const Color(0xFFAAAAAA)
+                    : danger ? const Color(0xFFC0392B) : const Color(0xFF555555)),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: Text(
+                  widget.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: widget.fontSize,
+                    fontVariations: const [FontVariation('wght', 500)],
+                    letterSpacing: -0.5,
+                    color: !enabled
+                        ? const Color(0xFFAAAAAA)
+                        : danger
+                            ? const Color(0xFFC0392B)
+                            : const Color(0xFF555555),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -847,7 +847,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           onTap: () => _openAddPlayerFromKeyboardFire(isHome),
           borderRadius: BorderRadius.circular(3),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(2, 5, 2, 5),
+            padding: const EdgeInsets.fromLTRB(2, 5, 8, 5),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1640,12 +1640,33 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(7),
         border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(7, 7, 8, 4),
+          Container(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+              ),
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(7),
+                topRight: Radius.circular(7),
+              ),
+              border: Border(
+                bottom: BorderSide(color: Color(0xFFE8E8E8), width: 0.5),
+              ),
+            ),
             child: trailingAction != null
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -1659,7 +1680,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(2, 0, 2, 2),
+              padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
               child: child,
             ),
           ),
@@ -1827,7 +1848,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           Icon(Icons.edit_outlined, size: 9, color: Colors.grey.shade500),
           const SizedBox(width: 3),
           Text(
-            'Style',
+            'Edit Caption Style',
             style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w500,
@@ -2025,22 +2046,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
+                      ElevatedGreyButton(
+                        label: 'Cancel',
+                        fontSize: 11,
                         onPressed: () => Navigator.of(ctx).pop(),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 9),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero),
-                        ),
-                        child: Text('Cancel',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade700)),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton(
+                      ElevatedGreyButton(
+                        label: 'Save',
+                        fontSize: 11,
+                        isPrimary: true,
                         onPressed: () {
                           final jersey = numberController.text.trim();
                           final name = fullNameController.text.trim();
@@ -2066,18 +2081,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           Navigator.of(ctx)
                               .pop({'jersey': jersey, 'fullName': name});
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0052CC),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero),
-                        ),
-                        child:
-                            const Text('Save', style: TextStyle(fontSize: 11)),
                       ),
                     ],
                   ),
@@ -3044,23 +3047,26 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        segment(
-          selected: !_useSquarePlayerView,
-          icon: Icons.format_list_bulleted,
-          tooltip: 'List view (names)',
-          onTap: () => setState(() => _useSquarePlayerView = false),
-        ),
-        const SizedBox(width: 2),
-        segment(
-          selected: _useSquarePlayerView,
-          icon: Icons.grid_view,
-          tooltip: 'Number grid: rows 0–9, 10–19, 20–29 … (10 per row)',
-          onTap: () => setState(() => _useSquarePlayerView = true),
-        ),
-      ],
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          segment(
+            selected: !_useSquarePlayerView,
+            icon: Icons.format_list_bulleted,
+            tooltip: 'List view (names)',
+            onTap: () => setState(() => _useSquarePlayerView = false),
+          ),
+          const SizedBox(width: 2),
+          segment(
+            selected: _useSquarePlayerView,
+            icon: Icons.grid_view,
+            tooltip: 'Number grid: rows 0–9, 10–19, 20–29 … (10 per row)',
+            onTap: () => setState(() => _useSquarePlayerView = true),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3076,9 +3082,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final field = TextField(
       controller: controller,
       focusNode: focusNode,
-      cursorHeight: 14,
+      cursorHeight: 12,
       cursorColor: Colors.black87,
-      style: const TextStyle(fontSize: 12),
+      style: const TextStyle(fontSize: 13),
       decoration: InputDecoration(
         isDense: true,
         filled: true,
@@ -3093,10 +3099,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(3),
-          borderSide: const BorderSide(color: Colors.black87, width: 1),
+          borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
         ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       ),
       keyboardType: TextInputType.text,
       inputFormatters: inputFormatters,
@@ -3104,7 +3110,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       onChanged: onChanged,
     );
     return Padding(
-      padding: const EdgeInsets.only(top: 3),
+      padding: const EdgeInsets.fromLTRB(4, 3, 4, 0),
       child: trailing == null
           ? field
           : Row(
@@ -5053,7 +5059,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final saveW = _saveActionBarBtnWidth().toDouble();
     return Padding(
       padding: const EdgeInsets.only(top: 2),
-      child: Wrap(
+      child: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Wrap(
         spacing: 4,
         runSpacing: 4,
         children: [
@@ -5194,6 +5214,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -5450,9 +5471,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       final isWide = wideLabels.contains(label);
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: SizedBox(
+        child: Container(
           width: isWide ? widePeriodButtonWidth : 28,
-          height: 26,
+          height: kFloInningButtonHeight,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
           child: OutlinedButton(
             onPressed: () => _onPeriodSelect(label),
             style: OutlinedButton.styleFrom(
@@ -5495,9 +5526,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       final label = '$inningNum';
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: SizedBox(
+        child: Container(
           width: baseballInningCellW,
-          height: 26,
+          height: kFloInningButtonHeight,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
           child: OutlinedButton(
             onPressed: () => _onInningSelect(isSelected ? null : inningNum),
             style: OutlinedButton.styleFrom(
@@ -5536,7 +5577,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         padding: const EdgeInsets.symmetric(horizontal: 1),
         child: SizedBox(
           width: baseballInningCellW,
-          height: 24,
+          height: kFloInningButtonHeight,
           child: OutlinedButton(
             onPressed: onPressed,
             style: OutlinedButton.styleFrom(
@@ -5547,8 +5588,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 color: enabled ? Colors.grey.shade400 : Colors.grey.shade300,
               ),
               backgroundColor: enabled ? Colors.white : Colors.grey.shade100,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(kFloInningButtonRadius),
               ),
             ),
             child: Icon(
@@ -5577,6 +5618,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(7),
             border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           padding: const EdgeInsets.fromLTRB(7, 6, 8, 7),
           child: Row(
@@ -5597,6 +5645,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 ),
               ),
               if (isBaseball) ...[
+                const SizedBox(width: 10),
+                Container(
+                  width: 1,
+                  height: kFloInningButtonHeight,
+                  color: const Color(0xFFE0E0E0),
+                ),
                 const SizedBox(width: 10),
                 _baseballKeyboardFireMlbControl(),
               ],
@@ -5650,6 +5704,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             color: Colors.white,
             borderRadius: BorderRadius.circular(7),
             border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           padding: const EdgeInsets.fromLTRB(7, 6, 8, 7),
           child: Row(
@@ -5697,6 +5758,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           color: Colors.white,
             borderRadius: BorderRadius.circular(7),
             border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           padding: const EdgeInsets.fromLTRB(7, 6, 8, 7),
           child: Row(
@@ -5728,7 +5796,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     const SizedBox(width: 3),
                     SizedBox(
                       width: 24,
-                      height: 24,
+                      height: kFloInningButtonHeight,
                       child: OutlinedButton(
                         onPressed: () {
                           setState(() =>
@@ -5746,8 +5814,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           backgroundColor: _showPlayoffOvertimes
                               ? Colors.blue.shade50
                               : Colors.white,
-                          shape: const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(kFloInningButtonRadius)),
                         ),
                         child: Icon(
                           _showPlayoffOvertimes ? Icons.remove : Icons.add,
@@ -5986,66 +6054,93 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(7),
                     border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 2),
-                          decoration: const BoxDecoration(color: Colors.white),
-                          child: Text(
-                            homeName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF3A3A3A),
-                              height: 1.0,
-                              letterSpacing: -0.45,
-                              fontVariations: [
-                                FontVariation('wght', 700),
-                                FontVariation('opsz', 32),
-                              ],
-                            ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+                          ),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(7),
+                            topRight: Radius.circular(7),
+                          ),
+                          border: Border(
+                            bottom: BorderSide(color: Color(0xFFE8E8E8), width: 0.5),
                           ),
                         ),
-                        _buildColumnBar(
-                          controller: _homeBarController,
-                          focusNode: _homeBarFocus,
-                          onSubmitted: _onHomeBarSubmit,
-                          rosterForGhostNames: _homeRosterView,
+                        child: Text(
+                          homeName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF3A3A3A),
+                            height: 1.0,
+                            letterSpacing: -0.45,
+                            fontVariations: [
+                              FontVariation('wght', 700),
+                              FontVariation('opsz', 32),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: _buildPlayerViewModeToggle(),
-                            ),
-                            const Spacer(),
-                            _buildKbAddPlayerIconButton(true),
-                          ],
-                        ),
-                        const SizedBox(height: 1),
-                        Expanded(
-                          child: _useSquarePlayerView
-                              ? _buildRosterSquareGrid(_homeRosterView, true)
-                              : ValueListenableBuilder<TextEditingValue>(
-                                  valueListenable: _homeBarController,
-                                  builder: (_, value, __) =>
-                                      _buildRosterColumnContent(
-                                        _homeRosterView,
-                                        true,
-                                        barText: value.text,
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildColumnBar(
+                                controller: _homeBarController,
+                                focusNode: _homeBarFocus,
+                                onSubmitted: _onHomeBarSubmit,
+                                rosterForGhostNames: _homeRosterView,
+                              ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: _buildPlayerViewModeToggle(),
+                                  ),
+                                  const Spacer(),
+                                  _buildKbAddPlayerIconButton(true),
+                                ],
+                              ),
+                              const SizedBox(height: 1),
+                              Expanded(
+                                child: _useSquarePlayerView
+                                    ? _buildRosterSquareGrid(_homeRosterView, true)
+                                    : ValueListenableBuilder<TextEditingValue>(
+                                        valueListenable: _homeBarController,
+                                        builder: (_, value, __) =>
+                                            _buildRosterColumnContent(
+                                              _homeRosterView,
+                                              true,
+                                              barText: value.text,
+                                            ),
                                       ),
-                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -6057,42 +6152,70 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(7),
                     border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 2),
-                          decoration: const BoxDecoration(color: Colors.white),
-                          child: const Text(
-                            'Verbs',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF3A3A3A),
-                              height: 1.0,
-                              letterSpacing: -0.45,
-                              fontVariations: [
-                                FontVariation('wght', 700),
-                                FontVariation('opsz', 32),
-                              ],
-                            ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+                          ),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(7),
+                            topRight: Radius.circular(7),
+                          ),
+                          border: Border(
+                            bottom: BorderSide(color: Color(0xFFE8E8E8), width: 0.5),
                           ),
                         ),
-                        _buildColumnBar(
-                          controller: _categoryBarController,
-                          focusNode: _categoryBarFocus,
-                          onSubmitted: _onCategoryVerbBarSubmit,
-                          onChanged: (v) {
-                            if (RegExp(r'^\d{2}$').hasMatch(v.trim())) {
-                              _onVerbBarInput(v.trim());
-                            }
-                          },
+                        child: const Text(
+                          'Verbs',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF3A3A3A),
+                            height: 1.0,
+                            letterSpacing: -0.45,
+                            fontVariations: [
+                              FontVariation('wght', 700),
+                              FontVariation('opsz', 32),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 3),
-                        Expanded(
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildColumnBar(
+                              controller: _categoryBarController,
+                              focusNode: _categoryBarFocus,
+                              onSubmitted: _onCategoryVerbBarSubmit,
+                              onChanged: (v) {
+                                if (RegExp(r'^\d{2}$').hasMatch(v.trim())) {
+                                  _onVerbBarInput(v.trim());
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
                           child: ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _categoryBarController,
                             builder: (_, value, __) =>
@@ -6100,8 +6223,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     barText: value.text),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -6113,66 +6236,93 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(7),
                     border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 2),
-                          decoration: const BoxDecoration(color: Colors.white),
-                          child: Text(
-                            awayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF3A3A3A),
-                              height: 1.0,
-                              letterSpacing: -0.45,
-                              fontVariations: [
-                                FontVariation('wght', 700),
-                                FontVariation('opsz', 32),
-                              ],
-                            ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.centerLeft,
+                            end: Alignment.centerRight,
+                            colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+                          ),
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(7),
+                            topRight: Radius.circular(7),
+                          ),
+                          border: Border(
+                            bottom: BorderSide(color: Color(0xFFE8E8E8), width: 0.5),
                           ),
                         ),
-                        _buildColumnBar(
-                          controller: _awayBarController,
-                          focusNode: _awayBarFocus,
-                          onSubmitted: _onAwayBarSubmit,
-                          rosterForGhostNames: _awayRosterView,
+                        child: Text(
+                          awayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF3A3A3A),
+                            height: 1.0,
+                            letterSpacing: -0.45,
+                            fontVariations: [
+                              FontVariation('wght', 700),
+                              FontVariation('opsz', 32),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 3),
-                        Row(
-                          children: [
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: _buildPlayerViewModeToggle(),
-                            ),
-                            const Spacer(),
-                            _buildKbAddPlayerIconButton(false),
-                          ],
-                        ),
-                        const SizedBox(height: 1),
-                        Expanded(
-                          child: _useSquarePlayerView
-                              ? _buildRosterSquareGrid(_awayRosterView, false)
-                              : ValueListenableBuilder<TextEditingValue>(
-                                  valueListenable: _awayBarController,
-                                  builder: (_, value, __) =>
-                                      _buildRosterColumnContent(
-                                        _awayRosterView,
-                                        false,
-                                        barText: value.text,
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 4, 4, 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildColumnBar(
+                                controller: _awayBarController,
+                                focusNode: _awayBarFocus,
+                                onSubmitted: _onAwayBarSubmit,
+                                rosterForGhostNames: _awayRosterView,
+                              ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: _buildPlayerViewModeToggle(),
+                                  ),
+                                  const Spacer(),
+                                  _buildKbAddPlayerIconButton(false),
+                                ],
+                              ),
+                              const SizedBox(height: 1),
+                              Expanded(
+                                child: _useSquarePlayerView
+                                    ? _buildRosterSquareGrid(_awayRosterView, false)
+                                    : ValueListenableBuilder<TextEditingValue>(
+                                        valueListenable: _awayBarController,
+                                        builder: (_, value, __) =>
+                                            _buildRosterColumnContent(
+                                              _awayRosterView,
+                                              false,
+                                              barText: value.text,
+                                            ),
                                       ),
-                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -6189,15 +6339,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(
+              ElevatedGreyButton(
+                label: 'Cancel',
+                fontSize: 13,
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text('Cancel',
-                    style:
-                        TextStyle(fontSize: 13, color: Colors.grey.shade700)),
               ),
               if (onPrimary != null) ...[
                 const SizedBox(width: 8),
-                FilledButton(
+                ElevatedGreyButton(
+                  label: primaryLabel,
+                  fontSize: 13,
+                  isPrimary: true,
                   onPressed: () {
                     if (_step == 0)
                       _onStep1Submit();
@@ -6205,8 +6357,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       _onStep2Submit();
                     else if (_step == 2) _done();
                   },
-                  child:
-                      Text(primaryLabel, style: const TextStyle(fontSize: 13)),
                 ),
               ],
             ],

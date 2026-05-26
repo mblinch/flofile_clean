@@ -4,6 +4,7 @@ import '../services/preferences_service.dart';
 import 'package:dropdown_flutter/custom_dropdown.dart';
 
 import 'app_compact_checkbox.dart';
+import 'app_styled_dialogs.dart';
 
 /// Standalone FTP Server Settings panel. Can be shown in a dialog or embedded (e.g. in Preferences > FTP).
 /// Uses the same storage keys as the caption widget (ftp_profiles, current_ftp_profile).
@@ -161,8 +162,12 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
+          ElevatedGreyButton(label: 'Cancel', fontSize: 11, onPressed: () => Navigator.pop(ctx)),
+          const SizedBox(width: 8),
+          ElevatedGreyButton(
+            label: 'Create Profile',
+            fontSize: 11,
+            isPrimary: true,
             onPressed: () {
               final name = nameController.text.trim();
               if (name.isNotEmpty) {
@@ -170,7 +175,6 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                 _saveCurrentAsProfile(name);
               }
             },
-            child: const Text('Create Profile'),
           ),
         ],
       ),
@@ -229,9 +233,12 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                    ElevatedGreyButton(label: 'Cancel', fontSize: 11, onPressed: () => Navigator.pop(ctx)),
                     const SizedBox(width: 8),
-                    ElevatedButton(
+                    ElevatedGreyButton(
+                      label: 'Save',
+                      fontSize: 11,
+                      isPrimary: true,
                       onPressed: () {
                         setState(() {
                           _profiles[profileName] = {
@@ -248,7 +255,6 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                         Navigator.pop(ctx);
                         setState(() => _successMessage = 'Profile updated.');
                       },
-                      child: const Text('Save'),
                     ),
                   ],
                 ),
@@ -468,14 +474,16 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton(onPressed: widget.onClose, child: const Text('Cancel')),
+                ElevatedGreyButton(label: 'Cancel', fontSize: 11, onPressed: () => widget.onClose?.call()),
                 const SizedBox(width: 8),
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Save Settings',
+                  fontSize: 11,
+                  isPrimary: true,
                   onPressed: () {
                     if (_currentProfile != null) _saveCurrentAsProfile(_currentProfile!);
                     widget.onClose?.call();
                   },
-                  child: const Text('Save Settings'),
                 ),
               ],
             ),

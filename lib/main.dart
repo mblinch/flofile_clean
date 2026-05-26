@@ -8,6 +8,7 @@ import 'firebase_options.dart';
 import 'screens/caption_builder_screen.dart';
 import 'widgets/preferences_dialog.dart';
 import 'intents.dart';
+import 'widgets/app_styled_dialogs.dart';
 
 // Global navigator key so native menus / dialogs can reach the app context.
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -122,9 +123,11 @@ class DmgWarningApp extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
+                ElevatedGreyButton(
+                  label: 'Quit',
+                  fontSize: 13,
+                  isDanger: true,
                   onPressed: () => exit(0),
-                  child: const Text('Quit'),
                 ),
               ],
             ),
@@ -169,7 +172,7 @@ class MyApp extends StatelessWidget {
               seedColor: const Color(0xFF2E3A59),
               brightness: Brightness.light,
             ),
-            scaffoldBackgroundColor: const Color(0xFFF8F8F8),
+            scaffoldBackgroundColor: const Color(0xFFF5F5F4),
             useMaterial3: true,
             fontFamily: 'Inter',
           ),

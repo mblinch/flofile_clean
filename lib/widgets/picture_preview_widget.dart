@@ -598,6 +598,13 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
           border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
           borderRadius: BorderRadius.circular(7),
           color: Colors.grey.shade50,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: const Center(
           child: Column(
@@ -636,6 +643,13 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
         borderRadius: BorderRadius.circular(7),
         color: widget.backgroundColor ?? Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -1046,12 +1060,16 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Cancel',
+                            fontSize: 11,
                             onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
                           ),
                           const SizedBox(width: 16),
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Rename',
+                            fontSize: 11,
+                            isPrimary: true,
                             onPressed: () {
                               final newName = controller.text.trim();
                               if (newName.isNotEmpty) {
@@ -1059,9 +1077,6 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                 Navigator.of(context).pop();
                               }
                             },
-                            style: TextButton.styleFrom(
-                                foregroundColor: Colors.blue),
-                            child: const Text('Rename'),
                           ),
                         ],
                       ),
@@ -1199,19 +1214,20 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Cancel',
+                            fontSize: 11,
                             onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cancel'),
                           ),
                           const SizedBox(width: 16),
-                          TextButton(
+                          ElevatedGreyButton(
+                            label: 'Delete',
+                            fontSize: 11,
+                            isDanger: true,
                             onPressed: () {
                               Navigator.of(context).pop();
                               _deleteImage(imagePath);
                             },
-                            style: TextButton.styleFrom(
-                                foregroundColor: Colors.red),
-                            child: const Text('Delete'),
                           ),
                         ],
                       ),

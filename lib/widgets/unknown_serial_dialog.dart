@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/camera_serial_service.dart';
+import 'app_styled_dialogs.dart';
 
 class UnknownSerialDialog extends StatefulWidget {
   final String serialNumber;
@@ -148,11 +149,16 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        ElevatedGreyButton(
+          label: 'Cancel',
+          fontSize: 11,
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
         ),
-        ElevatedButton(
+        const SizedBox(width: 8),
+        ElevatedGreyButton(
+          label: 'Add Serial Number',
+          fontSize: 11,
+          isPrimary: true,
           onPressed: () {
             if ((!_isAddingNew && _selectedPhotographer != null) ||
                 (_isAddingNew &&
@@ -160,7 +166,6 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
               _handleAssignment();
             }
           },
-          child: const Text('Add Serial Number'),
         ),
       ],
     );

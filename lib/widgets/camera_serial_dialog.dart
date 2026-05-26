@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import '../services/camera_serial_service.dart';
 import 'app_compact_checkbox.dart';
+import 'app_styled_dialogs.dart';
 
 class CameraSerialDialog extends StatefulWidget {
   final CameraSerialService cameraService;
@@ -138,14 +139,17 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
         content: const Text(
             'Are you sure you want to remove all camera serial number mappings? This action cannot be undone.'),
         actions: [
-          TextButton(
+          ElevatedGreyButton(
+            label: 'Cancel',
+            fontSize: 11,
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
           ),
-          TextButton(
+          const SizedBox(width: 8),
+          ElevatedGreyButton(
+            label: 'Clear All',
+            fontSize: 11,
+            isDanger: true,
             onPressed: () => Navigator.of(context).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Clear All'),
           ),
         ],
       ),
@@ -478,9 +482,11 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      ElevatedButton(
+                      ElevatedGreyButton(
+                        label: 'Add',
+                        fontSize: 11,
+                        isPrimary: true,
                         onPressed: _addCamera,
-                        child: const Text('Add'),
                       ),
                     ],
                   ),

@@ -13,6 +13,7 @@ import '../caption_style/game_info.dart';
 import '../services/current_user_service.dart';
 import '../services/preferences_service.dart';
 import 'app_compact_checkbox.dart';
+import 'app_styled_dialogs.dart';
 import 'date_formula_editor.dart';
 import 'caption_style_dropdown_row.dart';
 import 'location_formula_editor.dart';
@@ -1895,28 +1896,17 @@ class _CaptionLayoutBuilderDialogState
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      TextButton(
+                      ElevatedGreyButton(
+                        label: 'Cancel',
+                        fontSize: 12,
                         onPressed: _closeRenameCaptionStylePrompt,
-                        child: Text(
-                          'Cancel',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade700,
-                          ),
-                        ),
                       ),
                       const SizedBox(width: 8),
-                      FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _captionLayoutBlue,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                        ),
+                      ElevatedGreyButton(
+                        label: submitLabel,
+                        fontSize: 12,
+                        isPrimary: true,
                         onPressed: ok ? _submitRenameCaptionStyleName : null,
-                        child: Text(
-                          submitLabel,
-                          style: const TextStyle(fontSize: 12),
-                        ),
                       ),
                     ],
                   ),
@@ -5014,35 +5004,17 @@ class _CaptionLayoutBuilderDialogState
                       spacing: 4,
                       runSpacing: 6,
                       children: [
-                        TextButton(
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            minimumSize: Size.zero,
-                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          ),
+                        ElevatedGreyButton(
+                          label: 'Cancel',
+                          fontSize: 10,
                           onPressed: () => Navigator.of(context).pop(),
-                          child: Text(
-                            'Cancel',
-                            style: TextStyle(
-                                fontSize: 10, color: Colors.grey.shade700),
-                          ),
                         ),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _captionLayoutBlue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 6),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            elevation: 0,
-                          ),
+                        const SizedBox(width: 4),
+                        ElevatedGreyButton(
+                          label: 'Save',
+                          fontSize: 10,
+                          isPrimary: true,
                           onPressed: _save,
-                          child: const Text('Save',
-                              style: TextStyle(
-                                  fontSize: 10, fontWeight: FontWeight.w600)),
                         ),
                       ],
                     ),

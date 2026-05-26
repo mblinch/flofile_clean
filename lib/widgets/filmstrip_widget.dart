@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_styled_dialogs.dart';
 import 'oriented_file_preview.dart';
 
 class FilmstripWidget extends StatelessWidget {
@@ -57,14 +58,11 @@ class FilmstripWidget extends StatelessWidget {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton.icon(
+                  ElevatedGreyButton(
+                    label: 'Show All Thumbnails',
+                    fontSize: 12,
+                    icon: Icons.grid_view,
                     onPressed: onShowThumbnails,
-                    icon: const Icon(Icons.grid_view, size: 16),
-                    label: const Text('Show All Thumbnails', style: TextStyle(fontSize: 12)),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      minimumSize: Size.zero,
-                    ),
                   ),
                 ],
               ),
