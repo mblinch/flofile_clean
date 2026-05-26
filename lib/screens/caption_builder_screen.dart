@@ -231,6 +231,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   final Set<String> _currentlyUploading = {};
   // Request id for centering selected thumbnail on arrow navigation
   int _thumbCenterRequestId = 0;
+  // When true, thumbnail grid expands upward over the picture preview
+  bool _thumbnailsExpanded = false;
   // Column count from ThumbnailGridWidget (updated when thumb size or layout changes)
   int _lastThumbColumns = 4;
   // Focus for thumbnail area so arrow keys (incl. Up/Down) work when clicking there
@@ -4529,22 +4531,23 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     Color textColor;
     Color borderColor;
     LinearGradient? gradient;
-    const _grad = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF4A7A96), Color(0xFF2A4858)]);
+    const _tealGrad = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF4A7A96), Color(0xFF2A4858)]);
+    const _greyGrad = LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xFF3A3A3A), Color(0xFF222222)]);
     if (ftp) {
-      gradient = enabled ? _grad : null;
+      gradient = enabled ? _tealGrad : null;
       bg = enabled ? null : Colors.grey.shade300;
       textColor = enabled ? Colors.white : Colors.grey.shade600;
       borderColor = enabled ? const Color(0xFF4A7A96) : Colors.grey.shade300;
     } else if (danger) {
-      gradient = _grad;
-      bg = null;
+      gradient = enabled ? _greyGrad : null;
+      bg = enabled ? null : Colors.grey.shade300;
       textColor = enabled ? const Color(0xFFE57373) : Colors.white54;
-      borderColor = const Color(0xFF4A7A96);
+      borderColor = enabled ? const Color(0xFF555555) : Colors.grey.shade300;
     } else {
-      gradient = _grad;
-      bg = null;
-      textColor = enabled ? Colors.white : Colors.white54;
-      borderColor = const Color(0xFF4A7A96);
+      gradient = enabled ? _greyGrad : null;
+      bg = enabled ? null : const Color(0xFF888888);
+      textColor = enabled ? Colors.white : Colors.white70;
+      borderColor = enabled ? const Color(0xFF555555) : const Color(0xFF888888);
     }
     return GestureDetector(
       onTap: onTap,
@@ -4557,8 +4560,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             color: gradient != null ? null : bg, gradient: gradient,
             border: Border.all(color: borderColor), borderRadius: BorderRadius.circular(6),
           ),
-          child: Center(child: Text(label.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontFamily: 'Inter', letterSpacing: 0, fontSize: ftp ? 12 : 11, fontWeight: FontWeight.w700, color: textColor),
+          child: Center(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontFamily: 'Inter', letterSpacing: -0.25, fontSize: ftp ? 12 : 11, fontVariations: const [FontVariation('wght', 500)], color: textColor),
           )),
         ),
       ),
@@ -4664,14 +4667,17 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 // Resolution warning (if applicable)
                 _buildResolutionWarning(),
 
-                // Picture preview - 50% of screen height
+                // Picture preview - shrinks when thumbnails expanded
                 SizedBox(
-                  height: MediaQuery.of(context).size.height * 0.5,
+                  height: _thumbnailsExpanded
+                      ? MediaQuery.of(context).size.height * 0.15
+                      : MediaQuery.of(context).size.height * 0.5,
                   child: PicturePreviewWidget(
                     key: _picturePreviewKey2,
                     imagePaths: imagePaths,
                     currentIndex: currentIndex,
                     multiSelectedPaths: _multiSelectedImages,
+                    backgroundColor: _thumbnailsExpanded ? const Color(0xFFE0E0E0) : null,
                     onImageSelected: _onImageSelected,
                     onNextImage: () {
                       if (currentIndex < imagePaths.length - 1) {
@@ -4757,6 +4763,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     onMultiSelect: _onMultiSelect,
                     onEditMetadata: _showMetadataPopup,
                     onEditInPhotoshop: _launchPhotoshop,
+                    isExpanded: _thumbnailsExpanded,
+                    onToggleExpand: () => setState(() => _thumbnailsExpanded = !_thumbnailsExpanded),
                     onColumnsComputed: (cols) {
                       if (_lastThumbColumns != cols) {
                         setState(() => _lastThumbColumns = cols);

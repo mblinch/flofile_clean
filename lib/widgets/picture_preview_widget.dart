@@ -47,6 +47,7 @@ class PicturePreviewWidget extends StatefulWidget {
 
   final VoidCallback? onEditMetadata;
   final void Function(Map<String, dynamic>)? onExifLoaded;
+  final Color? backgroundColor;
 
   const PicturePreviewWidget({
     super.key,
@@ -78,6 +79,7 @@ class PicturePreviewWidget extends StatefulWidget {
     this.multiSelectedPaths = const [],
     this.onEditMetadata,
     this.onExifLoaded,
+    this.backgroundColor,
   });
 
   @override
@@ -407,10 +409,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     const double aspect = 1.0;
 
     return Container(
-      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 10),
+      margin: const EdgeInsets.only(left: 3, right: 3, top: 8, bottom: 10),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         border: Border.all(color: Colors.blue.shade300, width: 2.0),
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.circular(7),
         color: Colors.white,
         boxShadow: [
           BoxShadow(
@@ -589,10 +592,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
 
     if (widget.imagePaths.isEmpty) {
       return Container(
-        margin: const EdgeInsets.all(3.0),
+        margin: const EdgeInsets.only(left: 3, right: 3, top: 8, bottom: 10),
+        clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade300, width: 1.0),
-          borderRadius: BorderRadius.zero,
+          border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+          borderRadius: BorderRadius.circular(7),
           color: Colors.grey.shade50,
         ),
         child: const Center(
@@ -626,11 +630,12 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     final imageCount = widget.imagePaths.length;
 
     return Container(
-      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 10),
+      margin: const EdgeInsets.only(left: 3, right: 3, top: 8, bottom: 10),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade300, width: 1.0),
-        borderRadius: BorderRadius.zero,
-        color: Colors.white,
+        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+        borderRadius: BorderRadius.circular(7),
+        color: widget.backgroundColor ?? Colors.white,
       ),
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {

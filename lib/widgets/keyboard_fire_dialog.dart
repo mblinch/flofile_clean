@@ -1645,7 +1645,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(7, 7, 8, 7),
+            padding: const EdgeInsets.fromLTRB(7, 7, 8, 4),
             child: trailingAction != null
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -1824,12 +1824,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.edit_outlined, size: 11, color: Colors.grey.shade500),
-          const SizedBox(width: 4),
+          Icon(Icons.edit_outlined, size: 9, color: Colors.grey.shade500),
+          const SizedBox(width: 3),
           Text(
-            'Caption Style',
+            'Style',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 9,
               fontWeight: FontWeight.w500,
               color: Colors.grey.shade500,
               letterSpacing: -0.1,
@@ -2195,11 +2195,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       final isPicked = raw.isNotEmpty && selectedNames.contains(raw);
       final isCurrent = jersey.isNotEmpty &&
           currentNumbers.any((n) => n.trim() == jersey.trim());
+      final barQuery = (barText ?? '').trim().toLowerCase();
+      final isNumberPrefix = barQuery.isNotEmpty &&
+          RegExp(r'^\d+$').hasMatch(barQuery) &&
+          jersey.isNotEmpty &&
+          jersey.startsWith(barQuery);
+      final isNameMatch = barQuery.isNotEmpty &&
+          !RegExp(r'^\d+$').hasMatch(barQuery) &&
+          displayName.toLowerCase().contains(barQuery);
       final rosterKey = jersey.isNotEmpty ? '${isHomeTeam}_$jersey' : null;
       final isHovered = rosterKey != null && _hoveredRosterKey == rosterKey;
       final bgColor = isPicked
           ? const Color(0xFFDBEAFF)
-          : (isCurrent
+          : ((isCurrent || isNameMatch || isNumberPrefix)
               ? Colors.grey.shade200
               : (isHovered ? Colors.grey.shade200 : null));
       final rowCrossAlign = listRowHeight != null
@@ -3088,9 +3096,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           borderSide: const BorderSide(color: Colors.black87, width: 1),
         ),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       ),
-      keyboardType: TextInputType.number,
+      keyboardType: TextInputType.text,
       inputFormatters: inputFormatters,
       onSubmitted: (_) => onSubmitted(),
       onChanged: onChanged,
@@ -3401,7 +3409,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         } else if (isFavs) {
           bgColor = Colors.amber.shade50;
         } else {
-          bgColor = Colors.transparent;
+          bgColor = const Color(0xFFF2F2F2);
         }
 
         return Listener(
@@ -3489,9 +3497,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         '$catNum',
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.45,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                           color: (isSelected || isCurrent)
                               ? Colors.grey.shade900
                               : Colors.grey.shade800,
@@ -3503,10 +3510,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       child: Text(
                         name,
                         style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                           color: Colors.grey.shade800,
-                          letterSpacing: -0.45,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -3893,11 +3899,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           ? Colors.blue.shade100
                           : isDragOver
                               ? Colors.blue.shade50
-                              : Colors.white,
+                              : const Color(0xFFF2F2F2),
                       border: Border(
                         top: isDragOver
                             ? BorderSide(color: Colors.blue.shade400, width: 2)
-                            : BorderSide(color: Colors.white, width: 1),
+                            : const BorderSide(color: Color(0xFFF2F2F2), width: 1),
                         bottom:
                             BorderSide(color: Colors.grey.shade200, width: 0.5),
                       ),
@@ -3920,9 +3926,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               '$catNum',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.45,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                   color: Colors.grey.shade800),
                             ),
                           ),
@@ -3931,9 +3936,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             child: Text(
                               name,
                               style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.45,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
                                   color: Colors.grey.shade800),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -5989,7 +5993,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Container(
-                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 7),
+                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 2),
                           decoration: const BoxDecoration(color: Colors.white),
                           child: Text(
                             homeName,
@@ -6060,7 +6064,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Container(
-                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 7),
+                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 2),
                           decoration: const BoxDecoration(color: Colors.white),
                           child: const Text(
                             'Verbs',
@@ -6116,7 +6120,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Container(
-                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 7),
+                          padding: const EdgeInsets.fromLTRB(3, 6, 8, 2),
                           decoration: const BoxDecoration(color: Colors.white),
                           child: Text(
                             awayName,
