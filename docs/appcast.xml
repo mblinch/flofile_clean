@@ -10,6 +10,16 @@
     <language>en</language>
     <item>
       <title>Version 1.0.17</title>
+      <pubDate>Wed, 27 May 2026 13:51:40 +0000</pubDate>
+      <sparkle:version>118</sparkle:version>
+      <sparkle:shortVersionString>1.0.17</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="58080861" sparkle:edSignature="mo87Pvl4ARUsyH0+fhZYyYeEmBTZdT5M2ZVvVUkN7qaXJfcO/qX+y9xxEHupuidB9xkjnxgKzdjQDE7d+QC/BA==" />
+    </item>
+    <item>
+      <title>Version 1.0.17</title>
       <pubDate>Tue, 26 May 2026 04:52:39 +0000</pubDate>
       <sparkle:version>117</sparkle:version>
       <sparkle:shortVersionString>1.0.17</sparkle:shortVersionString>
