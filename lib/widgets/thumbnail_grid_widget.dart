@@ -180,14 +180,21 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: active ? const Color(0xFF3A3A3A) : Colors.white,
-            borderRadius: BorderRadius.circular(4),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(5),
             border: Border.all(
-              color: active ? const Color(0xFF3A3A3A) : const Color(0xFFE6E6E6),
-              width: 0.7,
+              color: active ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0),
+              width: active ? 1.5 : 0.7,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.14),
+                blurRadius: 3,
+                offset: const Offset(0, 1.5),
+              ),
+            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -197,18 +204,19 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                 active
                     ? Icons.visibility_off_outlined
                     : Icons.visibility_outlined,
-                size: 12,
-                color: active ? Colors.white : Colors.grey.shade600,
+                size: 15,
+                color: active ? const Color(0xFF4A7A96) : Colors.grey.shade500,
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 5),
               Text(
-                label,
+                active ? 'Hide $label' : label,
                 style: TextStyle(
                   fontFamily: 'Inter',
-                  fontSize: 10,
-                  fontVariations: const [FontVariation('wght', 500)],
-                  color: active ? Colors.white : Colors.grey.shade700,
+                  fontSize: 11,
+                  fontVariations: const [FontVariation('wght', 600)],
+                  color: active ? const Color(0xFF2A4858) : Colors.grey.shade700,
                   height: 1.0,
+                  letterSpacing: -0.2,
                 ),
               ),
             ],
@@ -263,21 +271,28 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: Container(
-                        width: 26,
-                        height: 22,
+                        width: 28,
+                        height: 24,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: widget.isExpanded ? const Color(0xFF3A3A3A) : Colors.white,
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: widget.isExpanded ? const Color(0xFF3A3A3A) : const Color(0xFFE6E6E6),
-                            width: 0.7,
+                            color: widget.isExpanded ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0),
+                            width: widget.isExpanded ? 1.5 : 0.7,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.14),
+                              blurRadius: 3,
+                              offset: const Offset(0, 1.5),
+                            ),
+                          ],
                         ),
                         child: Icon(
                           widget.isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
                           size: 15,
-                          color: widget.isExpanded ? Colors.white : Colors.grey.shade600,
+                          color: widget.isExpanded ? const Color(0xFF4A7A96) : Colors.grey.shade500,
                         ),
                       ),
                     ),
@@ -292,18 +307,25 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   child: MouseRegion(
                     cursor: SystemMouseCursors.click,
                     child: Container(
-                      width: 26,
-                      height: 22,
+                      width: 28,
+                      height: 24,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.14),
+                            blurRadius: 3,
+                            offset: const Offset(0, 1.5),
+                          ),
+                        ],
                       ),
                       child: Icon(
                         Icons.image_search,
-                        size: 13,
-                        color: Colors.grey.shade600,
+                        size: 14,
+                        color: Colors.grey.shade500,
                       ),
                     ),
                   ),
@@ -319,13 +341,20 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: Container(
-                    width: 22,
-                    height: 22,
+                    width: 24,
+                    height: 24,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.14),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1.5),
+                        ),
+                      ],
                     ),
                     child: Icon(Icons.remove, size: 12, color: Colors.grey.shade600),
                   ),
@@ -351,13 +380,20 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                 child: MouseRegion(
                   cursor: SystemMouseCursors.click,
                   child: Container(
-                    width: 22,
-                    height: 22,
+                    width: 24,
+                    height: 24,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.14),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1.5),
+                        ),
+                      ],
                     ),
                     child: Icon(Icons.add, size: 12, color: Colors.grey.shade600),
                   ),
@@ -819,14 +855,18 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             height: 32,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: const BorderRadius.only(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+              ),
+              borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(7),
                 topRight: Radius.circular(7),
               ),
               border: Border(
-                bottom: BorderSide(color: const Color(0xFFE6E6E6), width: 0.7),
+                bottom: BorderSide(color: Color(0xFFE8E8E8), width: 0.5),
               ),
             ),
             child: _buildThumbnailToolbar(),

@@ -79,11 +79,9 @@ class _StartupDialogState extends State<StartupDialog> {
   int typingIndex = 0;
   Timer? typingTimer;
 
-  // Team selection typewriter state
-  String _teamSelectionText = '';
+  // Team selection state (shown once folder is picked)
+  String _teamSelectionText = 'What teams are playing?';
   bool _isTypingTeamSelection = false;
-  int _teamSelectionTypingIndex = 0;
-  Timer? _teamSelectionTypingTimer;
 
   // Network status
   bool _isOffline = false;
@@ -208,32 +206,6 @@ class _StartupDialogState extends State<StartupDialog> {
     }
   }
 
-  void _startTeamSelectionTyping() {
-    setState(() {
-      _teamSelectionText = '';
-      _teamSelectionTypingIndex = 0;
-      _isTypingTeamSelection = true;
-    });
-    _typeTeamSelectionNextCharacter();
-  }
-
-  void _typeTeamSelectionNextCharacter() {
-    const textToType = 'What teams are playing?';
-
-    if (_teamSelectionTypingIndex < textToType.length) {
-      setState(() {
-        _teamSelectionText += textToType[_teamSelectionTypingIndex];
-        _teamSelectionTypingIndex++;
-      });
-      _teamSelectionTypingTimer = Timer(
-          const Duration(milliseconds: 15), _typeTeamSelectionNextCharacter);
-    } else {
-      setState(() {
-        _isTypingTeamSelection = false;
-      });
-    }
-  }
-
   String _formatDate(DateTime date) {
     const months = [
       'January',
@@ -259,8 +231,9 @@ class _StartupDialogState extends State<StartupDialog> {
         currentQuestion = 2; // Go to team selection
         isTyping = false;
         displayedText = 'Where is your images folder?';
+        _teamSelectionText = 'What teams are playing?';
+        _isTypingTeamSelection = false;
       });
-      _startTeamSelectionTyping();
       return;
     }
 
@@ -273,13 +246,14 @@ class _StartupDialogState extends State<StartupDialog> {
     }
 
     if (currentQuestion == questions.length - 1) {
-      // Move to team selection step with typing animation
+      // Move to team selection step without typing animation
       setState(() {
         currentQuestion = 2;
         isTyping = false;
         displayedText = 'Where is your images folder?';
+        _teamSelectionText = 'What teams are playing?';
+        _isTypingTeamSelection = false;
       });
-      _startTeamSelectionTyping();
     }
   }
 
@@ -887,17 +861,17 @@ class _StartupDialogState extends State<StartupDialog> {
       expandedHeaderPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       listItemPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: CustomDropdownDecoration(
-        closedFillColor: Colors.grey.shade100,
+        closedFillColor: Colors.white,
         expandedFillColor: Colors.white,
-        closedBorder: Border.all(color: Colors.grey.shade300),
-        expandedBorder: Border.all(color: Colors.grey.shade300),
-        closedBorderRadius: BorderRadius.circular(4),
+        closedBorder: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+        expandedBorder: Border.all(color: const Color(0xFF4A7A96), width: 1.0),
+        closedBorderRadius: BorderRadius.circular(5),
         expandedBorderRadius: BorderRadius.circular(8),
         hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-        headerStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+        headerStyle: const TextStyle(fontSize: 11, color: Color(0xFF2A4858), fontWeight: FontWeight.w500),
         listItemStyle: const TextStyle(fontSize: 11),
         listItemDecoration: ListItemDecoration(
-          selectedColor: Colors.grey.shade100,
+          selectedColor: const Color(0xFFEEF3F6),
         ),
       ),
       listItemBuilder: (context, item, isSelected, onItemSelect) {
@@ -1013,9 +987,20 @@ class _StartupDialogState extends State<StartupDialog> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
-        border: Border.all(color: Colors.grey.shade200),
+        gradient: const LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFFF8F8F8), Color(0xFFFFFFFF)],
+        ),
+        border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
         borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 3,
+            offset: const Offset(0, 1.5),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1025,11 +1010,12 @@ class _StartupDialogState extends State<StartupDialog> {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.grey.shade800,
-                  letterSpacing: 0.8,
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 9,
+                  fontVariations: [FontVariation('wght', 800)],
+                  color: Color(0xFF4A7A96),
+                  letterSpacing: 1.0,
                 ),
               ),
               if (trailing != null) ...[
@@ -1054,22 +1040,25 @@ class _StartupDialogState extends State<StartupDialog> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
+        color: const Color(0xFFEEF3F6),
         borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD0D0D0), width: 0.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: iconSize, color: iconColor ?? Colors.grey.shade600),
+          Icon(icon, size: iconSize, color: iconColor ?? const Color(0xFF4A7A96)),
           const SizedBox(width: 5),
           Flexible(
             child: Text(
               text,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: const TextStyle(
+                fontFamily: 'Inter',
                 fontSize: 10,
-                color: Colors.grey.shade700,
-                fontWeight: FontWeight.w500,
+                fontVariations: [FontVariation('wght', 500)],
+                color: Color(0xFF2A4858),
+                letterSpacing: -0.2,
               ),
             ),
           ),
@@ -1103,50 +1092,71 @@ class _StartupDialogState extends State<StartupDialog> {
       child: Center(
         child: Dialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(12),
           ),
+          elevation: 24,
           child: Container(
             width: dialogWidth,
             height: dialogHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-            color: Colors.white,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Header with optional back to sport
-                Row(
-                  children: [
-                    const Text(
-                      'FLO FILE',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.black,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    if (widget.onBackToSportSelection != null) ...[
-                      const Spacer(),
-                      ElevatedGreyButton(
-                        label: '← Back to sports selection',
-                        fontSize: 11,
-                        onPressed: widget.onBackToSportSelection,
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
+                // Header toolbar
                 Container(
-                  width: double.infinity,
-                  height: 1,
-                  color: Colors.grey.shade300,
+                  height: 38,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [Color(0xFFF6F6F6), Color(0xFFFEFEFE)],
+                    ),
+                    border: Border(
+                      bottom: BorderSide(color: Color(0xFFE0E0E0), width: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'FLO FILE',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 13,
+                          fontVariations: [FontVariation('wght', 800)],
+                          color: Color(0xFF2A4858),
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      if (widget.onBackToSportSelection != null) ...[
+                        const Spacer(),
+                        ElevatedGreyButton(
+                          label: '← Back to sports',
+                          fontSize: 11,
+                          onPressed: widget.onBackToSportSelection,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 6),
 
-                // Scrollable body so content never overflows
+                // Scrollable body
                 Expanded(
                   child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1155,47 +1165,123 @@ class _StartupDialogState extends State<StartupDialog> {
                 Text(
                   displayedText + (isTyping ? '|' : ''),
                   style: const TextStyle(
+                    fontFamily: 'Inter',
                     fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black,
+                    fontVariations: [FontVariation('wght', 600)],
+                    color: Color(0xFF2A4858),
+                    letterSpacing: -0.2,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
 
                 // Question-specific content
                 if (currentQuestion == 0 && !isTyping) ...[
-                  // Folder selection
-                  FractionallySizedBox(
-                    widthFactor: 0.75,
-                    alignment: Alignment.centerLeft,
-                    child: ElevatedGreyButton(
-                      label: isLoadingFolder ? 'Loading...' : 'Pick Images Folder',
-                      fontSize: 11,
-                      icon: Icons.folder_open,
-                      fullWidth: true,
-                      onPressed: isLoadingFolder ? null : _pickFolder,
+                  // Folder selection card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFFF8F8F8), Color(0xFFFFFFFF)],
+                      ),
+                      border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1.5),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'IMAGES FOLDER',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 9,
+                            fontVariations: [FontVariation('wght', 800)],
+                            color: Color(0xFF4A7A96),
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        FractionallySizedBox(
+                          widthFactor: 0.7,
+                          alignment: Alignment.centerLeft,
+                          child: ElevatedGreyButton(
+                            label: isLoadingFolder ? 'Loading...' : 'Pick Images Folder',
+                            fontSize: 11,
+                            icon: Icons.folder_open,
+                            fullWidth: true,
+                            onPressed: isLoadingFolder ? null : _pickFolder,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 10),
                 ] else if (currentQuestion == 1) ...[
-                  // Date selection (only show if no date was extracted from images)
-                  if (selectedGameDate == null) ...[
-                    ElevatedGreyButton(
-                      label: 'Select Game Date',
-                      fontSize: 11,
-                      icon: Icons.calendar_today,
-                      fullWidth: true,
-                      onPressed: _selectDate,
+                  // Date selection card
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Color(0xFFF8F8F8), Color(0xFFFFFFFF)],
+                      ),
+                      border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.08),
+                          blurRadius: 3,
+                          offset: const Offset(0, 1.5),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 12),
-                    ElevatedGreyButton(
-                      label: 'Skip →',
-                      fontSize: 11,
-                      icon: Icons.arrow_forward,
-                      fullWidth: true,
-                      onPressed: () => _nextQuestion(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'GAME DATE',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 9,
+                            fontVariations: [FontVariation('wght', 800)],
+                            color: Color(0xFF4A7A96),
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        if (selectedGameDate == null) ...[
+                          Row(
+                            children: [
+                              ElevatedGreyButton(
+                                label: 'Select Game Date',
+                                fontSize: 11,
+                                icon: Icons.calendar_today,
+                                onPressed: _selectDate,
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedGreyButton(
+                                label: 'Skip →',
+                                fontSize: 11,
+                                onPressed: () => _nextQuestion(),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 10),
                 ] else if (currentQuestion == 2) ...[
                   if (!isLoadingTeams) ...[
                     // ── IMAGES FOLDER card ──
@@ -1251,9 +1337,10 @@ class _StartupDialogState extends State<StartupDialog> {
                                   child: const Text(
                                     'Offline',
                                     style: TextStyle(
+                                      fontFamily: 'Inter',
                                       fontSize: 10,
+                                      fontVariations: [FontVariation('wght', 500)],
                                       color: Colors.orange,
-                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                 ),
@@ -1283,8 +1370,9 @@ class _StartupDialogState extends State<StartupDialog> {
                                   child: Text(
                                     '@',
                                     style: TextStyle(
+                                      fontFamily: 'Inter',
                                       fontSize: 12,
-                                      fontWeight: FontWeight.w700,
+                                      fontVariations: const [FontVariation('wght', 700)],
                                       color: Colors.grey.shade500,
                                     ),
                                   ),
@@ -1341,6 +1429,8 @@ class _StartupDialogState extends State<StartupDialog> {
                                   Text(
                                     'Home and away teams must be different',
                                     style: TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontVariations: [FontVariation('wght', 500)],
                                       color: Colors.red,
                                       fontSize: 11,
                                     ),
@@ -1354,8 +1444,11 @@ class _StartupDialogState extends State<StartupDialog> {
                             _teamSelectionText +
                                 (_isTypingTeamSelection ? '|' : ''),
                             style: const TextStyle(
-                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Inter',
+                              fontVariations: [FontVariation('wght', 600)],
                               fontSize: 11,
+                              color: Color(0xFF2A4858),
+                              letterSpacing: -0.2,
                             ),
                           ),
                         ],
@@ -1395,8 +1488,9 @@ class _StartupDialogState extends State<StartupDialog> {
                                   Text(
                                     'Burst sequence detection',
                                     style: TextStyle(
+                                      fontFamily: 'Inter',
                                       fontSize: 11,
-                                      fontWeight: FontWeight.w600,
+                                      fontVariations: const [FontVariation('wght', 600)],
                                       color: Colors.grey.shade800,
                                     ),
                                   ),
@@ -1436,7 +1530,9 @@ class _StartupDialogState extends State<StartupDialog> {
                               child: Text(
                                 'Apply preset to all images in session',
                                 style: TextStyle(
+                                  fontFamily: 'Inter',
                                   fontSize: 10,
+                                  fontVariations: const [FontVariation('wght', 500)],
                                   color: Colors.grey.shade600,
                                 ),
                               ),
@@ -1474,61 +1570,78 @@ class _StartupDialogState extends State<StartupDialog> {
                           }
                           setState(() => _goTimeWarningText = message);
                         },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 28, vertical: 10),
-                          decoration: BoxDecoration(
-                            gradient: _canProceed
-                                ? const LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
-                                  )
-                                : null,
-                            color: _canProceed ? null : Colors.grey.shade300,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Row(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 32, vertical: 10),
+                              decoration: BoxDecoration(
+                                gradient: _canProceed
+                                    ? const LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
+                                      )
+                                    : null,
+                                color: _canProceed ? null : Colors.grey.shade200,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: _canProceed
+                                      ? const Color(0xFF2A4858)
+                                      : const Color(0xFFD0D0D0),
+                                  width: 0.7,
+                                ),
+                                boxShadow: _canProceed
+                                    ? [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.22),
+                                          blurRadius: 5,
+                                          offset: const Offset(0, 2.5),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
                                     Icons.play_arrow_rounded,
-                                    size: 16,
+                                    size: 15,
                                     color: _canProceed
                                         ? Colors.white
-                                        : Colors.grey.shade600,
+                                        : Colors.grey.shade500,
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
                                     'Go Time',
                                     style: TextStyle(
+                                      fontFamily: 'Inter',
                                       fontSize: 13,
+                                      fontVariations: const [FontVariation('wght', 600)],
                                       color: _canProceed
                                           ? Colors.white
-                                          : Colors.grey.shade600,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.3,
+                                          : Colors.grey.shade500,
+                                      letterSpacing: 0.2,
                                     ),
                                   ),
                                 ],
                               ),
-                              if (_goTimeWarningText != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  _goTimeWarningText!,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.red.shade400,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                            ),
+                            if (_goTimeWarningText != null) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                _goTimeWarningText!,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 10,
+                                  fontVariations: const [FontVariation('wght', 500)],
+                                  color: Colors.red.shade400,
                                 ),
-                              ],
+                              ),
                             ],
-                          ),
+                          ],
                         ),
                       ),
                     ),

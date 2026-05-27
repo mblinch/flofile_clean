@@ -3595,7 +3595,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       Text(
                         'Custom Verb',
                         style: TextStyle(
-                          fontSize: 10,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
                           color: Colors.grey.shade600,
                         ),
@@ -3901,18 +3901,24 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
                     decoration: BoxDecoration(
+                      gradient: isDragging
+                          ? null
+                          : isDragOver
+                              ? null
+                              : const LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: [Color(0xFFF6F6F6), Color(0xFFFFFFFF)],
+                                ),
                       color: isDragging
                           ? Colors.blue.shade100
                           : isDragOver
                               ? Colors.blue.shade50
-                              : const Color(0xFFF2F2F2),
-                      border: Border(
-                        top: isDragOver
-                            ? BorderSide(color: Colors.blue.shade400, width: 2)
-                            : const BorderSide(color: Color(0xFFF2F2F2), width: 1),
-                        bottom:
-                            BorderSide(color: Colors.grey.shade200, width: 0.5),
-                      ),
+                              : null,
+                      borderRadius: BorderRadius.circular(4),
+                      border: isDragOver
+                          ? Border.all(color: Colors.blue.shade400, width: 2)
+                          : Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
                     ),
                     child: Opacity(
                       opacity: isDragging ? 0.35 : 1.0,
@@ -5575,9 +5581,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }) {
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 1),
-        child: SizedBox(
+        child: Container(
           width: baseballInningCellW,
           height: kFloInningButtonHeight,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+            boxShadow: enabled
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.14),
+                      blurRadius: 3,
+                      offset: const Offset(0, 1.5),
+                    ),
+                  ]
+                : null,
+          ),
           child: OutlinedButton(
             onPressed: onPressed,
             style: OutlinedButton.styleFrom(
@@ -5585,7 +5603,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               minimumSize: const Size(0, 0),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               side: BorderSide(
-                color: enabled ? Colors.grey.shade400 : Colors.grey.shade300,
+                color: enabled ? const Color(0xFFD0D0D0) : Colors.grey.shade300,
               ),
               backgroundColor: enabled ? Colors.white : Colors.grey.shade100,
               shape: RoundedRectangleBorder(
