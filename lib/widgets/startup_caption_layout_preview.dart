@@ -12,9 +12,16 @@ import 'caption_style_dropdown_row.dart';
 
 /// Caption layout sample line on the startup screen, with style picker and edit.
 class StartupCaptionLayoutPreview extends StatefulWidget {
-  const StartupCaptionLayoutPreview({super.key, this.sport});
+  const StartupCaptionLayoutPreview({
+    super.key,
+    this.sport,
+    this.compact = false,
+    this.onWireStyleChanged,
+  });
 
   final String? sport;
+  final bool compact;
+  final ValueChanged<WireStyle>? onWireStyleChanged;
 
   @override
   State<StartupCaptionLayoutPreview> createState() =>
@@ -68,6 +75,7 @@ class _StartupCaptionLayoutPreviewState
       _preview = preview;
       _loading = false;
     });
+    widget.onWireStyleChanged?.call(template.wireStyle);
   }
 
   Future<void> _toggleFavoriteCaptionStyle(String token) async {
@@ -98,6 +106,7 @@ class _StartupCaptionLayoutPreviewState
       _selectedToken = token;
       _template = template;
     });
+    widget.onWireStyleChanged?.call(template.wireStyle);
   }
 
   CreditSampleAgency _agencyFor(WireStyle wire) {
@@ -141,8 +150,9 @@ class _StartupCaptionLayoutPreviewState
 
   Widget _styleDropdown(CaptionStyleCatalog catalog) {
     final tokens = catalog.options.map((o) => o.token).toList();
+    final compact = widget.compact;
     final overlayHeight = () {
-      final h = tokens.length * 36.0;
+      final h = tokens.length * (compact ? 30.0 : 36.0);
       if (h < 120) return 120.0;
       if (h > 280) return 280.0;
       return h;
@@ -158,17 +168,25 @@ class _StartupCaptionLayoutPreviewState
       excludeSelected: false,
       hideSelectedFieldWhenExpanded: true,
       overlayHeight: overlayHeight,
-      closedHeaderPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      expandedHeaderPadding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      listItemPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      closedHeaderPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 8,
+        vertical: compact ? 3 : 5,
+      ),
+      expandedHeaderPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 8,
+        vertical: compact ? 3 : 5,
+      ),
+      listItemPadding: EdgeInsets.symmetric(
+        horizontal: compact ? 6 : 8,
+        vertical: compact ? 3 : 4,
+      ),
       headerBuilder: (context, selectedItem, enabled) {
         return Text(
           catalog.labelFor(selectedItem),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: compact ? 10 : 11,
             fontWeight: FontWeight.w600,
             color: Colors.grey.shade900,
           ),
@@ -217,43 +235,90 @@ class _StartupCaptionLayoutPreviewState
     if (catalog == null || template == null) return const SizedBox.shrink();
 
     final preview = _fullCaptionPreview(template);
+    final compact = widget.compact;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _styleDropdown(catalog),
+        if (compact)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: _styleDropdown(catalog)),
+              const SizedBox(width: 6),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: _openEditor,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.view_agenda_outlined,
+                            size: 10, color: Colors.grey.shade700),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Edit',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade700,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          _styleDropdown(catalog),
         if (preview != null && preview.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Text(
-            'PREVIEW',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: Colors.grey.shade800,
-              letterSpacing: 0.8,
+          SizedBox(height: compact ? 4 : 10),
+          if (!compact)
+            Text(
+              'PREVIEW',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                color: Colors.grey.shade800,
+                letterSpacing: 0.8,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
+          if (!compact) const SizedBox(height: 6),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 8 : 12,
+              vertical: compact ? 5 : 10,
+            ),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(4),
               border: Border(
                 left: BorderSide(
                   color: Colors.grey.shade400,
-                  width: 3,
+                  width: compact ? 2 : 3,
                 ),
               ),
             ),
             child: SelectionArea(
               child: Text(
                 preview,
+                maxLines: compact ? 2 : null,
+                overflow: compact ? TextOverflow.ellipsis : null,
                 style: TextStyle(
-                  fontSize: 11,
-                  height: 1.45,
+                  fontSize: compact ? 9.5 : 11,
+                  height: compact ? 1.3 : 1.45,
                   color: Colors.grey.shade800,
                   fontFamily: 'Menlo',
                   fontFamilyFallback: const [
@@ -266,12 +331,14 @@ class _StartupCaptionLayoutPreviewState
             ),
           ),
         ],
-        const SizedBox(height: 10),
-        AppSecondaryButton(
-          label: 'Edit caption layout',
-          icon: Icons.view_agenda_outlined,
-          onTap: _openEditor,
-        ),
+        if (!compact) ...[
+          const SizedBox(height: 10),
+          AppSecondaryButton(
+            label: 'Edit caption layout',
+            icon: Icons.view_agenda_outlined,
+            onTap: _openEditor,
+          ),
+        ],
       ],
     );
   }

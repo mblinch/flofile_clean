@@ -27,6 +27,7 @@ import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
 import '../caption_style/game_info.dart';
+import '../services/iptc_template_apply_service.dart';
 import '../services/preferences_service.dart';
 import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
@@ -671,6 +672,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           _sortImagesByDateTaken(imagePaths);
         });
 
+        unawaited(_applyStartupIptcToImageIfEnabled(newImagePath));
+
         // Show notification
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -891,6 +894,60 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
+  Future<void> _applyStartupIptcTemplateDuringLoad(List<String> paths) async {
+    if (paths.isEmpty) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final apply = prefs.getBool('apply_preset_to_all_images') ?? false;
+      if (!apply) return;
+
+      final presetJson = prefs.getString('selected_metadata_preset');
+      if (presetJson == null) return;
+
+      final decoded = jsonDecode(presetJson) as Map<String, dynamic>;
+      final template = decoded.map(
+        (k, v) => MapEntry(k, v?.toString() ?? ''),
+      );
+      final preset = IptcTemplateApplyService.normalizeForPreset(template);
+      if (preset.isEmpty) return;
+
+      final writable = paths
+          .where((path) => !_lockedPaths.contains(path))
+          .toList();
+      if (writable.isEmpty) return;
+
+      for (var i = 0; i < writable.length; i++) {
+        await IptcTemplateApplyService.applyToImage(writable[i], preset);
+        if (!mounted) return;
+        setState(() {
+          _imageLoadingProgress =
+              0.8 + (0.2 * (i + 1) / writable.length);
+        });
+      }
+    } catch (e) {
+      print('Error applying startup IPTC template during load: $e');
+    }
+  }
+
+  Future<void> _applyStartupIptcToImageIfEnabled(String imagePath) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!(prefs.getBool('apply_preset_to_all_images') ?? false)) return;
+      final presetJson = prefs.getString('selected_metadata_preset');
+      if (presetJson == null) return;
+      final decoded = jsonDecode(presetJson) as Map<String, dynamic>;
+      final template = decoded.map(
+        (k, v) => MapEntry(k, v?.toString() ?? ''),
+      );
+      final preset = IptcTemplateApplyService.normalizeForPreset(template);
+      if (preset.isEmpty) return;
+      if (_lockedPaths.contains(imagePath)) return;
+      await IptcTemplateApplyService.applyToImage(imagePath, preset);
+    } catch (e) {
+      print('Error applying startup IPTC to new image: $e');
+    }
+  }
+
   Future<void> _restoreSavedImagesForCurrentFolder() async {
     if (_selectedFolderPath == null || !mounted) return;
     try {
@@ -974,6 +1031,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       await _restoreSavedImagesForCurrentFolder();
 
+      await _applyStartupIptcTemplateDuringLoad(imageFiles);
+
       // Clean up any temporary files that might have been loaded
       _removeTemporaryFiles();
 
@@ -998,9 +1057,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // Load metadata for the first image
       if (imageFiles.isNotEmpty) {
         _loadMetadata();
-
-        // Check if we should apply metadata preset to all images
-        _checkAndApplyMetadataPreset();
       }
     } catch (e) {
       print('Error loading images from folder: $e');
@@ -3039,70 +3095,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Save metadata directly to a specific image file using the exact same logic as the working batch function
   Future<void> _saveMetadataToImage(
       String imagePath, Map<String, dynamic> metadata) async {
-    print('DEBUG: _saveMetadataToImage called with: $imagePath');
-
-    // Get values from metadata widget in the exact same way as the working batch path
-    Map<String, String> allValues = {};
-
-    // Convert template metadata to the same format that _saveIptcMetadata uses
+    final template = <String, String>{};
     metadata.forEach((key, value) {
-      if (value != null && value.toString().isNotEmpty) {
-        // Never write date/time from template
-        if (key == 'Date' || key == 'Time') return;
-
-        // Special handling for supplemental categories to match batch function format
-        if (key == 'Supp Cat 1') {
-          allValues['SupplementalCategories1'] = value.toString();
-        } else if (key == 'Supp Cat 2') {
-          allValues['SupplementalCategories2'] = value.toString();
-        } else if (key == 'Supp Cat 3') {
-          allValues['SupplementalCategories3'] = value.toString();
-        } else {
-          // Map other template display names to ExifTool field names
-          final exifToolField = _mapTemplateFieldToExifTool(key);
-          allValues[exifToolField] = value.toString();
-        }
-      }
+      if (value == null) return;
+      final v = value.toString().trim();
+      if (v.isEmpty) return;
+      if (key == 'Date' || key == 'Time') return;
+      template[key] = v;
     });
-
-    print('DEBUG: Converted to allValues format: $allValues');
-
-    try {
-      // Build exiftool command arguments using EXACT same logic as _saveIptcMetadata
-      List<String> args = [];
-
-      // Add each field that has a value
-      allValues.forEach((key, value) {
-        if (value.trim().isNotEmpty) {
-          args.add('-$key=$value');
-        }
-      });
-
-      final List<String> rawInputs =
-          supplementalCategoryRawInputsForSave(allValues, metadata);
-
-      // Remove any existing supplemental category args to ensure clean state
-      args.removeWhere((arg) =>
-          arg.startsWith('-SupplementalCategories') ||
-          arg.startsWith('-XMP-photoshop:SupplementalCategories'));
-
-      args.addAll(buildSupplementalCategoriesArgs(rawInputs));
-
-      // Always overwrite original file
-      args.add('-overwrite_original');
-      args.add(imagePath);
-
-      print('DEBUG: Final exiftool args: $args');
-      final proc = await ExiftoolHelper.run(args);
-
-      if (proc.exitCode == 0) {
-        print('DEBUG: Successfully saved metadata to $imagePath');
-      } else {
-        print('DEBUG: Exiftool error: ${proc.stderrText}');
-      }
-    } catch (e) {
-      print('DEBUG: Error saving metadata: $e');
-    }
+    await IptcTemplateApplyService.applyToImage(
+      imagePath,
+      template,
+      skipInAppGenerated: false,
+    );
   }
 
   // Save ExifTool-style metadata directly to a specific image file
@@ -3486,18 +3491,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final applyToAllImages =
           prefs.getBool('apply_preset_to_all_images') ?? false;
 
-      if (applyToAllImages) {
-        final presetJson = prefs.getString('selected_metadata_preset');
-        if (presetJson != null) {
-          final presetData = jsonDecode(presetJson) as Map<String, dynamic>;
-          final metadata = Map<String, String>.from(presetData);
-
-          // Apply metadata to all images
-          await _applyMetadataToAllImages(metadata);
-
-          // Clear the flag after applying
-          await prefs.setBool('apply_preset_to_all_images', false);
-        }
+      if (applyToAllImages && imagePaths.isNotEmpty) {
+        await _applyStartupIptcTemplateDuringLoad(imagePaths);
       }
     } catch (e) {
       print('Error checking/applying metadata preset: $e');
@@ -3815,200 +3810,94 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // Build the main app content
-    Widget mainAppContent = Scaffold(
-      backgroundColor: Colors.grey.shade100,
-      body: Column(
-        children: [
-          // App header
-          Container(
-            height: 60,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                const Text(
-                  'FLO FILE',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const Spacer(),
-                if (_isStartupComplete) ...[
-                  Text(
-                    'Ready to configure...',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          // Main content area
-          Expanded(
-            child: Container(
-              color: Colors.grey.shade50,
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.folder_open,
-                      size: 64,
-                      color: Colors.grey.shade400,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Select your images folder to begin',
-                      style: TextStyle(
-                        fontSize: 18,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Configure teams and game date',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  Widget _buildPreSessionBody() {
+    const padding = EdgeInsets.fromLTRB(8, 8, 8, 8);
 
-    // Show sport selection dialog first if sport not selected
     if (!_isSportSelected) {
-      return Stack(
-        children: [
-          // Main app in background
-          mainAppContent,
-          // Semi-transparent overlay
-          Container(
-            color: Colors.black.withOpacity(0.3),
-            child: Center(
-              child: SportSelectionDialog(
-                onSportSelected: _handleSportSelected,
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            padding: padding,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Center(
+                child: SportSelectionDialog(
+                  inline: true,
+                  onSportSelected: _handleSportSelected,
+                ),
               ),
             ),
-          ),
-        ],
+          );
+        },
       );
     }
 
-    // Show startup dialog overlay if configuration is not complete
-    if (!_isStartupComplete) {
-      return Stack(
-        children: [
-          // Main app in background
-          mainAppContent,
-          // Semi-transparent overlay
-          Container(
-            color: Colors.black.withOpacity(0.3),
-            child: Center(
-              child: StartupDialog(
-                onConfigurationComplete: _handleStartupComplete,
-                sport: _selectedSport,
-                onBackToSportSelection: () {
-                  setState(() => _isSportSelected = false);
-                },
-              ),
-            ),
-          ),
-        ],
-      );
-    }
-
-    // Show loading screen for players or images
     if (_isLoadingPlayers || _isLoadingImages) {
-      return Scaffold(
-        backgroundColor: Colors.grey.shade100,
-        body: Center(
-          child: Container(
-            width: 600,
-            height: 560,
-            padding: const EdgeInsets.all(32),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
+      return Padding(
+        padding: padding,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _isLoadingPlayers ? 'Loading players…' : 'Loading images…',
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                fontVariations: [FontVariation('wght', 600)],
+                color: Color(0xFF2A4858),
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'FLO FILE',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 32),
-                Text(
-                  _isLoadingPlayers
-                      ? 'Loading Players...'
-                      : 'Loading Images...',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                LinearProgressIndicator(
-                  value: _isLoadingPlayers
-                      ? _playerLoadingProgress
-                      : _imageLoadingProgress,
-                  backgroundColor: Colors.grey.shade200,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${((_isLoadingPlayers ? _playerLoadingProgress : _imageLoadingProgress) * 100).toInt()}%',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: _isLoadingPlayers
+                  ? _playerLoadingProgress
+                  : _imageLoadingProgress,
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
             ),
-          ),
+            const SizedBox(height: 6),
+            Text(
+              '${((_isLoadingPlayers ? _playerLoadingProgress : _imageLoadingProgress) * 100).toInt()}%',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 11,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
         ),
       );
     }
 
+    return Padding(
+      padding: padding,
+      child: SizedBox.expand(
+        child: StartupDialog(
+          inline: true,
+          sport: _selectedSport,
+          onConfigurationComplete: _handleStartupComplete,
+          onBackToSportSelection: () {
+            setState(() => _isSportSelected = false);
+          },
+        ),
+      ),
+    );
+  }
+
+  bool get _inPreSession =>
+      !_isSportSelected ||
+      !_isStartupComplete ||
+      _isLoadingPlayers ||
+      _isLoadingImages;
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppHeaderWidget(
+      appBar: _inPreSession
+          ? null
+          : AppHeaderWidget(
         cameraService: _cameraService,
         currentImagePath:
             imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
@@ -4082,7 +3971,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           } catch (_) {}
         },
       ),
-      body: Shortcuts(
+      body: _inPreSession
+          ? _buildPreSessionBody()
+          : Shortcuts(
         shortcuts: const <ShortcutActivator, Intent>{
           SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
               _PastePreviousCaptionIntent(),
