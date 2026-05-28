@@ -894,22 +894,46 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
-  Future<void> _applyStartupIptcTemplateDuringLoad(List<String> paths) async {
-    if (paths.isEmpty) return;
+  Future<Map<String, String>?> _loadSelectedIptcPreset() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final apply = prefs.getBool('apply_preset_to_all_images') ?? false;
-      if (!apply) return;
-
       final presetJson = prefs.getString('selected_metadata_preset');
-      if (presetJson == null) return;
-
+      if (presetJson == null) return null;
       final decoded = jsonDecode(presetJson) as Map<String, dynamic>;
       final template = decoded.map(
         (k, v) => MapEntry(k, v?.toString() ?? ''),
       );
       final preset = IptcTemplateApplyService.normalizeForPreset(template);
-      if (preset.isEmpty) return;
+      return preset.isEmpty ? null : preset;
+    } catch (e) {
+      print('Error loading IPTC preset: $e');
+      return null;
+    }
+  }
+
+  Future<void> _applyIptcTemplateOnSaveIfEnabled(String imagePath) async {
+    if (_lockedPaths.contains(imagePath)) return;
+    try {
+      final prefsService = await PreferencesService.getInstance();
+      if (await prefsService.getIptcApplyMode() != IptcApplyMode.onSave) return;
+      final preset = await _loadSelectedIptcPreset();
+      if (preset == null) return;
+      await IptcTemplateApplyService.applyToImage(imagePath, preset);
+    } catch (e) {
+      print('Error applying IPTC template on save: $e');
+    }
+  }
+
+  Future<void> _applyStartupIptcTemplateDuringLoad(List<String> paths) async {
+    if (paths.isEmpty) return;
+    try {
+      final prefsService = await PreferencesService.getInstance();
+      if (await prefsService.getIptcApplyMode() != IptcApplyMode.onImport) {
+        return;
+      }
+
+      final preset = await _loadSelectedIptcPreset();
+      if (preset == null) return;
 
       final writable = paths
           .where((path) => !_lockedPaths.contains(path))
@@ -931,17 +955,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   Future<void> _applyStartupIptcToImageIfEnabled(String imagePath) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      if (!(prefs.getBool('apply_preset_to_all_images') ?? false)) return;
-      final presetJson = prefs.getString('selected_metadata_preset');
-      if (presetJson == null) return;
-      final decoded = jsonDecode(presetJson) as Map<String, dynamic>;
-      final template = decoded.map(
-        (k, v) => MapEntry(k, v?.toString() ?? ''),
-      );
-      final preset = IptcTemplateApplyService.normalizeForPreset(template);
-      if (preset.isEmpty) return;
+      final prefsService = await PreferencesService.getInstance();
+      if (await prefsService.getIptcApplyMode() != IptcApplyMode.onImport) {
+        return;
+      }
       if (_lockedPaths.contains(imagePath)) return;
+      final preset = await _loadSelectedIptcPreset();
+      if (preset == null) return;
       await IptcTemplateApplyService.applyToImage(imagePath, preset);
     } catch (e) {
       print('Error applying startup IPTC to new image: $e');
@@ -1696,6 +1716,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         return;
       }
 
+      for (final path in targets) {
+        if (_lockedPaths.contains(path)) continue;
+        await _applyIptcTemplateOnSaveIfEnabled(path);
+      }
+
       // One exiftool run per file so only [targets] are written (burst “skip” cannot pick up strays).
       print(
           'Saving caption to ${targets.length} images (one process per file)...');
@@ -1884,6 +1909,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   Future<void> _saveIptcMetadataToImagePath(String imagePath) async {
     print('Saving IPTC metadata to: $imagePath');
+
+    await _applyIptcTemplateOnSaveIfEnabled(imagePath);
 
     // Get values from both widgets
     Map<String, String> allValues = {};
@@ -3487,11 +3514,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // Check and apply metadata preset to all images if enabled
   Future<void> _checkAndApplyMetadataPreset() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final applyToAllImages =
-          prefs.getBool('apply_preset_to_all_images') ?? false;
-
-      if (applyToAllImages && imagePaths.isNotEmpty) {
+      if (imagePaths.isNotEmpty) {
         await _applyStartupIptcTemplateDuringLoad(imagePaths);
       }
     } catch (e) {

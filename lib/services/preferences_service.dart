@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
+import 'iptc_template_apply_service.dart';
 
 class PreferencesService {
   static const String _keyCategoryOrder = 'category_order';
@@ -58,6 +59,12 @@ class PreferencesService {
   static const String _keyHasLaunchedBefore = 'has_launched_before';
   /// When true, saving may prompt to apply captions across rapid (≤1s) sequences.
   static const String _keyBurstDetectionEnabled = 'burst_detection_enabled';
+  /// `none` | `on_import` | `on_save` — when startup IPTC template is applied.
+  static const String _keyIptcApplyMode = 'iptc_apply_mode';
+  static const String _keyApplyIptcOnImport = 'apply_iptc_on_import';
+  static const String _keyApplyIptcOnSave = 'apply_iptc_on_save';
+  static const String _legacyApplyPresetToAllImages =
+      'apply_preset_to_all_images';
   /// [package_info_plus] build number for which “What’s new” was dismissed.
   static const String _keyLastAcknowledgedAppBuild =
       'last_acknowledged_app_build';
@@ -147,6 +154,35 @@ class PreferencesService {
   Future<void> saveBurstDetectionEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyBurstDetectionEnabled, enabled);
+  }
+
+  Future<IptcApplyMode> getIptcApplyMode() async {
+    final prefs = await _getPrefs();
+    if (!prefs.containsKey(_keyIptcApplyMode)) {
+      final onImport = prefs.getBool(_keyApplyIptcOnImport);
+      final onSave = prefs.getBool(_keyApplyIptcOnSave);
+      final legacy = prefs.getBool(_legacyApplyPresetToAllImages);
+
+      IptcApplyMode mode;
+      if (onSave == true && onImport != true) {
+        mode = IptcApplyMode.onSave;
+      } else if (onImport == true || legacy == true) {
+        mode = IptcApplyMode.onImport;
+      } else if (onImport == false && onSave == false) {
+        mode = IptcApplyMode.none;
+      } else {
+        mode = IptcApplyMode.onImport;
+      }
+
+      await prefs.setString(_keyIptcApplyMode, mode.storageValue);
+      return mode;
+    }
+    return IptcApplyMode.fromStorage(prefs.getString(_keyIptcApplyMode));
+  }
+
+  Future<void> saveIptcApplyMode(IptcApplyMode mode) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyIptcApplyMode, mode.storageValue);
   }
 
   /// Last [package_info_plus] build number the user saw update notes for (0 = never).

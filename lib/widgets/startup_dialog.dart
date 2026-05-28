@@ -8,7 +8,6 @@ import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
-import 'metadata_preset_dialog.dart';
 import '../services/preferences_service.dart';
 import '../caption_style/caption_template.dart';
 import 'startup_caption_layout_preview.dart';
@@ -74,7 +73,7 @@ class _StartupDialogState extends State<StartupDialog> {
   bool isLoadingFolder = false;
   bool hasImagesInFolder = false;
   bool isExtractingDate = false;
-  bool _applyPresetToAllImages = false;
+  IptcApplyMode _iptcApplyMode = IptcApplyMode.onImport;
   bool _burstDetectionEnabled = false;
 
   Map<String, String> _iptcTemplateValues = {};
@@ -121,7 +120,15 @@ class _StartupDialogState extends State<StartupDialog> {
     await _initializePreferences();
     await _loadIptcWireContext();
     await _loadSavedIptcPreset();
+    await _loadIptcApplyOptions();
     await _loadTeams();
+  }
+
+  Future<void> _loadIptcApplyOptions() async {
+    final prefs = await PreferencesService.getInstance();
+    final mode = await prefs.getIptcApplyMode();
+    if (!mounted) return;
+    setState(() => _iptcApplyMode = mode);
   }
 
   Future<void> _loadIptcWireContext() async {
@@ -212,7 +219,7 @@ class _StartupDialogState extends State<StartupDialog> {
 
       setState(() {
         _iptcTemplateValues = Map<String, String>.from(result.values);
-        _applyPresetToAllImages = true;
+        _iptcApplyMode = IptcApplyMode.onImport;
       });
       await _persistIptcTemplateValues();
 
@@ -247,14 +254,17 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   Future<void> _persistIptcTemplateValues() async {
-    if (_iptcTemplateValues.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
-    final preset = IptcTemplateApplyService.normalizeForPreset(_iptcTemplateValues);
-    await prefs.setString(
-      'selected_metadata_preset',
-      jsonEncode(preset),
-    );
-    await prefs.setBool('apply_preset_to_all_images', _applyPresetToAllImages);
+    final preset =
+        IptcTemplateApplyService.normalizeForPreset(_iptcTemplateValues);
+    if (preset.isNotEmpty) {
+      await prefs.setString(
+        'selected_metadata_preset',
+        jsonEncode(preset),
+      );
+    }
+    final prefsService = await PreferencesService.getInstance();
+    await prefsService.saveIptcApplyMode(_iptcApplyMode);
   }
 
   String _keywordsFromMeta(Map<String, dynamic> meta) {
@@ -993,61 +1003,6 @@ class _StartupDialogState extends State<StartupDialog> {
     }
   }
 
-  void _openMetadataPreset() async {
-    final result = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (context) => MetadataPresetDialog(
-        currentPreset: null,
-        detectedDate: selectedGameDate,
-      ),
-    );
-
-    if (result != null) {
-      // Extract metadata
-      final metadata = result['metadata'] as Map<String, String>;
-
-      // Store the selected preset data to be used when the app starts
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('selected_metadata_preset', jsonEncode(metadata));
-
-      // Automatically check the "Apply preset to all images" checkbox when template is applied
-      setState(() {
-        _applyPresetToAllImages = true;
-        _iptcTemplateValues = _normalizeIptcPresetMap(metadata);
-      });
-      if (selectedFolderPath != null) {
-        final directory = Directory(selectedFolderPath!);
-        final imageFiles = await directory
-            .list()
-            .where((e) => e is File)
-            .map((e) => e.path)
-            .where((path) {
-          final lower = path.toLowerCase();
-          return lower.endsWith('.jpg') ||
-              lower.endsWith('.jpeg') ||
-              lower.endsWith('.png') ||
-              lower.endsWith('.tiff') ||
-              lower.endsWith('.bmp');
-        }).toList();
-        if (imageFiles.isNotEmpty) {
-          await _loadIptcFromFolderImages(imageFiles);
-        }
-      }
-
-      // Store the checkbox value from the startup dialog
-      await prefs.setBool(
-          'apply_preset_to_all_images', _applyPresetToAllImages);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Metadata preset will be applied to all images in the session.'),
-          duration: const Duration(seconds: 2),
-        ),
-      );
-    }
-  }
-
   Future<void> _toggleFavoriteTeam({required bool isHome}) async {
     setState(() {
       final selectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
@@ -1657,10 +1612,10 @@ class _StartupDialogState extends State<StartupDialog> {
             'IPTC TEMPLATE',
             style: TextStyle(
               fontFamily: 'Inter',
-              fontSize: 12,
-              fontVariations: [FontVariation('wght', 800)],
-              color: Color(0xFF2A4858),
-              letterSpacing: 1.0,
+              fontSize: 13,
+              fontVariations: [FontVariation('wght', 700)],
+              color: Color(0xFF333333),
+              letterSpacing: -0.5,
             ),
           ),
         ],
@@ -1686,11 +1641,15 @@ class _StartupDialogState extends State<StartupDialog> {
                 isLoading: _loadingIptcFromFiles,
                 onValueChanged: _onIptcTemplateValueChanged,
                 onWireSelected: _onCaptionWireStyleChanged,
+                iptcApplyMode: _iptcApplyMode,
+                onIptcApplyModeChanged: (mode) {
+                  setState(() => _iptcApplyMode = mode);
+                },
               ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedGreyButton(
@@ -1950,35 +1909,6 @@ class _StartupDialogState extends State<StartupDialog> {
                 ),
               ),
             ),
-            ElevatedGreyButton(
-              label: 'Metadata preset',
-              fontSize: 10,
-              icon: Icons.description_outlined,
-              onPressed: _openMetadataPreset,
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            AppCompactCheckbox(
-              value: _applyPresetToAllImages,
-              onChanged: (v) {
-                setState(() => _applyPresetToAllImages = v);
-              },
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                'Apply preset to all images in session',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 9,
-                  fontVariations: const [FontVariation('wght', 500)],
-                  color: Colors.grey.shade600,
-                ),
-              ),
-            ),
           ],
         ),
       ],
@@ -1995,12 +1925,7 @@ class _StartupDialogState extends State<StartupDialog> {
             return;
           }
           if (_canProceed) {
-            setState(() {
-              _goTimeWarningText = null;
-              if (_iptcTemplateValues.isNotEmpty) {
-                _applyPresetToAllImages = true;
-              }
-            });
+            setState(() => _goTimeWarningText = null);
             _persistIptcTemplateValues();
             widget.onConfigurationComplete(
               selectedFolderPath!,

@@ -1,6 +1,35 @@
 import '../helpers.dart';
 import '../utils/exiftool_helper.dart';
 
+/// When (if ever) the startup IPTC template is written to image files.
+enum IptcApplyMode {
+  none,
+  onImport,
+  onSave;
+
+  static IptcApplyMode fromStorage(String? value) {
+    switch (value) {
+      case 'on_import':
+        return IptcApplyMode.onImport;
+      case 'on_save':
+        return IptcApplyMode.onSave;
+      default:
+        return IptcApplyMode.none;
+    }
+  }
+
+  String get storageValue {
+    switch (this) {
+      case IptcApplyMode.onImport:
+        return 'on_import';
+      case IptcApplyMode.onSave:
+        return 'on_save';
+      case IptcApplyMode.none:
+        return 'none';
+    }
+  }
+}
+
 /// Applies startup / metadata-preset IPTC values to image files (Photo Mechanic style).
 class IptcTemplateApplyService {
   IptcTemplateApplyService._();

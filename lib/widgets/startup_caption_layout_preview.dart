@@ -316,16 +316,11 @@ class _StartupCaptionLayoutPreviewState
                 preview,
                 maxLines: compact ? 2 : null,
                 overflow: compact ? TextOverflow.ellipsis : null,
-                style: TextStyle(
-                  fontSize: compact ? 9.5 : 11,
-                  height: compact ? 1.3 : 1.45,
-                  color: Colors.grey.shade800,
-                  fontFamily: 'Menlo',
-                  fontFamilyFallback: const [
-                    'Consolas',
-                    'Courier New',
-                    'monospace',
-                  ],
+                style: const TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 11,
+                  height: 1.35,
+                  color: Colors.black87,
                 ),
               ),
             ),
