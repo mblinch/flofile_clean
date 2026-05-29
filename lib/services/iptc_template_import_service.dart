@@ -157,7 +157,15 @@ class IptcTemplateImportService {
   static Future<Map<String, dynamic>?> _readMetadataViaExiftool(
     String filePath,
   ) async {
-    const tags = [
+    final proc = await ExiftoolHelper.run(['-a', '-j', ...applyCompareTags, filePath]);
+    if (!proc.isSuccess) return null;
+    final List data = jsonDecode(proc.stdoutText);
+    if (data.isEmpty) return null;
+    return data.first as Map<String, dynamic>;
+  }
+
+  /// Tags read before apply-on-import to detect unchanged fields.
+  static const applyCompareTags = [
       '-IPTC:Description',
       '-Description',
       '-IPTC:By-line',
@@ -165,18 +173,23 @@ class IptcTemplateImportService {
       '-Creator',
       '-IPTC:OriginalTransmissionReference',
       '-OriginalTransmissionReference',
+      '-TransmissionReference',
       '-MEID',
       '-CaptionWriter',
+      '-IPTC:Writer-Editor',
       '-IPTC:By-lineTitle',
       '-By-lineTitle',
+      '-AuthorsPosition',
       '-IPTC:CopyrightNotice',
       '-Copyright',
+      '-XMP:Rights',
       '-IPTC:Credit',
       '-Credit',
       '-IPTC:Source',
       '-Source',
       '-IPTC:Headline',
       '-Headline',
+      '-XMP:Title',
       '-IPTC:Keywords',
       '-Keywords',
       '-Subject',
@@ -189,30 +202,61 @@ class IptcTemplateImportService {
       '-ObjectName',
       '-IPTC:SubLocation',
       '-SubLocation',
+      '-Sub-location',
       '-IPTC:City',
       '-City',
       '-IPTC:ProvinceState',
       '-ProvinceState',
+      '-Province-State',
       '-IPTC:CountryPrimaryLocationName',
       '-Country',
       '-IPTC:CountryPrimaryLocationCode',
       '-CountryCode',
       '-IPTC:SpecialInstructions',
       '-SpecialInstructions',
+      '-XMP:Instructions',
+      '-XMP-photoshop:Instructions',
+      '-Instructions',
       '-XMP-getty:Personality',
       '-Personality',
       '-IPTC:Urgency',
       '-Urgency',
+      '-XMP-photomech:CreatorIdentity',
       '-XMP:CreatorIdentity',
-      '-DateTimeOriginal',
-      '-CreateDate',
+      '-CreatorIdentity',
     ];
 
-    final proc = await ExiftoolHelper.run(['-a', '-j', ...tags, filePath]);
-    if (!proc.isSuccess) return null;
-    final List data = jsonDecode(proc.stdoutText);
-    if (data.isEmpty) return null;
-    return data.first as Map<String, dynamic>;
+  /// Reads metadata from [filePath] for apply skip-if-unchanged checks.
+  static Future<Map<String, dynamic>?> readMetadata(String filePath) =>
+      _readMetadataViaExiftool(filePath);
+
+  /// One ExifTool pass for many files (used before batch IPTC apply on import).
+  static Future<Map<String, Map<String, dynamic>>> readMetadataBatch(
+    List<String> filePaths,
+  ) async {
+    if (filePaths.isEmpty) return {};
+    final proc = await ExiftoolHelper.run([
+      '-a',
+      '-j',
+      ...applyCompareTags,
+      ...filePaths,
+    ]);
+    if (!proc.isSuccess) return {};
+    try {
+      final List data = jsonDecode(proc.stdoutText);
+      final out = <String, Map<String, dynamic>>{};
+      for (final item in data) {
+        if (item is Map<String, dynamic>) {
+          final source = item['SourceFile']?.toString();
+          if (source != null && source.isNotEmpty) {
+            out[source] = item;
+          }
+        }
+      }
+      return out;
+    } catch (_) {
+      return {};
+    }
   }
 
   /// Maps ExifTool JSON (from .xmp, .jpg, etc.) to startup panel storage keys.
@@ -263,6 +307,9 @@ class IptcTemplateImportService {
       'Special Instructions': _first(meta, [
         'IPTC:SpecialInstructions',
         'SpecialInstructions',
+        'XMP-photoshop:Instructions',
+        'XMP:Instructions',
+        'Instructions',
       ]),
       'Stadium': _first(meta, ['IPTC:SubLocation', 'SubLocation', 'Sub-location']),
       'City': _first(meta, ['IPTC:City', 'City']),
@@ -281,7 +328,11 @@ class IptcTemplateImportService {
         'CountryPrimaryLocationCode',
         'CountryCode',
       ]),
-      "Creator's Identity": _first(meta, ['XMP:CreatorIdentity', 'CreatorIdentity']),
+      "Creator's Identity": _firstScalar(meta, [
+        'XMP-photomech:CreatorIdentity',
+        'XMP:CreatorIdentity',
+        'CreatorIdentity',
+      ]),
       'Time and Date': _formatExifDateTime(meta),
       'Urgency': _first(meta, ['IPTC:Urgency', 'Urgency']),
     };
@@ -304,6 +355,24 @@ class IptcTemplateImportService {
             .where((e) => e.isNotEmpty)
             .toList();
         if (parts.isNotEmpty) return parts.join(', ');
+      } else {
+        final v = raw.toString().trim();
+        if (v.isNotEmpty) return v;
+      }
+    }
+    return '';
+  }
+
+  /// Like [_first] but uses only the first list item (avoids duplicate bag values).
+  static String _firstScalar(Map<String, dynamic> meta, List<String> keys) {
+    for (final key in keys) {
+      final raw = meta[key];
+      if (raw == null) continue;
+      if (raw is List) {
+        for (final item in raw) {
+          final v = item.toString().trim();
+          if (v.isNotEmpty) return v;
+        }
       } else {
         final v = raw.toString().trim();
         if (v.isNotEmpty) return v;

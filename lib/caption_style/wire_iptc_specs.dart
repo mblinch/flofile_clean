@@ -140,7 +140,7 @@ class WireIptcSpecs {
       'MEID': 'IPTC:OriginalTransmissionReference',
       'Keywords': 'IPTC:Keywords',
       'Creator': 'IPTC:By-line',
-      "Creator's Identity": 'XMP:CreatorIdentity',
+      "Creator's Identity": 'XMP-photomech:CreatorIdentity',
       'Job Title': 'IPTC:By-lineTitle',
       'Copyright': 'IPTC:CopyrightNotice',
       'Credit': 'IPTC:Credit',

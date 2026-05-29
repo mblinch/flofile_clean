@@ -27,6 +27,7 @@ import '../services/api_manager.dart';
 import '../services/mlb_api_service.dart'; // For Player model
 import '../caption_style/game_info.dart';
 import '../services/iptc_template_apply_service.dart';
+import '../services/iptc_template_import_service.dart';
 import '../services/preferences_service.dart';
 import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
@@ -820,17 +821,19 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Folder watching disabled to prevent image jumping
   }
 
-  void _reportSessionLoading({
+  Future<void> _reportSessionLoading({
     required double progress,
     required String title,
     required String detail,
-  }) {
+  }) async {
     if (!mounted) return;
     setState(() {
       _loadingProgress = progress.clamp(0.0, 1.0);
       _loadingStatusTitle = title;
       _loadingStatusDetail = detail;
     });
+    // Yield so the progress bar can repaint during long async work.
+    await Future<void>.delayed(Duration.zero);
   }
 
   static String _iptcApplyModeLabel(IptcApplyMode mode) {
@@ -857,7 +860,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       const rosterTimeout = Duration(seconds: 12);
 
       if (selectedHomeTeam != null) {
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.06,
           title: 'Loading players',
           detail: 'Home team · $selectedHomeTeam',
@@ -872,7 +875,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         print('Loaded ${homeRoster.length} home team players');
         if (!mounted) return;
         setState(() => _cachedHomeRoster = homeRoster);
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.22,
           title: 'Loading players',
           detail: 'Home roster loaded (${homeRoster.length} players)',
@@ -884,7 +887,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
 
       if (selectedAwayTeam != null) {
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.24,
           title: 'Loading players',
           detail: 'Away team · $selectedAwayTeam',
@@ -899,13 +902,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         print('Loaded ${awayRoster.length} away team players');
         if (!mounted) return;
         setState(() => _cachedAwayRoster = awayRoster);
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.34,
           title: 'Loading players',
           detail: 'Away roster loaded (${awayRoster.length} players)',
         );
       } else if (selectedHomeTeam == null && selectedAwayTeam == null) {
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.2,
           title: 'Loading session',
           detail: 'No team rosters to load',
@@ -940,7 +943,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     await _loadImagesFromFolder(folderPath);
 
     if (!mounted) return;
-    _reportSessionLoading(
+    await _reportSessionLoading(
       progress: 1.0,
       title: 'Ready',
       detail: '${imagePaths.length} images loaded',
@@ -1009,7 +1012,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final mode = await prefsService.getIptcApplyMode();
       if (mode != IptcApplyMode.onImport) {
         _startupIptcPresetForImport = null;
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.92,
           title: 'Loading images',
           detail:
@@ -1022,7 +1025,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           await _loadSelectedIptcPreset();
       _startupIptcPresetForImport = null;
       if (preset == null || preset.isEmpty) {
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.92,
           title: 'Loading images',
           detail: 'No IPTC template fields to write',
@@ -1033,7 +1036,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final writable =
           paths.where((path) => !_lockedPaths.contains(path)).toList();
       if (writable.isEmpty) {
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.92,
           title: 'Loading images',
           detail: 'No writable images for IPTC template',
@@ -1042,31 +1045,59 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
 
       final fieldCount = preset.length;
+      await _reportSessionLoading(
+        progress: 0.67,
+        title: 'Writing IPTC template',
+        detail: 'Checking ${writable.length} images…',
+      );
+      final existingByPath =
+          await IptcTemplateImportService.readMetadataBatch(writable);
+
+      var skippedCount = 0;
+      var updatedCount = 0;
       for (var i = 0; i < writable.length; i++) {
-        final name = p.basename(writable[i]);
-        _reportSessionLoading(
-          progress: 0.68 + (0.26 * (i + 1) / writable.length),
-          title: 'Writing IPTC template',
-          detail:
-              'Image ${i + 1} of ${writable.length} · $name · $fieldCount fields',
-        );
-        await IptcTemplateApplyService.applyToImage(
-          writable[i],
+        final path = writable[i];
+        final name = p.basename(path);
+        final result = await IptcTemplateApplyService.applyToImage(
+          path,
           preset,
           imageIndex: i,
+          existingMetadata: existingByPath[path],
+        );
+        if (!result.success) {
+          await _reportSessionLoading(
+            progress: 0.68 + (0.26 * (i + 1) / writable.length),
+            title: 'Writing IPTC template',
+            detail: 'Some images could not be updated',
+          );
+          return;
+        }
+        if (result.skipped) {
+          skippedCount++;
+        } else {
+          updatedCount++;
+        }
+        await _reportSessionLoading(
+          progress: 0.68 + (0.26 * (i + 1) / writable.length),
+          title: 'Writing IPTC template',
+          detail: result.skipped
+              ? 'Image ${i + 1} of ${writable.length} · $name · up to date'
+              : 'Image ${i + 1} of ${writable.length} · $name · $fieldCount fields',
         );
         if (!mounted) return;
       }
-      _reportSessionLoading(
+      await _reportSessionLoading(
         progress: 0.96,
         title: 'Writing IPTC template',
-        detail: 'Finished · ${writable.length} images updated',
+        detail: skippedCount == writable.length
+            ? 'All ${writable.length} images already matched template'
+            : 'Updated $updatedCount · skipped $skippedCount (already set)',
       );
     } catch (e) {
       print('Error applying startup IPTC template during load: $e');
       _startupIptcPresetForImport = null;
       if (mounted) {
-        _reportSessionLoading(
+        await _reportSessionLoading(
           progress: 0.92,
           title: 'Writing IPTC template',
           detail: 'Some images could not be updated',
@@ -1125,7 +1156,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               ? imagePaths[currentIndex]
               : null;
 
-      _reportSessionLoading(
+      await _reportSessionLoading(
         progress: 0.38,
         title: 'Loading images',
         detail: 'Scanning folder…',
@@ -1160,7 +1191,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             !fileName.startsWith('tmp.');
       }).toList();
 
-      _reportSessionLoading(
+      await _reportSessionLoading(
         progress: 0.42,
         title: 'Loading images',
         detail: imageFiles.isEmpty
@@ -1170,7 +1201,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
       await _sortImagesByDateTaken(imageFiles);
 
-      _reportSessionLoading(
+      await _reportSessionLoading(
         progress: 0.64,
         title: 'Loading images',
         detail: 'Sorted ${imageFiles.length} images by capture time',
@@ -1188,7 +1219,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
-      _reportSessionLoading(
+      await _reportSessionLoading(
         progress: 0.66,
         title: 'Loading images',
         detail: 'Restoring saved markers…',
@@ -2551,8 +2582,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     for (int i = 0; i < imageFiles.length; i++) {
       final filePath = imageFiles[i];
 
-      if (imageFiles.isNotEmpty) {
-        _reportSessionLoading(
+      if (imageFiles.isNotEmpty &&
+          (i == 0 || i == imageFiles.length - 1 || i % 2 == 0)) {
+        await _reportSessionLoading(
           progress: 0.44 + (0.18 * (i + 1) / imageFiles.length),
           title: 'Loading images',
           detail:
@@ -3985,13 +4017,31 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   Widget _buildPreSessionBody() {
     const padding = EdgeInsets.fromLTRB(16, 16, 16, 16);
+    const loadingTitleStyle = TextStyle(
+      fontFamily: 'Impact',
+      fontFamilyFallback: ['Inter'],
+      fontSize: 36,
+      fontWeight: FontWeight.w800,
+      color: kFloTealDark,
+      height: 1.05,
+      letterSpacing: 0.5,
+    );
+    const loadingPercentStyle = TextStyle(
+      fontFamily: 'Impact',
+      fontFamilyFallback: ['Inter'],
+      fontSize: 44,
+      fontWeight: FontWeight.w800,
+      color: kFloTealDark,
+      height: 1.0,
+      letterSpacing: 0.5,
+    );
 
     if (_isLoadingPlayers || _isLoadingImages) {
       return Padding(
         padding: padding,
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 360),
+            constraints: const BoxConstraints(maxWidth: 520),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3999,14 +4049,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 Text(
                   _loadingStatusTitle,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontFamily: 'Impact',
-                    fontFamilyFallback: ['Inter'],
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    color: kFloTealDark,
-                    letterSpacing: 0.3,
-                  ),
+                  style: loadingTitleStyle,
                 ),
                 if (_loadingStatusDetail.isNotEmpty) ...[
                   const SizedBox(height: 8),
@@ -4024,19 +4067,16 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
                 FloTealGradientProgressBar(
-                  value: _loadingProgress < 0.02 ? 0.02 : _loadingProgress,
+                  value: _loadingProgress,
+                  height: 14,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
                 Text(
-                  '${(_loadingProgress * 100).toInt()}%',
+                  '${(_loadingProgress * 100).round()}%',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 11,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: loadingPercentStyle,
                 ),
               ],
             ),

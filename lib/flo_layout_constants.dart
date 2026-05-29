@@ -56,44 +56,64 @@ BoxDecoration floTealSelectedChipDecoration({BorderRadius? borderRadius}) {
   );
 }
 
-/// Horizontal progress fill using [kFloTealGradientHorizontal].
+/// Horizontal progress fill: white track with teal gradient growing left → right.
 class FloTealGradientProgressBar extends StatelessWidget {
   const FloTealGradientProgressBar({
     super.key,
     required this.value,
-    this.height = 6,
-    this.backgroundColor,
+    this.height = 14,
+    this.trackColor = Colors.white,
+    this.borderColor = const Color(0xFFD0D0D0),
     this.borderRadius,
+    this.animationDuration = const Duration(milliseconds: 220),
   });
 
   final double value;
   final double height;
-  final Color? backgroundColor;
+  final Color trackColor;
+  final Color borderColor;
   final BorderRadius? borderRadius;
+  final Duration animationDuration;
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ?? BorderRadius.circular(3);
+    final radius = borderRadius ?? BorderRadius.circular(height / 2);
     final fill = value.clamp(0.0, 1.0);
-    return ClipRRect(
-      borderRadius: radius,
-      child: SizedBox(
-        height: height,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: backgroundColor ?? const Color(0xFFE8ECEE)),
-            if (fill > 0)
-              Align(
-                alignment: Alignment.centerLeft,
-                widthFactor: fill,
-                child: const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: kFloTealGradientHorizontal,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: trackColor,
+        borderRadius: radius,
+        border: Border.all(color: borderColor, width: 0.7),
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: SizedBox(
+          height: height,
+          width: double.infinity,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final trackWidth = constraints.maxWidth;
+              final fillWidth = trackWidth * fill;
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  ColoredBox(color: trackColor),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: AnimatedContainer(
+                      duration: animationDuration,
+                      curve: Curves.easeOutCubic,
+                      width: fillWidth,
+                      height: height,
+                      decoration: const BoxDecoration(
+                        gradient: kFloTealGradientHorizontal,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-          ],
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

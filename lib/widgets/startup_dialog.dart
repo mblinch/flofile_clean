@@ -76,7 +76,7 @@ class _StartupDialogState extends State<StartupDialog> {
   String? selectedAwayTeam;
   DateTime? selectedGameDate;
   List<String> availableTeams = [];
-  bool isLoadingTeams = true;
+  bool isLoadingTeams = false;
   bool isLoadingFolder = false;
   bool hasImagesInFolder = false;
   bool isExtractingDate = false;
@@ -384,11 +384,16 @@ class _StartupDialogState extends State<StartupDialog> {
     '-CountryCode',
     '-IPTC:SpecialInstructions',
     '-SpecialInstructions',
+    '-XMP:Instructions',
+    '-XMP-photoshop:Instructions',
+    '-Instructions',
     '-XMP-getty:Personality',
     '-Personality',
     '-IPTC:Urgency',
     '-Urgency',
+    '-XMP-photomech:CreatorIdentity',
     '-XMP:CreatorIdentity',
+    '-CreatorIdentity',
   ];
 
   String _formatExifDateTime(Map<String, dynamic> meta) {
@@ -523,6 +528,9 @@ class _StartupDialogState extends State<StartupDialog> {
       'Special Instructions': _firstMetaValue(meta, [
         'IPTC:SpecialInstructions',
         'SpecialInstructions',
+        'XMP-photoshop:Instructions',
+        'XMP:Instructions',
+        'Instructions',
       ]),
       'Stadium': _firstMetaValue(meta, [
         'IPTC:SubLocation',
@@ -546,6 +554,7 @@ class _StartupDialogState extends State<StartupDialog> {
         'CountryCode',
       ]),
       "Creator's Identity": _firstMetaValue(meta, [
+        'XMP-photomech:CreatorIdentity',
         'XMP:CreatorIdentity',
         'CreatorIdentity',
       ]),
@@ -655,6 +664,15 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   Future<void> _loadTeams() async {
+    if (!_sportChosen) {
+      if (mounted) {
+        setState(() => isLoadingTeams = false);
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() => isLoadingTeams = true);
+    }
     try {
       final teams = await _apiManager.fetchTeams();
       if (!mounted) return;
@@ -1213,8 +1231,11 @@ class _StartupDialogState extends State<StartupDialog> {
     final selectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
     final otherTeam = isHome ? selectedAwayTeam : selectedHomeTeam;
     final favoriteTeam = isHome ? _favoriteHomeTeam : _favoriteAwayTeam;
+    final effectiveHint = isLoadingTeams && availableTeams.isEmpty
+        ? 'Loading teams…'
+        : hintText;
     return _StartupTeamAutocomplete(
-      hintText: hintText,
+      hintText: effectiveHint,
       teams: availableTeams,
       selectedTeam: selectedTeam,
       otherTeam: otherTeam,
@@ -1823,77 +1844,71 @@ class _StartupDialogState extends State<StartupDialog> {
             )
           : null,
       children: [
-        if (isLoadingTeams)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 2),
-            child: Center(
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: _buildTeamDropdownWithFavoriteIndicator(
+                isHome: false,
+                hintText: 'Away team',
               ),
             ),
-          )
-        else ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: _buildTeamDropdownWithFavoriteIndicator(
-                  isHome: false,
-                  hintText: 'Away team',
-                ),
-              ),
-              SizedBox(
-                width: 22,
-                child: Center(
-                  child: Text(
-                    '@',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 11,
-                      fontVariations: const [FontVariation('wght', 700)],
-                      color: Colors.grey.shade500,
-                    ),
+            SizedBox(
+              width: 22,
+              child: Center(
+                child: Text(
+                  '@',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 11,
+                    fontVariations: const [FontVariation('wght', 700)],
+                    color: Colors.grey.shade500,
                   ),
                 ),
               ),
-              Expanded(
-                child: _buildTeamDropdownWithFavoriteIndicator(
-                  isHome: true,
-                  hintText: 'Home team',
-                ),
-              ),
-            ],
-          ),
-          if (selectedHomeTeam != null &&
-              selectedAwayTeam != null &&
-              selectedHomeTeam == selectedAwayTeam) ...[
-            const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                border: Border.all(color: Colors.red.shade200),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.error, color: Colors.red, size: 14),
-                  SizedBox(width: 4),
-                  Text(
-                    'Home and away teams must be different',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontVariations: [FontVariation('wght', 500)],
-                      color: Colors.red,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
+            ),
+            Expanded(
+              child: _buildTeamDropdownWithFavoriteIndicator(
+                isHome: true,
+                hintText: 'Home team',
               ),
             ),
           ],
+        ),
+        if (isLoadingTeams && availableTeams.isEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Loading team list…',
+            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+          ),
+        ],
+        if (selectedHomeTeam != null &&
+            selectedAwayTeam != null &&
+            selectedHomeTeam == selectedAwayTeam) ...[
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.red.shade50,
+              border: Border.all(color: Colors.red.shade200),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.error, color: Colors.red, size: 14),
+                SizedBox(width: 4),
+                Text(
+                  'Home and away teams must be different',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontVariations: [FontVariation('wght', 500)],
+                    color: Colors.red,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ],
     );

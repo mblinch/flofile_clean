@@ -77,6 +77,8 @@ void main() {
             '-XMP-photoshop:SupplementalCategories=',
             '-sep',
             ',',
+            '-IPTC:SupplementalCategories=SPO1,BBN1,BBA1',
+            '-SupplementalCategories=SPO1,BBN1,BBA1',
             '-XMP-photoshop:SupplementalCategories=SPO1,BBN1,BBA1',
           ]));
     });
@@ -104,6 +106,8 @@ void main() {
             '-XMP-photoshop:SupplementalCategories=',
             '-sep',
             ',',
+            '-IPTC:SupplementalCategories=SPO1',
+            '-SupplementalCategories=SPO1',
             '-XMP-photoshop:SupplementalCategories=SPO1',
           ]));
     });
@@ -140,6 +144,18 @@ void main() {
       expect(r[0], 'SPO, BBN, BBA');
       expect(r[1], '');
       expect(r[2], '');
+    });
+
+    test('reads Supp Cat panel keys from metadata', () {
+      final form = <String, String>{};
+      final meta = <String, dynamic>{
+        'Supp Cat 1': 'SPO',
+        'Supp Cat 2': 'BBN',
+      };
+      expect(
+        supplementalCategoryRawInputsForSave(form, meta),
+        equals(['SPO', 'BBN', '']),
+      );
     });
   });
 }

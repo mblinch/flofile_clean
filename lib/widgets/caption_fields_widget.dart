@@ -9314,7 +9314,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               (e) => _buildVerbOption(e.value, verbNumber: e.key + 1),
             ),
         ...List.generate(
-          10 - _favoriteVerbs.length,
+          (10 - _favoriteVerbs.length).clamp(0, 10),
           (index) => _buildVerbOption(''),
         ),
       ];
@@ -10757,7 +10757,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               .toList(),
           // Add empty chips to fill remaining space
           ...List.generate(
-            10 - _favoriteVerbs.length,
+            (10 - _favoriteVerbs.length).clamp(0, 10),
             (index) => _buildVerbOption(''),
           ),
         ],

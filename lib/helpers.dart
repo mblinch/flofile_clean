@@ -53,15 +53,25 @@ List<String> supplementalCategoryRawInputsForSave(
   Map<String, String> allValues,
   Map<String, dynamic>? currentMetadata,
 ) {
-  String pick(String key) {
-    final fromForm = allValues[key]?.trim() ?? '';
-    if (fromForm.isNotEmpty) return fromForm;
-    return currentMetadata?[key]?.toString().trim() ?? '';
+  String pickSlot(int slot) {
+    final keys = <String>[
+      'SupplementalCategories$slot',
+      'Supp Cat $slot',
+    ];
+    for (final key in keys) {
+      final fromForm = allValues[key]?.trim() ?? '';
+      if (fromForm.isNotEmpty) return fromForm;
+    }
+    for (final key in keys) {
+      final fromMeta = currentMetadata?[key]?.toString().trim() ?? '';
+      if (fromMeta.isNotEmpty) return fromMeta;
+    }
+    return '';
   }
 
-  String s1 = pick('SupplementalCategories1');
-  String s2 = pick('SupplementalCategories2');
-  String s3 = pick('SupplementalCategories3');
+  String s1 = pickSlot(1);
+  String s2 = pickSlot(2);
+  String s3 = pickSlot(3);
 
   if (s1.isEmpty && s2.isEmpty && s3.isEmpty && currentMetadata != null) {
     final combined = combinedSupplementalCategoriesValue(currentMetadata);
@@ -166,13 +176,15 @@ List<String> buildSupplementalCategoriesArgs(List<String> rawInputs) {
   // Clear the authoritative XMP-photoshop bag
   args.add('-XMP-photoshop:SupplementalCategories=');
 
-  // If we have values, assign the entire list in one go using -sep
+  // If we have values, assign the entire list in one go using -sep.
+  // Photo Mechanic reads IPTC SupplementalCategories; XMP-photoshop is also set.
   if (normalizedSuppCats.isNotEmpty) {
-    // Use comma separator and single assignment to avoid incremental list mutation
+    final joined = normalizedSuppCats.join(',');
     args.add('-sep');
     args.add(',');
-    args.add(
-        '-XMP-photoshop:SupplementalCategories=${normalizedSuppCats.join(',')}');
+    args.add('-IPTC:SupplementalCategories=$joined');
+    args.add('-SupplementalCategories=$joined');
+    args.add('-XMP-photoshop:SupplementalCategories=$joined');
   }
 
   return args;

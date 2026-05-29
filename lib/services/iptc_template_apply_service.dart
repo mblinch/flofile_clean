@@ -1,5 +1,33 @@
 import '../helpers.dart';
 import '../utils/exiftool_helper.dart';
+import 'iptc_template_import_service.dart';
+
+/// Fields to write when applying a preset to one image (skip-unchanged path).
+class _IptcWritePlan {
+  const _IptcWritePlan({
+    required this.presetFields,
+    this.keywords,
+    this.objectName,
+    required this.skipEntirely,
+  });
+
+  final Map<String, String> presetFields;
+  final String? keywords;
+  final String? objectName;
+  final bool skipEntirely;
+}
+
+/// Result of applying IPTC template values to one image file.
+class IptcApplyToImageResult {
+  const IptcApplyToImageResult({
+    required this.success,
+    this.skipped = false,
+  });
+
+  final bool success;
+  /// True when every template field already matched file metadata (no ExifTool write).
+  final bool skipped;
+}
 
 /// When (if ever) the startup IPTC template is written to image files.
 enum IptcApplyMode {
@@ -104,6 +132,10 @@ class IptcTemplateApplyService {
         return 'Stadium';
       case 'ObjectName':
         return 'Object Name';
+      case 'SpecialInstructions':
+        return 'Special Instructions';
+      case 'Creators Identity':
+        return 'Creator\'s Identity';
       default:
         return key;
     }
@@ -257,6 +289,9 @@ class IptcTemplateApplyService {
       case 'Special Instructions':
         tag('SpecialInstructions');
         tag('IPTC:SpecialInstructions');
+        // Photo Mechanic often displays the XMP Instructions field.
+        tag('XMP:Instructions');
+        tag('XMP-photoshop:Instructions');
         break;
       case 'Personality':
         tag('XMP-getty:Personality');
@@ -273,8 +308,9 @@ class IptcTemplateApplyService {
         tag('IPTC:Urgency');
         break;
       case 'Creator\'s Identity':
-        tag('XMP:CreatorIdentity');
-        tag('CreatorIdentity');
+      case 'Creators Identity':
+        // PM stores this in the PhotoMechanic XMP namespace (not dc/XMP core).
+        tag('XMP-photomech:CreatorIdentity');
         break;
       case 'Date':
       case 'Time':
@@ -402,6 +438,109 @@ class IptcTemplateApplyService {
     return buildGettyObjectNameSlug(preset, imageIndex: imageIndex);
   }
 
+  static Set<String> _keywordSet(String raw) {
+    var s = raw.trim();
+    if (s.startsWith('[') && s.endsWith(']')) {
+      s = s.substring(1, s.length - 1);
+    }
+    return s
+        .split(',')
+        .map((e) => e.trim().toLowerCase())
+        .where((e) => e.isNotEmpty)
+        .toSet();
+  }
+
+  static bool _keywordsMatch(String expected, String existing) {
+    return _keywordSet(expected) == _keywordSet(existing);
+  }
+
+  static bool _fieldNeedsWrite(String presetKey, String expected, String existing) {
+    final e = expected.trim();
+    if (e.isEmpty) return false;
+    final x = existing.trim();
+    if (presetKey == 'Urgency') {
+      return normalizeUrgencyValue(e) != normalizeUrgencyValue(x);
+    }
+    if (presetKey.startsWith('Supp Cat')) {
+      return e.toUpperCase() != x.toUpperCase();
+    }
+    return e != x;
+  }
+
+  /// Preset fields (plus keywords / object name) that differ from [existingMeta].
+  static _IptcWritePlan _writePlanForImage(
+    Map<String, String> preset,
+    Map<String, dynamic> existingMeta, {
+    bool skipInAppGenerated = true,
+    int? imageIndex,
+  }) {
+    final existing =
+        IptcTemplateImportService.panelValuesFromExiftool(existingMeta);
+    final changed = <String, String>{};
+
+    // If any supp cat differs, rewrite all preset slots (full bag overwrite).
+    var anySuppOutOfSync = false;
+    for (var i = 1; i <= 3; i++) {
+      final key = 'Supp Cat $i';
+      final v = preset[key]?.trim();
+      if (v == null || v.isEmpty) continue;
+      if (_fieldNeedsWrite(key, v, existing[key] ?? '')) {
+        anySuppOutOfSync = true;
+        break;
+      }
+    }
+    if (anySuppOutOfSync) {
+      for (var i = 1; i <= 3; i++) {
+        final key = 'Supp Cat $i';
+        final v = preset[key]?.trim() ?? '';
+        if (v.isNotEmpty) changed[key] = v;
+      }
+    }
+
+    preset.forEach((key, value) {
+      final v = value.trim();
+      if (v.isEmpty) return;
+      if (key == 'Keywords' ||
+          key == 'Object Name' ||
+          key == 'ObjectName' ||
+          key.startsWith('Supp Cat')) {
+        return;
+      }
+      if (skipInAppGenerated && inAppGeneratedPresetKeys.contains(key)) {
+        return;
+      }
+      final existingVal = existing[key] ?? '';
+      if (_fieldNeedsWrite(key, v, existingVal)) {
+        changed[key] = v;
+      }
+    });
+
+    final keywordsRaw = preset['Keywords']?.trim() ?? '';
+    final keywords = keywordsRaw.isNotEmpty &&
+            !_keywordsMatch(keywordsRaw, existing['Keywords'] ?? '')
+        ? keywordsRaw
+        : null;
+
+    final resolvedObjectName =
+        resolveObjectNameForImage(preset, imageIndex: imageIndex);
+    final objectName = resolvedObjectName != null &&
+            _fieldNeedsWrite(
+              'Object Name',
+              resolvedObjectName,
+              existing['Object Name'] ?? '',
+            )
+        ? resolvedObjectName
+        : null;
+
+    return _IptcWritePlan(
+      presetFields: changed,
+      keywords: keywords,
+      objectName: objectName,
+      skipEntirely:
+          changed.isEmpty && keywords == null && objectName == null,
+    );
+  }
+
   /// Writes keywords using clear-then-add (Photo Mechanic compatible).
   static Future<void> applyKeywords(String imagePath, String keywordsValue) async {
     final cleanValue = keywordsValue.trim();
@@ -467,43 +606,77 @@ class IptcTemplateApplyService {
   }
 
   /// Applies [template] (preset display keys) to [imagePath].
-  static Future<bool> applyToImage(
+  ///
+  /// When [existingMetadata] is supplied, fields that already match the template
+  /// are skipped (no ExifTool write for that field). Returns [IptcApplyToImageResult.skipped]
+  /// when the entire image is unchanged.
+  static Future<IptcApplyToImageResult> applyToImage(
     String imagePath,
     Map<String, String> template, {
     bool skipInAppGenerated = true,
     int? imageIndex,
+    Map<String, dynamic>? existingMetadata,
   }) async {
     final preset = normalizeForPreset(template);
-    if (preset.isEmpty) return true;
+    if (preset.isEmpty) {
+      return const IptcApplyToImageResult(success: true, skipped: true);
+    }
 
-    final keywords = preset['Keywords']?.trim() ?? '';
-    final objectName =
-        resolveObjectNameForImage(preset, imageIndex: imageIndex);
-    if (objectName != null) {
-      print(
-        'IPTC apply Object Name for $imagePath: $objectName (index=$imageIndex)',
+    Map<String, dynamic>? meta = existingMetadata;
+    meta ??= await IptcTemplateImportService.readMetadata(imagePath);
+
+    final Map<String, String> fieldsToWrite;
+    final String? keywordsToWrite;
+    final String? objectNameToWrite;
+
+    if (meta != null) {
+      final plan = _writePlanForImage(
+        preset,
+        meta,
+        skipInAppGenerated: skipInAppGenerated,
+        imageIndex: imageIndex,
       );
+      if (plan.skipEntirely) {
+        return const IptcApplyToImageResult(success: true, skipped: true);
+      }
+      fieldsToWrite = plan.presetFields;
+      keywordsToWrite = plan.keywords;
+      objectNameToWrite = plan.objectName;
+    } else {
+      fieldsToWrite = Map<String, String>.from(preset)
+        ..removeWhere((key, _) =>
+            key == 'Keywords' ||
+            key == 'Object Name' ||
+            key == 'ObjectName' ||
+            (skipInAppGenerated && inAppGeneratedPresetKeys.contains(key)));
+      final kw = preset['Keywords']?.trim();
+      keywordsToWrite = (kw == null || kw.isEmpty) ? null : kw;
+      objectNameToWrite =
+          resolveObjectNameForImage(preset, imageIndex: imageIndex);
+    }
+
+    if (fieldsToWrite.isEmpty &&
+        keywordsToWrite == null &&
+        objectNameToWrite == null) {
+      return const IptcApplyToImageResult(success: true, skipped: true);
     }
 
     try {
-      // Title / Object Name first — still written if the main batch fails later.
-      if (objectName != null) {
-        final ok = await applyObjectName(imagePath, objectName);
-        if (!ok) return false;
+      if (keywordsToWrite != null) {
+        await applyKeywords(imagePath, keywordsToWrite);
       }
 
-      if (keywords.isNotEmpty) {
-        await applyKeywords(imagePath, keywords);
+      if (objectNameToWrite != null) {
+        final objectOk =
+            await applyObjectName(imagePath, objectNameToWrite);
+        if (!objectOk) {
+          return const IptcApplyToImageResult(success: false);
+        }
       }
 
       final allValues = <String, String>{};
-      preset.forEach((key, value) {
+      fieldsToWrite.forEach((key, value) {
         if (value.trim().isEmpty) return;
-        if (key == 'Keywords') return;
-        if (key == 'Object Name' || key == 'ObjectName') return;
-        if (skipInAppGenerated && inAppGeneratedPresetKeys.contains(key)) {
-          return;
-        }
         if (key == 'Supp Cat 1') {
           allValues['SupplementalCategories1'] = value;
         } else if (key == 'Supp Cat 2') {
@@ -515,41 +688,49 @@ class IptcTemplateApplyService {
         }
       });
 
-      if (objectName != null) {
-        _tagObjectNameAliases(allValues, objectName);
-      }
-
-      if (allValues.isEmpty && keywords.isEmpty && objectName == null) {
-        return true;
-      }
-
-      // Match MetadataPopupDialog save order/flags (no -m, which hides write failures).
-      final args = <String>[];
-
-      allValues.forEach((tag, value) {
-        if (value.trim().isNotEmpty) {
-          args.add(exiftoolWriteArg(tag, value));
-        }
-      });
-
-      final metadataForSupp = <String, dynamic>{
-        for (final e in preset.entries) e.key: e.value,
-      };
-      final rawInputs = supplementalCategoryRawInputsForSave(
-        allValues,
-        metadataForSupp,
-      );
-      args.removeWhere((arg) =>
-          arg.contains('SupplementalCategories1') ||
-          arg.contains('SupplementalCategories2') ||
-          arg.contains('SupplementalCategories3'));
-      args.addAll(buildSupplementalCategoriesArgs(rawInputs));
-
-      args.add('-overwrite_original');
-      args.add(imagePath);
-
       var mainOk = true;
-      if (args.length > 2) {
+      if (allValues.isNotEmpty) {
+        final args = <String>[];
+
+        allValues.forEach((tag, value) {
+          if (value.trim().isNotEmpty) {
+            args.add(exiftoolWriteArg(tag, value));
+          }
+        });
+
+        final metadataForSupp = <String, dynamic>{
+          for (final e in fieldsToWrite.entries) e.key: e.value,
+        };
+        if (fieldsToWrite.keys.any((k) => k.startsWith('Supp Cat'))) {
+          final existing = meta != null
+              ? IptcTemplateImportService.panelValuesFromExiftool(meta)
+              : <String, String>{};
+          for (var i = 1; i <= 3; i++) {
+            final key = 'Supp Cat $i';
+            final value = fieldsToWrite[key] ??
+                preset[key] ??
+                existing[key] ??
+                '';
+            if (value.trim().isNotEmpty) {
+              metadataForSupp[key] = value.trim();
+              allValues['SupplementalCategories$i'] = value.trim();
+            }
+          }
+        }
+        final rawInputs = supplementalCategoryRawInputsForSave(
+          allValues,
+          meta,
+        );
+        args.removeWhere((arg) =>
+            arg.contains('SupplementalCategories1') ||
+            arg.contains('SupplementalCategories2') ||
+            arg.contains('SupplementalCategories3'));
+        args.addAll(buildSupplementalCategoriesArgs(rawInputs));
+
+        args.addAll(['-charset', 'iptc=UTF8']);
+        args.add('-overwrite_original');
+        args.add(imagePath);
+
         final proc = await ExiftoolHelper.run(args);
         mainOk = proc.isSuccess;
         if (!mainOk) {
@@ -558,16 +739,10 @@ class IptcTemplateApplyService {
         }
       }
 
-      // Re-apply Object Name after main batch in case a tag in that batch cleared it.
-      if (objectName != null) {
-        final ok = await applyObjectName(imagePath, objectName);
-        if (!ok) return false;
-      }
-
-      return mainOk;
+      return IptcApplyToImageResult(success: mainOk);
     } catch (e) {
       print('IPTC template apply error for $imagePath: $e');
-      return false;
+      return const IptcApplyToImageResult(success: false);
     }
   }
 }
