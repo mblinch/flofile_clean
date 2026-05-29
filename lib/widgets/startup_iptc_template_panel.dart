@@ -12,6 +12,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     required this.selectedWire,
     required this.wireLabels,
     required this.values,
+    this.foundInFilesKeys = const {},
     this.onValueChanged,
     this.onWireSelected,
     this.isLoading = false,
@@ -22,29 +23,31 @@ class StartupIptcTemplatePanel extends StatelessWidget {
   final WireStyle selectedWire;
   final Map<WireStyle, String> wireLabels;
   final Map<String, String> values;
+  final Set<String> foundInFilesKeys;
   final void Function(String storageKey, String value)? onValueChanged;
   final ValueChanged<WireStyle>? onWireSelected;
   final bool isLoading;
   final IptcApplyMode iptcApplyMode;
   final ValueChanged<IptcApplyMode>? onIptcApplyModeChanged;
 
-  static const double _rowHeight = 36;
-  static const double _captionRowHeight = 96;
-  static const double _keywordsRowHeight = 56;
-  /// Wide enough for longest panel labels; may wrap to 2 lines instead of ellipsis.
-  static const double _labelWidth = 100;
+  /// One height for every row so the grid stays even; "Found in files" fits on line 2.
+  static const double _rowHeight = 34;
+  static const double _rowGap = 2;
+  /// Wide enough for longest panel labels on one line.
+  static const double _labelWidth = 106;
 
   /// Same as the main caption editor ([CaptionFieldsWidget] caption field).
   static const TextStyle _fieldValueStyle = TextStyle(
     fontFamily: 'Inter',
-    fontSize: 11,
-    height: 1.35,
+    fontSize: 10,
+    height: 1.25,
     color: Colors.black87,
   );
 
   static const String _captionLabel = 'Caption';
   static const String _keywordsLabel = 'Keywords';
   static const String _headlineLabel = 'Headline';
+  static const String _specialInstructionsLabel = 'Special Instructions';
   static const String _personalityLabel = 'Personality';
   static const String _urgencyLabel = 'Urgency';
 
@@ -53,12 +56,44 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     _personalityLabel,
   };
 
+  static String _labelOnOneLine(String label) {
+    final parts = label.trim().split(RegExp(r'\s+'));
+    if (parts.length == 2) {
+      return '${parts[0]}\u00A0${parts[1]}';
+    }
+    return label;
+  }
+
+  static bool _isFoundInFiles(String storageKey, Set<String> foundKeys) {
+    if (foundKeys.contains(storageKey)) return true;
+    final presetKey = IptcTemplateApplyService.toPresetKey(storageKey);
+    return foundKeys.contains(presetKey) ||
+        foundKeys.contains(IptcTemplateApplyService.toPanelKey(presetKey));
+  }
+
+  static String? _displayValueForField({
+    required String label,
+    required String? storedValue,
+    required bool showFoundInFiles,
+  }) {
+    final trimmed = storedValue?.trim() ?? '';
+    if (trimmed.isNotEmpty &&
+        !IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+      return trimmed;
+    }
+    if (_inAppGeneratedLabels.contains(label) && showFoundInFiles) {
+      return IptcTemplateApplyService.inAppGeneratedPlaceholder;
+    }
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
   @override
   Widget build(BuildContext context) {
     final specs = WireIptcSpecs.fieldsForPanel(selectedWire);
     WireIptcFieldSpec? captionSpec;
     WireIptcFieldSpec? keywordsSpec;
     WireIptcFieldSpec? headlineSpec;
+    WireIptcFieldSpec? specialInstructionsSpec;
     final remaining = <WireIptcFieldSpec>[];
     for (final spec in specs) {
       if (spec.label == _captionLabel) {
@@ -67,6 +102,8 @@ class StartupIptcTemplatePanel extends StatelessWidget {
         keywordsSpec = spec;
       } else if (spec.label == _headlineLabel) {
         headlineSpec = spec;
+      } else if (spec.label == _specialInstructionsLabel) {
+        specialInstructionsSpec = spec;
       } else {
         remaining.add(spec);
       }
@@ -74,16 +111,6 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     final mid = (remaining.length / 2).ceil();
     final left = remaining.sublist(0, mid);
     final right = remaining.sublist(mid);
-
-    final requiredTotal =
-        specs.where((s) => s.level == IptcFieldLevel.required).length;
-    var requiredFilled = 0;
-    for (final s in specs) {
-      if (s.level == IptcFieldLevel.required &&
-          (values[s.storageKey]?.trim().isNotEmpty ?? false)) {
-        requiredFilled++;
-      }
-    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -120,7 +147,8 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 6),
+                  const _IptcApplyModeHelpButton(),
+                  const SizedBox(width: 4),
                   SizedBox(
                     width: 240,
                     child: _IptcApplyModeSelector(
@@ -133,10 +161,10 @@ class StartupIptcTemplatePanel extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 6),
-        Row(
-          children: [
-            if (isLoading) ...[
+        if (isLoading) ...[
+          const SizedBox(height: 2),
+          Row(
+            children: [
               const SizedBox(
                 width: 12,
                 height: 12,
@@ -148,104 +176,255 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: 'Inter',
                   fontSize: 10,
-                  fontVariations: const [FontVariation('wght', 500)],
+                  fontVariations: [FontVariation('wght', 500)],
                   color: Colors.grey.shade600,
-                ),
-              ),
-            ] else
-              Text(
-                '$requiredFilled / $requiredTotal required',
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 10,
-                  fontVariations: [FontVariation('wght', 600)],
-                  color: Color(0xFF4A7A96),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (captionSpec != null) ...[
-                SizedBox(
-                  height: _captionRowHeight,
-                  child: _EditableFieldRow(
-                    key: ValueKey(captionSpec.storageKey),
-                    spec: captionSpec,
-                    value: IptcTemplateApplyService.lookupValue(
-                      values,
-                      captionSpec.storageKey,
-                    ),
-                    valueMaxLines: 6,
-                    onValueChanged: onValueChanged,
-                  ),
-                ),
-                const SizedBox(height: 3),
-              ],
-              if (keywordsSpec != null) ...[
-                SizedBox(
-                  height: _keywordsRowHeight,
-                  child: _EditableFieldRow(
-                    key: ValueKey(keywordsSpec.storageKey),
-                    spec: keywordsSpec,
-                    value: IptcTemplateApplyService.lookupValue(
-                      values,
-                      keywordsSpec.storageKey,
-                    ),
-                    valueMaxLines: 3,
-                    onValueChanged: onValueChanged,
-                  ),
-                ),
-                const SizedBox(height: 3),
-              ],
-              if (headlineSpec != null) ...[
-                SizedBox(
-                  height: _rowHeight,
-                  child: _EditableFieldRow(
-                    key: ValueKey(headlineSpec.storageKey),
-                    spec: headlineSpec,
-                    value: IptcTemplateApplyService.lookupValue(
-                      values,
-                      headlineSpec.storageKey,
-                    ),
-                    onValueChanged: onValueChanged,
-                  ),
-                ),
-                const SizedBox(height: 3),
-              ],
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _FieldColumn(
-                          specs: left,
-                          values: values,
-                          rowHeight: _rowHeight,
-                          onValueChanged: onValueChanged,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _FieldColumn(
-                          specs: right,
-                          values: values,
-                          rowHeight: _rowHeight,
-                          onValueChanged: onValueChanged,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
             ],
           ),
+        ],
+        const SizedBox(height: 4),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (captionSpec != null) ...[
+                  SizedBox(
+                    height: _rowHeight,
+                    child: _EditableFieldRow(
+                      key: ValueKey(captionSpec.storageKey),
+                      spec: captionSpec,
+                      value: _displayValueForField(
+                        label: captionSpec.label,
+                        storedValue: IptcTemplateApplyService.lookupValue(
+                          values,
+                          captionSpec.storageKey,
+                        ),
+                        showFoundInFiles: _isFoundInFiles(
+                          captionSpec.storageKey,
+                          foundInFilesKeys,
+                        ),
+                      ),
+                      showFoundInFiles: _isFoundInFiles(
+                        captionSpec.storageKey,
+                        foundInFilesKeys,
+                      ),
+                      onValueChanged: onValueChanged,
+                    ),
+                  ),
+                  const SizedBox(height: _rowGap),
+                ],
+                if (keywordsSpec != null) ...[
+                  SizedBox(
+                    height: _rowHeight,
+                    child: _EditableFieldRow(
+                      key: ValueKey(keywordsSpec.storageKey),
+                      spec: keywordsSpec,
+                      value: IptcTemplateApplyService.lookupValue(
+                        values,
+                        keywordsSpec.storageKey,
+                      ),
+                      showFoundInFiles: _isFoundInFiles(
+                        keywordsSpec.storageKey,
+                        foundInFilesKeys,
+                      ),
+                      onValueChanged: onValueChanged,
+                    ),
+                  ),
+                  const SizedBox(height: _rowGap),
+                ],
+                if (headlineSpec != null) ...[
+                  SizedBox(
+                    height: _rowHeight,
+                    child: _EditableFieldRow(
+                      key: ValueKey(headlineSpec.storageKey),
+                      spec: headlineSpec,
+                      value: IptcTemplateApplyService.lookupValue(
+                        values,
+                        headlineSpec.storageKey,
+                      ),
+                      showFoundInFiles: _isFoundInFiles(
+                        headlineSpec.storageKey,
+                        foundInFilesKeys,
+                      ),
+                      onValueChanged: onValueChanged,
+                    ),
+                  ),
+                  const SizedBox(height: _rowGap),
+                ],
+                if (specialInstructionsSpec != null) ...[
+                  SizedBox(
+                    height: _rowHeight,
+                    child: _EditableFieldRow(
+                      key: ValueKey(specialInstructionsSpec.storageKey),
+                      spec: specialInstructionsSpec,
+                      value: IptcTemplateApplyService.lookupValue(
+                        values,
+                        specialInstructionsSpec.storageKey,
+                      ),
+                      showFoundInFiles: _isFoundInFiles(
+                        specialInstructionsSpec.storageKey,
+                        foundInFilesKeys,
+                      ),
+                      onValueChanged: onValueChanged,
+                    ),
+                  ),
+                  const SizedBox(height: _rowGap),
+                ],
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _FieldColumn(
+                        specs: left,
+                        values: values,
+                        foundInFilesKeys: foundInFilesKeys,
+                        onValueChanged: onValueChanged,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _FieldColumn(
+                        specs: right,
+                        values: values,
+                        foundInFilesKeys: foundInFilesKeys,
+                        onValueChanged: onValueChanged,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
+      ],
+    );
+  }
+}
+
+class _IptcApplyModeHelpButton extends StatelessWidget {
+  const _IptcApplyModeHelpButton();
+
+  static const TextStyle _titleStyle = TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 11,
+    fontVariations: [FontVariation('wght', 700)],
+    color: Color(0xFF333333),
+    height: 1.3,
+  );
+
+  static const TextStyle _bodyStyle = TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 10,
+    fontVariations: [FontVariation('wght', 400)],
+    color: Color(0xFF555555),
+    height: 1.45,
+  );
+
+  static void _showHelpDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        titlePadding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+        contentPadding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+        actionsPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        title: const Text(
+          'Write IPTC Template',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 13,
+            fontVariations: [FontVariation('wght', 700)],
+            color: Color(0xFF2A4858),
+          ),
+        ),
+        content: SizedBox(
+          width: 360,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: const [
+              _HelpOptionBlock(
+                title: 'Off',
+                body:
+                    'The template is for reference only. Nothing is written to your image files automatically.',
+              ),
+              SizedBox(height: 10),
+              _HelpOptionBlock(
+                title: 'On import',
+                body:
+                    'When you open a folder, template fields are written to each image as it loads. Caption and Personality are skipped — those are generated in the app.',
+              ),
+              SizedBox(height: 10),
+              _HelpOptionBlock(
+                title: 'On save',
+                body:
+                    'Nothing is written when you open a folder. Template fields are written only when you save IPTC metadata. Caption and Personality are written too — from what you build in the app, not from this template panel.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text(
+              'Got it',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 11,
+                fontVariations: [FontVariation('wght', 600)],
+                color: Color(0xFF4A7A96),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Explain Write IPTC Template options',
+      waitDuration: const Duration(milliseconds: 400),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showHelpDialog(context),
+          borderRadius: BorderRadius.circular(10),
+          child: Padding(
+            padding: const EdgeInsets.all(2),
+            child: Icon(
+              Icons.help_outline,
+              size: 12,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HelpOptionBlock extends StatelessWidget {
+  const _HelpOptionBlock({
+    required this.title,
+    required this.body,
+  });
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: _IptcApplyModeHelpButton._titleStyle),
+        const SizedBox(height: 2),
+        Text(body, style: _IptcApplyModeHelpButton._bodyStyle),
       ],
     );
   }
@@ -314,7 +493,7 @@ class _IptcApplyModeSelector extends StatelessWidget {
         onTap: onChanged == null ? null : onTap,
         borderRadius: BorderRadius.circular(3),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
           alignment: Alignment.center,
           color: selected ? Colors.white : Colors.transparent,
           child: Text(
@@ -342,13 +521,13 @@ class _FieldColumn extends StatelessWidget {
   const _FieldColumn({
     required this.specs,
     required this.values,
-    required this.rowHeight,
+    required this.foundInFilesKeys,
     this.onValueChanged,
   });
 
   final List<WireIptcFieldSpec> specs;
   final Map<String, String> values;
-  final double rowHeight;
+  final Set<String> foundInFilesKeys;
   final void Function(String storageKey, String value)? onValueChanged;
 
   @override
@@ -358,15 +537,26 @@ class _FieldColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var i = 0; i < specs.length; i++) ...[
-          if (i > 0) const SizedBox(height: 3),
+          if (i > 0) const SizedBox(height: StartupIptcTemplatePanel._rowGap),
           SizedBox(
-            height: rowHeight,
+            height: StartupIptcTemplatePanel._rowHeight,
             child: _EditableFieldRow(
               key: ValueKey(specs[i].storageKey),
               spec: specs[i],
-              value: IptcTemplateApplyService.lookupValue(
-                values,
+              value: StartupIptcTemplatePanel._displayValueForField(
+                label: specs[i].label,
+                storedValue: IptcTemplateApplyService.lookupValue(
+                  values,
+                  specs[i].storageKey,
+                ),
+                showFoundInFiles: StartupIptcTemplatePanel._isFoundInFiles(
+                  specs[i].storageKey,
+                  foundInFilesKeys,
+                ),
+              ),
+              showFoundInFiles: StartupIptcTemplatePanel._isFoundInFiles(
                 specs[i].storageKey,
+                foundInFilesKeys,
               ),
               onValueChanged: onValueChanged,
             ),
@@ -382,12 +572,14 @@ class _EditableFieldRow extends StatefulWidget {
     super.key,
     required this.spec,
     this.value,
+    this.showFoundInFiles = false,
     this.valueMaxLines = 1,
     this.onValueChanged,
   });
 
   final WireIptcFieldSpec spec;
   final String? value;
+  final bool showFoundInFiles;
   final int valueMaxLines;
   final void Function(String storageKey, String value)? onValueChanged;
 
@@ -426,12 +618,34 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
   }
 
   void _onFocusChange() {
-    setState(() => _focused = _focusNode.hasFocus);
+    final wasFocused = _focused;
+    final nowFocused = _focusNode.hasFocus;
+    if (nowFocused && !wasFocused &&
+        IptcTemplateApplyService.isInAppGeneratedPlaceholder(_controller.text)) {
+      _controller.clear();
+    }
+    setState(() => _focused = nowFocused);
   }
 
   void _notifyChanged(String value) {
-    widget.onValueChanged?.call(widget.spec.storageKey, value);
+    final trimmed = value.trim();
+    if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+      widget.onValueChanged?.call(widget.spec.storageKey, '');
+      return;
+    }
+    widget.onValueChanged?.call(widget.spec.storageKey, trimmed);
   }
+
+  bool get _showingPlaceholder =>
+      !_focused &&
+      IptcTemplateApplyService.isInAppGeneratedPlaceholder(_controller.text);
+
+  TextStyle get _valueStyle => _showingPlaceholder
+      ? StartupIptcTemplatePanel._fieldValueStyle.copyWith(
+          color: const Color(0xFFD32F2F),
+          fontStyle: FontStyle.italic,
+        )
+      : StartupIptcTemplatePanel._fieldValueStyle;
 
   bool get _isUrgency => widget.spec.label == StartupIptcTemplatePanel._urgencyLabel;
 
@@ -445,7 +659,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
 
     return Container(
       height: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(
@@ -464,18 +678,15 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
         ],
       ),
       child: Row(
-        crossAxisAlignment:
-            singleLine ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+        crossAxisAlignment: widget.showFoundInFiles
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: StartupIptcTemplatePanel._labelWidth,
             child: _FieldLabel(
               label: widget.spec.label,
-              showGeneratedInApp:
-                  StartupIptcTemplatePanel._inAppGeneratedLabels
-                      .contains(widget.spec.label),
-              compact: !StartupIptcTemplatePanel._inAppGeneratedLabels
-                  .contains(widget.spec.label),
+              showFoundInFiles: widget.showFoundInFiles,
             ),
           ),
           Expanded(
@@ -493,7 +704,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
                     : TextInputType.multiline,
                 textInputAction:
                     singleLine ? TextInputAction.next : TextInputAction.newline,
-                style: StartupIptcTemplatePanel._fieldValueStyle,
+                style: _valueStyle,
                 decoration: const InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
@@ -521,7 +732,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
 
     return Container(
       height: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(
@@ -540,14 +751,15 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
         ],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: widget.showFoundInFiles
+            ? CrossAxisAlignment.start
+            : CrossAxisAlignment.center,
         children: [
           SizedBox(
             width: StartupIptcTemplatePanel._labelWidth,
             child: _FieldLabel(
               label: widget.spec.label,
-              showGeneratedInApp: false,
-              compact: true,
+              showFoundInFiles: widget.showFoundInFiles,
             ),
           ),
           Expanded(
@@ -585,56 +797,56 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
 class _FieldLabel extends StatelessWidget {
   const _FieldLabel({
     required this.label,
-    required this.showGeneratedInApp,
-    this.compact = true,
+    this.showFoundInFiles = false,
   });
 
   final String label;
-  final bool showGeneratedInApp;
-  final bool compact;
+  final bool showFoundInFiles;
+
+  static const TextStyle _labelStyle = TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 10,
+    fontVariations: [FontVariation('wght', 600)],
+    color: Color(0xFF333333),
+    height: 1.15,
+  );
 
   @override
   Widget build(BuildContext context) {
-    const labelStyle = TextStyle(
-      fontFamily: 'Inter',
-      fontSize: 10,
-      fontVariations: [FontVariation('wght', 600)],
-      color: Color(0xFF333333),
-      height: 1.15,
-    );
+    final displayLabel = StartupIptcTemplatePanel._labelOnOneLine(label);
 
-    if (compact && !showGeneratedInApp) {
+    if (!showFoundInFiles) {
       return Text(
-        label,
-        maxLines: 2,
-        softWrap: true,
-        style: labelStyle,
+        displayLabel,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: _labelStyle,
       );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          label,
-          maxLines: 2,
-          softWrap: true,
-          style: labelStyle,
+          displayLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _labelStyle,
         ),
-        if (showGeneratedInApp)
-          const Text(
-            'Generated In-App',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 8,
-              fontVariations: [FontVariation('wght', 600)],
-              color: Color(0xFFD32F2F),
-              height: 1.1,
-            ),
+        const Text(
+          'Found in files',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 8,
+            fontVariations: [FontVariation('wght', 600)],
+            color: Color(0xFF2E7D32),
+            height: 1.1,
           ),
+        ),
       ],
     );
   }
@@ -707,7 +919,7 @@ class _WireTemplateDropdown extends StatelessWidget {
         return InkWell(
           onTap: onItemSelect,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
             child: Text(
               _labelForKey(item),
               maxLines: 1,

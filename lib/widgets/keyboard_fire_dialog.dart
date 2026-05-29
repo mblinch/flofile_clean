@@ -2209,7 +2209,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       final rosterKey = jersey.isNotEmpty ? '${isHomeTeam}_$jersey' : null;
       final isHovered = rosterKey != null && _hoveredRosterKey == rosterKey;
       final bgColor = isPicked
-          ? const Color(0xFFDBEAFF)
+          ? kFloTealSelectedFill
           : ((isCurrent || isNameMatch || isNumberPrefix)
               ? Colors.grey.shade200
               : (isHovered ? Colors.grey.shade200 : null));
@@ -2241,7 +2241,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             color: bgColor,
             border: isPicked
                 ? const Border(
-                    left: BorderSide(color: Color(0xFF4A90E2), width: 3),
+                    left: BorderSide(color: kFloTealLight, width: 3),
                   )
                 : null,
           ),
@@ -2460,7 +2460,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final isHovered = synthetic != null && _hoveredRosterKey == rosterKey;
     final canToggle = synthetic != null;
     final bgColor = isPicked
-        ? const Color(0xFFDBEAFF)
+        ? kFloTealSelectedFill
         : (isHovered ? Colors.grey.shade200 : null);
 
     final nameText = name == 'data missing' ? 'data missing' : name;
@@ -2558,7 +2558,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             color: bgColor,
             border: isPicked
                 ? const Border(
-                    left: BorderSide(color: Color(0xFF4A90E2), width: 3),
+                    left: BorderSide(color: kFloTealLight, width: 3),
                   )
                 : null,
           ),
@@ -2623,9 +2623,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           child: Container(
             margin: const EdgeInsets.all(0.5),
             decoration: BoxDecoration(
-              color: isPicked ? const Color(0xFFDBEAFF) : Colors.white,
+              color: isPicked ? kFloTealSelectedFill : Colors.white,
               border: Border.all(
-                color: isPicked ? const Color(0xFF4A90E2) : Colors.grey.shade300,
+                color: isPicked ? kFloTealLight : Colors.grey.shade300,
                 width: isPicked ? 2 : 1,
               ),
               borderRadius: BorderRadius.circular(2),
@@ -2808,10 +2808,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: isPicked ? const Color(0xFFDBEAFF) : Colors.white,
+                      color: isPicked ? kFloTealSelectedFill : Colors.white,
                       border: Border.all(
                         color: isPicked
-                            ? const Color(0xFF4A90E2)
+                            ? kFloTealLight
                             : Colors.grey.shade300,
                         width: isPicked ? 2 : 1,
                       ),
@@ -3201,6 +3201,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// Called externally (e.g. from sidebar) to sync internal keyword state.
   Future<void> setKeywordVerbsEnabled(bool enabled) => _setApplyVerbKeywordsKb(enabled);
   Future<void> setKeywordNamesEnabled(bool enabled) => _setApplyPlayerNamesToKeywordsKb(enabled);
+
+  /// Clears home/away player search bars after save.
+  void clearPlayerSearchBars() {
+    if (!mounted) return;
+    setState(() {
+      _homeBarController.clear();
+      _awayBarController.clear();
+    });
+  }
 
   Future<void> _setApplyVerbKeywordsKb(bool enabled) async {
     if (_applyVerbKeywordsEnabledKb == enabled) return;
@@ -4089,7 +4098,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             color: isPinned
                                 ? const Color(0xFFFFF8E1)
                                 : (isPicked
-                                    ? const Color(0xFFDBEAFF)
+                                    ? kFloTealSelectedFill
                                     : (isHovered
                                         ? Colors.grey.shade200
                                         : null)),
@@ -4112,7 +4121,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     : (isPicked
                                         ? Border(
                                             left: const BorderSide(
-                                                color: Color(0xFF4A90E2),
+                                                color: kFloTealLight,
                                                 width: 3),
                                             bottom: BorderSide(
                                                 color: Colors.grey.shade100,
@@ -4281,10 +4290,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     return Container(
       padding: const EdgeInsets.only(left: 8, right: 8, top: 2, bottom: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F4FF),
+        color: kFloTealSubmenuFill,
         border: Border(
           bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
-          left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+          left: const BorderSide(color: kFloTealLight, width: 3),
         ),
       ),
       child: Row(
@@ -4320,15 +4329,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   width: 20,
                   height: 16,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF4A90E2) : Colors.white,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFF4A90E2)
-                          : Colors.grey.shade300,
-                    ),
-                  ),
+                  decoration: isSelected
+                      ? floTealSelectedDecoration(
+                          borderRadius: BorderRadius.circular(3),
+                        )
+                      : BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
                   child: Text(
                     '$rbi',
                     style: TextStyle(
@@ -4359,10 +4368,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     return Container(
       padding: const EdgeInsets.only(left: 8, right: 8, top: 2, bottom: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F4FF),
+        color: kFloTealSubmenuFill,
         border: Border(
           bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
-          left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+          left: const BorderSide(color: kFloTealLight, width: 3),
         ),
       ),
       child: Row(
@@ -4386,15 +4395,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   width: 22,
                   height: 16,
                   alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFF4A90E2) : Colors.white,
-                    borderRadius: BorderRadius.circular(3),
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFF4A90E2)
-                          : Colors.grey.shade300,
-                    ),
-                  ),
+                  decoration: isSelected
+                      ? floTealSelectedDecoration(
+                          borderRadius: BorderRadius.circular(3),
+                        )
+                      : BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(3),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
                   child: Text(
                     label,
                     style: TextStyle(
@@ -4461,7 +4470,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         color: const Color(0xFFE8F4FC),
         border: Border(
           bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
-          left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+          left: const BorderSide(color: kFloTealLight, width: 3),
         ),
       ),
       child: Column(
@@ -4555,15 +4564,18 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       final Color borderColor;
       final Color textColor;
       if (isSelected) {
-        bgColor = base == 'Tagged Out'
-            ? const Color(0xFFE53935)
-            : const Color(0xFF4A90E2);
-        borderColor = bgColor;
+        if (base == 'Tagged Out') {
+          bgColor = const Color(0xFFE53935);
+          borderColor = bgColor;
+        } else {
+          bgColor = Colors.transparent;
+          borderColor = kFloTealDark;
+        }
         textColor = Colors.white;
       } else if (isStoredBase) {
-        bgColor = const Color(0xFF4A90E2).withOpacity(0.15);
-        borderColor = const Color(0xFF4A90E2);
-        textColor = const Color(0xFF4A90E2);
+        bgColor = kFloTealLight.withValues(alpha: 0.15);
+        borderColor = kFloTealLight;
+        textColor = kFloTealDark;
       } else {
         bgColor = Colors.white;
         borderColor = Colors.grey.shade300;
@@ -4587,11 +4599,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             width: w,
             height: 16,
             alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: bgColor,
-              borderRadius: BorderRadius.circular(3),
-              border: Border.all(color: borderColor),
-            ),
+            decoration: isSelected && base != 'Tagged Out'
+                ? floTealSelectedDecoration(
+                    borderRadius: BorderRadius.circular(3),
+                  )
+                : BoxDecoration(
+                    color: bgColor,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: borderColor),
+                  ),
             child: Text(
               kbBaseChipLabel(base),
               maxLines: 1,
@@ -4613,10 +4629,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     return Container(
       padding: const EdgeInsets.only(left: 8, right: 8, top: 2, bottom: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F4FF),
+        color: kFloTealSubmenuFill,
         border: Border(
           bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
-          left: const BorderSide(color: Color(0xFF4A90E2), width: 3),
+          left: const BorderSide(color: kFloTealLight, width: 3),
         ),
       ),
       child: Column(
@@ -4799,7 +4815,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     _pickedVerbIndex == verbNum;
                 final isCurrent = barVerbNum != null && barVerbNum == verbNum;
                 final bgColor = isPicked
-                    ? const Color(0xFFDBEAFF)
+                    ? kFloTealSelectedFill
                     : (isCurrent ? Colors.grey.shade200 : null);
                 final isLastUsed = _lastUsedVerbLabel == verb;
                 final dynamic state = widget.captionState;
@@ -4842,7 +4858,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         border: isPicked
                             ? Border(
                                 left: const BorderSide(
-                                    color: Color(0xFF4A90E2), width: 3),
+                                    color: kFloTealLight, width: 3),
                                 bottom: BorderSide(
                                     color: Colors.grey.shade100, width: 0.5),
                               )
@@ -5490,32 +5506,36 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             ],
           ),
-          child: OutlinedButton(
-            onPressed: () => _onPeriodSelect(label),
-            style: OutlinedButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 0),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              side: BorderSide(
-                color: isSelected ? const Color(0xFF3A5F78) : const Color(0xFFE0E0E0),
-              ),
-              backgroundColor: isSelected ? const Color(0xFF3A5F78) : Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5),
-              ),
-            ),
-            child: Center(
-              child: Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                softWrap: false,
-                overflow: TextOverflow.clip,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                  letterSpacing: -0.1,
-                  color: isSelected ? Colors.white : const Color(0xFF3A3A3A),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+            child: InkWell(
+              onTap: () => _onPeriodSelect(label),
+              borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+              child: Ink(
+                decoration: isSelected
+                    ? floTealSelectedDecoration()
+                    : BoxDecoration(
+                        color: Colors.white,
+                        borderRadius:
+                            BorderRadius.circular(kFloInningButtonRadius),
+                        border: Border.all(color: const Color(0xFFE0E0E0)),
+                      ),
+                child: Center(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.clip,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w400,
+                      letterSpacing: -0.1,
+                      color: isSelected ? Colors.white : const Color(0xFF3A3A3A),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -5545,28 +5565,34 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             ],
           ),
-          child: OutlinedButton(
-            onPressed: () => _onInningSelect(isSelected ? null : inningNum),
-            style: OutlinedButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(0, 0),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              side: BorderSide(
-                color: isSelected ? const Color(0xFF3A5F78) : const Color(0xFFE0E0E0),
-              ),
-              backgroundColor: isSelected ? const Color(0xFF3A5F78) : Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5),
-              ),
-            ),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                letterSpacing: -0.1,
-                color: isSelected ? Colors.white : const Color(0xFF3A3A3A),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+            child: InkWell(
+              onTap: () => _onInningSelect(isSelected ? null : inningNum),
+              borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+              child: Ink(
+                decoration: isSelected
+                    ? floTealSelectedDecoration()
+                    : BoxDecoration(
+                        color: Colors.white,
+                        borderRadius:
+                            BorderRadius.circular(kFloInningButtonRadius),
+                        border: Border.all(color: const Color(0xFFE0E0E0)),
+                      ),
+                child: Center(
+                  child: Text(
+                    label,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w400,
+                      letterSpacing: -0.1,
+                      color: isSelected ? Colors.white : const Color(0xFF3A3A3A),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

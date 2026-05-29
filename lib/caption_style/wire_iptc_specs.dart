@@ -135,7 +135,7 @@ class WireIptcSpecs {
     const tags = <String, String>{
       'Caption': 'IPTC:Description',
       'Personality': 'XMP-getty:Personality',
-      'Description Writers': 'CaptionWriter',
+      'Description Writers': 'IPTC:Writer-Editor',
       'Headline': 'IPTC:Headline',
       'MEID': 'IPTC:OriginalTransmissionReference',
       'Keywords': 'IPTC:Keywords',
@@ -176,7 +176,7 @@ class WireIptcSpecs {
     ),
     WireIptcFieldSpec(
       label: 'Description Writers',
-      iptcTag: 'CaptionWriter',
+      iptcTag: 'IPTC:Writer-Editor',
       level: IptcFieldLevel.required,
       example: 'MB',
       notes: 'Getty / Photo Mechanic caption writer initials',

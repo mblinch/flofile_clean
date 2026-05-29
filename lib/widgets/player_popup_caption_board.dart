@@ -1091,6 +1091,16 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     );
   }
 
+  void clearPlayerSearchBars() {
+    if (!mounted) return;
+    setState(() {
+      _homeSearchController.clear();
+      _awaySearchController.clear();
+      _homeSearchText = '';
+      _awaySearchText = '';
+    });
+  }
+
   void resetSelections() {
     setState(() {
       _selectedHomePlayers.clear();

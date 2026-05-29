@@ -3,14 +3,51 @@ import 'package:flutter/material.dart';
 class SportSelectionDialog extends StatelessWidget {
   final Function(String sport) onSportSelected;
   final bool inline;
+  final bool sectionCard;
+  final String? selectedSport;
 
   const SportSelectionDialog({
     Key? key,
     required this.onSportSelected,
     this.inline = false,
+    this.sectionCard = false,
+    this.selectedSport,
   }) : super(key: key);
 
   Widget _buildContent() {
+    if (sectionCard) {
+      return Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          _buildSportCard(
+            'Baseball',
+            Icons.sports_baseball,
+            const Color(0xFF0052CC),
+            compact: true,
+          ),
+          _buildSportCard(
+            'Hockey',
+            Icons.sports_hockey,
+            const Color(0xFFD32F2F),
+            compact: true,
+          ),
+          _buildSportCard(
+            'Basketball',
+            Icons.sports_basketball,
+            const Color(0xFFFF6F00),
+            compact: true,
+          ),
+          _buildSportCard(
+            'Soccer',
+            Icons.sports_soccer,
+            const Color(0xFF1B5E20),
+            compact: true,
+          ),
+        ],
+      );
+    }
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment:
@@ -80,19 +117,27 @@ class SportSelectionDialog extends StatelessWidget {
   Widget _buildSportCard(
     String sport,
     IconData icon,
-    Color color,
-  ) {
+    Color color, {
+    bool compact = false,
+  }) {
+    final sportKey = sport.toLowerCase();
+    final isSelected =
+        selectedSport != null && selectedSport!.toLowerCase() == sportKey;
+
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => onSportSelected(sport.toLowerCase()),
+        onTap: () => onSportSelected(sportKey),
         child: Container(
-          width: 128,
-          height: 132,
+          width: compact ? 58 : 128,
+          height: compact ? 64 : 132,
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300, width: 1),
+            borderRadius: BorderRadius.circular(compact ? 6 : 8),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF333333) : Colors.grey.shade300,
+              width: isSelected ? 1.5 : 1,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.04),
@@ -105,23 +150,23 @@ class SportSelectionDialog extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: compact ? 24 : 52,
+                height: compact ? 24 : 52,
                 decoration: BoxDecoration(
                   color: color.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   icon,
-                  size: 28,
+                  size: compact ? 13 : 28,
                   color: color,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: compact ? 4 : 8),
               Text(
                 sport,
-                style: const TextStyle(
-                  fontSize: 14,
+                style: TextStyle(
+                  fontSize: compact ? 10 : 14,
                   fontWeight: FontWeight.w700,
                   color: Colors.black87,
                 ),
@@ -137,8 +182,8 @@ class SportSelectionDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     final content = _buildContent();
 
-    if (inline) {
-      return _buildContent();
+    if (inline || sectionCard) {
+      return content;
     }
 
     return Material(

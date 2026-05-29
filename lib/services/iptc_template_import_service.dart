@@ -254,7 +254,11 @@ class IptcTemplateImportService {
         'Caption-Abstract',
         'IPTC:Caption-Abstract',
       ]),
-      'Object Name': _first(meta, ['IPTC:ObjectName', 'ObjectName']),
+      'Object Name': _first(meta, [
+        'IPTC:ObjectName',
+        'ObjectName',
+        'XMP:Title',
+      ]),
       'Category': _first(meta, ['IPTC:Category', 'Category']),
       'Special Instructions': _first(meta, [
         'IPTC:SpecialInstructions',

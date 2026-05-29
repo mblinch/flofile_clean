@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../utils/native_file_picker.dart';
 import 'dart:io';
 import '../services/api_manager.dart';
 import 'dart:convert'; // Added for jsonDecode
-import 'package:dropdown_flutter/custom_dropdown.dart';
 import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_compact_checkbox.dart';
@@ -14,6 +14,7 @@ import 'startup_caption_layout_preview.dart';
 import '../services/iptc_template_apply_service.dart';
 import '../services/iptc_template_import_service.dart';
 import 'startup_iptc_template_panel.dart';
+import 'sport_selection_dialog.dart';
 
 // Custom button widget with cursor styling (matching the one in caption_fields_widget.dart)
 class CustomButton extends StatelessWidget {
@@ -45,9 +46,14 @@ class CustomButton extends StatelessWidget {
 }
 
 class StartupDialog extends StatefulWidget {
-  final Function(String folderPath, String? homeTeam, String? awayTeam)
-      onConfigurationComplete;
+  final void Function(
+    String folderPath,
+    String? homeTeam,
+    String? awayTeam,
+    Map<String, String> iptcPreset,
+  ) onConfigurationComplete;
   final String? sport; // Current sport mode
+  final ValueChanged<String>? onSportSelected;
   final VoidCallback? onBackToSportSelection;
   final bool inline;
 
@@ -55,6 +61,7 @@ class StartupDialog extends StatefulWidget {
     Key? key,
     required this.onConfigurationComplete,
     this.sport,
+    this.onSportSelected,
     this.onBackToSportSelection,
     this.inline = false,
   }) : super(key: key);
@@ -73,10 +80,11 @@ class _StartupDialogState extends State<StartupDialog> {
   bool isLoadingFolder = false;
   bool hasImagesInFolder = false;
   bool isExtractingDate = false;
-  IptcApplyMode _iptcApplyMode = IptcApplyMode.onImport;
+  IptcApplyMode _iptcApplyMode = IptcApplyMode.none;
   bool _burstDetectionEnabled = false;
 
   Map<String, String> _iptcTemplateValues = {};
+  final Set<String> _iptcKeysFoundInFiles = {};
   bool _loadingIptcFromFiles = false;
   bool _loadingExternalTemplate = false;
   WireStyle _iptcWireStyle = WireStyle.getty;
@@ -103,6 +111,9 @@ class _StartupDialogState extends State<StartupDialog> {
 
   bool get _folderChosen => selectedFolderPath != null;
 
+  bool get _sportChosen =>
+      widget.sport != null && widget.sport!.trim().isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -115,13 +126,30 @@ class _StartupDialogState extends State<StartupDialog> {
     _initializeAndLoadData();
   }
 
-  Future<void> _initializeAndLoadData() async {
-    // Wait for preferences to load first, then load teams
+  @override
+  void didUpdateWidget(StartupDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sport != widget.sport && _sportChosen) {
+      _apiManager.setSport(widget.sport!);
+      unawaited(_reloadForSport());
+    }
+  }
+
+  Future<void> _reloadForSport() async {
+    if (!_sportChosen) return;
     await _initializePreferences();
-    await _loadIptcWireContext();
-    await _loadSavedIptcPreset();
-    await _loadIptcApplyOptions();
     await _loadTeams();
+  }
+
+  Future<void> _initializeAndLoadData() async {
+    _preferencesService = await PreferencesService.getInstance();
+    await _loadIptcWireContext();
+    _resetIptcTemplate();
+    await _loadIptcApplyOptions();
+    if (_sportChosen) {
+      await _initializePreferences();
+      await _loadTeams();
+    }
   }
 
   Future<void> _loadIptcApplyOptions() async {
@@ -161,19 +189,16 @@ class _StartupDialogState extends State<StartupDialog> {
     return IptcTemplateApplyService.denormalizeForPanel(raw);
   }
 
-  Future<void> _loadSavedIptcPreset() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final presetJson = prefs.getString('selected_metadata_preset');
-      if (presetJson == null) return;
-      final preset = jsonDecode(presetJson) as Map<String, dynamic>;
-      if (!mounted) return;
-      setState(() {
-        _iptcTemplateValues = _normalizeIptcPresetMap(preset);
-      });
-    } catch (e) {
-      print('Error loading saved IPTC preset: $e');
-    }
+  void _resetIptcTemplate() {
+    if (!mounted) return;
+    setState(() {
+      _iptcTemplateValues = {};
+      _iptcKeysFoundInFiles.clear();
+    });
+  }
+
+  void _onSportSelected(String sport) {
+    widget.onSportSelected?.call(sport);
   }
 
   void _onCaptionWireStyleChanged(WireStyle wire) {
@@ -184,7 +209,10 @@ class _StartupDialogState extends State<StartupDialog> {
   void _onIptcTemplateValueChanged(String storageKey, String value) {
     setState(() {
       final next = Map<String, String>.from(_iptcTemplateValues);
-      final trimmed = value.trim();
+      var trimmed = value.trim();
+      if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+        trimmed = '';
+      }
       if (trimmed.isEmpty) {
         next.remove(storageKey);
       } else {
@@ -219,6 +247,7 @@ class _StartupDialogState extends State<StartupDialog> {
 
       setState(() {
         _iptcTemplateValues = Map<String, String>.from(result.values);
+        _iptcKeysFoundInFiles.clear();
         _iptcApplyMode = IptcApplyMode.onImport;
       });
       await _persistIptcTemplateValues();
@@ -253,7 +282,8 @@ class _StartupDialogState extends State<StartupDialog> {
     }
   }
 
-  Future<void> _persistIptcTemplateValues() async {
+  /// Persists IPTC template + apply mode; returns normalized preset for immediate use.
+  Future<Map<String, String>> _persistIptcTemplateValues() async {
     final prefs = await SharedPreferences.getInstance();
     final preset =
         IptcTemplateApplyService.normalizeForPreset(_iptcTemplateValues);
@@ -262,9 +292,12 @@ class _StartupDialogState extends State<StartupDialog> {
         'selected_metadata_preset',
         jsonEncode(preset),
       );
+    } else {
+      await prefs.remove('selected_metadata_preset');
     }
     final prefsService = await PreferencesService.getInstance();
     await prefsService.saveIptcApplyMode(_iptcApplyMode);
+    return preset;
   }
 
   String _keywordsFromMeta(Map<String, dynamic> meta) {
@@ -393,12 +426,23 @@ class _StartupDialogState extends State<StartupDialog> {
     Map<String, String> into,
     Map<String, String> from, {
     bool onlyIfEmpty = false,
+    Set<String>? foundInFilesKeys,
   }) {
     for (final e in from.entries) {
       final v = e.value.trim();
       if (v.isEmpty) continue;
-      if (!onlyIfEmpty || (into[e.key]?.trim().isEmpty ?? true)) {
+      final wasEmpty = into[e.key]?.trim().isEmpty ?? true;
+      if (IptcTemplateApplyService.isInAppGeneratedFieldKey(e.key)) {
+        if (foundInFilesKeys != null && wasEmpty) {
+          foundInFilesKeys.add(e.key);
+        }
+        continue;
+      }
+      if (!onlyIfEmpty || wasEmpty) {
         into[e.key] = v;
+        if (foundInFilesKeys != null && wasEmpty) {
+          foundInFilesKeys.add(e.key);
+        }
       }
     }
   }
@@ -467,7 +511,11 @@ class _StartupDialogState extends State<StartupDialog> {
         'Caption-Abstract',
         'IPTC:Caption-Abstract',
       ]),
-      'Object Name': _firstMetaValue(meta, ['IPTC:ObjectName', 'ObjectName']),
+      'Object Name': _firstMetaValue(meta, [
+        'IPTC:ObjectName',
+        'ObjectName',
+        'XMP:Title',
+      ]),
       'Category': _firstMetaValue(meta, ['IPTC:Category', 'Category']),
       'Supp Cat 1': supplemental.isNotEmpty ? supplemental[0] : '',
       'Supp Cat 2': supplemental.length > 1 ? supplemental[1] : '',
@@ -513,15 +561,24 @@ class _StartupDialogState extends State<StartupDialog> {
     setState(() => _loadingIptcFromFiles = true);
     try {
       final merged = Map<String, String>.from(_iptcTemplateValues);
+      final foundInFiles = <String>{};
       final sample = imageFiles.take(8).toList();
       for (final path in sample) {
         final raw = await _readIptcRawFromFile(path);
         if (raw == null) continue;
-        _mergeIptcValues(merged, _iptcDisplayFromRaw(raw), onlyIfEmpty: true);
+        _mergeIptcValues(
+          merged,
+          _iptcDisplayFromRaw(raw),
+          onlyIfEmpty: true,
+          foundInFilesKeys: foundInFiles,
+        );
       }
       if (!mounted) return;
       setState(() {
         _iptcTemplateValues = merged;
+        _iptcKeysFoundInFiles
+          ..clear()
+          ..addAll(foundInFiles);
         _loadingIptcFromFiles = false;
       });
     } catch (e) {
@@ -531,10 +588,10 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   Future<void> _initializePreferences() async {
-    _preferencesService = await PreferencesService.getInstance();
+    if (!_sportChosen) return;
 
     // Load favorite teams for the current sport
-    final sport = widget.sport?.toLowerCase() ?? 'baseball';
+    final sport = widget.sport!.toLowerCase();
     print('DEBUG _initializePreferences: Loading favorites for sport=$sport');
     _favoriteTeams = await _preferencesService.getFavoriteTeams(sport: sport);
     print(
@@ -887,7 +944,10 @@ class _StartupDialogState extends State<StartupDialog> {
           });
           await _loadIptcFromFolderImages(imageFiles);
         } else {
-          setState(() => _iptcTemplateValues = {});
+          setState(() {
+            _iptcTemplateValues = {};
+            _iptcKeysFoundInFiles.clear();
+          });
         }
 
       } else {
@@ -1151,105 +1211,39 @@ class _StartupDialogState extends State<StartupDialog> {
     required String hintText,
   }) {
     final selectedTeam = isHome ? selectedHomeTeam : selectedAwayTeam;
-    final initial =
-        (selectedTeam != null && availableTeams.contains(selectedTeam))
-            ? selectedTeam
-            : null;
-    return DropdownFlutter<String>(
+    final otherTeam = isHome ? selectedAwayTeam : selectedHomeTeam;
+    final favoriteTeam = isHome ? _favoriteHomeTeam : _favoriteAwayTeam;
+    return _StartupTeamAutocomplete(
       hintText: hintText,
-      items: availableTeams,
-      initialItem: initial,
-      overlayHeight: 220,
-      closedHeaderPadding:
-          const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      expandedHeaderPadding:
-          const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      listItemPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: CustomDropdownDecoration(
-        closedFillColor: Colors.white,
-        expandedFillColor: Colors.white,
-        closedBorder: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
-        expandedBorder: Border.all(color: const Color(0xFF4A7A96), width: 1.0),
-        closedBorderRadius: BorderRadius.circular(5),
-        expandedBorderRadius: BorderRadius.circular(8),
-        hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-        headerStyle: const TextStyle(
-            fontSize: 11,
-            color: Color(0xFF2A4858),
-            fontWeight: FontWeight.w500),
-        listItemStyle: const TextStyle(fontSize: 11),
-        listItemDecoration: ListItemDecoration(
-          selectedColor: const Color(0xFFEEF3F6),
-        ),
-      ),
-      listItemBuilder: (context, item, isSelected, onItemSelect) {
-        final team = item;
-        final blockedByOtherSelection = (isHome && selectedAwayTeam == team) ||
-            (!isHome && selectedHomeTeam == team);
-        final isFavForSlot =
-            isHome ? _favoriteHomeTeam == team : _favoriteAwayTeam == team;
-        return InkWell(
-          onTap: blockedByOtherSelection ? null : onItemSelect,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  team,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: blockedByOtherSelection
-                        ? Colors.grey.shade400
-                        : Colors.grey.shade800,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () async {
-                  if (blockedByOtherSelection) return;
-                  setState(() {
-                    if (isHome) {
-                      selectedHomeTeam = team;
-                    } else {
-                      selectedAwayTeam = team;
-                    }
-                  });
-                  if (_showStartupCoachInfo) {
-                    _refreshCoachLabelForTeam(isHome: isHome);
-                  }
-                  await _toggleFavoriteTeam(isHome: isHome);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(
-                    isFavForSlot ? Icons.star : Icons.star_border,
-                    size: 16,
-                    color: isFavForSlot ? Colors.amber : Colors.grey.shade400,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-      onChanged: (value) {
-        if (value == null) return;
-        final blockedByOtherSelection = (isHome && selectedAwayTeam == value) ||
-            (!isHome && selectedHomeTeam == value);
-        if (blockedByOtherSelection) return;
+      teams: availableTeams,
+      selectedTeam: selectedTeam,
+      otherTeam: otherTeam,
+      favoriteTeam: favoriteTeam,
+      onTeamSelected: (team) {
         setState(() {
           if (isHome) {
-            selectedHomeTeam = value;
+            selectedHomeTeam = team;
           } else {
-            selectedAwayTeam = value;
+            selectedAwayTeam = team;
           }
           _goTimeWarningText = null;
         });
         if (_showStartupCoachInfo) {
           _refreshCoachLabelForTeam(isHome: isHome);
         }
+      },
+      onToggleFavorite: (team) async {
+        setState(() {
+          if (isHome) {
+            selectedHomeTeam = team;
+          } else {
+            selectedAwayTeam = team;
+          }
+        });
+        if (_showStartupCoachInfo) {
+          _refreshCoachLabelForTeam(isHome: isHome);
+        }
+        await _toggleFavoriteTeam(isHome: isHome);
       },
     );
   }
@@ -1287,10 +1281,12 @@ class _StartupDialogState extends State<StartupDialog> {
     required String label,
     required List<Widget> children,
     Widget? trailing,
+    EdgeInsetsGeometry? padding,
+    double labelSpacing = 8,
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
+      padding: padding ?? const EdgeInsets.all(12),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topCenter,
@@ -1329,7 +1325,7 @@ class _StartupDialogState extends State<StartupDialog> {
               ],
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: labelSpacing),
           ...children,
         ],
       ),
@@ -1460,9 +1456,9 @@ class _StartupDialogState extends State<StartupDialog> {
           bottom: BorderSide(color: Color(0xFFE0E0E0), width: 0.5),
         ),
       ),
-      child: Row(
+      child: const Row(
         children: [
-          const Text(
+          Text(
             'FLO FILE',
             style: TextStyle(
               fontFamily: 'Inter',
@@ -1472,14 +1468,6 @@ class _StartupDialogState extends State<StartupDialog> {
               letterSpacing: -0.5,
             ),
           ),
-          if (widget.onBackToSportSelection != null) ...[
-            const Spacer(),
-            ElevatedGreyButton(
-              label: '← Back to sports',
-              fontSize: 10,
-              onPressed: widget.onBackToSportSelection,
-            ),
-          ],
         ],
       ),
     );
@@ -1521,11 +1509,26 @@ class _StartupDialogState extends State<StartupDialog> {
     );
   }
 
+  Widget _buildSportSection() {
+    return _sectionCard(
+      label: 'SPORT',
+      children: [
+        SportSelectionDialog(
+          sectionCard: true,
+          selectedSport: widget.sport,
+          onSportSelected: _onSportSelected,
+        ),
+      ],
+    );
+  }
+
   Widget _buildLeftFormSections() {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildSportSection(),
+        const SizedBox(height: 10),
         _sectionCard(
           label: 'IMAGES FOLDER',
           children: [
@@ -1538,7 +1541,9 @@ class _StartupDialogState extends State<StartupDialog> {
                       : 'Pick images folder',
                   fontSize: 10,
                   icon: Icons.folder_open,
-                  onPressed: isLoadingFolder ? null : _pickFolder,
+                  onPressed: (!_sportChosen || isLoadingFolder)
+                      ? null
+                      : _pickFolder,
                 ),
                 if (selectedFolderPath != null) ...[
                   const SizedBox(width: 8),
@@ -1633,11 +1638,12 @@ class _StartupDialogState extends State<StartupDialog> {
           _buildIptcInfoHeader(),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
               child: StartupIptcTemplatePanel(
                 selectedWire: _iptcWireStyle,
                 wireLabels: _wireLabels,
                 values: _iptcTemplateValues,
+                foundInFilesKeys: _iptcKeysFoundInFiles,
                 isLoading: _loadingIptcFromFiles,
                 onValueChanged: _onIptcTemplateValueChanged,
                 onWireSelected: _onCaptionWireStyleChanged,
@@ -1649,7 +1655,7 @@ class _StartupDialogState extends State<StartupDialog> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedGreyButton(
@@ -1674,6 +1680,7 @@ class _StartupDialogState extends State<StartupDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
+          flex: 9,
           child: Container(
             decoration: _panelDecoration(),
             clipBehavior: Clip.antiAlias,
@@ -1684,8 +1691,8 @@ class _StartupDialogState extends State<StartupDialog> {
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
+                      horizontal: 20,
+                      vertical: 16,
                     ),
                     child: _buildLeftFormSections(),
                   ),
@@ -1694,8 +1701,11 @@ class _StartupDialogState extends State<StartupDialog> {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-              Expanded(child: _buildRightIptcPanel()),
+        const SizedBox(width: 16),
+        Expanded(
+          flex: 11,
+          child: _buildRightIptcPanel(),
+        ),
       ],
     );
   }
@@ -1705,6 +1715,8 @@ class _StartupDialogState extends State<StartupDialog> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildSportSection(),
+        const SizedBox(height: 10),
         // ── IMAGES FOLDER (always active) ──
         _sectionCard(
           label: 'IMAGES FOLDER',
@@ -1718,7 +1730,9 @@ class _StartupDialogState extends State<StartupDialog> {
                       : 'Pick images folder',
                   fontSize: 10,
                   icon: Icons.folder_open,
-                  onPressed: isLoadingFolder ? null : _pickFolder,
+                  onPressed: (!_sportChosen || isLoadingFolder)
+                      ? null
+                      : _pickFolder,
                 ),
                 if (selectedFolderPath != null) ...[
                   const SizedBox(width: 8),
@@ -1775,6 +1789,8 @@ class _StartupDialogState extends State<StartupDialog> {
   Widget _buildTeamsSection() {
     return _sectionCard(
       label: 'TEAMS',
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
+      labelSpacing: 5,
       trailing: _isOffline
           ? Row(
               mainAxisSize: MainAxisSize.min,
@@ -1809,7 +1825,7 @@ class _StartupDialogState extends State<StartupDialog> {
       children: [
         if (isLoadingTeams)
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 6),
+            padding: EdgeInsets.symmetric(vertical: 2),
             child: Center(
               child: SizedBox(
                 width: 18,
@@ -1916,114 +1932,112 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   Widget _buildGoTimeButton() {
-    return Center(
-      child: CustomButton(
-        onTap: () {
-          if (!_folderChosen) {
-            setState(
-                () => _goTimeWarningText = 'Pick an images folder first.');
-            return;
-          }
-          if (_canProceed) {
-            setState(() => _goTimeWarningText = null);
-            _persistIptcTemplateValues();
-            widget.onConfigurationComplete(
-              selectedFolderPath!,
-              selectedHomeTeam,
-              selectedAwayTeam,
-            );
-            return;
-          }
-          final missingTeams =
-              selectedHomeTeam == null || selectedAwayTeam == null;
-          final sameTeam = selectedHomeTeam != null &&
-              selectedAwayTeam != null &&
-              selectedHomeTeam == selectedAwayTeam;
-          final needsDate =
-              !hasImagesInFolder && selectedGameDate == null;
-          String message = 'Complete setup before continuing.';
-          if (needsDate) {
-            message = 'Select a game date.';
-          } else if (missingTeams) {
-            message = 'Select both Away and Home teams.';
-          } else if (sameTeam) {
-            message = 'Home and away teams must be different.';
-          }
-          setState(() => _goTimeWarningText = message);
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 24, vertical: 7),
-              decoration: BoxDecoration(
-                gradient: _canProceed
-                    ? const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
-                      )
-                    : null,
-                color: _canProceed ? null : Colors.grey.shade200,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: _canProceed
-                      ? const Color(0xFF2A4858)
-                      : const Color(0xFFD0D0D0),
-                  width: 0.7,
-                ),
-                boxShadow: _canProceed
-                    ? [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.22),
-                          blurRadius: 5,
-                          offset: const Offset(0, 2.5),
-                        ),
-                      ]
-                    : null,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        CustomButton(
+          onTap: () async {
+            if (!_folderChosen) {
+              setState(
+                  () => _goTimeWarningText = 'Pick an images folder first.');
+              return;
+            }
+            if (_canProceed) {
+              setState(() => _goTimeWarningText = null);
+              final preset = await _persistIptcTemplateValues();
+              if (!mounted) return;
+              widget.onConfigurationComplete(
+                selectedFolderPath!,
+                selectedHomeTeam,
+                selectedAwayTeam,
+                preset,
+              );
+              return;
+            }
+            final missingTeams =
+                selectedHomeTeam == null || selectedAwayTeam == null;
+            final sameTeam = selectedHomeTeam != null &&
+                selectedAwayTeam != null &&
+                selectedHomeTeam == selectedAwayTeam;
+            final needsDate =
+                !hasImagesInFolder && selectedGameDate == null;
+            String message = 'Complete setup before continuing.';
+            if (needsDate) {
+              message = 'Select a game date.';
+            } else if (missingTeams) {
+              message = 'Select both Away and Home teams.';
+            } else if (sameTeam) {
+              message = 'Home and away teams must be different.';
+            }
+            setState(() => _goTimeWarningText = message);
+          },
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 7),
+            decoration: BoxDecoration(
+              gradient: _canProceed
+                  ? const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
+                    )
+                  : null,
+              color: _canProceed ? null : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: _canProceed
+                    ? const Color(0xFF2A4858)
+                    : const Color(0xFFD0D0D0),
+                width: 0.7,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.play_arrow_rounded,
-                    size: 14,
+              boxShadow: _canProceed
+                  ? [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.22),
+                        blurRadius: 5,
+                        offset: const Offset(0, 2.5),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.play_arrow_rounded,
+                  size: 14,
+                  color: _canProceed ? Colors.white : Colors.grey.shade500,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Go Time',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                    fontVariations: const [FontVariation('wght', 600)],
                     color:
                         _canProceed ? Colors.white : Colors.grey.shade500,
+                    letterSpacing: 0.2,
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Go Time',
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 12,
-                      fontVariations: const [FontVariation('wght', 600)],
-                      color: _canProceed
-                          ? Colors.white
-                          : Colors.grey.shade500,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_goTimeWarningText != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                _goTimeWarningText!,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 10,
-                  fontVariations: const [FontVariation('wght', 500)],
-                  color: Colors.red.shade400,
                 ),
-              ),
-            ],
-          ],
+              ],
+            ),
+          ),
         ),
-      ),
+        if (_goTimeWarningText != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _goTimeWarningText!,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 10,
+              fontVariations: const [FontVariation('wght', 500)],
+              color: Colors.red.shade400,
+            ),
+          ),
+        ],
+      ],
     );
   }
 
@@ -2067,6 +2081,208 @@ class _StartupDialogState extends State<StartupDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Team field: click, type to filter the list — no separate search bar in the menu.
+class _StartupTeamAutocomplete extends StatefulWidget {
+  const _StartupTeamAutocomplete({
+    required this.hintText,
+    required this.teams,
+    required this.selectedTeam,
+    required this.otherTeam,
+    required this.favoriteTeam,
+    required this.onTeamSelected,
+    required this.onToggleFavorite,
+  });
+
+  final String hintText;
+  final List<String> teams;
+  final String? selectedTeam;
+  final String? otherTeam;
+  final String? favoriteTeam;
+  final ValueChanged<String> onTeamSelected;
+  final Future<void> Function(String team) onToggleFavorite;
+
+  @override
+  State<_StartupTeamAutocomplete> createState() =>
+      _StartupTeamAutocompleteState();
+}
+
+class _StartupTeamAutocompleteState extends State<_StartupTeamAutocomplete> {
+  final GlobalKey _fieldKey = GlobalKey();
+  double? _fieldWidth;
+
+  static const _fieldStyle = TextStyle(
+    fontSize: 11,
+    color: Color(0xFF2A4858),
+    fontWeight: FontWeight.w500,
+  );
+
+  InputDecoration _fieldDecoration({required bool focused}) {
+    final borderRadius = BorderRadius.circular(focused ? 8 : 5);
+    final borderColor =
+        focused ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0);
+    final borderWidth = focused ? 1.0 : 0.7;
+    return InputDecoration(
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      hintText: widget.hintText,
+      hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+      filled: true,
+      fillColor: Colors.white,
+      suffixIcon: Icon(
+        Icons.arrow_drop_down,
+        size: 18,
+        color: Colors.grey.shade600,
+      ),
+      suffixIconConstraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+      border: OutlineInputBorder(
+        borderRadius: borderRadius,
+        borderSide: BorderSide(color: borderColor, width: borderWidth),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: borderRadius,
+        borderSide: BorderSide(color: borderColor, width: borderWidth),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: borderRadius,
+        borderSide: BorderSide(color: borderColor, width: borderWidth),
+      ),
+    );
+  }
+
+  void _syncFieldWidth() {
+    final box = _fieldKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final w = box.size.width;
+    if (w > 0 && w != _fieldWidth) {
+      setState(() => _fieldWidth = w);
+    }
+  }
+
+  Iterable<String> _matchingTeams(String query) {
+    final q = query.trim().toLowerCase();
+    return widget.teams.where((team) {
+      if (q.isEmpty) return true;
+      return team.toLowerCase().contains(q);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncFieldWidth());
+
+    return Autocomplete<String>(
+      key: ValueKey(widget.teams),
+      initialValue: TextEditingValue(text: widget.selectedTeam ?? ''),
+      optionsBuilder: (textEditingValue) =>
+          _matchingTeams(textEditingValue.text),
+      displayStringForOption: (team) => team,
+      onSelected: (team) {
+        if (widget.otherTeam == team) return;
+        widget.onTeamSelected(team);
+      },
+      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        return KeyedSubtree(
+          key: _fieldKey,
+          child: ListenableBuilder(
+            listenable: focusNode,
+            builder: (context, _) {
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                style: _fieldStyle,
+                decoration: _fieldDecoration(focused: focusNode.hasFocus),
+                onTap: () {
+                  controller.selection = TextSelection(
+                    baseOffset: 0,
+                    extentOffset: controller.text.length,
+                  );
+                },
+                onSubmitted: (_) => onFieldSubmitted(),
+              );
+            },
+          ),
+        );
+      },
+      optionsViewBuilder: (context, onSelected, options) {
+        final width = _fieldWidth;
+        if (width == null || options.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Material(
+            elevation: 4,
+            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: 380, maxWidth: width),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: options.length,
+                itemBuilder: (context, index) {
+                  final team = options.elementAt(index);
+                  final blocked = widget.otherTeam == team;
+                  final isSelected = widget.selectedTeam == team;
+                  final isFavorite = widget.favoriteTeam == team;
+                  return InkWell(
+                    onTap: blocked ? null : () => onSelected(team),
+                    child: Container(
+                      width: width,
+                      color: isSelected
+                          ? const Color(0xFFEEF3F6)
+                          : Colors.transparent,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              team,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: isSelected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                color: blocked
+                                    ? Colors.grey.shade400
+                                    : Colors.grey.shade800,
+                              ),
+                            ),
+                          ),
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: blocked
+                                ? null
+                                : () => widget.onToggleFavorite(team),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(
+                                isFavorite ? Icons.star : Icons.star_border,
+                                size: 16,
+                                color: isFavorite
+                                    ? Colors.amber
+                                    : Colors.grey.shade400,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

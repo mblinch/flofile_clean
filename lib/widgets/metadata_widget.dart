@@ -231,8 +231,11 @@ class _MetadataWidgetState extends State<MetadataWidget> {
       // Load IPTC metadata fields only if they exist - prefer Photo Mechanic's fields
 
       // Load categorization metadata - prefer Photo Mechanic's fields
-      titleObjectNameController.text =
-          (meta['IPTC:ObjectName'] ?? meta['ObjectName'])?.toString() ?? '';
+      titleObjectNameController.text = (meta['IPTC:ObjectName'] ??
+              meta['ObjectName'] ??
+              meta['XMP:Title'])
+          ?.toString() ??
+          '';
       categoryController.text =
           (meta['IPTC:Category'] ?? meta['Category'])?.toString() ?? '';
 

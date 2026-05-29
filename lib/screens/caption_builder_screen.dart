@@ -16,7 +16,6 @@ import '../widgets/matrix_caption_board.dart';
 import '../widgets/player_popup_caption_board.dart';
 
 import '../widgets/startup_dialog.dart';
-import '../widgets/sport_selection_dialog.dart';
 import '../widgets/keyboard_fire_dialog.dart';
 import '../widgets/burst_caption_confirm_dialog.dart';
 import '../widgets/app_styled_dialogs.dart';
@@ -32,6 +31,7 @@ import '../services/preferences_service.dart';
 import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
 import '../utils/burst_chain_helper.dart';
+import '../flo_layout_constants.dart';
 
 /// Writes IPTC keyword bag and XMP/IPTC **Subject** so apps like Photo Mechanic
 /// show keywords (PM often reads `Subject` / dc:subject; IPTC-only is easy to miss).
@@ -202,9 +202,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   // Loading states
   bool _isLoadingPlayers = false;
-  double _playerLoadingProgress = 0.0;
   bool _isLoadingImages = false;
-  double _imageLoadingProgress = 0.0;
+  double _loadingProgress = 0.0;
+  String _loadingStatusTitle = 'Loading…';
+  String _loadingStatusDetail = '';
+
+  /// IPTC preset from Go Time (avoids reading prefs before write finishes).
+  Map<String, String>? _startupIptcPresetForImport;
 
   // Global keys for accessing widgets
 
@@ -575,8 +579,27 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       try {
         final dynamic state = popupState;
         state.resetSelections();
+        state.clearPlayerSearchBars();
       } catch (e) {
         print('Error resetting player popup: $e');
+      }
+    }
+
+    final captionState = _captionFieldsKey2.currentState;
+    if (captionState != null) {
+      try {
+        (captionState as dynamic).clearPlayerSearchBars();
+      } catch (e) {
+        print('Error clearing caption search bars: $e');
+      }
+    }
+
+    final kbState = _kbPanelKey.currentState;
+    if (kbState != null) {
+      try {
+        (kbState as dynamic).clearPlayerSearchBars();
+      } catch (e) {
+        print('Error clearing keyboard fire search bars: $e');
       }
     }
   }
@@ -775,7 +798,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   }
 
   void _handleStartupComplete(
-      String folderPath, String? homeTeam, String? awayTeam) {
+    String folderPath,
+    String? homeTeam,
+    String? awayTeam,
+    Map<String, String> iptcPreset,
+  ) {
+    _startupIptcPresetForImport =
+        iptcPreset.isEmpty ? null : Map<String, String>.from(iptcPreset);
     setState(() {
       _selectedFolderPath = folderPath;
       selectedHomeTeam = homeTeam;
@@ -791,22 +820,48 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // Folder watching disabled to prevent image jumping
   }
 
+  void _reportSessionLoading({
+    required double progress,
+    required String title,
+    required String detail,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _loadingProgress = progress.clamp(0.0, 1.0);
+      _loadingStatusTitle = title;
+      _loadingStatusDetail = detail;
+    });
+  }
+
+  static String _iptcApplyModeLabel(IptcApplyMode mode) {
+    switch (mode) {
+      case IptcApplyMode.onImport:
+        return 'On import';
+      case IptcApplyMode.onSave:
+        return 'On save';
+      case IptcApplyMode.none:
+        return 'Off';
+    }
+  }
+
   Future<void> _startLoadingSequence(String folderPath) async {
-    // Step 1: Load players
     setState(() {
       _isLoadingPlayers = true;
-      _playerLoadingProgress = 0.0;
+      _isLoadingImages = false;
+      _loadingProgress = 0.0;
+      _loadingStatusTitle = 'Loading session';
+      _loadingStatusDetail = 'Preparing…';
     });
 
     try {
-      // Load home team players
-      setState(() {
-        _playerLoadingProgress = 0.1;
-      });
-
       const rosterTimeout = Duration(seconds: 12);
 
       if (selectedHomeTeam != null) {
+        _reportSessionLoading(
+          progress: 0.06,
+          title: 'Loading players',
+          detail: 'Home team · $selectedHomeTeam',
+        );
         print('Loading home team roster for: $selectedHomeTeam');
         final homeRoster = await _apiManager
             .fetchTeamRoster(selectedHomeTeam!)
@@ -815,19 +870,25 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               'Home roster request timed out after ${rosterTimeout.inSeconds}s');
         });
         print('Loaded ${homeRoster.length} home team players');
-        setState(() {
-          _cachedHomeRoster = homeRoster;
-          _playerLoadingProgress = 0.5;
-        });
+        if (!mounted) return;
+        setState(() => _cachedHomeRoster = homeRoster);
+        _reportSessionLoading(
+          progress: 0.22,
+          title: 'Loading players',
+          detail: 'Home roster loaded (${homeRoster.length} players)',
+        );
       }
 
-      // Brief pause before the second request to avoid rate-limiting
       if (selectedHomeTeam != null && selectedAwayTeam != null) {
         await Future<void>.delayed(const Duration(milliseconds: 300));
       }
 
-      // Load away team players
       if (selectedAwayTeam != null) {
+        _reportSessionLoading(
+          progress: 0.24,
+          title: 'Loading players',
+          detail: 'Away team · $selectedAwayTeam',
+        );
         print('Loading away team roster for: $selectedAwayTeam');
         final awayRoster = await _apiManager
             .fetchTeamRoster(selectedAwayTeam!)
@@ -836,14 +897,22 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               'Away roster request timed out after ${rosterTimeout.inSeconds}s');
         });
         print('Loaded ${awayRoster.length} away team players');
-        setState(() {
-          _cachedAwayRoster = awayRoster;
-          _playerLoadingProgress = 1.0;
-        });
+        if (!mounted) return;
+        setState(() => _cachedAwayRoster = awayRoster);
+        _reportSessionLoading(
+          progress: 0.34,
+          title: 'Loading players',
+          detail: 'Away roster loaded (${awayRoster.length} players)',
+        );
+      } else if (selectedHomeTeam == null && selectedAwayTeam == null) {
+        _reportSessionLoading(
+          progress: 0.2,
+          title: 'Loading session',
+          detail: 'No team rosters to load',
+        );
       }
 
-      // Small delay to show completion
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
     } catch (e) {
       print('Error loading players: $e');
       if (mounted) {
@@ -858,22 +927,26 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
     }
 
-    setState(() {
-      _isLoadingPlayers = false;
-    });
+    if (!mounted) return;
+    setState(() => _isLoadingPlayers = false);
 
-    // Step 2: Load images from the selected folder
     setState(() {
       _isLoadingImages = true;
-      _imageLoadingProgress = 0.0;
+      _loadingProgress = 0.36;
+      _loadingStatusTitle = 'Loading images';
+      _loadingStatusDetail = 'Starting…';
     });
 
     await _loadImagesFromFolder(folderPath);
 
-    setState(() {
-      _isLoadingImages = false;
-      _imageLoadingProgress = 1.0;
-    });
+    if (!mounted) return;
+    _reportSessionLoading(
+      progress: 1.0,
+      title: 'Ready',
+      detail: '${imagePaths.length} images loaded',
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    setState(() => _isLoadingImages = false);
 
     print('Images loaded: ${imagePaths.length} - going straight to app');
   }
@@ -918,7 +991,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       if (await prefsService.getIptcApplyMode() != IptcApplyMode.onSave) return;
       final preset = await _loadSelectedIptcPreset();
       if (preset == null) return;
-      await IptcTemplateApplyService.applyToImage(imagePath, preset);
+      final index = imagePaths.indexOf(imagePath);
+      await IptcTemplateApplyService.applyToImage(
+        imagePath,
+        preset,
+        imageIndex: index >= 0 ? index : null,
+      );
     } catch (e) {
       print('Error applying IPTC template on save: $e');
     }
@@ -928,28 +1006,72 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     if (paths.isEmpty) return;
     try {
       final prefsService = await PreferencesService.getInstance();
-      if (await prefsService.getIptcApplyMode() != IptcApplyMode.onImport) {
+      final mode = await prefsService.getIptcApplyMode();
+      if (mode != IptcApplyMode.onImport) {
+        _startupIptcPresetForImport = null;
+        _reportSessionLoading(
+          progress: 0.92,
+          title: 'Loading images',
+          detail:
+              'IPTC template not written on load (Write IPTC: ${_iptcApplyModeLabel(mode)})',
+        );
         return;
       }
 
-      final preset = await _loadSelectedIptcPreset();
-      if (preset == null) return;
-
-      final writable = paths
-          .where((path) => !_lockedPaths.contains(path))
-          .toList();
-      if (writable.isEmpty) return;
-
-      for (var i = 0; i < writable.length; i++) {
-        await IptcTemplateApplyService.applyToImage(writable[i], preset);
-        if (!mounted) return;
-        setState(() {
-          _imageLoadingProgress =
-              0.8 + (0.2 * (i + 1) / writable.length);
-        });
+      final preset = _startupIptcPresetForImport ??
+          await _loadSelectedIptcPreset();
+      _startupIptcPresetForImport = null;
+      if (preset == null || preset.isEmpty) {
+        _reportSessionLoading(
+          progress: 0.92,
+          title: 'Loading images',
+          detail: 'No IPTC template fields to write',
+        );
+        return;
       }
+
+      final writable =
+          paths.where((path) => !_lockedPaths.contains(path)).toList();
+      if (writable.isEmpty) {
+        _reportSessionLoading(
+          progress: 0.92,
+          title: 'Loading images',
+          detail: 'No writable images for IPTC template',
+        );
+        return;
+      }
+
+      final fieldCount = preset.length;
+      for (var i = 0; i < writable.length; i++) {
+        final name = p.basename(writable[i]);
+        _reportSessionLoading(
+          progress: 0.68 + (0.26 * (i + 1) / writable.length),
+          title: 'Writing IPTC template',
+          detail:
+              'Image ${i + 1} of ${writable.length} · $name · $fieldCount fields',
+        );
+        await IptcTemplateApplyService.applyToImage(
+          writable[i],
+          preset,
+          imageIndex: i,
+        );
+        if (!mounted) return;
+      }
+      _reportSessionLoading(
+        progress: 0.96,
+        title: 'Writing IPTC template',
+        detail: 'Finished · ${writable.length} images updated',
+      );
     } catch (e) {
       print('Error applying startup IPTC template during load: $e');
+      _startupIptcPresetForImport = null;
+      if (mounted) {
+        _reportSessionLoading(
+          progress: 0.92,
+          title: 'Writing IPTC template',
+          detail: 'Some images could not be updated',
+        );
+      }
     }
   }
 
@@ -962,7 +1084,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       if (_lockedPaths.contains(imagePath)) return;
       final preset = await _loadSelectedIptcPreset();
       if (preset == null) return;
-      await IptcTemplateApplyService.applyToImage(imagePath, preset);
+      final index = imagePaths.indexOf(imagePath);
+      await IptcTemplateApplyService.applyToImage(
+        imagePath,
+        preset,
+        imageIndex: index >= 0 ? index : null,
+      );
     } catch (e) {
       print('Error applying startup IPTC to new image: $e');
     }
@@ -998,6 +1125,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               ? imagePaths[currentIndex]
               : null;
 
+      _reportSessionLoading(
+        progress: 0.38,
+        title: 'Loading images',
+        detail: 'Scanning folder…',
+      );
+
       final directory = Directory(folderPath);
       final List<FileSystemEntity> entities = await directory.list().toList();
 
@@ -1027,15 +1160,21 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             !fileName.startsWith('tmp.');
       }).toList();
 
-      // Sort images by capture time BEFORE setting the first image
-      setState(() {
-        _imageLoadingProgress = 0.3;
-      });
+      _reportSessionLoading(
+        progress: 0.42,
+        title: 'Loading images',
+        detail: imageFiles.isEmpty
+            ? 'No images found in folder'
+            : 'Found ${imageFiles.length} images · sorting by date…',
+      );
+
       await _sortImagesByDateTaken(imageFiles);
 
-      setState(() {
-        _imageLoadingProgress = 0.8;
-      });
+      _reportSessionLoading(
+        progress: 0.64,
+        title: 'Loading images',
+        detail: 'Sorted ${imageFiles.length} images by capture time',
+      );
 
       // Set images after sorting to ensure the first image is chronologically first
       setState(() {
@@ -1049,6 +1188,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
       });
 
+      _reportSessionLoading(
+        progress: 0.66,
+        title: 'Loading images',
+        detail: 'Restoring saved markers…',
+      );
       await _restoreSavedImagesForCurrentFolder();
 
       await _applyStartupIptcTemplateDuringLoad(imageFiles);
@@ -1294,6 +1438,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
     _saveIptcMetadataInternal().then((r) {
       if (r.cancelled || !mounted) return;
+      _clearPopupSelections();
       // Snapshot the current caption (with verb) as "last saved" before moving on.
       (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
       // Don't advance when multi-selection is active
@@ -1328,6 +1473,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     // 1. Save IPTC metadata
     final r = await _saveIptcMetadataInternal();
     if (r.cancelled || !mounted) return;
+    _clearPopupSelections();
 
     // Snapshot the current caption (with verb) as "last saved" before moving on.
     (_captionFieldsKey2.currentState as dynamic)?.storeCurrentCaption();
@@ -1827,6 +1973,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   Future<_IptcInternalSaveResult> _saveIptcMetadataInternal() async {
     if (_multiSelectedImages.length > 1) {
       await _saveIptcToMultipleImages(_multiSelectedImages);
+      _clearPopupSelections();
       return _IptcInternalSaveResult.saved();
     }
 
@@ -2404,12 +2551,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     for (int i = 0; i < imageFiles.length; i++) {
       final filePath = imageFiles[i];
 
-      // Update progress during sorting
-      if (imageFiles.length > 10) {
-        // Only update progress for larger sets
-        setState(() {
-          _imageLoadingProgress = 0.3 + (0.5 * (i / imageFiles.length));
-        });
+      if (imageFiles.isNotEmpty) {
+        _reportSessionLoading(
+          progress: 0.44 + (0.18 * (i + 1) / imageFiles.length),
+          title: 'Loading images',
+          detail:
+              'Reading capture times · ${i + 1} of ${imageFiles.length}',
+        );
       }
       try {
         final proc = await ExiftoolHelper.run([
@@ -3372,6 +3520,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               break;
             case 'Object Name':
               exifMetadata['ObjectName'] = value;
+              exifMetadata['IPTC:ObjectName'] = value;
+              exifMetadata['XMP:Title'] = value;
               break;
             case 'Stadium':
               exifMetadata['Sub-location'] = value;
@@ -3834,62 +3984,63 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   }
 
   Widget _buildPreSessionBody() {
-    const padding = EdgeInsets.fromLTRB(8, 8, 8, 8);
-
-    if (!_isSportSelected) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          return SingleChildScrollView(
-            padding: padding,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: Center(
-                child: SportSelectionDialog(
-                  inline: true,
-                  onSportSelected: _handleSportSelected,
-                ),
-              ),
-            ),
-          );
-        },
-      );
-    }
+    const padding = EdgeInsets.fromLTRB(16, 16, 16, 16);
 
     if (_isLoadingPlayers || _isLoadingImages) {
       return Padding(
         padding: padding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _isLoadingPlayers ? 'Loading players…' : 'Loading images…',
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 14,
-                fontVariations: [FontVariation('wght', 600)],
-                color: Color(0xFF2A4858),
-              ),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  _loadingStatusTitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Impact',
+                    fontFamilyFallback: ['Inter'],
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: kFloTealDark,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                if (_loadingStatusDetail.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _loadingStatusDetail,
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 11,
+                      fontVariations: const [FontVariation('wght', 500)],
+                      color: Colors.grey.shade700,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                FloTealGradientProgressBar(
+                  value: _loadingProgress < 0.02 ? 0.02 : _loadingProgress,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${(_loadingProgress * 100).toInt()}%',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: _isLoadingPlayers
-                  ? _playerLoadingProgress
-                  : _imageLoadingProgress,
-              backgroundColor: Colors.grey.shade200,
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-              minHeight: 6,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${((_isLoadingPlayers ? _playerLoadingProgress : _imageLoadingProgress) * 100).toInt()}%',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 11,
-                color: Colors.grey.shade600,
-              ),
-            ),
-          ],
+          ),
         ),
       );
     }
@@ -3899,11 +4050,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       child: SizedBox.expand(
         child: StartupDialog(
           inline: true,
-          sport: _selectedSport,
+          sport: _isSportSelected ? _selectedSport : null,
+          onSportSelected: _handleSportSelected,
           onConfigurationComplete: _handleStartupComplete,
-          onBackToSportSelection: () {
-            setState(() => _isSportSelected = false);
-          },
         ),
       ),
     );

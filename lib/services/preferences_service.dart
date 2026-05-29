@@ -47,6 +47,8 @@ class PreferencesService {
   /// IANA zone: EXIF capture times are interpreted as this local zone when
   /// resolving MLB innings from play-by-play (internal / allowlisted users).
   static const String _keyMlbInningExifTimezone = 'mlb_inning_exif_timezone';
+  static const String _keyMlbInningFromClockEnabled =
+      'mlb_inning_from_clock_enabled';
   static const String mlbInningExifTimezoneDefault = 'America/New_York';
   /// Legacy prefs key; optional headline strip under the caption is no longer offered.
   static const String _keyShowHeadlineField = 'show_headline_field';
@@ -171,7 +173,7 @@ class PreferencesService {
       } else if (onImport == false && onSave == false) {
         mode = IptcApplyMode.none;
       } else {
-        mode = IptcApplyMode.onImport;
+        mode = IptcApplyMode.none;
       }
 
       await prefs.setString(_keyIptcApplyMode, mode.storageValue);
@@ -977,6 +979,17 @@ class PreferencesService {
     }
   }
 
+  /// When true (default), baseball photos auto-resolve inning from MLB vs EXIF.
+  Future<bool> getMlbInningFromClockEnabled() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyMlbInningFromClockEnabled) ?? true;
+  }
+
+  Future<void> setMlbInningFromClockEnabled(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyMlbInningFromClockEnabled, enabled);
+  }
+
   /// Exports all preferences as JSON, including per-sport verb settings so they can be saved and passed on.
   Future<Map<String, dynamic>> exportAllPreferences() async {
     const sports = ['baseball', 'hockey', 'basketball', 'soccer'];
@@ -1013,6 +1026,7 @@ class PreferencesService {
       'syncServerUrl': await getSyncServerUrl(),
       'syncAccountId': await getSyncAccountId(),
       'mlbInningExifTimezone': await getMlbInningExifTimezone(),
+      'mlbInningFromClockEnabled': await getMlbInningFromClockEnabled(),
       'ftpProfiles': await getFtpProfiles(),
       'currentFtpProfile': await getCurrentFtpProfile(),
       'placeFirebarOnRight': await getPlaceFirebarOnRight(),
@@ -1132,6 +1146,11 @@ class PreferencesService {
     if (preferences.containsKey('mlbInningExifTimezone')) {
       await setMlbInningExifTimezone(
           preferences['mlbInningExifTimezone'] as String? ?? '');
+    }
+    if (preferences.containsKey('mlbInningFromClockEnabled')) {
+      await setMlbInningFromClockEnabled(
+        preferences['mlbInningFromClockEnabled'] as bool? ?? true,
+      );
     }
     if (preferences.containsKey('useBallDontLieApi')) {
       final prefs = await _getPrefs();

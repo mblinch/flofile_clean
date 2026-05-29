@@ -303,6 +303,16 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       outgoing['Subject'] = '';
     }
 
+  // PM "Title" (Getty object-name slug) — dc:title, same value as Object Name.
+    final objectNameValue = outgoing['ObjectName']?.toString().trim() ??
+        outgoing['IPTC:ObjectName']?.toString().trim() ??
+        '';
+    if (objectNameValue.isNotEmpty) {
+      outgoing['XMP:Title'] = objectNameValue;
+    } else {
+      outgoing.remove('XMP:Title');
+    }
+
     return outgoing;
   }
 
@@ -1437,6 +1447,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
       case 'IPTC:ObjectName':
       case 'ObjectName':
+      case 'XMP:Title':
         return 'IPTC:ObjectName';
 
       case 'IPTC:SubLocation':

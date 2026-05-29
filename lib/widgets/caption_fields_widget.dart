@@ -667,6 +667,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// When non-null and equal to [CaptionFieldsWidget.currentImagePath], the
   /// current inning / prior-to-game state came from MLB play-by-play vs EXIF.
   String? _mlbInningIndicatorPath;
+  bool _mlbInningFromClockEnabled = true;
+  final ValueNotifier<int> _mlbClockUiRevision = ValueNotifier(0);
   String? _selectedPeriod; // Track selected hockey period
   bool _showOvertimePeriods = false; // Track whether to show overtime periods
   bool _isDivingCatch = false;
@@ -2436,7 +2438,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
     headlineController.dispose();
     keywordsController.dispose();
+    _mlbClockUiRevision.dispose();
     super.dispose();
+  }
+
+  void _notifyMlbClockUiChanged() {
+    _mlbClockUiRevision.value++;
   }
 
   Future<void> _initializePreferences() async {
@@ -2481,6 +2488,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         await _preferencesService.getApplyVerbKeywords();
     _applyPlayerNamesToKeywordsEnabled =
         await _preferencesService.getApplyPlayerNamesToKeywords();
+
+    _mlbInningFromClockEnabled =
+        await _preferencesService.getMlbInningFromClockEnabled();
 
     // Load last saved metadata
     _lastSavedMetadata = await _preferencesService.getLastSavedMetadata();
@@ -2888,7 +2898,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
-    _scheduleMlbInningFromPhotoTimestamp(meta);
+    if (_mlbInningFromClockEnabled) {
+      _scheduleMlbInningFromPhotoTimestamp(meta);
+    }
+  }
+
+  Future<void> _setMlbInningFromClockEnabled(bool enabled) async {
+    await _preferencesService.setMlbInningFromClockEnabled(enabled);
+    if (!mounted) return;
+    setState(() {
+      _mlbInningFromClockEnabled = enabled;
+      if (!enabled) {
+        _mlbInningIndicatorPath = null;
+        _mlbInningResolveToken++;
+      }
+    });
+    _notifyMlbClockUiChanged();
   }
 
   void _mlbClockSnack(String message, bool userInitiated) {
@@ -2904,6 +2929,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// Re-runs MLB play-by-play vs EXIF for the current image (used by the MLB button).
   Future<void> applyMlbInningFromExifClock({bool userInitiated = false}) async {
+    if (userInitiated && !_mlbInningFromClockEnabled) {
+      await _setMlbInningFromClockEnabled(true);
+    }
     final meta = widget.metadata;
     if (meta == null) {
       _mlbClockSnack('No metadata for this photo yet.', userInitiated);
@@ -2920,23 +2948,68 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return buildMlbInningClockAffordance(height: kFloInningButtonHeight);
   }
 
-  /// Baseball: filled “MLB time” after a successful API match, or outlined “MLB” to run / retry.
+  /// Baseball: grey when off, teal gradient when on (stays on after MLB match).
   Widget buildMlbInningClockAffordance({double height = kFloInningButtonHeight}) {
     if ((widget.sport ?? '').toLowerCase() != 'baseball') {
       return const SizedBox.shrink();
     }
-    if (showMlbInningFromClockIndicator) {
-      return _mlbInningFromClockChip(height: height);
-    }
-    return _mlbInningFromClockStubButton(height: height);
+    return ValueListenableBuilder<int>(
+      valueListenable: _mlbClockUiRevision,
+      builder: (context, _, __) {
+        if (!_mlbInningFromClockEnabled) {
+          return _mlbInningFromClockOffButton(height: height);
+        }
+        return _mlbInningFromClockOnButton(height: height);
+      },
+    );
   }
 
-  Widget _mlbInningFromClockStubButton({required double height}) {
-    final fontSize = height >= 28 ? 10.0 : 9.0;
+  double _mlbClockButtonFontSize(double height) =>
+      height >= 28 ? 10.0 : (height >= 24 ? 9.0 : 7.5);
+
+  Widget _mlbInningFromClockOffButton({required double height}) {
+    final fontSize = _mlbClockButtonFontSize(height);
     return Tooltip(
       message:
-          'Set inning or pre/post-game from MLB play-by-play using this photo’s '
-          'EXIF time, game date, and teams. Tap to run or refresh.',
+          'MLB Time Stamp is off. Tap to turn on and set inning from EXIF.',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => applyMlbInningFromExifClock(userInitiated: true),
+          borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+          child: Container(
+            height: height,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(kFloInningButtonRadius),
+              border: Border.all(color: Colors.grey.shade400, width: 0.7),
+            ),
+            child: Text(
+              'MLB Time Stamp Off',
+              style: TextStyle(
+                fontSize: fontSize,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade600,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _mlbInningFromClockOnButton({required double height}) {
+    final fontSize = _mlbClockButtonFontSize(height);
+    final matched = showMlbInningFromClockIndicator;
+    return Tooltip(
+      message: matched
+          ? 'Inning set from MLB play-by-play vs this photo’s EXIF time. '
+              'Tap to turn off.'
+          : 'Set inning from MLB play-by-play using EXIF time, game date, and '
+              'teams. Tap to run or refresh; tap again after a match to turn off.',
       child: Container(
         height: height,
         decoration: BoxDecoration(
@@ -2958,14 +3031,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           color: Colors.transparent,
           child: InkWell(
             onTap: () {
-              applyMlbInningFromExifClock(userInitiated: true);
+              if (matched) {
+                _setMlbInningFromClockEnabled(false);
+              } else {
+                applyMlbInningFromExifClock(userInitiated: true);
+              }
             },
             borderRadius: BorderRadius.circular(kFloInningButtonRadius),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8),
               child: Center(
                 child: Text(
-                  'MLB Time Stamp',
+                  'MLB Time Stamp On',
                   style: TextStyle(
                     fontSize: fontSize,
                     fontWeight: FontWeight.w600,
@@ -2987,6 +3064,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     Map<String, dynamic> meta, {
     bool userInitiated = false,
   }) async {
+    if (!_mlbInningFromClockEnabled && !userInitiated) return;
+
     final path = widget.currentImagePath;
     if (path == null || path.isEmpty) {
       _mlbClockSnack('No image selected.', userInitiated);
@@ -3112,43 +3191,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Updates [_selectedRbiInning]. Pass [mlbIndicatorForPath] only from the MLB
   /// timestamp resolver so the UI can show a small “from MLB” chip.
   void _putRbiInning(int? value, {String? mlbIndicatorForPath}) {
+    final prevIndicator = _mlbInningIndicatorPath;
     _selectedRbiInning = value;
     if (mlbIndicatorForPath != null) {
       _mlbInningIndicatorPath = mlbIndicatorForPath;
     } else {
       _mlbInningIndicatorPath = null;
     }
-  }
-
-  Widget _mlbInningFromClockChip({double height = 33}) {
-    final fontSize = height >= 28 ? 10.0 : 9.0;
-    return Tooltip(
-      message:
-          'Pre-game, inning, or post-game was set from MLB play-by-play using '
-          'this photo’s EXIF time and your game date / teams.',
-      child: SizedBox(
-        height: height,
-        child: Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
-            color: const Color(0xFF002D72).withOpacity(0.08),
-            borderRadius: BorderRadius.circular(kFloInningButtonRadius),
-            border:
-                Border.all(color: const Color(0xFF002D72).withOpacity(0.35)),
-          ),
-          child: Text(
-            'MLB time',
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF002D72),
-              letterSpacing: 0.2,
-            ),
-          ),
-        ),
-      ),
-    );
+    if (prevIndicator != _mlbInningIndicatorPath) {
+      _notifyMlbClockUiChanged();
+    }
   }
 
   /// After metadata refresh for the **same** image (e.g. save), clear player picks
@@ -7546,22 +7598,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _reapplyVerbKeywordsIfEnabled();
           },
           child: Container(
-            decoration: BoxDecoration(
-              color: isMainPlayer
-                  ? Colors.red.shade100
-                  : isSelected
-                      ? Colors.blue.shade100
-                      : Colors.white,
-              border: Border.all(
-                color: isMainPlayer
-                    ? Colors.red.shade400
-                    : isSelected
-                        ? Colors.blue.shade400
-                        : Colors.grey.shade300,
-                width: isMainPlayer || isSelected ? 2 : 1,
-              ),
-              borderRadius: BorderRadius.circular(3),
-            ),
+            decoration: isMainPlayer
+                ? BoxDecoration(
+                    color: Colors.red.shade100,
+                    border: Border.all(color: Colors.red.shade400, width: 2),
+                    borderRadius: BorderRadius.circular(3),
+                  )
+                : (isSelected
+                    ? floTealSelectedDecoration(
+                        borderRadius: BorderRadius.circular(3),
+                      )
+                    : BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.grey.shade300),
+                        borderRadius: BorderRadius.circular(3),
+                      )),
             child: Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -7577,7 +7628,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       color: isMainPlayer
                           ? Colors.red.shade700
                           : isSelected
-                              ? Colors.blue.shade700
+                              ? Colors.white
                               : Colors.black87,
                     ),
                   ),
@@ -7590,7 +7641,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       color: isMainPlayer
                           ? Colors.red.shade700
                           : isSelected
-                              ? Colors.blue.shade700
+                              ? Colors.white
                               : Colors.black87,
                     ),
                     maxLines: 1,
@@ -10568,6 +10619,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Future<void> triggerFtp() async => _onFtpPressed();
   void showFtpSettings() => _showFtpSettings();
 
+  /// Clears player search fields after save without resetting caption selections.
+  void clearPlayerSearchBars() {
+    if (!mounted) return;
+    setState(() {
+      _homeSearchController.clear();
+      _awaySearchController.clear();
+      _unifiedSearchController.clear();
+      _homeSearchText = '';
+      _awaySearchText = '';
+      _unifiedSearchText = '';
+      _playerSearchText = '';
+      _filteredPlayers.clear();
+      _noPlayersFound = false;
+    });
+  }
+
   /// Called by the screen whenever the user explicitly saves an image, so that
   /// the current caption (including the verb phrase) is captured as the
   /// "previous" caption available via paste-prev.
@@ -10919,18 +10986,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         height: 36, // Further increased height for bigger chips
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
         margin: const EdgeInsets.only(bottom: 1),
-        decoration: BoxDecoration(
-          color: isSticky
-              ? const Color(0xFFE3EDFF)
-              : (isSelected ? const Color(0xFFDBEAFF) : Colors.grey.shade50),
-          borderRadius: BorderRadius.circular(3),
-          border: Border.all(
-            color: isSticky
-                ? const Color(0xFF0052CC)
-                : (isSelected ? const Color(0xFF4A90E2) : Colors.grey.shade300),
-            width: (isSelected || isSticky) ? 1.5 : 0.5,
-          ),
-        ),
+        decoration: isSticky
+            ? BoxDecoration(
+                color: kFloTealSelectedFill,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: kFloTealDark, width: 1.5),
+              )
+            : (isSelected
+                ? floTealSelectedChipDecoration()
+                : BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: Colors.grey.shade300, width: 0.5),
+                  )),
         child: Center(
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -10941,12 +11009,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF4A90E2)
-                          : Colors.grey.shade500,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
+                    decoration: isSelected
+                        ? floTealSelectedDecoration(
+                            borderRadius: BorderRadius.circular(3),
+                          )
+                        : BoxDecoration(
+                            color: Colors.grey.shade500,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
                     child: Text(
                       '$verbNumber',
                       style: const TextStyle(
@@ -11076,7 +11146,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? FontWeight.w600
                                       : FontWeight.w500,
                                   color: isSelected
-                                      ? const Color(0xFF0052CC)
+                                      ? kFloTealDark
                                       : Colors.grey.shade700,
                                 ),
                               ),
@@ -11086,7 +11156,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                   color: isSelected
-                                      ? const Color(0xFF0052CC)
+                                      ? kFloTealDark
                                       : Colors.black87,
                                 ),
                               ),
@@ -11113,7 +11183,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? FontWeight.w600
                                       : FontWeight.w500,
                                   color: isSelected
-                                      ? const Color(0xFF0052CC)
+                                      ? kFloTealDark
                                       : Colors.grey.shade700,
                                 ),
                               ),
@@ -11147,7 +11217,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? FontWeight.w600
                                       : FontWeight.w500,
                                   color: isSelected
-                                      ? const Color(0xFF0052CC)
+                                      ? kFloTealDark
                                       : Colors.grey.shade700,
                                 ),
                               ),
@@ -11157,7 +11227,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
                                   color: isSelected
-                                      ? const Color(0xFF0052CC)
+                                      ? kFloTealDark
                                       : Colors.black87,
                                 ),
                               ),
@@ -11185,7 +11255,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? FontWeight.w600
                                       : FontWeight.w500,
                                   color: isSelected
-                                      ? const Color(0xFF0052CC)
+                                      ? kFloTealDark
                                       : Colors.grey.shade700,
                                 ),
                               ),
@@ -13106,13 +13176,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Container(
         alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.blue.shade100 : Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? Colors.blue.shade300 : Colors.grey.shade300,
-          ),
-        ),
+        decoration: isSelected
+            ? floTealSelectedDecoration(borderRadius: BorderRadius.circular(12))
+            : BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
         child: Text(
           label,
           textAlign: TextAlign.center,
@@ -13121,7 +13191,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w500,
-            color: isSelected ? Colors.blue.shade700 : Colors.grey.shade700,
+            color: isSelected ? Colors.white : Colors.grey.shade700,
           ),
         ),
       ),
@@ -20810,6 +20880,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _selectedHittingAction == 'celebrates_in_dugout';
   }
 
+  /// Hit outcomes that use a short noun after "celebrates a …" (not "hits a …").
+  bool _hitVerbUsesCelebrationNoun(String verb) {
+    switch (verb) {
+      case 'Single':
+      case 'Double':
+      case 'Triple':
+      case 'Grand Slam':
+      case 'Sacrifice Fly':
+      case 'Strikeout':
+        return true;
+      default:
+        return false;
+    }
+  }
+
   /// When Cele is on for steal/slide/run/round, replace factual line with [core] + affixes.
   /// Tagged-out outcomes keep the factual line.
   String _withRunningVerbCelebration(String factualLine, String celebratoryCore) {
@@ -22070,8 +22155,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         baseAction = originalVerb.toLowerCase();
     }
 
-    // Apply custom wording override to base action (except Home Run handled below)
-    if (hasResolvedVerbPhrase && originalVerb != 'Home Run') {
+    // Apply custom wording override to base action (except Home Run handled below).
+    // Cele captions need the hit noun ("single"), not the full clause ("hits a single").
+    if (hasResolvedVerbPhrase &&
+        originalVerb != 'Home Run' &&
+        !(_isHittingCelebrationSelected() &&
+            _hitVerbUsesCelebrationNoun(originalVerb))) {
       baseAction = resolvedVerbPhrase!;
     }
 

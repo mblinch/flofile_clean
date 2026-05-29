@@ -53,6 +53,21 @@ class IptcTemplateApplyService {
     'Personality',
   };
 
+  /// Shown in the startup IPTC panel when caption/personality exist in files.
+  /// Display-only — never persisted or written to IPTC.
+  static const String inAppGeneratedPlaceholder = 'To be generated in app';
+
+  static bool isInAppGeneratedPlaceholder(String? value) {
+    return value?.trim().toLowerCase() ==
+        inAppGeneratedPlaceholder.toLowerCase();
+  }
+
+  static bool isInAppGeneratedFieldKey(String key) {
+    final presetKey = toPresetKey(key);
+    return inAppGeneratedPresetKeys.contains(key) ||
+        inAppGeneratedPresetKeys.contains(presetKey);
+  }
+
   static String urgencyMenuLabel(String value) {
     switch (value) {
       case '1':
@@ -85,6 +100,10 @@ class IptcTemplateApplyService {
     switch (key) {
       case 'Job Title':
         return 'Creator\'s Job Title';
+      case 'Location':
+        return 'Stadium';
+      case 'ObjectName':
+        return 'Object Name';
       default:
         return key;
     }
@@ -104,8 +123,9 @@ class IptcTemplateApplyService {
     final out = <String, String>{};
     for (final e in raw.entries) {
       final v = e.value.trim();
-      if (v.isEmpty) continue;
+      if (v.isEmpty || isInAppGeneratedPlaceholder(v)) continue;
       final presetKey = toPresetKey(e.key);
+      if (inAppGeneratedPresetKeys.contains(presetKey)) continue;
       if (presetKey == 'Urgency') {
         out[presetKey] = normalizeUrgencyValue(v);
       } else {
@@ -132,55 +152,254 @@ class IptcTemplateApplyService {
     return v;
   }
 
-  static String? exiftoolTagForPresetKey(String key) {
-    switch (key) {
+  /// ExifTool CLI: hyphenated bare tags (e.g. [Sub-location]) must use `--Tag=value`
+  /// or they are parsed as invalid options.
+  static String exiftoolWriteArg(String tag, String value) {
+    final needsDoubleDash = !tag.contains(':') && tag.contains('-');
+    final prefix = needsDoubleDash ? '--' : '-';
+    return '$prefix$tag=$value';
+  }
+
+  /// Registers every ExifTool tag alias the Edit IPTC dialog writes for [presetKey].
+  ///
+  /// Photo Mechanic / JPEG files often only update when both the short tag
+  /// (e.g. [Headline], [CaptionWriter]) and the IPTC: form are set — same as
+  /// [MetadataPopupDialog._buildOutgoingMetadataFromState].
+  static void addExiftoolTagsForPresetKey(
+    Map<String, String> into,
+    String presetKey,
+    String value,
+  ) {
+    final v = value.trim();
+    if (v.isEmpty) return;
+
+    void tag(String name) => into[name] = v;
+
+    switch (presetKey) {
       case 'Creator':
-        return 'IPTC:By-line';
+        tag('Creator');
+        tag('IPTC:By-line');
+        break;
       case 'MEID':
-        return 'IPTC:OriginalTransmissionReference';
+        tag('TransmissionReference');
+        tag('OriginalTransmissionReference');
+        tag('IPTC:OriginalTransmissionReference');
+        break;
       case 'Description Writers':
-        return 'CaptionWriter';
+        tag('CaptionWriter');
+        tag('IPTC:Writer-Editor');
+        break;
       case 'Creator\'s Job Title':
-        return 'IPTC:By-lineTitle';
+        tag('AuthorsPosition');
+        tag('By-lineTitle');
+        tag('IPTC:By-lineTitle');
+        break;
       case 'Copyright':
-        return 'IPTC:CopyrightNotice';
+        // Prefer CopyrightNotice — bare "Copyright" can clash with exiftool's
+        // -copyright switch; Rights is lang-alt XMP that PM also reads.
+        tag('CopyrightNotice');
+        tag('IPTC:CopyrightNotice');
+        tag('Rights');
+        tag('XMP:Rights');
+        break;
       case 'Credit':
-        return 'IPTC:Credit';
+        tag('Credit');
+        tag('IPTC:Credit');
+        break;
       case 'Source':
-        return 'IPTC:Source';
+        tag('Source');
+        tag('IPTC:Source');
+        break;
       case 'Headline':
-        return 'IPTC:Headline';
+        tag('Headline');
+        tag('IPTC:Headline');
+        break;
       case 'Category':
-        return 'IPTC:Category';
+        tag('Category');
+        tag('IPTC:Category');
+        break;
       case 'Object Name':
-        return 'IPTC:ObjectName';
+      case 'ObjectName':
+        // Written in [applyObjectName]; include PM / iptcExt "Title" alias.
+        _tagObjectNameAliases(into, v);
+        break;
       case 'Stadium':
-        return 'IPTC:Sub-location';
+      case 'Location':
+        tag('Sub-location');
+        tag('SubLocation');
+        tag('IPTC:Sub-location');
+        tag('IPTC:SubLocation');
+        tag('Location');
+        tag('XMP:Location');
+        break;
       case 'City':
-        return 'IPTC:City';
+        tag('City');
+        tag('IPTC:City');
+        break;
       case 'Province/State':
-        return 'IPTC:Province-State';
+        tag('Province-State');
+        tag('ProvinceState');
+        tag('IPTC:Province-State');
+        tag('IPTC:ProvinceState');
+        tag('State');
+        tag('XMP:State');
+        break;
       case 'Country':
-        return 'IPTC:Country-Primary-Location-Name';
+        tag('Country');
+        tag('CountryPrimaryLocationName');
+        tag('IPTC:CountryPrimaryLocationName');
+        break;
       case 'Country Code':
-        return 'IPTC:Country-Primary-Location-Code';
+        tag('CountryCode');
+        tag('CountryPrimaryLocationCode');
+        tag('IPTC:CountryPrimaryLocationCode');
+        break;
       case 'Special Instructions':
-        return 'IPTC:Special-Instructions';
+        tag('SpecialInstructions');
+        tag('IPTC:SpecialInstructions');
+        break;
       case 'Personality':
-        return 'XMP-getty:Personality';
+        tag('XMP-getty:Personality');
+        tag('Personality');
+        break;
       case 'Caption':
-        return 'IPTC:Caption-Abstract';
+        tag('IPTC:Description');
+        tag('Description');
+        tag('Caption-Abstract');
+        tag('IPTC:Caption-Abstract');
+        break;
       case 'Urgency':
-        return 'IPTC:Urgency';
+        tag('Urgency');
+        tag('IPTC:Urgency');
+        break;
       case 'Creator\'s Identity':
-        return 'XMP:CreatorIdentity';
+        tag('XMP:CreatorIdentity');
+        tag('CreatorIdentity');
+        break;
       case 'Date':
       case 'Time':
       case 'Time and Date':
-        return null;
+      case 'Keywords':
+      case 'Supp Cat 1':
+      case 'Supp Cat 2':
+      case 'Supp Cat 3':
+        break;
       default:
-        return null;
+        break;
     }
+  }
+
+  /// All ExifTool keys for Getty / Photo Mechanic **Title** (= Object Name slug).
+  ///
+  /// PM often shows slugs like `776360337_MB_00_LEAFS` under Title / Object Name.
+  /// Writes IPTC Object Name plus [XMP:Title] (dc:title) — not iptcExt:Title, which
+  /// ExifTool does not support on JPEG.
+  static void _tagObjectNameAliases(Map<String, String> into, String value) {
+    into['IPTC:ObjectName'] = value;
+    into['ObjectName'] = value;
+    into['XMP:Title'] = value;
+  }
+
+  /// IPTC Object Name / XMP Title — dedicated pass so it isn't lost in large batches.
+  static Future<bool> applyObjectName(String imagePath, String value) async {
+    final v = value.trim();
+    if (v.isEmpty) return true;
+
+    final args = <String>[
+      exiftoolWriteArg('IPTC:ObjectName', v),
+      exiftoolWriteArg('ObjectName', v),
+      exiftoolWriteArg('XMP:Title', v),
+      '-charset',
+      'iptc=UTF8',
+      '-overwrite_original',
+      imagePath,
+    ];
+
+    final proc = await ExiftoolHelper.run(args);
+    if (!proc.isSuccess) {
+      print('IPTC Object Name apply failed for $imagePath: ${proc.stderrText}');
+      print('IPTC Object Name apply args: ${args.join(' ')}');
+      return false;
+    }
+    return true;
+  }
+
+  static String? _meidFromPreset(Map<String, String> preset) {
+    for (final key in const [
+      'MEID',
+      'TransmissionReference',
+      'OriginalTransmissionReference',
+      'JobID',
+    ]) {
+      final v = preset[key]?.trim();
+      if (v != null && v.isNotEmpty) return v;
+    }
+    return null;
+  }
+
+  static String? _descriptionWritersFromPreset(Map<String, String> preset) {
+    for (final key in const [
+      'Description Writers',
+      'CaptionWriter',
+      'Writer-Editor',
+    ]) {
+      final v = preset[key]?.trim();
+      if (v != null && v.isNotEmpty) return v;
+    }
+    return null;
+  }
+
+  static String? _objectNameFromPreset(Map<String, String> preset) {
+    for (final key in const ['Object Name', 'ObjectName']) {
+      final v = preset[key]?.trim();
+      if (v != null && v.isNotEmpty) return v;
+    }
+    return null;
+  }
+
+  /// Supp cat used as team code in Getty object-name slugs (e.g. …_LEAFS).
+  static String? _teamCodeFromPreset(Map<String, String> preset) {
+    for (final key in const ['Supp Cat 3', 'Supp Cat 2', 'Supp Cat 1']) {
+      final v = preset[key]?.trim();
+      if (v != null && v.isNotEmpty && v != 'SPO') return v;
+    }
+    return null;
+  }
+
+  /// Builds `MEID_WRITER_00_TEAM` (e.g. 776360337_MB_00_LEAFS) when components exist.
+  static String? buildGettyObjectNameSlug(
+    Map<String, String> preset, {
+    required int imageIndex,
+  }) {
+    final meid = _meidFromPreset(preset);
+    final writer = _descriptionWritersFromPreset(preset);
+    if (meid == null || writer == null) return null;
+
+    final seq = imageIndex.toString().padLeft(2, '0');
+    final team = _teamCodeFromPreset(preset);
+    if (team != null && team.isNotEmpty) {
+      return '${meid}_${writer}_${seq}_$team';
+    }
+    return '${meid}_${writer}_$seq';
+  }
+
+  /// Explicit Object Name from template, else Getty slug from MEID + writer + index + supp cat.
+  static String? resolveObjectNameForImage(
+    Map<String, String> preset, {
+    int? imageIndex,
+  }) {
+    final explicit = _objectNameFromPreset(preset);
+    if (explicit != null && explicit.isNotEmpty) {
+      if (imageIndex != null && explicit.contains('{seq}')) {
+        return explicit.replaceAll(
+          '{seq}',
+          imageIndex.toString().padLeft(2, '0'),
+        );
+      }
+      return explicit;
+    }
+    if (imageIndex == null) return null;
+    return buildGettyObjectNameSlug(preset, imageIndex: imageIndex);
   }
 
   /// Writes keywords using clear-then-add (Photo Mechanic compatible).
@@ -252,13 +471,27 @@ class IptcTemplateApplyService {
     String imagePath,
     Map<String, String> template, {
     bool skipInAppGenerated = true,
+    int? imageIndex,
   }) async {
     final preset = normalizeForPreset(template);
     if (preset.isEmpty) return true;
 
     final keywords = preset['Keywords']?.trim() ?? '';
+    final objectName =
+        resolveObjectNameForImage(preset, imageIndex: imageIndex);
+    if (objectName != null) {
+      print(
+        'IPTC apply Object Name for $imagePath: $objectName (index=$imageIndex)',
+      );
+    }
 
     try {
+      // Title / Object Name first — still written if the main batch fails later.
+      if (objectName != null) {
+        final ok = await applyObjectName(imagePath, objectName);
+        if (!ok) return false;
+      }
+
       if (keywords.isNotEmpty) {
         await applyKeywords(imagePath, keywords);
       }
@@ -267,6 +500,7 @@ class IptcTemplateApplyService {
       preset.forEach((key, value) {
         if (value.trim().isEmpty) return;
         if (key == 'Keywords') return;
+        if (key == 'Object Name' || key == 'ObjectName') return;
         if (skipInAppGenerated && inAppGeneratedPresetKeys.contains(key)) {
           return;
         }
@@ -277,26 +511,24 @@ class IptcTemplateApplyService {
         } else if (key == 'Supp Cat 3') {
           allValues['SupplementalCategories3'] = value;
         } else {
-          final tag = exiftoolTagForPresetKey(key);
-          if (tag != null) {
-            allValues[tag] = value;
-          }
+          addExiftoolTagsForPresetKey(allValues, key, value);
         }
       });
 
-      if (allValues.isEmpty && keywords.isEmpty) return true;
+      if (objectName != null) {
+        _tagObjectNameAliases(allValues, objectName);
+      }
 
-      final args = <String>[
-        '-overwrite_original',
-        '-P',
-        '-m',
-        '-charset',
-        'iptc=UTF8',
-      ];
+      if (allValues.isEmpty && keywords.isEmpty && objectName == null) {
+        return true;
+      }
+
+      // Match MetadataPopupDialog save order/flags (no -m, which hides write failures).
+      final args = <String>[];
 
       allValues.forEach((tag, value) {
         if (value.trim().isNotEmpty) {
-          args.add('-$tag=$value');
+          args.add(exiftoolWriteArg(tag, value));
         }
       });
 
@@ -308,20 +540,31 @@ class IptcTemplateApplyService {
         metadataForSupp,
       );
       args.removeWhere((arg) =>
-          arg.startsWith('-SupplementalCategories') ||
-          arg.startsWith('-XMP-photoshop:SupplementalCategories'));
+          arg.contains('SupplementalCategories1') ||
+          arg.contains('SupplementalCategories2') ||
+          arg.contains('SupplementalCategories3'));
       args.addAll(buildSupplementalCategoriesArgs(rawInputs));
 
+      args.add('-overwrite_original');
       args.add(imagePath);
 
-      if (args.length <= 5 && keywords.isEmpty) return true;
-
-      final proc = await ExiftoolHelper.run(args);
-      if (!proc.isSuccess) {
-        print('IPTC template apply failed for $imagePath: ${proc.stderrText}');
-        return false;
+      var mainOk = true;
+      if (args.length > 2) {
+        final proc = await ExiftoolHelper.run(args);
+        mainOk = proc.isSuccess;
+        if (!mainOk) {
+          print('IPTC template apply failed for $imagePath: ${proc.stderrText}');
+          print('IPTC template apply args: ${args.join(' ')}');
+        }
       }
-      return true;
+
+      // Re-apply Object Name after main batch in case a tag in that batch cleared it.
+      if (objectName != null) {
+        final ok = await applyObjectName(imagePath, objectName);
+        if (!ok) return false;
+      }
+
+      return mainOk;
     } catch (e) {
       print('IPTC template apply error for $imagePath: $e');
       return false;
