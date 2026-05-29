@@ -364,13 +364,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     double bestTileCross = 0;
 
     for (int cols = 1; cols <= count; cols++) {
-      final tileCross =
-          (innerW - (cols - 1) * spacing) / cols;
+      final tileCross = (innerW - (cols - 1) * spacing) / cols;
       if (tileCross <= 0) continue;
       final tileMain = tileCross / childAspectRatio;
       final rows = (count / cols).ceil();
-      final totalMain =
-          rows * tileMain + (rows - 1) * spacing;
+      final totalMain = rows * tileMain + (rows - 1) * spacing;
       if (totalMain <= innerH && tileCross > bestTileCross) {
         bestTileCross = tileCross;
         bestCols = cols;
@@ -384,13 +382,11 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     double minOverflow = double.infinity;
     final maxTry = math.min(count, 8);
     for (int cols = 1; cols <= maxTry; cols++) {
-      final tileCross =
-          (innerW - (cols - 1) * spacing) / cols;
+      final tileCross = (innerW - (cols - 1) * spacing) / cols;
       if (tileCross <= 0) continue;
       final tileMain = tileCross / childAspectRatio;
       final rows = (count / cols).ceil();
-      final totalMain =
-          rows * tileMain + (rows - 1) * spacing;
+      final totalMain = rows * tileMain + (rows - 1) * spacing;
       final overflow = totalMain - innerH;
       if (overflow < minOverflow) {
         minOverflow = overflow;
@@ -436,7 +432,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
             ),
             child: Row(
               children: [
-                Icon(Icons.photo_library, size: 14, color: Colors.blue.shade700),
+                Icon(Icons.photo_library,
+                    size: 14, color: Colors.blue.shade700),
                 const SizedBox(width: 6),
                 Text(
                   '$count images selected',
@@ -465,10 +462,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                final innerW =
-                    constraints.maxWidth - 2 * gridPad;
-                final innerH =
-                    constraints.maxHeight - 2 * gridPad;
+                final innerW = constraints.maxWidth - 2 * gridPad;
+                final innerH = constraints.maxHeight - 2 * gridPad;
                 final cols = _crossAxisCountForFit(
                   innerW,
                   innerH,
@@ -476,18 +471,14 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                   spacing: gap,
                   childAspectRatio: aspect,
                 );
-                final tileW =
-                    (innerW - (cols - 1) * gap) / cols;
+                final tileW = (innerW - (cols - 1) * gap) / cols;
                 final rows = (count / cols).ceil();
                 final tileH = tileW / aspect;
-                final gridMainExtent =
-                    rows * tileH + (rows - 1) * gap;
-                final fitsWithoutScroll =
-                    gridMainExtent <= innerH + 0.5;
+                final gridMainExtent = rows * tileH + (rows - 1) * gap;
+                final fitsWithoutScroll = gridMainExtent <= innerH + 0.5;
 
                 final dpr = MediaQuery.devicePixelRatioOf(context);
-                final cacheW =
-                    math.max(64, (tileW * dpr).round());
+                final cacheW = math.max(64, (tileW * dpr).round());
 
                 return GridView.builder(
                   padding: const EdgeInsets.all(gridPad),
@@ -505,8 +496,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                     final imgPath = paths[index];
                     return Container(
                       decoration: BoxDecoration(
-                        border: Border.all(
-                            color: Colors.grey.shade300, width: 0.5),
+                        border:
+                            Border.all(color: Colors.grey.shade300, width: 0.5),
                         color: Colors.white,
                       ),
                       clipBehavior: Clip.hardEdge,
@@ -515,8 +506,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         children: [
                           Positioned.fill(
                             child: Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                  2, 2, 2, 16),
+                              padding: const EdgeInsets.fromLTRB(2, 2, 2, 16),
                               child: ClipRect(
                                 child: OrientedFilePreview(
                                   path: imgPath,
@@ -556,8 +546,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                               decoration: BoxDecoration(
                                 color: Colors.blue,
                                 shape: BoxShape.circle,
-                                border: Border.all(
-                                    color: Colors.white, width: 1.5),
+                                border:
+                                    Border.all(color: Colors.white, width: 1.5),
                               ),
                               child: Center(
                                 child: Text(
@@ -654,8 +644,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           const double _imageVerticalPadding = 6;
-          final double _mainImageHeight = constraints.maxHeight -
-              (_imageVerticalPadding * 2);
+          final double _mainImageHeight =
+              constraints.maxHeight - (_imageVerticalPadding * 2);
           final double dpr = MediaQuery.devicePixelRatioOf(context);
           final int colorManagedMaxPx = (math.max(
                     constraints.maxWidth,
@@ -666,117 +656,117 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
               .clamp(1200, 8192);
           return Column(
             children: [
-
               // Main image area with padding so image doesn't touch outline
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 6),
                 child: SizedBox(
                   height: _mainImageHeight,
                   child: Stack(
-                  children: [
-                    // Main image with right-click and double-click support
-                    GestureDetector(
-                      onSecondaryTapDown: (details) {
-                        unawaited(_showContextMenu(
-                            context, currentImagePath, details.globalPosition));
-                      },
-                      onDoubleTap: widget.onEditMetadata != null
-                          ? () => widget.onEditMetadata!()
-                          : null,
-                      child: ColorManagedFilePreview(
-                        path: currentImagePath,
-                        maxPixelDimension: colorManagedMaxPx,
-                        fit: BoxFit.contain,
-                        alignment: Alignment.center,
-                        width: double.infinity,
-                        height: double.infinity,
-                        filterQuality: FilterQuality.high,
-                      ),
-                    ),
-
-                    // Zoom button
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: Material(
-                        color: Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(20),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: () =>
-                              _showHighResZoom(context, currentImagePath),
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(Icons.zoom_in,
-                                color: Colors.white, size: 16),
-                          ),
+                    children: [
+                      // Main image with right-click and double-click support
+                      GestureDetector(
+                        onSecondaryTapDown: (details) {
+                          unawaited(_showContextMenu(context, currentImagePath,
+                              details.globalPosition));
+                        },
+                        onDoubleTap: widget.onEditMetadata != null
+                            ? () => widget.onEditMetadata!()
+                            : null,
+                        child: ColorManagedFilePreview(
+                          path: currentImagePath,
+                          maxPixelDimension: colorManagedMaxPx,
+                          fit: BoxFit.contain,
+                          alignment: Alignment.center,
+                          width: double.infinity,
+                          height: double.infinity,
+                          filterQuality: FilterQuality.high,
                         ),
                       ),
-                    ),
 
-                    // FTP Upload Status Overlay
-                    if ((widget.uploadProgress?.containsKey(currentImagePath) ==
-                                true &&
-                            widget.uploadProgress![currentImagePath]! < 1.0) ||
-                        widget.queuedUploads?.contains(currentImagePath) ==
-                            true)
+                      // Zoom button
                       Positioned(
                         top: 8,
-                        left: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              if (widget.uploadProgress
-                                          ?.containsKey(currentImagePath) ==
-                                      true &&
-                                  widget.uploadProgress![currentImagePath]! <
-                                      1.0) ...[
-                                // Currently uploading
-                                const Icon(Icons.rocket_launch,
-                                    color: Colors.blue, size: 16),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${(widget.uploadProgress![currentImagePath]! * 100).toInt()}%',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ] else ...[
-                                // Queued
-                                const Icon(Icons.schedule,
-                                    color: Colors.orange, size: 16),
-                                const SizedBox(width: 4),
-                                const Text(
-                                  'Queued',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ],
+                        right: 8,
+                        child: Material(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(20),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(20),
+                            onTap: () =>
+                                _showHighResZoom(context, currentImagePath),
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Icon(Icons.zoom_in,
+                                  color: Colors.white, size: 16),
+                            ),
                           ),
                         ),
                       ),
-                  ],
-                ),
+
+                      // FTP Upload Status Overlay
+                      if ((widget.uploadProgress
+                                      ?.containsKey(currentImagePath) ==
+                                  true &&
+                              widget.uploadProgress![currentImagePath]! <
+                                  1.0) ||
+                          widget.queuedUploads?.contains(currentImagePath) ==
+                              true)
+                        Positioned(
+                          top: 8,
+                          left: 8,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.8),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.uploadProgress
+                                            ?.containsKey(currentImagePath) ==
+                                        true &&
+                                    widget.uploadProgress![currentImagePath]! <
+                                        1.0) ...[
+                                  // Currently uploading
+                                  const Icon(Icons.rocket_launch,
+                                      color: Colors.blue, size: 16),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${(widget.uploadProgress![currentImagePath]! * 100).toInt()}%',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ] else ...[
+                                  // Queued
+                                  const Icon(Icons.schedule,
+                                      color: Colors.orange, size: 16),
+                                  const SizedBox(width: 4),
+                                  const Text(
+                                    'Queued',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-
             ],
           );
         },
@@ -845,8 +835,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
   // Show context menu for right-click (matches app / Keyboard Fire menu chrome).
   Future<void> _showContextMenu(
       BuildContext context, String imagePath, Offset tapPosition) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final position = RelativeRect.fromRect(
       Rect.fromPoints(tapPosition, tapPosition),
       Offset.zero & overlay.size,
@@ -899,7 +888,6 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         label: 'Open in Finder',
         icon: Icons.open_in_new,
       ),
-      const PopupMenuDivider(height: 1),
       AppPopupMenu.tile(
         value: 'rename',
         label: 'Rename Image',

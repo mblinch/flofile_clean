@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../flo_layout_constants.dart';
+
 /// Matches [KeyboardFirePanel] FTP / burst primary actions (`keyboard_fire_dialog.dart`).
 const Color kAppDialogPrimaryBlue = Color(0xFF0052CC);
 
@@ -77,9 +79,25 @@ Future<bool?> showAppConfirmDialog({
   );
 }
 
+/// App-wide right-click context menu (square corners, grey→white gradient).
+/// Default row height for [AppPopupMenu.tile] in context menus.
+const double kAppContextMenuItemHeight = 26;
 
-/// App-wide right-click context menu (square corners, white surface — matches
-/// [showAppConfirmDialog] and Keyboard Fire menus).
+/// Matches thumbnail toolbar / startup panel surfaces.
+const LinearGradient kAppContextMenuGradient = LinearGradient(
+  begin: Alignment.centerLeft,
+  end: Alignment.centerRight,
+  colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+);
+
+const TextStyle kAppContextMenuTextStyle = TextStyle(
+  fontFamily: 'Inter',
+  fontSize: 11,
+  fontWeight: FontWeight.w500,
+  height: 1.1,
+  color: Colors.black87,
+);
+
 Future<T?> showAppContextMenu<T>({
   required BuildContext context,
   required RelativeRect position,
@@ -87,19 +105,194 @@ Future<T?> showAppContextMenu<T>({
   Color? color,
   double? elevation,
 }) {
-  return showMenu<T>(
-    context: context,
-    position: position,
-    items: items,
-    color: color ?? Colors.white,
-    elevation: elevation ?? 0,
-    surfaceTintColor: Colors.transparent,
-    shadowColor: Colors.black.withValues(alpha: 0.12),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.zero,
-      side: BorderSide(color: Color(0xFFD0D0D0)),
+  final navigator = Navigator.of(context);
+  return navigator.push<T>(
+    _AppContextMenuRoute<T>(
+      position: position,
+      items: items,
+      panelColor: color,
+      elevation: elevation ?? 0,
+      capturedThemes:
+          InheritedTheme.capture(from: context, to: navigator.context),
     ),
   );
+}
+
+class _AppContextMenuRoute<T> extends PopupRoute<T> {
+  _AppContextMenuRoute({
+    required this.position,
+    required this.items,
+    this.panelColor,
+    this.elevation = 0,
+    required this.capturedThemes,
+  });
+
+  final RelativeRect position;
+  final List<PopupMenuEntry<T>> items;
+  final Color? panelColor;
+  final double elevation;
+  final CapturedThemes capturedThemes;
+
+  @override
+  Duration get transitionDuration => const Duration(milliseconds: 150);
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  String? get barrierLabel => 'Dismiss';
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+  ) {
+    return capturedThemes.wrap(
+      CustomSingleChildLayout(
+        delegate: _AppContextMenuLayoutDelegate(position),
+        child: IntrinsicWidth(
+          child: _AppContextMenuPanel<T>(
+            items: items,
+            panelColor: panelColor,
+            elevation: elevation,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AppContextMenuLayoutDelegate extends SingleChildLayoutDelegate {
+  const _AppContextMenuLayoutDelegate(this.position);
+
+  final RelativeRect position;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    return BoxConstraints.loose(constraints.biggest);
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    double x = position.left;
+    double y = position.top;
+
+    if (x + childSize.width > size.width - position.right) {
+      x = size.width - position.right - childSize.width;
+    }
+    if (y + childSize.height > size.height - position.bottom) {
+      y = size.height - position.bottom - childSize.height;
+    }
+
+    return Offset(x.clamp(0.0, size.width - childSize.width),
+        y.clamp(0.0, size.height - childSize.height));
+  }
+
+  @override
+  bool shouldRelayout(_AppContextMenuLayoutDelegate oldDelegate) {
+    return position != oldDelegate.position;
+  }
+}
+
+class _AppContextMenuPanel<T> extends StatelessWidget {
+  const _AppContextMenuPanel({
+    required this.items,
+    this.panelColor,
+    this.elevation = 0,
+  });
+
+  final List<PopupMenuEntry<T>> items;
+  final Color? panelColor;
+  final double elevation;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      elevation: elevation,
+      shadowColor: Colors.black.withValues(alpha: 0.12),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 148),
+        decoration: BoxDecoration(
+          color: panelColor,
+          gradient: panelColor == null ? kAppContextMenuGradient : null,
+          border: Border.all(color: const Color(0xFFD0D0D0)),
+        ),
+        child: DefaultTextStyle(
+          style: kAppContextMenuTextStyle,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final item in items) _buildEntry(context, item),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEntry(BuildContext context, PopupMenuEntry<T> item) {
+    if (item is PopupMenuDivider) {
+      return Divider(
+        height: item.height,
+        thickness: item.thickness ?? 1,
+        indent: item.indent ?? 0,
+        endIndent: item.endIndent ?? 0,
+        color: item.color ?? const Color(0xFFE8E8E8),
+      );
+    }
+    if (item is PopupMenuItem<T>) {
+      return _AppContextMenuItemRow<T>(item: item);
+    }
+    return SizedBox(height: item.height);
+  }
+}
+
+class _AppContextMenuItemRow<T> extends StatefulWidget {
+  const _AppContextMenuItemRow({required this.item});
+
+  final PopupMenuItem<T> item;
+
+  @override
+  State<_AppContextMenuItemRow<T>> createState() =>
+      _AppContextMenuItemRowState<T>();
+}
+
+class _AppContextMenuItemRowState<T> extends State<_AppContextMenuItemRow<T>> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    final enabled = item.enabled;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+      onExit: enabled ? (_) => setState(() => _hovered = false) : null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled
+            ? () {
+                item.onTap?.call();
+                Navigator.pop<T>(context, item.value);
+              }
+            : null,
+        child: Container(
+          height: item.height,
+          color: _hovered ? const Color(0x0A000000) : null,
+          padding: item.padding ??
+              const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+          alignment: Alignment.centerLeft,
+          child: item.child,
+        ),
+      ),
+    );
+  }
 }
 
 /// Grey bordered action used on startup (Pick folder, Metadata Preset, etc.).
@@ -167,6 +360,7 @@ class ElevatedGreyButton extends StatefulWidget {
   final String label;
   final VoidCallback? onPressed;
   final bool isPrimary;
+  final bool isTealGradient;
   final bool isDanger;
   final bool fullWidth;
   final double fontSize;
@@ -177,6 +371,7 @@ class ElevatedGreyButton extends StatefulWidget {
     required this.label,
     required this.onPressed,
     this.isPrimary = false,
+    this.isTealGradient = false,
     this.isDanger = false,
     this.fullWidth = false,
     this.fontSize = 13,
@@ -195,6 +390,7 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
     final danger = widget.isDanger && _hovered && enabled;
+    final teal = widget.isTealGradient;
 
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -214,26 +410,45 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: !enabled
-                  ? const Color(0x1A000000)
+                  ? (teal ? Colors.grey.shade300 : const Color(0x1A000000))
                   : danger
                       ? const Color(0x33C0392B)
-                      : const Color(0x2E000000),
-              width: 0.5,
+                      : teal
+                          ? kFloTealDark
+                          : const Color(0x2E000000),
+              width: teal ? 0.7 : 0.5,
             ),
             gradient: !enabled
                 ? null
-                : LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: _pressed
-                        ? [const Color(0xFFE0E0E0), const Color(0xFFF0F0F0)]
-                        : danger
-                            ? [const Color(0xFFFFF5F5), const Color(0xFFFFE8E8)]
-                            : _hovered
-                                ? [const Color(0xFFFFFFFF), const Color(0xFFFAFAFA)]
-                                : [const Color(0xFFFFFFFF), const Color(0xFFFAFAFA)],
-                  ),
-            color: !enabled ? const Color(0xFFF0F0F0) : null,
+                : teal
+                    ? (_pressed
+                        ? kFloTealGradientVertical
+                        : (_hovered
+                            ? kFloTealGradientHorizontal
+                            : kFloTealGradientHorizontal))
+                    : LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: _pressed
+                            ? [const Color(0xFFE0E0E0), const Color(0xFFF0F0F0)]
+                            : danger
+                                ? [
+                                    const Color(0xFFFFF5F5),
+                                    const Color(0xFFFFE8E8)
+                                  ]
+                                : _hovered
+                                    ? [
+                                        const Color(0xFFFFFFFF),
+                                        const Color(0xFFFAFAFA)
+                                      ]
+                                    : [
+                                        const Color(0xFFFFFFFF),
+                                        const Color(0xFFFAFAFA)
+                                      ],
+                      ),
+            color: !enabled
+                ? (teal ? Colors.grey.shade300 : const Color(0xFFF0F0F0))
+                : null,
             boxShadow: !enabled
                 ? null
                 : _pressed
@@ -246,24 +461,35 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                       ]
                     : [
                         BoxShadow(
-                          color: Colors.black.withValues(alpha: _hovered ? 0.18 : 0.13),
-                          blurRadius: _hovered ? 4.5 : 2.5,
-                          offset: Offset(0, _hovered ? 1.5 : 1.25),
+                          color: Colors.black.withValues(
+                              alpha: _hovered ? 0.18 : (teal ? 0.14 : 0.13)),
+                          blurRadius: _hovered ? 4.5 : (teal ? 3.5 : 2.5),
+                          offset:
+                              Offset(0, _hovered ? 1.5 : (teal ? 1.5 : 1.25)),
                         ),
                       ],
           ),
           padding: EdgeInsets.symmetric(
-            horizontal: widget.isPrimary ? 10 : 8,
-            vertical: 5,
+            horizontal: teal ? 14 : (widget.isPrimary ? 10 : 8),
+            vertical: teal ? 6 : 5,
           ),
           child: Row(
-            mainAxisSize: widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
+            mainAxisSize:
+                widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
-                Icon(widget.icon, size: widget.fontSize, color: !enabled
-                    ? const Color(0xFFAAAAAA)
-                    : danger ? const Color(0xFFC0392B) : const Color(0xFF555555)),
+                Icon(
+                  widget.icon,
+                  size: widget.fontSize,
+                  color: !enabled
+                      ? (teal ? Colors.grey.shade600 : const Color(0xFFAAAAAA))
+                      : danger
+                          ? const Color(0xFFC0392B)
+                          : teal
+                              ? Colors.white
+                              : const Color(0xFF555555),
+                ),
                 const SizedBox(width: 5),
               ],
               Flexible(
@@ -278,10 +504,14 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                     fontVariations: const [FontVariation('wght', 500)],
                     letterSpacing: -0.5,
                     color: !enabled
-                        ? const Color(0xFFAAAAAA)
+                        ? (teal
+                            ? Colors.grey.shade600
+                            : const Color(0xFFAAAAAA))
                         : danger
                             ? const Color(0xFFC0392B)
-                            : const Color(0xFF555555),
+                            : teal
+                                ? Colors.white
+                                : const Color(0xFF555555),
                   ),
                 ),
               ),
@@ -302,32 +532,25 @@ class AppPopupMenu {
     required String label,
     IconData? icon,
     bool destructive = false,
-    double height = 34,
+    double height = kAppContextMenuItemHeight,
   }) {
-    final Color c =
-        destructive ? const Color(0xFFC62828) : Colors.black87;
+    final Color c = destructive ? const Color(0xFFC62828) : Colors.black87;
     return PopupMenuItem<T>(
       value: value,
       height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 15, color: c),
-            const SizedBox(width: 8),
+            Icon(icon, size: 13, color: c),
+            const SizedBox(width: 6),
           ],
-          Expanded(
-            child: Text(
-              label,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: c,
-                height: 1.2,
-              ),
-            ),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: kAppContextMenuTextStyle.copyWith(color: c),
           ),
         ],
       ),

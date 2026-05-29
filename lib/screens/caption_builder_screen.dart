@@ -987,18 +987,32 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     }
   }
 
+  Future<Set<String>> _loadIptcClearedFields() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final list =
+          prefs.getStringList('selected_metadata_preset_cleared_fields');
+      return list?.toSet() ?? {};
+    } catch (e) {
+      print('Error loading IPTC cleared fields: $e');
+      return {};
+    }
+  }
+
   Future<void> _applyIptcTemplateOnSaveIfEnabled(String imagePath) async {
     if (_lockedPaths.contains(imagePath)) return;
     try {
       final prefsService = await PreferencesService.getInstance();
       if (await prefsService.getIptcApplyMode() != IptcApplyMode.onSave) return;
-      final preset = await _loadSelectedIptcPreset();
-      if (preset == null) return;
+      final preset = await _loadSelectedIptcPreset() ?? <String, String>{};
+      final clearedFields = await _loadIptcClearedFields();
+      if (preset.isEmpty && clearedFields.isEmpty) return;
       final index = imagePaths.indexOf(imagePath);
       await IptcTemplateApplyService.applyToImage(
         imagePath,
         preset,
         imageIndex: index >= 0 ? index : null,
+        fieldsToClear: clearedFields.isNotEmpty ? clearedFields : null,
       );
     } catch (e) {
       print('Error applying IPTC template on save: $e');
@@ -1022,9 +1036,11 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }
 
       final preset = _startupIptcPresetForImport ??
-          await _loadSelectedIptcPreset();
+          await _loadSelectedIptcPreset() ??
+          <String, String>{};
       _startupIptcPresetForImport = null;
-      if (preset == null || preset.isEmpty) {
+      final clearedFields = await _loadIptcClearedFields();
+      if (preset.isEmpty && clearedFields.isEmpty) {
         await _reportSessionLoading(
           progress: 0.92,
           title: 'Loading images',
@@ -1044,7 +1060,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         return;
       }
 
-      final fieldCount = preset.length;
+      final fieldCount = preset.length + clearedFields.length;
       await _reportSessionLoading(
         progress: 0.67,
         title: 'Writing IPTC template',
@@ -1063,6 +1079,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           preset,
           imageIndex: i,
           existingMetadata: existingByPath[path],
+          fieldsToClear: clearedFields.isNotEmpty ? clearedFields : null,
         );
         if (!result.success) {
           await _reportSessionLoading(

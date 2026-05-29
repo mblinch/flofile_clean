@@ -175,6 +175,17 @@ class MyApp extends StatelessWidget {
             scaffoldBackgroundColor: const Color(0xFFF5F5F4),
             useMaterial3: true,
             fontFamily: 'Inter',
+            popupMenuTheme: PopupMenuThemeData(
+              color: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              menuPadding: EdgeInsets.zero,
+              shadowColor: Colors.black.withValues(alpha: 0.12),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+                side: BorderSide(color: Color(0xFFD0D0D0)),
+              ),
+            ),
           ),
           home: const CaptionBuilderScreen(),
         ),

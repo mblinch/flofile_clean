@@ -12,8 +12,9 @@ class NativeFilePicker {
 
         // Verify the path exists before using it
         if (Directory(normalizedPath).existsSync()) {
-          // AppleScript expects an alias/file spec, not a raw string path
-          script += ' default location POSIX file "$normalizedPath"';
+          final appleScriptPath = _appleScriptString(normalizedPath);
+          // Coerce to alias so macOS reliably honors the default location.
+          script += ' default location (POSIX file $appleScriptPath as alias)';
         } else {
           print('Initial directory does not exist, ignoring: $normalizedPath');
         }
@@ -53,8 +54,9 @@ class NativeFilePicker {
 
         // Verify the path exists before using it
         if (Directory(normalizedPath).existsSync()) {
-          // AppleScript expects an alias/file spec, not a raw string path
-          script += ' default location POSIX file "$normalizedPath"';
+          final appleScriptPath = _appleScriptString(normalizedPath);
+          // Coerce to alias so macOS reliably honors the default location.
+          script += ' default location (POSIX file $appleScriptPath as alias)';
         } else {
           print('Initial directory does not exist, ignoring: $normalizedPath');
         }
@@ -105,5 +107,10 @@ class NativeFilePicker {
 
     // Already a POSIX path or empty, return as-is
     return path;
+  }
+
+  static String _appleScriptString(String value) {
+    final escaped = value.replaceAll(r'\', r'\\').replaceAll('"', r'\"');
+    return '"$escaped"';
   }
 }

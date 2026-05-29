@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/wire_iptc_specs.dart';
 import '../services/iptc_template_apply_service.dart';
+import 'app_styled_dialogs.dart';
 
 /// Startup right column: compact IPTC checklist filled from folder files.
 class StartupIptcTemplatePanel extends StatelessWidget {
@@ -18,6 +19,14 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     this.isLoading = false,
     required this.iptcApplyMode,
     this.onIptcApplyModeChanged,
+    this.onLoadTemplate,
+    this.onClearTemplate,
+    this.onLoadOriginalValues,
+    this.isLoadTemplateLoading = false,
+    this.isLoadTemplateDisabled = false,
+    this.isLoadOriginalValuesDisabled = false,
+    this.templateRevision = 0,
+    this.fieldsOnly = false,
   });
 
   final WireStyle selectedWire;
@@ -29,10 +38,23 @@ class StartupIptcTemplatePanel extends StatelessWidget {
   final bool isLoading;
   final IptcApplyMode iptcApplyMode;
   final ValueChanged<IptcApplyMode>? onIptcApplyModeChanged;
+  final VoidCallback? onLoadTemplate;
+  final VoidCallback? onClearTemplate;
+  final VoidCallback? onLoadOriginalValues;
+  final bool isLoadTemplateLoading;
+  final bool isLoadTemplateDisabled;
+  final bool isLoadOriginalValuesDisabled;
+  final int templateRevision;
+
+  /// When true, shows only the scrollable IPTC field grid (no wire dropdown,
+  /// apply mode, or template action buttons). Used by [MetadataPopupDialog].
+  final bool fieldsOnly;
 
   /// One height for every row so the grid stays even; "Found in files" fits on line 2.
   static const double _rowHeight = 34;
+  static const double _twoLineRowHeight = 58;
   static const double _rowGap = 2;
+
   /// Wide enough for longest panel labels on one line.
   static const double _labelWidth = 106;
 
@@ -87,6 +109,8 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     return trimmed.isEmpty ? null : trimmed;
   }
 
+  String _fieldKey(String storageKey) => '$storageKey-$templateRevision';
+
   @override
   Widget build(BuildContext context) {
     final specs = WireIptcSpecs.fieldsForPanel(selectedWire);
@@ -115,75 +139,77 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              flex: 3,
-              child: _WireTemplateDropdown(
-                selectedWire: selectedWire,
-                wireLabels: wireLabels,
-                onSelected: onWireSelected,
-                compact: true,
+        if (!fieldsOnly) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                flex: 3,
+                child: _WireTemplateDropdown(
+                  selectedWire: selectedWire,
+                  wireLabels: wireLabels,
+                  onSelected: onWireSelected,
+                  compact: true,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              flex: 7,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      'Write IPTC Template:',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 9,
-                        fontVariations: const [FontVariation('wght', 600)],
-                        color: Color(0xFF333333),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 7,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Write IPTC Template:',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 9,
+                          fontVariations: const [FontVariation('wght', 600)],
+                          color: Color(0xFF333333),
+                        ),
                       ),
                     ),
-                  ),
-                  const _IptcApplyModeHelpButton(),
-                  const SizedBox(width: 4),
-                  SizedBox(
-                    width: 240,
-                    child: _IptcApplyModeSelector(
-                      mode: iptcApplyMode,
-                      onChanged: onIptcApplyModeChanged,
+                    const _IptcApplyModeHelpButton(),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: 240,
+                      child: _IptcApplyModeSelector(
+                        mode: iptcApplyMode,
+                        onChanged: onIptcApplyModeChanged,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        if (isLoading) ...[
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              const SizedBox(
-                width: 12,
-                height: 12,
-                child: CircularProgressIndicator(strokeWidth: 1.5),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Reading IPTC from folder…',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 10,
-                  fontVariations: [FontVariation('wght', 500)],
-                  color: Colors.grey.shade600,
+                  ],
                 ),
               ),
             ],
           ),
+          if (isLoading) ...[
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 12,
+                  height: 12,
+                  child: CircularProgressIndicator(strokeWidth: 1.5),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Reading IPTC from folder…',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 10,
+                    fontVariations: [FontVariation('wght', 500)],
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 4),
         ],
-        const SizedBox(height: 4),
         Expanded(
           child: SingleChildScrollView(
             child: Column(
@@ -191,10 +217,11 @@ class StartupIptcTemplatePanel extends StatelessWidget {
               children: [
                 if (captionSpec != null) ...[
                   SizedBox(
-                    height: _rowHeight,
+                    height: _twoLineRowHeight,
                     child: _EditableFieldRow(
-                      key: ValueKey(captionSpec.storageKey),
+                      key: ValueKey(_fieldKey(captionSpec.storageKey)),
                       spec: captionSpec,
+                      valueMaxLines: 2,
                       value: _displayValueForField(
                         label: captionSpec.label,
                         storedValue: IptcTemplateApplyService.lookupValue(
@@ -215,30 +242,11 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                   ),
                   const SizedBox(height: _rowGap),
                 ],
-                if (keywordsSpec != null) ...[
-                  SizedBox(
-                    height: _rowHeight,
-                    child: _EditableFieldRow(
-                      key: ValueKey(keywordsSpec.storageKey),
-                      spec: keywordsSpec,
-                      value: IptcTemplateApplyService.lookupValue(
-                        values,
-                        keywordsSpec.storageKey,
-                      ),
-                      showFoundInFiles: _isFoundInFiles(
-                        keywordsSpec.storageKey,
-                        foundInFilesKeys,
-                      ),
-                      onValueChanged: onValueChanged,
-                    ),
-                  ),
-                  const SizedBox(height: _rowGap),
-                ],
                 if (headlineSpec != null) ...[
                   SizedBox(
                     height: _rowHeight,
                     child: _EditableFieldRow(
-                      key: ValueKey(headlineSpec.storageKey),
+                      key: ValueKey(_fieldKey(headlineSpec.storageKey)),
                       spec: headlineSpec,
                       value: IptcTemplateApplyService.lookupValue(
                         values,
@@ -253,12 +261,34 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                   ),
                   const SizedBox(height: _rowGap),
                 ],
+                if (keywordsSpec != null) ...[
+                  SizedBox(
+                    height: _twoLineRowHeight,
+                    child: _EditableFieldRow(
+                      key: ValueKey(_fieldKey(keywordsSpec.storageKey)),
+                      spec: keywordsSpec,
+                      valueMaxLines: 2,
+                      value: IptcTemplateApplyService.lookupValue(
+                        values,
+                        keywordsSpec.storageKey,
+                      ),
+                      showFoundInFiles: _isFoundInFiles(
+                        keywordsSpec.storageKey,
+                        foundInFilesKeys,
+                      ),
+                      onValueChanged: onValueChanged,
+                    ),
+                  ),
+                  const SizedBox(height: _rowGap),
+                ],
                 if (specialInstructionsSpec != null) ...[
                   SizedBox(
-                    height: _rowHeight,
+                    height: _twoLineRowHeight,
                     child: _EditableFieldRow(
-                      key: ValueKey(specialInstructionsSpec.storageKey),
+                      key: ValueKey(
+                          _fieldKey(specialInstructionsSpec.storageKey)),
                       spec: specialInstructionsSpec,
+                      valueMaxLines: 2,
                       value: IptcTemplateApplyService.lookupValue(
                         values,
                         specialInstructionsSpec.storageKey,
@@ -280,6 +310,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                         specs: left,
                         values: values,
                         foundInFilesKeys: foundInFilesKeys,
+                        templateRevision: templateRevision,
                         onValueChanged: onValueChanged,
                       ),
                     ),
@@ -289,11 +320,72 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                         specs: right,
                         values: values,
                         foundInFilesKeys: foundInFilesKeys,
+                        templateRevision: templateRevision,
                         onValueChanged: onValueChanged,
                       ),
                     ),
                   ],
                 ),
+                if (onLoadTemplate != null ||
+                    onClearTemplate != null ||
+                    onLoadOriginalValues != null) ...[
+                  if (!fieldsOnly) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if (onLoadTemplate != null)
+                          SizedBox(
+                            width: 168,
+                            child: ElevatedGreyButton(
+                              label: isLoadTemplateLoading
+                                  ? 'Loading template…'
+                                  : 'Load template…',
+                              fontSize: 10,
+                              icon: Icons.upload_file_outlined,
+                              isTealGradient: true,
+                              fullWidth: true,
+                              onPressed: isLoadTemplateLoading ||
+                                      isLoadTemplateDisabled
+                                  ? null
+                                  : onLoadTemplate,
+                            ),
+                          ),
+                        if (onLoadOriginalValues != null)
+                          SizedBox(
+                            width: 178,
+                            child: ElevatedGreyButton(
+                              label: 'Load original values',
+                              fontSize: 10,
+                              icon: Icons.restore_page_outlined,
+                              fullWidth: true,
+                              onPressed: isLoadTemplateLoading ||
+                                      isLoadTemplateDisabled ||
+                                      isLoadOriginalValuesDisabled
+                                  ? null
+                                  : onLoadOriginalValues,
+                            ),
+                          ),
+                        if (onClearTemplate != null)
+                          SizedBox(
+                            width: 104,
+                            child: ElevatedGreyButton(
+                              label: 'Clear all',
+                              fontSize: 10,
+                              icon: Icons.clear_all,
+                              isDanger: true,
+                              fullWidth: true,
+                              onPressed: isLoadTemplateLoading ||
+                                      isLoadTemplateDisabled
+                                  ? null
+                                  : onClearTemplate,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ],
               ],
             ),
           ),
@@ -506,9 +598,8 @@ class _IptcApplyModeSelector extends StatelessWidget {
               fontVariations: [
                 FontVariation('wght', selected ? 700 : 500),
               ],
-              color: selected
-                  ? const Color(0xFF333333)
-                  : const Color(0xFF888888),
+              color:
+                  selected ? const Color(0xFF333333) : const Color(0xFF888888),
             ),
           ),
         ),
@@ -522,12 +613,14 @@ class _FieldColumn extends StatelessWidget {
     required this.specs,
     required this.values,
     required this.foundInFilesKeys,
+    required this.templateRevision,
     this.onValueChanged,
   });
 
   final List<WireIptcFieldSpec> specs;
   final Map<String, String> values;
   final Set<String> foundInFilesKeys;
+  final int templateRevision;
   final void Function(String storageKey, String value)? onValueChanged;
 
   @override
@@ -541,7 +634,7 @@ class _FieldColumn extends StatelessWidget {
           SizedBox(
             height: StartupIptcTemplatePanel._rowHeight,
             child: _EditableFieldRow(
-              key: ValueKey(specs[i].storageKey),
+              key: ValueKey('${specs[i].storageKey}-$templateRevision'),
               spec: specs[i],
               value: StartupIptcTemplatePanel._displayValueForField(
                 label: specs[i].label,
@@ -603,8 +696,9 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
   @override
   void didUpdateWidget(_EditableFieldRow oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (_focusNode.hasFocus) return;
     final incoming = widget.value?.trim() ?? '';
-    if (incoming != oldWidget.value?.trim() && !_focusNode.hasFocus) {
+    if (_controller.text.trim() != incoming) {
       _controller.text = incoming;
     }
   }
@@ -620,8 +714,10 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
   void _onFocusChange() {
     final wasFocused = _focused;
     final nowFocused = _focusNode.hasFocus;
-    if (nowFocused && !wasFocused &&
-        IptcTemplateApplyService.isInAppGeneratedPlaceholder(_controller.text)) {
+    if (nowFocused &&
+        !wasFocused &&
+        IptcTemplateApplyService.isInAppGeneratedPlaceholder(
+            _controller.text)) {
       _controller.clear();
     }
     setState(() => _focused = nowFocused);
@@ -647,7 +743,8 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
         )
       : StartupIptcTemplatePanel._fieldValueStyle;
 
-  bool get _isUrgency => widget.spec.label == StartupIptcTemplatePanel._urgencyLabel;
+  bool get _isUrgency =>
+      widget.spec.label == StartupIptcTemplatePanel._urgencyLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -663,9 +760,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(
-          color: _focused
-              ? const Color(0xFF4A7A96)
-              : const Color(0xFFD0D0D0),
+          color: _focused ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0),
           width: _focused ? 1.0 : 0.7,
         ),
         borderRadius: BorderRadius.circular(4),
@@ -691,17 +786,14 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
           ),
           Expanded(
             child: Align(
-              alignment: singleLine
-                  ? Alignment.centerLeft
-                  : Alignment.topLeft,
+              alignment: singleLine ? Alignment.centerLeft : Alignment.topLeft,
               child: TextField(
                 controller: _controller,
                 focusNode: _focusNode,
                 maxLines: widget.valueMaxLines,
                 minLines: 1,
-                keyboardType: singleLine
-                    ? TextInputType.text
-                    : TextInputType.multiline,
+                keyboardType:
+                    singleLine ? TextInputType.text : TextInputType.multiline,
                 textInputAction:
                     singleLine ? TextInputAction.next : TextInputAction.newline,
                 style: _valueStyle,
@@ -736,9 +828,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(
-          color: _focused
-              ? const Color(0xFF4A7A96)
-              : const Color(0xFFD0D0D0),
+          color: _focused ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0),
           width: _focused ? 1.0 : 0.7,
         ),
         borderRadius: BorderRadius.circular(4),
@@ -767,7 +857,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
               child: DropdownButton<String>(
                 value: IptcTemplateApplyService.urgencyValues.contains(current)
                     ? current
-                    : '5',
+                    : '0',
                 isExpanded: true,
                 isDense: true,
                 style: StartupIptcTemplatePanel._fieldValueStyle,

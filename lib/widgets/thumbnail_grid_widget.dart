@@ -132,10 +132,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       return;
     }
     final path = widget.imagePaths[widget.currentIndex];
-    final hiddenByFtp =
-        _hideFtpdImages && widget.uploadedImages.contains(path);
-    final hiddenBySaved =
-        _hideSavedImages && widget.savedImages.contains(path);
+    final hiddenByFtp = _hideFtpdImages && widget.uploadedImages.contains(path);
+    final hiddenBySaved = _hideSavedImages && widget.savedImages.contains(path);
     if (!hiddenByFtp && !hiddenBySaved) return;
 
     int nextIndex = widget.currentIndex + 1;
@@ -214,7 +212,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   fontFamily: 'Inter',
                   fontSize: 11,
                   fontVariations: const [FontVariation('wght', 600)],
-                  color: active ? const Color(0xFF2A4858) : Colors.grey.shade700,
+                  color:
+                      active ? const Color(0xFF2A4858) : Colors.grey.shade700,
                   height: 1.0,
                   letterSpacing: -0.2,
                 ),
@@ -264,7 +263,9 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             children: [
               if (widget.onToggleExpand != null)
                 Tooltip(
-                  message: widget.isExpanded ? 'Collapse thumbnails' : 'Expand thumbnails',
+                  message: widget.isExpanded
+                      ? 'Collapse thumbnails'
+                      : 'Expand thumbnails',
                   waitDuration: const Duration(milliseconds: 400),
                   child: GestureDetector(
                     onTap: widget.onToggleExpand,
@@ -278,7 +279,9 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(5),
                           border: Border.all(
-                            color: widget.isExpanded ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0),
+                            color: widget.isExpanded
+                                ? const Color(0xFF4A7A96)
+                                : const Color(0xFFD0D0D0),
                             width: widget.isExpanded ? 1.5 : 0.7,
                           ),
                           boxShadow: [
@@ -290,9 +293,13 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                           ],
                         ),
                         child: Icon(
-                          widget.isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up,
+                          widget.isExpanded
+                              ? Icons.keyboard_arrow_down
+                              : Icons.keyboard_arrow_up,
                           size: 15,
-                          color: widget.isExpanded ? const Color(0xFF4A7A96) : Colors.grey.shade500,
+                          color: widget.isExpanded
+                              ? const Color(0xFF4A7A96)
+                              : Colors.grey.shade500,
                         ),
                       ),
                     ),
@@ -313,7 +320,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(5),
-                        border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+                        border: Border.all(
+                            color: const Color(0xFFD0D0D0), width: 0.7),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.14),
@@ -347,7 +355,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(5),
-                      border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+                      border: Border.all(
+                          color: const Color(0xFFD0D0D0), width: 0.7),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.14),
@@ -356,7 +365,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         ),
                       ],
                     ),
-                    child: Icon(Icons.remove, size: 12, color: Colors.grey.shade600),
+                    child: Icon(Icons.remove,
+                        size: 12, color: Colors.grey.shade600),
                   ),
                 ),
               ),
@@ -386,7 +396,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(5),
-                      border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+                      border: Border.all(
+                          color: const Color(0xFFD0D0D0), width: 0.7),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.14),
@@ -395,7 +406,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         ),
                       ],
                     ),
-                    child: Icon(Icons.add, size: 12, color: Colors.grey.shade600),
+                    child:
+                        Icon(Icons.add, size: 12, color: Colors.grey.shade600),
                   ),
                 ),
               ),
@@ -719,25 +731,25 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
     if (widget.imagePaths.isEmpty) {
       return Container(
-      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
-        borderRadius: BorderRadius.circular(7),
-        color: Colors.grey.shade50,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.grid_view, size: 48, color: Colors.grey),
+        margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+          borderRadius: BorderRadius.circular(7),
+          color: Colors.grey.shade50,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.grid_view, size: 48, color: Colors.grey),
               SizedBox(height: 8),
               Text(
                 'No Images',
@@ -763,25 +775,25 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     // Show loading state while thumbnails are being generated
     if (_isLoadingThumbnails) {
       return Container(
-      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
-        borderRadius: BorderRadius.circular(7),
-        color: Colors.grey.shade50,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
+        margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+          borderRadius: BorderRadius.circular(7),
+          color: Colors.grey.shade50,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
               SizedBox(height: 16),
               Text(
                 'Generating thumbnails...',
@@ -817,9 +829,9 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         final double crossAxisExtent =
             constraints.maxWidth - containerMarginH - gridPaddingH;
         // Same formula as SliverGridDelegate: count * size + (count-1) * spacing <= extent => count <= (extent + spacing) / (size + spacing)
-        final int columns = ((crossAxisExtent + _thumbSpacing) /
-                (_thumbSize + _thumbSpacing))
-            .floor();
+        final int columns =
+            ((crossAxisExtent + _thumbSpacing) / (_thumbSize + _thumbSpacing))
+                .floor();
         final int cols = columns > 0 ? columns : 4;
         _lastComputedColumns = cols;
 
@@ -835,372 +847,382 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         }
 
         return Container(
-      margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
-        borderRadius: BorderRadius.circular(7),
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+          margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+            borderRadius: BorderRadius.circular(7),
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.18),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
-                colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+          child: Column(
+            children: [
+              Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+                  ),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(7),
+                    topRight: Radius.circular(7),
+                  ),
+                  border: Border(
+                    bottom: BorderSide(color: Color(0xFFE8E8E8), width: 0.5),
+                  ),
+                ),
+                child: _buildThumbnailToolbar(),
               ),
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(7),
-                topRight: Radius.circular(7),
-              ),
-              border: Border(
-                bottom: BorderSide(color: Color(0xFFE8E8E8), width: 0.5),
-              ),
-            ),
-            child: _buildThumbnailToolbar(),
-          ),
 
-          // Thumbnail grid
-          Expanded(
-            child: GridView.builder(
-              controller: widget.scrollController,
-              padding: const EdgeInsets.all(8),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: cols,
-                mainAxisSpacing: _thumbSpacing,
-                crossAxisSpacing: _thumbSpacing,
-                childAspectRatio: 1.0,
-              ),
-              itemCount: visiblePaths.length,
-              itemBuilder: (context, index) {
-                final imagePath = visiblePaths[index];
-                final isCurrent =
-                    widget.imagePaths.indexOf(imagePath) == widget.currentIndex;
-                final isMultiSelected = _selectedImages.contains(imagePath);
-                return MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: GestureDetector(
-                    onTap: () {
-                      _handleThumbnailTap(imagePath);
-                    },
-                    onSecondaryTapDown: (TapDownDetails details) {
-                      unawaited(_showContextMenu(
-                          context, imagePath, details.globalPosition));
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: isCurrent ? null : Colors.white,
-                        gradient: isCurrent
-                            ? LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  Theme.of(context)
-                                      .colorScheme
-                                      .primary
-                                      .withValues(alpha: 0.07),
-                                  Colors.white,
-                                ],
-                                stops: const [0.0, 0.52],
-                              )
-                            : null,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isMultiSelected
-                              ? Colors.blue
-                              : isCurrent
-                                  ? const Color(0xFF424242)
-                                  : Colors.grey.shade500,
-                          width: isMultiSelected
-                              ? 2.0
-                              : isCurrent
-                                  ? 1.0
-                                  : 0.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 2,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
-                      ),
-                      child: Stack(
-                        children: [
-                          // Color label badge (top-left)
-                          Positioned(
-                            top: 4,
-                            left: 4,
-                            child: Builder(builder: (context) {
-                              final label = widget.xmpLabels?[imagePath];
-                              final c = _labelToColor(label);
-                              if (c == null) return const SizedBox.shrink();
-                              return Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: c,
-                                  shape: BoxShape.circle,
-                                  border:
-                                      Border.all(color: Colors.white, width: 1),
-                                ),
-                              );
-                            }),
-                          ),
-                          // Multi-select check (top-right)
-                          if (isMultiSelected)
-                            Positioned(
-                              top: 4,
-                              right: 4,
-                              child: Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: Colors.blue,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                      color: Colors.white, width: 2),
-                                ),
-                                child: const Icon(
-                                  Icons.check,
-                                  size: 12,
-                                  color: Colors.white,
-                                ),
+              // Thumbnail grid
+              Expanded(
+                child: GridView.builder(
+                  controller: widget.scrollController,
+                  padding: const EdgeInsets.all(8),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: cols,
+                    mainAxisSpacing: _thumbSpacing,
+                    crossAxisSpacing: _thumbSpacing,
+                    childAspectRatio: 1.0,
+                  ),
+                  itemCount: visiblePaths.length,
+                  itemBuilder: (context, index) {
+                    final imagePath = visiblePaths[index];
+                    final isCurrent = widget.imagePaths.indexOf(imagePath) ==
+                        widget.currentIndex;
+                    final isMultiSelected = _selectedImages.contains(imagePath);
+                    return MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        onTap: () {
+                          _handleThumbnailTap(imagePath);
+                        },
+                        onSecondaryTapDown: (TapDownDetails details) {
+                          unawaited(_showContextMenu(
+                              context, imagePath, details.globalPosition));
+                        },
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: isCurrent ? null : Colors.white,
+                            gradient: isCurrent
+                                ? LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Theme.of(context)
+                                          .colorScheme
+                                          .primary
+                                          .withValues(alpha: 0.07),
+                                      Colors.white,
+                                    ],
+                                    stops: const [0.0, 0.52],
+                                  )
+                                : null,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: isMultiSelected
+                                  ? Colors.blue
+                                  : isCurrent
+                                      ? const Color(0xFF424242)
+                                      : Colors.grey.shade500,
+                              width: isMultiSelected
+                                  ? 2.0
+                                  : isCurrent
+                                      ? 1.0
+                                      : 0.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.1),
+                                blurRadius: 2,
+                                offset: const Offset(0, 1),
                               ),
-                            ),
-                          // Saved (IPTC written) — floppy-disk style
-                          if (widget.savedImages.contains(imagePath))
-                            Positioned(
-                              bottom: 4,
-                              right: 4,
-                              child: Icon(
-                                Icons.save,
-                                size: (_thumbSize * 0.09).clamp(11.0, 18.0),
-                                color: Colors.green.shade700,
-                              ),
-                            ),
-                          // Lock — bottom-left
-                          if ((widget.lockedPaths ?? const {})
-                              .contains(imagePath))
-                            const Positioned(
-                              bottom: 4,
-                              left: 4,
-                              child: Icon(Icons.lock,
-                                  size: 12, color: Colors.black54),
-                            ),
-                          // Main content on top
-                          Column(
+                            ],
+                          ),
+                          child: Stack(
                             children: [
-                              // Image thumbnail (+ FTP watermark over image only)
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.all(4),
-                                  child: Stack(
-                                    fit: StackFit.expand,
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      Opacity(
-                                        opacity: widget.uploadedImages
-                                                .contains(imagePath)
-                                            ? 0.54
-                                            : 1.0,
-                                        child: _buildThumbnail(imagePath),
-                                      ),
-                                      if (widget.uploadedImages
-                                          .contains(imagePath))
-                                        Positioned(
-                                          left: 0,
-                                          right: 0,
-                                          top: 2,
-                                          child: Center(
-                                            child: Text(
-                                              'FTP',
-                                              style: TextStyle(
-                                                fontSize: _thumbSize * 0.42,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.grey.shade600
-                                                    .withValues(alpha: 0.72),
-                                                letterSpacing: 2.0,
-                                                shadows: const [
-                                                  Shadow(
-                                                    offset: Offset(0, 0),
-                                                    blurRadius: 3,
-                                                    color: Color(0xE6FFFFFF),
+                              // Color label badge (top-left)
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: Builder(builder: (context) {
+                                  final label = widget.xmpLabels?[imagePath];
+                                  final c = _labelToColor(label);
+                                  if (c == null) return const SizedBox.shrink();
+                                  return Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: BoxDecoration(
+                                      color: c,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 1),
+                                    ),
+                                  );
+                                }),
+                              ),
+                              // Multi-select check (top-right)
+                              if (isMultiSelected)
+                                Positioned(
+                                  top: 4,
+                                  right: 4,
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                          color: Colors.white, width: 2),
+                                    ),
+                                    child: const Icon(
+                                      Icons.check,
+                                      size: 12,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              // Saved (IPTC written) — floppy-disk style
+                              if (widget.savedImages.contains(imagePath))
+                                Positioned(
+                                  bottom: 4,
+                                  right: 4,
+                                  child: Icon(
+                                    Icons.save,
+                                    size: (_thumbSize * 0.09).clamp(11.0, 18.0),
+                                    color: Colors.green.shade700,
+                                  ),
+                                ),
+                              // Lock — bottom-left
+                              if ((widget.lockedPaths ?? const {})
+                                  .contains(imagePath))
+                                const Positioned(
+                                  bottom: 4,
+                                  left: 4,
+                                  child: Icon(Icons.lock,
+                                      size: 12, color: Colors.black54),
+                                ),
+                              // Main content on top
+                              Column(
+                                children: [
+                                  // Image thumbnail (+ FTP watermark over image only)
+                                  Expanded(
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      child: Stack(
+                                        fit: StackFit.expand,
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          Opacity(
+                                            opacity: widget.uploadedImages
+                                                    .contains(imagePath)
+                                                ? 0.54
+                                                : 1.0,
+                                            child: _buildThumbnail(imagePath),
+                                          ),
+                                          if (widget.uploadedImages
+                                              .contains(imagePath))
+                                            Positioned(
+                                              left: 0,
+                                              right: 0,
+                                              top: 2,
+                                              child: Center(
+                                                child: Text(
+                                                  'FTP',
+                                                  style: TextStyle(
+                                                    fontSize: _thumbSize * 0.42,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.grey.shade600
+                                                        .withValues(
+                                                            alpha: 0.72),
+                                                    letterSpacing: 2.0,
+                                                    shadows: const [
+                                                      Shadow(
+                                                        offset: Offset(0, 0),
+                                                        blurRadius: 3,
+                                                        color:
+                                                            Color(0xE6FFFFFF),
+                                                      ),
+                                                      Shadow(
+                                                        offset: Offset(0, 1),
+                                                        blurRadius: 2,
+                                                        color:
+                                                            Color(0x66000000),
+                                                      ),
+                                                    ],
                                                   ),
-                                                  Shadow(
-                                                    offset: Offset(0, 1),
-                                                    blurRadius: 2,
-                                                    color: Color(0x66000000),
-                                                  ),
-                                                ],
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        ),
-                                    ],
+                                        ],
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                              // Filename at top
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 2),
-                                decoration: const BoxDecoration(
-                                  color: Colors.transparent,
-                                ),
-                                child: Text(
-                                  p.basename(imagePath),
-                                  style: const TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.black87,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              // Time at bottom
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 4, vertical: 1),
-                                margin: const EdgeInsets.only(bottom: 2),
-                                decoration: const BoxDecoration(
-                                  color: Colors.transparent,
-                                ),
-                                child: () {
-                                  final provided = widget.exifTimes?[imagePath];
-                                  if (provided != null && provided.isNotEmpty) {
-                                    return Text(
-                                      provided,
+                                  // Filename at top
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.transparent,
+                                    ),
+                                    child: Text(
+                                      p.basename(imagePath),
                                       style: const TextStyle(
-                                          fontSize: 9, color: Colors.grey),
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w500,
+                                        color: Colors.black87,
+                                      ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
-                                    );
-                                  }
-                                  return FutureBuilder<String>(
-                                    future: _getImageTime(imagePath),
-                                    builder: (context, snapshot) {
-                                      if (snapshot.hasData &&
-                                          snapshot.data!.isNotEmpty) {
+                                    ),
+                                  ),
+                                  // Time at bottom
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 4, vertical: 1),
+                                    margin: const EdgeInsets.only(bottom: 2),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.transparent,
+                                    ),
+                                    child: () {
+                                      final provided =
+                                          widget.exifTimes?[imagePath];
+                                      if (provided != null &&
+                                          provided.isNotEmpty) {
                                         return Text(
-                                          snapshot.data!,
+                                          provided,
                                           style: const TextStyle(
                                               fontSize: 9, color: Colors.grey),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         );
                                       }
-                                      return const SizedBox.shrink();
-                                    },
-                                  );
-                                }(),
+                                      return FutureBuilder<String>(
+                                        future: _getImageTime(imagePath),
+                                        builder: (context, snapshot) {
+                                          if (snapshot.hasData &&
+                                              snapshot.data!.isNotEmpty) {
+                                            return Text(
+                                              snapshot.data!,
+                                              style: const TextStyle(
+                                                  fontSize: 9,
+                                                  color: Colors.grey),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            );
+                                          }
+                                          return const SizedBox.shrink();
+                                        },
+                                      );
+                                    }(),
+                                  ),
+                                ],
                               ),
-                            ],
-                          ),
-                          // Upload progress overlay (must render last to sit on top)
-                          if ((widget.uploadProgress.containsKey(imagePath) &&
-                                  widget.uploadProgress[imagePath]! < 1.0) ||
-                              widget.queuedUploads.contains(imagePath))
-                            Positioned.fill(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.85),
-                                  borderRadius: BorderRadius.zero,
-                                ),
-                                child: Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      // Show different icons and content based on state
-                                      if (widget.uploadProgress
-                                              .containsKey(imagePath) &&
-                                          widget.uploadProgress[imagePath]! <
-                                              1.0) ...[
-                                        // Currently uploading
-                                        Icon(
-                                          Icons.cloud_upload,
-                                          size: _thumbSize * 0.2,
-                                          color: const Color(0xFF0052CC),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        SizedBox(
-                                          width: _thumbSize * 0.75,
-                                          child: LinearProgressIndicator(
-                                            value: widget
-                                                .uploadProgress[imagePath],
-                                            minHeight: 14,
-                                            backgroundColor:
-                                                Colors.white.withOpacity(0.3),
-                                            valueColor:
-                                                const AlwaysStoppedAnimation<
-                                                    Color>(Colors.white),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '${(widget.uploadProgress[imagePath]! * 100).toInt()}%',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: _thumbSize * 0.08,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                      ] else ...[
-                                        // Queued
-                                        Icon(
-                                          Icons.schedule,
-                                          size: _thumbSize * 0.2,
-                                          color: Colors.orange,
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Queued',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: _thumbSize * 0.08,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Waiting...',
-                                          style: TextStyle(
-                                            color:
-                                                Colors.white.withOpacity(0.8),
-                                            fontSize: _thumbSize * 0.06,
-                                          ),
-                                        ),
-                                      ],
-                                    ],
+                              // Upload progress overlay (must render last to sit on top)
+                              if ((widget.uploadProgress
+                                          .containsKey(imagePath) &&
+                                      widget.uploadProgress[imagePath]! <
+                                          1.0) ||
+                                  widget.queuedUploads.contains(imagePath))
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.85),
+                                      borderRadius: BorderRadius.zero,
+                                    ),
+                                    child: Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          // Show different icons and content based on state
+                                          if (widget.uploadProgress
+                                                  .containsKey(imagePath) &&
+                                              widget.uploadProgress[
+                                                      imagePath]! <
+                                                  1.0) ...[
+                                            // Currently uploading
+                                            Icon(
+                                              Icons.cloud_upload,
+                                              size: _thumbSize * 0.2,
+                                              color: const Color(0xFF0052CC),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            SizedBox(
+                                              width: _thumbSize * 0.75,
+                                              child: LinearProgressIndicator(
+                                                value: widget
+                                                    .uploadProgress[imagePath],
+                                                minHeight: 14,
+                                                backgroundColor: Colors.white
+                                                    .withOpacity(0.3),
+                                                valueColor:
+                                                    const AlwaysStoppedAnimation<
+                                                        Color>(Colors.white),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '${(widget.uploadProgress[imagePath]! * 100).toInt()}%',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: _thumbSize * 0.08,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            // Queued
+                                            Icon(
+                                              Icons.schedule,
+                                              size: _thumbSize * 0.2,
+                                              color: Colors.orange,
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Text(
+                                              'Queued',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: _thumbSize * 0.08,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Waiting...',
+                                              style: TextStyle(
+                                                color: Colors.white
+                                                    .withOpacity(0.8),
+                                                fontSize: _thumbSize * 0.06,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                        ],
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                );
-              },
-            ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-    },
+        );
+      },
     );
   }
 
@@ -1234,8 +1256,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
   Future<void> _showContextMenu(
       BuildContext context, String imagePath, Offset tapPosition) async {
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
     final position = RelativeRect.fromRect(
       Rect.fromPoints(tapPosition, tapPosition),
       Offset.zero & overlay.size,
@@ -1314,7 +1335,6 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           label: 'Open in Finder',
           icon: Icons.open_in_new,
         ),
-        const PopupMenuDivider(height: 1),
         AppPopupMenu.tile(
           value: 'rename',
           label: 'Rename Image',

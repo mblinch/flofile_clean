@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/services.dart';
+import '../caption_style/caption_template.dart';
+import '../services/iptc_template_apply_service.dart';
+import '../services/iptc_template_import_service.dart';
 import '../utils/exiftool_helper.dart';
 import 'oriented_file_preview.dart';
+import 'startup_iptc_template_panel.dart';
 import '../helpers.dart';
 
 class MetadataPopupDialog extends StatefulWidget {
@@ -14,6 +18,7 @@ class MetadataPopupDialog extends StatefulWidget {
   final VoidCallback? onNextImage;
   final VoidCallback? onCopyMetadata;
   final VoidCallback? onPasteMetadata;
+  final WireStyle wireStyle;
   // Optional: request parent to change image without closing dialog.
   // Should return a map containing 'path' (String) and 'metadata' (Map<String,dynamic>).
   final Future<Map<String, dynamic>> Function(int delta)? onRequestImageChange;
@@ -28,6 +33,7 @@ class MetadataPopupDialog extends StatefulWidget {
     this.onCopyMetadata,
     this.onPasteMetadata,
     this.onRequestImageChange,
+    this.wireStyle = WireStyle.getty,
   });
 
   @override
@@ -40,13 +46,8 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   // Track whether we've ever successfully loaded EXIF in this dialog session
   bool _hasEverLoadedExif = false;
   String? _currentImagePath;
-
-  // Controllers for caption and personality fields
-  late TextEditingController captionController;
-  late TextEditingController personalityController;
-
-  // Cache for field controllers to prevent cursor jumping
-  final Map<String, TextEditingController> _fieldControllers = {};
+  Map<String, String> _panelValues = {};
+  int _panelRevision = 0;
 
   @override
   void initState() {
@@ -54,51 +55,31 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     currentMetadata = Map<String, dynamic>.from(widget.metadata ?? {});
     _currentImagePath = widget.imagePath;
     _normalizeMetadataForUi();
-
-    // Debug: Print what metadata we received
-    print('DEBUG: Metadata popup received metadata: $currentMetadata');
-    print('DEBUG: Available keys: ${currentMetadata?.keys.toList()}');
-    print(
-        'DEBUG: SupplementalCategories in received metadata: ${currentMetadata?['SupplementalCategories']}');
-    print(
-        'DEBUG: XMP-photoshop:SupplementalCategories in received metadata: ${currentMetadata?['XMP-photoshop:SupplementalCategories']}');
-    print(
-        'DEBUG: Caption fields: IPTC:Description=${currentMetadata?['IPTC:Description']}, Description=${currentMetadata?['Description']}, Caption-Abstract=${currentMetadata?['Caption-Abstract']}');
-    print(
-        'DEBUG: Personality: XMP-getty:Personality=${currentMetadata?['XMP-getty:Personality']}, Personality=${currentMetadata?['Personality']}');
-    print(
-        'DEBUG: SupplementalCategories: ${currentMetadata?['SupplementalCategories']} (${currentMetadata?['SupplementalCategories'].runtimeType})');
-    print(
-        'DEBUG: IPTC:SupplementalCategories: ${currentMetadata?['IPTC:SupplementalCategories']} (${currentMetadata?['IPTC:SupplementalCategories'].runtimeType})');
-    print(
-        'DEBUG: After normalization - SupplementalCategories1=${currentMetadata?['SupplementalCategories1']}, SupplementalCategories2=${currentMetadata?['SupplementalCategories2']}, SupplementalCategories3=${currentMetadata?['SupplementalCategories3']}');
-
-    // Initialize controllers with current values (fallback across common keys, prioritizing Photo Mechanic's field)
-    final String initialCaption =
-        (currentMetadata?['IPTC:Description']?.toString() ??
-                currentMetadata?['Description']?.toString() ??
-                currentMetadata?['Caption-Abstract']?.toString() ??
-                currentMetadata?['IPTC:Caption-Abstract']?.toString() ??
-                currentMetadata?['ImageDescription']?.toString() ??
-                currentMetadata?['XMP:Description']?.toString() ??
-                '')
-            .toString();
-
-    print('DEBUG: Initializing controllers - Caption: "$initialCaption"');
-    captionController = TextEditingController(text: initialCaption);
-
-    final String initialPersonality =
-        (currentMetadata?['XMP-getty:Personality']?.toString() ??
-                currentMetadata?['Personality']?.toString() ??
-                '')
-            .toString();
-
-    print(
-        'DEBUG: Initializing controllers - Personality: "$initialPersonality"');
-    personalityController = TextEditingController(text: initialPersonality);
+    _syncPanelValuesFromMetadata();
 
     // Load EXIF data for the image
     _loadExifData();
+  }
+
+  void _syncPanelValuesFromMetadata() {
+    _panelValues = IptcTemplateImportService.panelValuesFromExiftool(
+      Map<String, dynamic>.from(currentMetadata ?? {}),
+    );
+    _panelRevision++;
+  }
+
+  void _onPanelValueChanged(String storageKey, String value) {
+    setState(() {
+      if (value.isEmpty) {
+        _panelValues.remove(storageKey);
+      } else {
+        _panelValues[storageKey] = value;
+      }
+      currentMetadata = IptcTemplateApplyService.exiftoolMapFromPanelValues(
+        _panelValues,
+        mergeInto: currentMetadata,
+      );
+    });
   }
 
   // Load EXIF data from the image file
@@ -149,34 +130,8 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
       setState(() {
         currentMetadata = metadata;
         _normalizeMetadataForUi();
+        _syncPanelValuesFromMetadata();
       });
-      // Update controllers with new metadata
-      _updateControllersFromMetadata();
-    }
-  }
-
-  // Update caption and personality controllers from current metadata
-  void _updateControllersFromMetadata() {
-    final String updatedCaption =
-        (currentMetadata?['IPTC:Description']?.toString() ??
-                currentMetadata?['Description']?.toString() ??
-                currentMetadata?['Caption-Abstract']?.toString() ??
-                currentMetadata?['IPTC:Caption-Abstract']?.toString() ??
-                currentMetadata?['ImageDescription']?.toString() ??
-                currentMetadata?['XMP:Description']?.toString() ??
-                '')
-            .toString();
-    if (captionController.text != updatedCaption) {
-      captionController.text = updatedCaption;
-    }
-
-    final String updatedPersonality =
-        (currentMetadata?['XMP-getty:Personality']?.toString() ??
-                currentMetadata?['Personality']?.toString() ??
-                '')
-            .toString();
-    if (personalityController.text != updatedPersonality) {
-      personalityController.text = updatedPersonality;
     }
   }
 
@@ -229,269 +184,28 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     }
   }
 
-  // Build an outgoing metadata map that reflects current controller values
+  // Build an outgoing metadata map that reflects current panel values.
   Map<String, dynamic> _buildOutgoingMetadataFromState() {
-    // Start with currentMetadata which contains all the field changes from regular text fields
-    final Map<String, dynamic> outgoing =
-        Map<String, dynamic>.from(currentMetadata ?? {});
-
-    // Override with ALL field controller values to ensure we capture any changes
-    // This fixes issues where onChanged callbacks might not have fired
-    _fieldControllers.forEach((key, controller) {
-      final value = controller.text.trim();
-      if (value.isNotEmpty) {
-        outgoing[key] = value;
-        // Also write to Photo Mechanic's preferred IPTC field
-        final photoMechanicKey = _getPhotoMechanicField(key);
-        if (photoMechanicKey != null) {
-          outgoing[photoMechanicKey] = value;
-        }
-      } else {
-        // Remove empty fields
-        outgoing.remove(key);
-        final photoMechanicKey = _getPhotoMechanicField(key);
-        if (photoMechanicKey != null) {
-          outgoing.remove(photoMechanicKey);
-        }
-      }
-    });
-
-    // Override with Caption controller value (since it's handled separately)
-    final String cap = captionController.text.trim();
-    if (cap.isNotEmpty) {
-      // Only save to the primary field to avoid duplication
-      outgoing['IPTC:Description'] = cap;
-      // Remove duplicates
-      outgoing.remove('Description');
-      outgoing.remove('Caption-Abstract');
-      outgoing.remove('IPTC:Caption-Abstract');
-      outgoing.remove('ImageDescription');
-    } else {
-      outgoing.remove('IPTC:Description');
-      outgoing.remove('Description');
-      outgoing.remove('Caption-Abstract');
-      outgoing.remove('IPTC:Caption-Abstract');
-      outgoing.remove('ImageDescription');
-    }
-
-    // Override with Personality controller value (since it's handled separately)
-    final String pers = personalityController.text.trim();
-    if (pers.isNotEmpty) {
-      outgoing['XMP-getty:Personality'] = pers;
-      outgoing.remove('Personality');
-    } else {
-      outgoing.remove('XMP-getty:Personality');
-      outgoing.remove('Personality');
-    }
-
-    // Supplemental categories are now handled in the _fieldControllers loop above
-
-    // Handle KeywordsTest specially - remove it and use for IPTC:Keywords only
-    final String testKW = (outgoing['KeywordsTest'] ?? '').toString().trim();
-    outgoing.remove('KeywordsTest'); // Remove the test field
-    outgoing.remove('Keywords');
-    outgoing.remove('XMP:Subject');
-
-    if (testKW.isNotEmpty) {
-      outgoing['IPTC:Keywords'] = testKW;
-      // CRITICAL: Also update Subject field to match the cleaned keywords
-      outgoing['Subject'] = testKW;
-    } else {
-      // When keywords are deleted, explicitly set empty string so save logic clears the field
-      outgoing['IPTC:Keywords'] = '';
-      // CRITICAL: Also clear Subject field
-      outgoing['Subject'] = '';
-    }
-
-  // PM "Title" (Getty object-name slug) — dc:title, same value as Object Name.
-    final objectNameValue = outgoing['ObjectName']?.toString().trim() ??
-        outgoing['IPTC:ObjectName']?.toString().trim() ??
-        '';
-    if (objectNameValue.isNotEmpty) {
-      outgoing['XMP:Title'] = objectNameValue;
-    } else {
-      outgoing.remove('XMP:Title');
-    }
-
-    return outgoing;
+    return IptcTemplateApplyService.exiftoolMapFromPanelValues(
+      _panelValues,
+      mergeInto: currentMetadata,
+    );
   }
 
-  // Save metadata to the image file using ExifTool
+  // Save metadata to the image file using shared IPTC apply service.
   Future<void> _saveMetadataToFile(Map<String, dynamic> metadata) async {
     final imagePath = _currentImagePath ?? widget.imagePath;
     if (imagePath == null) return;
 
-    // Build ExifTool command arguments
-    List<String> args = [];
+    final result = await IptcTemplateApplyService.applyToImage(
+      imagePath,
+      _panelValues,
+      skipInAppGenerated: false,
+      existingMetadata: metadata,
+    );
 
-    // Map metadata fields to ExifTool format
-    metadata.forEach((key, value) {
-      if (value != null && value.toString().isNotEmpty) {
-        // Skip date/time fields as they shouldn't be modified
-        if ([
-          'Date',
-          'Time',
-          'DateTimeOriginal',
-          'CreateDate',
-          'ModifyDate',
-          'FileModifyDate'
-        ].contains(key)) {
-          print('DEBUG: Skipping date/time field: $key');
-          return;
-        }
-
-        // Handle supplemental categories specially
-        if (key == 'SupplementalCategories1' ||
-            key == 'SupplementalCategories2' ||
-            key == 'SupplementalCategories3' ||
-            key == 'SupplementalCategories') {
-          // Skip individual fields AND the corrupted master field, we'll handle them together with helper
-          print('DEBUG: Skipping supp cat field: $key');
-          return;
-        }
-
-        // Skip Keywords/Subject here; handled centrally below
-        if (key != 'IPTC:Keywords' &&
-            key != 'XMP-dc:Subject' &&
-            key != 'Keywords' &&
-            key != 'Subject' &&
-            key != 'XMP:Subject') {
-          args.add('-$key=$value');
-          print('DEBUG: Adding field: -$key=$value');
-        } else {
-          print('DEBUG: SKIPPING keyword/subject field: $key=$value');
-        }
-      }
-    });
-
-    // Centralize keyword handling: clear XMP/Keywords and write IPTC per item
-    // Remove any pre-added keyword args
-    args.removeWhere((arg) =>
-        arg.startsWith('-IPTC:Keywords') ||
-        arg.startsWith('-XMP:Subject') ||
-        arg.startsWith('-XMP-dc:Subject') ||
-        arg.startsWith('-Subject') ||
-        arg.startsWith('-Keywords'));
-
-    final String keywordsValue =
-        (metadata['IPTC:Keywords'] ?? metadata['Keywords'])?.toString() ?? '';
-    print('DEBUG SAVE: Raw keywordsValue from metadata: "$keywordsValue"');
-
-    if (keywordsValue.trim().isNotEmpty) {
-      // Clean any array brackets first
-      String cleanValue = keywordsValue.trim();
-      if (cleanValue.startsWith('[') && cleanValue.endsWith(']')) {
-        cleanValue = cleanValue.substring(1, cleanValue.length - 1);
-      }
-      final List<String> kw = cleanValue
-          .split(',')
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toSet()
-          .toList();
-      print('DEBUG SAVE: Parsed keywords to save: $kw');
-
-      if (kw.isNotEmpty) {
-        print('DEBUG SAVE: About to save ${kw.length} keywords: $kw');
-
-        // STEP 1: NUCLEAR CLEAR - Use separate command like our successful manual test
-        final List<String> clearArgs = [
-          '-Subject=',
-          '-XMP-dc:Subject=',
-          '-XMP:Subject=',
-          '-Keywords=', // NUCLEAR: Clear the problematic legacy Keywords field
-          '-IPTC:Keywords=', // Clear existing
-          '-XMP:Keywords=', // Clear any other variants
-          '-XMP-photoshop:Keywords=',
-          '-overwrite_original',
-          imagePath,
-        ];
-        print('DEBUG: Step 1 - Nuclear clear: exiftool ${clearArgs.join(' ')}');
-        final clearProc = await ExiftoolHelper.run(clearArgs);
-        print('DEBUG: Clear exit code: ${clearProc.exitCode}');
-        if (clearProc.exitCode != 0) {
-          print('DEBUG: Clear stderr: ${clearProc.stderrText}');
-          throw Exception('Failed to clear keywords: ${clearProc.stderrText}');
-        }
-
-        // STEP 2: ADD KEYWORDS - Write to both IPTC:Keywords AND Subject for Photo Mechanic compatibility
-        final List<String> addArgs = [];
-        // Write keywords to multiple fields to ensure Photo Mechanic sees them
-        final String allKeywords = kw.join(', ');
-        addArgs.add('-Subject=$allKeywords'); // Photo Mechanic reads from this
-        for (final keyword in kw) {
-          addArgs.add(
-              '-IPTC:Keywords+=$keyword'); // Individual keywords for the app
-        }
-        addArgs.addAll(['-overwrite_original', imagePath]);
-
-        print('DEBUG: Step 2 - Add keywords: exiftool ${addArgs.join(' ')}');
-        final addProc = await ExiftoolHelper.run(addArgs);
-        print('DEBUG: Add exit code: ${addProc.exitCode}');
-        if (addProc.exitCode != 0) {
-          print('DEBUG: Add stderr: ${addProc.stderrText}');
-          throw Exception('Failed to add keywords: ${addProc.stderrText}');
-        }
-
-        // DO NOT return here, allow the main save to process other fields.
-      } else {
-        // User has cleared all keywords. Run a command to clear all related fields.
-        print(
-            'DEBUG: User cleared all keywords. Clearing all keyword/subject fields.');
-        final List<String> clearKwArgs = [
-          '-IPTC:Keywords=',
-          '-Subject=',
-          '-XMP-dc:Subject=',
-          '-XMP:Subject=',
-          '-Keywords=', // NUCLEAR: Clear the problematic legacy Keywords field
-          '-XMP:Keywords=', // Clear any other variants
-          '-XMP-photoshop:Keywords=',
-          '-overwrite_original',
-          imagePath,
-        ];
-        final kwClearProc = await ExiftoolHelper.run(clearKwArgs);
-        if (kwClearProc.exitCode != 0) {
-          print('DEBUG: Failed to clear keywords: ' + kwClearProc.stderrText);
-          throw Exception(
-              'Failed to clear keywords: ' + kwClearProc.stderrText);
-        }
-        // DO NOT return here, allow the main save to process other fields.
-      }
-    } else {
-      // User has cleared all keywords. Run a command to clear all related fields.
-      print(
-          'DEBUG: User cleared all keywords. Clearing all keyword/subject fields.');
-      final List<String> clearKwArgs = [
-        '-IPTC:Keywords=',
-        '-Subject=',
-        '-XMP-dc:Subject=',
-        '-XMP:Subject=',
-        '-Keywords=',
-        '-overwrite_original',
-        imagePath,
-      ];
-      final kwClearProc = await ExiftoolHelper.run(clearKwArgs);
-      if (kwClearProc.exitCode != 0) {
-        print('DEBUG: Failed to clear keywords: ' + kwClearProc.stderrText);
-        throw Exception('Failed to clear keywords: ' + kwClearProc.stderrText);
-      }
-      // DO NOT return here, allow the main save to process other fields.
-    }
-
-    // Add overwrite flag and image path for the general metadata save
-    args.add('-overwrite_original');
-    args.add(imagePath);
-
-    print('DEBUG: ExifTool command args: $args');
-    print('DEBUG: Image path: $imagePath');
-    print('DEBUG: Full command would be: exiftool ${args.join(' ')}');
-
-    // Run ExifTool command for non-keyword fields
-    if (args.isNotEmpty) {
-      final proc = await ExiftoolHelper.run(args);
-      if (proc.exitCode != 0) {
-        throw Exception('ExifTool failed: ${proc.stderrText}');
-      }
+    if (!result.success) {
+      throw Exception('Failed to save IPTC metadata to file');
     }
   }
 
@@ -501,12 +215,6 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
   @override
   void dispose() {
-    captionController.dispose();
-    personalityController.dispose();
-    // Dispose all cached field controllers
-    for (final controller in _fieldControllers.values) {
-      controller.dispose();
-    }
     super.dispose();
   }
 
@@ -514,82 +222,16 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
   void didUpdateWidget(covariant MetadataPopupDialog oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Check if the image path changed (indicating a new image)
     if (oldWidget.imagePath != widget.imagePath) {
-      // Only reload EXIF data when the image actually changes
-      // Don't clear exifData first - let it keep showing until new data loads
       _currentImagePath = widget.imagePath;
       _loadExifData(path: _currentImagePath);
     }
 
     if (oldWidget.metadata != widget.metadata) {
-      print('DEBUG: didUpdateWidget - metadata changed');
-      print('DEBUG: didUpdateWidget - new metadata: ${widget.metadata}');
-      print(
-          'DEBUG: didUpdateWidget - SupplementalCategories in new metadata: ${widget.metadata?['SupplementalCategories']}');
-      print(
-          'DEBUG: didUpdateWidget - XMP-photoshop:SupplementalCategories in new metadata: ${widget.metadata?['XMP-photoshop:SupplementalCategories']}');
       currentMetadata = Map<String, dynamic>.from(widget.metadata ?? {});
       _normalizeMetadataForUi();
-      // Rehydrate controllers from the possibly new metadata (prioritizing Photo Mechanic's field)
-      final String updatedCaption =
-          (currentMetadata?['IPTC:Description']?.toString() ??
-                  currentMetadata?['Description']?.toString() ??
-                  currentMetadata?['Caption-Abstract']?.toString() ??
-                  currentMetadata?['IPTC:Caption-Abstract']?.toString() ??
-                  currentMetadata?['ImageDescription']?.toString() ??
-                  currentMetadata?['XMP:Description']?.toString() ??
-                  '')
-              .toString();
-      if (captionController.text != updatedCaption) {
-        captionController.text = updatedCaption;
-      }
-
-      final String updatedPersonality =
-          (currentMetadata?['XMP-getty:Personality']?.toString() ??
-                  currentMetadata?['Personality']?.toString() ??
-                  '')
-              .toString();
-      if (personalityController.text != updatedPersonality) {
-        personalityController.text = updatedPersonality;
-      }
-
-      // Update supplementary category controllers
-      final String updatedSuppCat1 =
-          currentMetadata?['SupplementalCategories1']?.toString() ?? '';
-      final String updatedSuppCat2 =
-          currentMetadata?['SupplementalCategories2']?.toString() ?? '';
-      final String updatedSuppCat3 =
-          currentMetadata?['SupplementalCategories3']?.toString() ?? '';
-
-      print('DEBUG: didUpdateWidget - updating supp cat controllers:');
-      print('  SuppCat1: "$updatedSuppCat1"');
-      print('  SuppCat2: "$updatedSuppCat2"');
-      print('  SuppCat3: "$updatedSuppCat3"');
-      print(
-          '  Controllers exist: SuppCat1=${_fieldControllers.containsKey('SupplementalCategories1')}, SuppCat2=${_fieldControllers.containsKey('SupplementalCategories2')}, SuppCat3=${_fieldControllers.containsKey('SupplementalCategories3')}');
-
-      if (_fieldControllers.containsKey('SupplementalCategories1') &&
-          _fieldControllers['SupplementalCategories1']!.text !=
-              updatedSuppCat1) {
-        print(
-            'DEBUG: Updating SuppCat1 controller from "${_fieldControllers['SupplementalCategories1']!.text}" to "$updatedSuppCat1"');
-        _fieldControllers['SupplementalCategories1']!.text = updatedSuppCat1;
-      }
-      if (_fieldControllers.containsKey('SupplementalCategories2') &&
-          _fieldControllers['SupplementalCategories2']!.text !=
-              updatedSuppCat2) {
-        print(
-            'DEBUG: Updating SuppCat2 controller from "${_fieldControllers['SupplementalCategories2']!.text}" to "$updatedSuppCat2"');
-        _fieldControllers['SupplementalCategories2']!.text = updatedSuppCat2;
-      }
-      if (_fieldControllers.containsKey('SupplementalCategories3') &&
-          _fieldControllers['SupplementalCategories3']!.text !=
-              updatedSuppCat3) {
-        print(
-            'DEBUG: Updating SuppCat3 controller from "${_fieldControllers['SupplementalCategories3']!.text}" to "$updatedSuppCat3"');
-        _fieldControllers['SupplementalCategories3']!.text = updatedSuppCat3;
-      }
+      _syncPanelValuesFromMetadata();
+      if (mounted) setState(() {});
     }
   }
 
@@ -775,9 +417,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
       // Normalize UI fields
       _normalizeMetadataForUi();
-
-      // Update controllers with new values
-      _updateControllersFromMetadata();
+      _syncPanelValuesFromMetadata();
 
       // Notify parent of changes
       _handleMetadataUpdated(currentMetadata);
@@ -824,678 +464,26 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     }
   }
 
-  Widget _buildTwoColumnMetadata() {
+  Widget _buildIptcFieldsPanel() {
     return Container(
-      height: double.infinity,
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey.shade400, width: 1.0),
-        borderRadius: BorderRadius.circular(8),
-        color: Colors.grey.shade50,
+        border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+        borderRadius: BorderRadius.circular(4),
+        color: Colors.white,
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Caption and Personality fields at the top spanning full width
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Caption field with persistent controller
-                Text(
-                  'Caption',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                TextField(
-                  controller: captionController,
-                  maxLines: 2,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: Colors.white,
-                    focusColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade500),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade500),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide:
-                          BorderSide(color: Colors.grey.shade500, width: 1),
-                    ),
-                    disabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade500),
-                    ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                    isDense: true,
-                  ),
-                  style: const TextStyle(fontSize: 11),
-                ),
-
-                const SizedBox(height: 5),
-
-                // Personality field with persistent controller
-                Text(
-                  'Personality',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                TextField(
-                  controller: personalityController,
-                  maxLines: 1,
-                  decoration: InputDecoration(
-                    filled: true,
-                    fillColor: Colors.white,
-                    focusColor: Colors.transparent,
-                    hoverColor: Colors.transparent,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade500),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade500),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide:
-                          BorderSide(color: Colors.grey.shade500, width: 1),
-                    ),
-                    disabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                      borderSide: BorderSide(color: Colors.grey.shade500),
-                    ),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-                    isDense: true,
-                  ),
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ],
-            ),
-            const SizedBox(height: 5),
-            // Two-column layout
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // First column
-                  Expanded(
-                    child: Column(
-                      children: [
-                        _buildField('Category', 'Category'),
-                        _buildField('Supp Cat 1', 'SupplementalCategories1'),
-                        _buildField('Supp Cat 2', 'SupplementalCategories2'),
-                        _buildField('Supp Cat 3', 'SupplementalCategories3'),
-                        _buildField('Object Name', 'ObjectName'),
-                        _buildField('Stadium', 'Sub-location'),
-                        _buildField('City', 'City'),
-                        _buildField('Province/State', 'Province-State'),
-                        _buildField('Country', 'Country'),
-                        _buildField('Country Code', 'CountryCode'),
-                        _buildField(
-                            'Special Instructions', 'SpecialInstructions'),
-                        _buildField('Urgency', 'Urgency'),
-                      ]
-                          .map((widget) => Padding(
-                                padding: const EdgeInsets.only(bottom: 5.0),
-                                child: widget,
-                              ))
-                          .toList(),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  // Second column
-                  Expanded(
-                    child: Column(
-                      children: [
-                        _buildField('Photographer', 'Creator'),
-                        _buildField(
-                            'MEID (Job Reference)', 'TransmissionReference'),
-                        _buildField('Description Writers', 'CaptionWriter'),
-                        _buildField('Creator\'s Job Title', 'AuthorsPosition'),
-                        _buildField('Copyright', 'Copyright'),
-                        _buildField('Credit', 'Credit'),
-                        _buildField('Source', 'Source'),
-                        _buildField('Headline', 'Headline'),
-                        _buildField('Keywords (Test)', 'KeywordsTest'),
-                      ]
-                          .map((widget) => Padding(
-                                padding: const EdgeInsets.only(bottom: 5.0),
-                                child: widget,
-                              ))
-                          .toList(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+        padding: const EdgeInsets.all(6),
+        child: StartupIptcTemplatePanel(
+          fieldsOnly: true,
+          selectedWire: widget.wireStyle,
+          wireLabels: const {},
+          values: _panelValues,
+          iptcApplyMode: IptcApplyMode.none,
+          onValueChanged: _onPanelValueChanged,
+          templateRevision: _panelRevision,
         ),
       ),
     );
-  }
-
-  Widget _buildField(String label, String key, {int? maxLines}) {
-    // Prioritize Photo Mechanic's preferred IPTC field, then fallback to original key
-    final photoMechanicKey = _getPhotoMechanicField(key);
-
-    // Handle array values properly - extract first value or join with commas
-    String value = '';
-
-    dynamic rawValue;
-    if (key == 'KeywordsTest') {
-      // Read from IPTC:Keywords first (edited data), fallback to Keywords (original data)
-      rawValue =
-          currentMetadata?['IPTC:Keywords'] ?? currentMetadata?['Keywords'];
-    } else {
-      rawValue = currentMetadata?[photoMechanicKey] ?? currentMetadata?[key];
-    }
-
-    if (rawValue != null) {
-      if (rawValue is List) {
-        // Convert ExifTool arrays to comma-separated strings with NO brackets
-        // Remove duplicates from arrays (keywords often get duplicated)
-        final cleanItems = rawValue
-            .map((e) => e.toString().trim())
-            .where((e) => e.isNotEmpty)
-            .toSet() // Remove duplicates
-            .toList();
-        value = cleanItems.join(', ');
-      } else {
-        // For non-array values, use as-is but clean any bracket artifacts
-        final stringValue = rawValue.toString();
-        if (stringValue.startsWith('[') && stringValue.endsWith(']')) {
-          // Remove brackets and clean up
-          final cleaned = stringValue.substring(1, stringValue.length - 1);
-          value = cleaned;
-        } else {
-          value = stringValue;
-        }
-      }
-    }
-
-    // Special handling for KeywordsTest - use chips instead of text field
-    if (key == 'KeywordsTest') {
-      // Ensure no stray controller remains for this key
-      _fieldControllers.remove(key);
-      return _buildKeywordChips(label, value);
-    }
-
-    // Special handling for Urgency - use dropdown instead of text field
-    if (key == 'Urgency') {
-      return _buildUrgencyDropdown(label, value);
-    }
-
-    // Get or create controller for this key. Only set text on creation to avoid
-    // resetting selection/caret and breaking backspace/highlight behavior.
-    late final TextEditingController controller;
-    if (_fieldControllers.containsKey(key)) {
-      controller = _fieldControllers[key]!;
-      // Do not overwrite controller.text here
-    } else {
-      controller = TextEditingController(text: value);
-      _fieldControllers[key] = controller;
-    }
-
-    // Build labeled text field matching existing styling
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(height: 3),
-        TextField(
-          controller: controller,
-          maxLines: maxLines ?? 1,
-          onChanged: (newValue) {
-            setState(() {
-              final trimmed = newValue.trim();
-              if (trimmed.isNotEmpty) {
-                currentMetadata![key] = trimmed;
-                final pmKey = _getPhotoMechanicField(key);
-                if (pmKey != null) {
-                  currentMetadata![pmKey] = trimmed;
-                }
-              } else {
-                currentMetadata!.remove(key);
-                final pmKey = _getPhotoMechanicField(key);
-                if (pmKey != null) {
-                  currentMetadata!.remove(pmKey);
-                }
-              }
-            });
-          },
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white,
-            focusColor: Colors.transparent,
-            hoverColor: Colors.transparent,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade500),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade500),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade500, width: 1),
-            ),
-            disabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(4),
-              borderSide: BorderSide(color: Colors.grey.shade500),
-            ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-            isDense: true,
-          ),
-          style: const TextStyle(fontSize: 11),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildKeywordChips(String label, String value) {
-    // Parse current keywords from metadata - prefer IPTC:Keywords, fallback to Keywords
-    String currentValue = currentMetadata?['IPTC:Keywords']?.toString() ??
-        currentMetadata?['Keywords']?.toString() ??
-        '';
-
-    print('🔍 KEYWORD CHIPS: currentValue from metadata: "$currentValue"');
-    print(
-        '🔍 KEYWORD CHIPS: IPTC:Keywords: "${currentMetadata?['IPTC:Keywords']}"');
-    print('🔍 KEYWORD CHIPS: Keywords: "${currentMetadata?['Keywords']}"');
-    print('🔍 KEYWORD CHIPS: Subject: "${currentMetadata?['Subject']}"');
-
-    // Clean any bracket artifacts from the value
-    if (currentValue.isNotEmpty) {
-      // Remove outer array brackets if present
-      if (currentValue.startsWith('[') && currentValue.endsWith(']')) {
-        currentValue = currentValue.substring(1, currentValue.length - 1);
-      }
-      // Remove any remaining brackets from individual keywords
-      currentValue = currentValue.replaceAll('[', '').replaceAll(']', '');
-    }
-
-    final List<String> keywords = currentValue.isEmpty
-        ? <String>[]
-        : currentValue
-            .split(',')
-            .map((k) => k.trim())
-            .where((k) => k.isNotEmpty)
-            .toSet() // de-duplicate on read
-            .toList();
-
-    final TextEditingController addController = TextEditingController();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade500),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Add new keyword field at the top
-              Row(
-                children: [
-                  IconButton(
-                    icon: Icon(Icons.add, size: 16, color: Colors.black),
-                    onPressed: () {
-                      final trimmed = addController.text.trim();
-                      if (trimmed.isNotEmpty) {
-                        // Split by commas and add each keyword
-                        final newKeywords = trimmed
-                            .split(',')
-                            .map((k) => k.trim())
-                            .where((k) => k.isNotEmpty && !keywords.contains(k))
-                            .toList();
-
-                        if (newKeywords.isNotEmpty) {
-                          setState(() {
-                            keywords.addAll(newKeywords);
-                            final newValue = keywords.join(', ');
-                            currentMetadata!['KeywordsTest'] = newValue;
-                            currentMetadata!['IPTC:Keywords'] = newValue;
-                          });
-                          addController.clear();
-                        }
-                      }
-                    },
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 24, minHeight: 24),
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: addController,
-                      decoration: InputDecoration(
-                        hintText: 'Add keyword(s) separated by commas...',
-                        hintStyle: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade500),
-                        border: InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 4),
-                        isDense: true,
-                      ),
-                      style: const TextStyle(fontSize: 11),
-                      onSubmitted: (keyword) {
-                        final trimmed = keyword.trim();
-                        if (trimmed.isNotEmpty) {
-                          // Split by commas and add each keyword
-                          final newKeywords = trimmed
-                              .split(',')
-                              .map((k) => k.trim())
-                              .where(
-                                  (k) => k.isNotEmpty && !keywords.contains(k))
-                              .toList();
-
-                          if (newKeywords.isNotEmpty) {
-                            setState(() {
-                              keywords.addAll(newKeywords);
-                              final newValue = keywords.join(', ');
-                              currentMetadata!['KeywordsTest'] = newValue;
-                              currentMetadata!['IPTC:Keywords'] = newValue;
-                            });
-                            addController.clear();
-                          }
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              if (keywords.isNotEmpty) const SizedBox(height: 8),
-              // Existing keyword chips
-              if (keywords.isNotEmpty)
-                Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: keywords.map((keyword) {
-                    return Chip(
-                      label: Text(
-                        keyword,
-                        style: const TextStyle(fontSize: 9),
-                      ),
-                      deleteIcon: Icon(Icons.close,
-                          size: 10, color: Colors.grey.shade600),
-                      onDeleted: () {
-                        print('🗑️ DELETING KEYWORD: "$keyword"');
-                        print('🗑️ BEFORE DELETE: keywords = $keywords');
-                        setState(() {
-                          keywords.remove(keyword);
-                          final newValue =
-                              keywords.isEmpty ? '' : keywords.join(', ');
-                          print('🗑️ AFTER DELETE: newValue = "$newValue"');
-
-                          // Update all keyword-related fields
-                          if (newValue.isEmpty) {
-                            currentMetadata!.remove('KeywordsTest');
-                            currentMetadata!.remove('IPTC:Keywords');
-                            currentMetadata!.remove('Keywords');
-                            print(
-                                '🗑️ CLEARED ALL: removed KeywordsTest, IPTC:Keywords, Keywords');
-                          } else {
-                            currentMetadata!['KeywordsTest'] = newValue;
-                            currentMetadata!['IPTC:Keywords'] = newValue;
-                            print(
-                                '🗑️ UPDATED: KeywordsTest and IPTC:Keywords = "$newValue"');
-                          }
-                          print(
-                              '🗑️ CURRENT METADATA IPTC:Keywords: "${currentMetadata!['IPTC:Keywords']}"');
-                        });
-                      },
-                      backgroundColor: Colors.grey.shade100,
-                      side: BorderSide(color: Colors.grey.shade300),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 2, vertical: 0),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    );
-                  }).toList(),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Get Photo Mechanic's preferred IPTC field for a given key
-  String _getUrgencyDisplayText(String value) {
-    switch (value) {
-      case '0':
-        return '0 - Undefined';
-      case '1':
-        return '1 - High';
-      case '2':
-        return '2';
-      case '3':
-        return '3';
-      case '4':
-        return '4';
-      case '5':
-        return '5 - Normal';
-      case '6':
-        return '6';
-      case '7':
-        return '7';
-      case '8':
-        return '8 - Low';
-      default:
-        return value;
-    }
-  }
-
-  Widget _buildUrgencyDropdown(String label, String value) {
-    // Define urgency levels
-    final urgencyLevels = ['0', '1', '2', '3', '4', '5', '6', '7', '8'];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w700,
-            color: Colors.grey.shade600,
-          ),
-        ),
-        const SizedBox(height: 3),
-        Container(
-          height: 32, // Match the height of text fields
-          decoration: BoxDecoration(
-            color: Colors.white,
-            border: Border.all(color: Colors.grey.shade500),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: urgencyLevels.contains(value) ? value : '5',
-              isExpanded: true,
-              items: urgencyLevels.map((String level) {
-                return DropdownMenuItem<String>(
-                  value: level,
-                  child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-                    child: Text(
-                      _getUrgencyDisplayText(level),
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                if (newValue != null) {
-                  setState(() {
-                    currentMetadata!['Urgency'] = newValue;
-                    final pmKey = _getPhotoMechanicField('Urgency');
-                    if (pmKey != null) {
-                      currentMetadata![pmKey] = newValue;
-                    }
-                  });
-                }
-              },
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String? _getPhotoMechanicField(String key) {
-    switch (key) {
-      // Core IPTC fields that should be written directly
-      case 'IPTC:Description':
-      case 'Description':
-      case 'Caption-Abstract':
-      case 'IPTC:Caption-Abstract':
-      case 'ImageDescription':
-        return 'IPTC:Description';
-
-      case 'IPTC:By-line':
-      case 'By-line':
-      case 'Creator':
-      case 'XMP:Creator':
-        return 'IPTC:By-line';
-
-      case 'IPTC:OriginalTransmissionReference':
-      case 'OriginalTransmissionReference':
-      case 'TransmissionReference':
-      case 'JobID':
-      case 'MEID':
-        return 'IPTC:OriginalTransmissionReference';
-
-      case 'IPTC:By-lineTitle':
-      case 'By-lineTitle':
-      case 'AuthorsPosition':
-        return 'IPTC:By-lineTitle';
-
-      case 'IPTC:CopyrightNotice':
-      case 'CopyrightNotice':
-      case 'Copyright':
-      case 'XMP:Rights':
-        return 'IPTC:CopyrightNotice';
-
-      case 'IPTC:Credit':
-      case 'Credit':
-        return 'IPTC:Credit';
-
-      case 'IPTC:Source':
-      case 'Source':
-      case 'XMP:Source':
-        return 'IPTC:Source';
-
-      case 'IPTC:Headline':
-      case 'Headline':
-      case 'XMP:Title':
-        return 'IPTC:Headline';
-
-      case 'IPTC:Keywords':
-      case 'Keywords':
-      case 'XMP:Subject':
-        return 'IPTC:Keywords';
-
-      case 'KeywordsTest':
-        return 'IPTC:Keywords';
-
-      case 'IPTC:Category':
-      case 'Category':
-        return 'IPTC:Category';
-
-      case 'IPTC:ObjectName':
-      case 'ObjectName':
-      case 'XMP:Title':
-        return 'IPTC:ObjectName';
-
-      case 'IPTC:SubLocation':
-      case 'Sub-location':
-      case 'SubLocation':
-      case 'XMP:Location':
-        return 'IPTC:SubLocation';
-
-      case 'IPTC:City':
-      case 'City':
-      case 'XMP:City':
-        return 'IPTC:City';
-
-      case 'IPTC:ProvinceState':
-      case 'Province-State':
-      case 'ProvinceState':
-      case 'XMP:State':
-        return 'IPTC:ProvinceState';
-
-      case 'IPTC:CountryPrimaryLocationName':
-      case 'CountryPrimaryLocationName':
-      case 'Country':
-      case 'XMP:Country':
-        return 'IPTC:CountryPrimaryLocationName';
-
-      case 'IPTC:CountryPrimaryLocationCode':
-      case 'CountryPrimaryLocationCode':
-      case 'CountryCode':
-        return 'IPTC:CountryPrimaryLocationCode';
-
-      case 'IPTC:Urgency':
-      case 'Urgency':
-        return 'IPTC:Urgency';
-
-      case 'IPTC:SpecialInstructions':
-      case 'SpecialInstructions':
-      case 'XMP:Instructions':
-      case 'XMP-photoshop:Instructions':
-        return 'IPTC:SpecialInstructions';
-
-      case 'XMP-getty:Personality':
-      case 'XMP:Personality':
-      case 'Personality':
-        return 'XMP-getty:Personality';
-
-      default:
-        return null;
-    }
   }
 
   Widget _buildExifRow(String label, String exifKey) {
@@ -1759,11 +747,6 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
   @override
   Widget build(BuildContext context) {
-    // Ensure controllers are updated with current metadata
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _updateControllersFromMetadata();
-    });
-
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
@@ -1880,6 +863,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                                 (result['metadata'] ?? {})
                                                     as Map);
                                         _normalizeMetadataForUi(); // Split supplemental categories
+                                        _syncPanelValuesFromMetadata();
                                         setState(() {});
                                         _loadExifData(path: _currentImagePath);
                                       } catch (_) {}
@@ -2002,6 +986,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                                 (result['metadata'] ?? {})
                                                     as Map);
                                         _normalizeMetadataForUi(); // Split supplemental categories
+                                        _syncPanelValuesFromMetadata();
                                         setState(() {});
                                         _loadExifData(path: _currentImagePath);
                                       } catch (_) {}
@@ -2109,7 +1094,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                       padding: const EdgeInsets.all(6),
                       child: Container(
                         height: double.infinity,
-                        child: _buildTwoColumnMetadata(),
+                        child: _buildIptcFieldsPanel(),
                       ),
                     ),
                   ),

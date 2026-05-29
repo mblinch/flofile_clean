@@ -10,6 +10,7 @@ class ThumbnailPopupDialog extends StatefulWidget {
   final int currentIndex;
   final Function(int) onImageSelected;
   final VoidCallback? onEditMetadata;
+
   /// Images that have had IPTC saved successfully in this session (or restored from prefs).
   final Set<String> savedImages;
   final Set<String> uploadedImages;
@@ -122,7 +123,8 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(7),
-                    border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
+                    border:
+                        Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
                   ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -139,10 +141,14 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         child: Text(
                           p.basename(imagePath),
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.black87),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.black87),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -166,7 +172,8 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                         color: Colors.black.withOpacity(0.6),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Icon(Icons.close, size: 16, color: Colors.white),
+                      child: const Icon(Icons.close,
+                          size: 16, color: Colors.white),
                     ),
                   ),
                 ),
@@ -183,8 +190,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
     final Size screenSize = MediaQuery.of(context).size;
     final Offset anchor = _lastSecondaryTapPosition ??
         Offset(screenSize.width / 2, screenSize.height / 2);
-
-    showAppContextMenu(
+    showAppContextMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         anchor.dx,
@@ -193,86 +199,49 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
         screenSize.height - anchor.dy,
       ),
       items: [
-        PopupMenuItem(
+        AppPopupMenu.tile(
           value: 'select',
-          child: Row(
-            children: [
-              const Icon(Icons.check, size: 16),
-              const SizedBox(width: 8),
-              const Text('Select Image'),
-            ],
-          ),
+          label: 'Select Image',
+          icon: Icons.check,
         ),
         if (widget.onEditMetadata != null)
-          PopupMenuItem(
+          AppPopupMenu.tile(
             value: 'edit',
-            child: Row(
-              children: [
-                const Icon(Icons.edit, size: 16),
-                const SizedBox(width: 8),
-                const Text('Edit IPTC'),
-              ],
-            ),
+            label: 'Edit IPTC',
+            icon: Icons.edit_outlined,
           ),
-        PopupMenuItem(
+        AppPopupMenu.tile(
           value: 'copy_metadata',
-          child: Row(
-            children: [
-              const Icon(Icons.copy, size: 16),
-              const SizedBox(width: 8),
-              const Text('Copy Metadata'),
-            ],
-          ),
+          label: 'Copy Metadata',
+          icon: Icons.copy_outlined,
         ),
-        PopupMenuItem(
+        AppPopupMenu.tile(
           value: 'paste_metadata',
-          child: Row(
-            children: [
-              const Icon(Icons.paste, size: 16),
-              const SizedBox(width: 8),
-              const Text('Paste Metadata'),
-            ],
-          ),
+          label: 'Paste Metadata',
+          icon: Icons.paste_outlined,
         ),
-        PopupMenuItem(
+        AppPopupMenu.tile(
           value: 'apply_iptc_template',
-          child: Row(
-            children: [
-              const Icon(Icons.description, size: 16),
-              const SizedBox(width: 8),
-              const Text('Apply IPTC Template'),
-            ],
-          ),
+          label: 'Apply IPTC Template',
+          icon: Icons.description_outlined,
         ),
-        PopupMenuItem(
+        const PopupMenuDivider(height: 1),
+        AppPopupMenu.tile(
           value: 'open',
-          child: Row(
-            children: [
-              const Icon(Icons.open_in_new, size: 16),
-              const SizedBox(width: 8),
-              const Text('Open in Finder'),
-            ],
-          ),
+          label: 'Open in Finder',
+          icon: Icons.open_in_new,
         ),
-        PopupMenuItem(
+        AppPopupMenu.tile(
           value: 'rename',
-          child: Row(
-            children: [
-              const Icon(Icons.edit, size: 16),
-              const SizedBox(width: 8),
-              const Text('Rename Image'),
-            ],
-          ),
+          label: 'Rename Image',
+          icon: Icons.drive_file_rename_outline,
         ),
-        PopupMenuItem(
+        const PopupMenuDivider(height: 1),
+        AppPopupMenu.tile(
           value: 'delete',
-          child: Row(
-            children: [
-              const Icon(Icons.delete, size: 16),
-              const SizedBox(width: 8),
-              const Text('Delete Image'),
-            ],
-          ),
+          label: 'Delete Image',
+          icon: Icons.delete_outline,
+          destructive: true,
         ),
       ],
     ).then((value) {
@@ -359,8 +328,17 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                   const Spacer(),
                   // Thumbnail size controls
                   _popupToolbarBtn(Icons.remove, () {
-                    const steps = [100.0, 150.0, 200.0, 250.0, 300.0, 400.0, 500.0];
-                    final idx = steps.lastIndexWhere((s) => s < _popupThumbSize);
+                    const steps = [
+                      100.0,
+                      150.0,
+                      200.0,
+                      250.0,
+                      300.0,
+                      400.0,
+                      500.0
+                    ];
+                    final idx =
+                        steps.lastIndexWhere((s) => s < _popupThumbSize);
                     if (idx >= 0) setState(() => _popupThumbSize = steps[idx]);
                   }),
                   Padding(
@@ -377,7 +355,15 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                     ),
                   ),
                   _popupToolbarBtn(Icons.add, () {
-                    const steps = [100.0, 150.0, 200.0, 250.0, 300.0, 400.0, 500.0];
+                    const steps = [
+                      100.0,
+                      150.0,
+                      200.0,
+                      250.0,
+                      300.0,
+                      400.0,
+                      500.0
+                    ];
                     final idx = steps.indexWhere((s) => s > _popupThumbSize);
                     if (idx >= 0) setState(() => _popupThumbSize = steps[idx]);
                   }),
@@ -386,7 +372,8 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                     onTap: () => Navigator.of(context).pop(),
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
-                      child: Icon(Icons.close, size: 14, color: Colors.grey.shade600),
+                      child: Icon(Icons.close,
+                          size: 14, color: Colors.grey.shade600),
                     ),
                   ),
                 ],
@@ -486,7 +473,8 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                         child: Container(
                                           width: double.infinity,
                                           height: double.infinity,
-                                          decoration: const BoxDecoration(color: Colors.white),
+                                          decoration: const BoxDecoration(
+                                              color: Colors.white),
                                           child: OrientedFilePreview(
                                             path: imagePath,
                                             fit: BoxFit.contain,
@@ -507,11 +495,18 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                                             style: TextStyle(
                                               fontSize: 60,
                                               fontWeight: FontWeight.bold,
-                                              color: Colors.grey.shade600.withValues(alpha: 0.72),
+                                              color: Colors.grey.shade600
+                                                  .withValues(alpha: 0.72),
                                               letterSpacing: 2.0,
                                               shadows: const [
-                                                Shadow(offset: Offset(0, 0), blurRadius: 3, color: Color(0xE6FFFFFF)),
-                                                Shadow(offset: Offset(0, 1), blurRadius: 2, color: Color(0x66000000)),
+                                                Shadow(
+                                                    offset: Offset(0, 0),
+                                                    blurRadius: 3,
+                                                    color: Color(0xE6FFFFFF)),
+                                                Shadow(
+                                                    offset: Offset(0, 1),
+                                                    blurRadius: 2,
+                                                    color: Color(0x66000000)),
                                               ],
                                             ),
                                           ),
@@ -522,7 +517,8 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                               ),
                             ),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 2),
                               child: Text(
                                 p.basename(imagePath),
                                 style: const TextStyle(
@@ -548,5 +544,4 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
       ),
     );
   }
-
 }

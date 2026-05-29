@@ -11,6 +11,7 @@ import 'app_styled_dialogs.dart';
 import '../services/preferences_service.dart';
 import '../caption_style/caption_template.dart';
 import 'startup_caption_layout_preview.dart';
+import '../caption_style/wire_iptc_specs.dart';
 import '../services/iptc_template_apply_service.dart';
 import '../services/iptc_template_import_service.dart';
 import 'startup_iptc_template_panel.dart';
@@ -87,7 +88,13 @@ class _StartupDialogState extends State<StartupDialog> {
   final Set<String> _iptcKeysFoundInFiles = {};
   bool _loadingIptcFromFiles = false;
   bool _loadingExternalTemplate = false;
+  /// Set when an external template is loaded before an images folder is chosen.
+  bool _iptcTemplateLoadedBeforeFolder = false;
+  int _iptcTemplateRevision = 0;
   WireStyle _iptcWireStyle = WireStyle.getty;
+  /// Panel keys whose template value is intentionally blank → cleared from files on import.
+  Set<String> _iptcTemplateClearedFields = {};
+  List<String> _selectedImageFiles = [];
   final Map<WireStyle, String> _wireLabels = {};
 
   // Network status
@@ -113,6 +120,11 @@ class _StartupDialogState extends State<StartupDialog> {
 
   bool get _sportChosen =>
       widget.sport != null && widget.sport!.trim().isNotEmpty;
+
+  bool get _teamsChosen =>
+      selectedHomeTeam != null &&
+      selectedAwayTeam != null &&
+      selectedHomeTeam != selectedAwayTeam;
 
   @override
   void initState() {
@@ -222,13 +234,75 @@ class _StartupDialogState extends State<StartupDialog> {
     });
   }
 
+  Future<void> _clearIptcTemplateValues() async {
+    if (_loadingIptcFromFiles || _loadingExternalTemplate) return;
+    setState(() {
+      _iptcTemplateValues = {};
+      _iptcKeysFoundInFiles.clear();
+      _iptcTemplateLoadedBeforeFolder = false;
+      _iptcApplyMode = IptcApplyMode.onImport;
+      _iptcTemplateRevision++;
+    });
+    await _persistIptcTemplateValues();
+  }
+
+  Future<void> _loadOriginalIptcValuesFromFiles() async {
+    if (_loadingIptcFromFiles || _loadingExternalTemplate) return;
+    var imageFiles = List<String>.from(_selectedImageFiles);
+    if (imageFiles.isEmpty && selectedFolderPath != null) {
+      imageFiles = await _imageFilesInDirectory(selectedFolderPath!);
+    }
+    if (imageFiles.isEmpty || !mounted) return;
+
+    setState(() => _loadingIptcFromFiles = true);
+    try {
+      final folderIptc = await _collectIptcFromFolderSample(imageFiles);
+      if (!mounted) return;
+
+      final merged = IptcTemplateApplyService.panelValuesFromImportedTemplate(
+        folderIptc,
+        _iptcWireStyle,
+      );
+      setState(() {
+        _selectedImageFiles = imageFiles;
+        _iptcTemplateValues = merged;
+        _iptcKeysFoundInFiles
+          ..clear()
+          ..addAll(merged.keys.where(
+            (key) => !IptcTemplateApplyService.isInAppGeneratedFieldKey(key),
+          ));
+        _iptcTemplateLoadedBeforeFolder = false;
+        _iptcApplyMode = IptcApplyMode.onImport;
+        _iptcTemplateRevision++;
+      });
+      await _persistIptcTemplateValues();
+    } catch (e) {
+      print('Error loading original IPTC values from files: $e');
+    } finally {
+      if (mounted) setState(() => _loadingIptcFromFiles = false);
+    }
+  }
+
   Future<void> _loadExternalIptcTemplate() async {
     if (_loadingExternalTemplate) return;
 
+    String? lastTemplateDir;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      lastTemplateDir = prefs.getString('last_template_folder');
+    } catch (_) {}
+
     final filePath = await NativeFilePicker.pickFile(
       allowedExtensions: ['txt', 'xmp', 'jpg', 'jpeg'],
+      initialDirectory: lastTemplateDir,
     );
     if (filePath == null || !mounted) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+          'last_template_folder', File(filePath).parent.path);
+    } catch (_) {}
 
     setState(() => _loadingExternalTemplate = true);
     try {
@@ -246,9 +320,17 @@ class _StartupDialogState extends State<StartupDialog> {
       }
 
       setState(() {
-        _iptcTemplateValues = Map<String, String>.from(result.values);
+        _iptcTemplateValues =
+            IptcTemplateApplyService.panelValuesFromImportedTemplate(
+          result.values,
+          _iptcWireStyle,
+        );
         _iptcKeysFoundInFiles.clear();
         _iptcApplyMode = IptcApplyMode.onImport;
+        _iptcTemplateRevision++;
+        if (selectedFolderPath == null) {
+          _iptcTemplateLoadedBeforeFolder = true;
+        }
       });
       await _persistIptcTemplateValues();
 
@@ -283,6 +365,18 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   /// Persists IPTC template + apply mode; returns normalized preset for immediate use.
+  /// Preset keys whose template value is blank — to be cleared from files on import.
+  Set<String> _computeClearedFields() {
+    const neverClear = {'Time and Date', 'Date', 'Time'};
+    return WireIptcSpecs.fieldsForPanel(_iptcWireStyle)
+        .map((s) => s.storageKey)
+        .where((k) => !neverClear.contains(k))
+        .where((k) =>
+            !_iptcTemplateValues.containsKey(k) ||
+            _iptcTemplateValues[k]!.trim().isEmpty)
+        .toSet();
+  }
+
   Future<Map<String, String>> _persistIptcTemplateValues() async {
     final prefs = await SharedPreferences.getInstance();
     final preset =
@@ -295,6 +389,12 @@ class _StartupDialogState extends State<StartupDialog> {
     } else {
       await prefs.remove('selected_metadata_preset');
     }
+    // Persist which panel fields are intentionally blank (to clear on import).
+    _iptcTemplateClearedFields = _computeClearedFields();
+    await prefs.setStringList(
+      'selected_metadata_preset_cleared_fields',
+      _iptcTemplateClearedFields.toList(),
+    );
     final prefsService = await PreferencesService.getInstance();
     await prefsService.saveIptcApplyMode(_iptcApplyMode);
     return preset;
@@ -373,11 +473,23 @@ class _StartupDialogState extends State<StartupDialog> {
     '-IPTC:ObjectName',
     '-ObjectName',
     '-IPTC:SubLocation',
+    '-IPTC:Sub-location',
     '-SubLocation',
+    '-Sub-location',
+    '-Location',
+    '-XMP:Location',
+    '-XMP-iptcCore:Location',
+    '-LocationShownSublocation',
+    '-LocationCreatedSublocation',
     '-IPTC:City',
     '-City',
     '-IPTC:ProvinceState',
+    '-IPTC:Province-State',
     '-ProvinceState',
+    '-Province-State',
+    '-State',
+    '-XMP:State',
+    '-XMP-photoshop:State',
     '-IPTC:CountryPrimaryLocationName',
     '-Country',
     '-IPTC:CountryPrimaryLocationCode',
@@ -534,14 +646,24 @@ class _StartupDialogState extends State<StartupDialog> {
       ]),
       'Stadium': _firstMetaValue(meta, [
         'IPTC:SubLocation',
+        'IPTC:Sub-location',
         'SubLocation',
         'Sub-location',
+        'Location',
+        'XMP:Location',
+        'XMP-iptcCore:Location',
+        'LocationShownSublocation',
+        'LocationCreatedSublocation',
       ]),
       'City': _firstMetaValue(meta, ['IPTC:City', 'City']),
       'Province/State': _firstMetaValue(meta, [
         'IPTC:ProvinceState',
+        'IPTC:Province-State',
         'ProvinceState',
         'Province-State',
+        'State',
+        'XMP:State',
+        'XMP-photoshop:State',
       ]),
       'Country': _firstMetaValue(meta, [
         'IPTC:CountryPrimaryLocationName',
@@ -565,23 +687,100 @@ class _StartupDialogState extends State<StartupDialog> {
     };
   }
 
+  Future<Map<String, String>> _collectIptcFromFolderSample(
+    List<String> imageFiles,
+  ) async {
+    final merged = <String, String>{};
+    for (final path in imageFiles.take(8)) {
+      final raw = await _readIptcRawFromFile(path);
+      if (raw == null) continue;
+      _mergeIptcValues(
+        merged,
+        _iptcDisplayFromRaw(raw),
+        onlyIfEmpty: true,
+      );
+    }
+    return merged;
+  }
+
+  Future<List<String>> _imageFilesInDirectory(String folderPath) async {
+    final directory = Directory(folderPath);
+    final entities = await directory.list().toList();
+    return entities
+        .whereType<File>()
+        .map((entity) => entity.path)
+        .where((path) {
+          final lower = path.toLowerCase();
+          return lower.endsWith('.jpg') ||
+              lower.endsWith('.jpeg') ||
+              lower.endsWith('.png') ||
+              lower.endsWith('.tiff') ||
+              lower.endsWith('.bmp');
+        })
+        .toList();
+  }
+
   Future<void> _loadIptcFromFolderImages(List<String> imageFiles) async {
     if (imageFiles.isEmpty || !mounted) return;
     setState(() => _loadingIptcFromFiles = true);
     try {
-      final merged = Map<String, String>.from(_iptcTemplateValues);
+      final folderIptc = await _collectIptcFromFolderSample(imageFiles);
+      if (!mounted) return;
+
+      if (folderIptc.isEmpty) {
+        setState(() {
+          _loadingIptcFromFiles = false;
+          _iptcTemplateLoadedBeforeFolder = false;
+        });
+        return;
+      }
+
+      var overrideWithFolder = false;
+      // Whether the user was explicitly asked (so "Keep" means no folder merge).
+      var userChoseToKeep = false;
+      if (_iptcTemplateLoadedBeforeFolder && _iptcTemplateValues.isNotEmpty) {
+        setState(() => _loadingIptcFromFiles = false);
+        final useFolderIptc = await showAppConfirmDialog(
+          context: context,
+          title: 'Replace IPTC template?',
+          message:
+              'You loaded a template before choosing a folder. Replace it with IPTC read from the folder images?',
+          cancelLabel: 'Keep template',
+          confirmLabel: 'Use folder IPTC',
+        );
+        if (!mounted) return;
+        overrideWithFolder = useFolderIptc == true;
+        userChoseToKeep = !overrideWithFolder;
+        setState(() => _loadingIptcFromFiles = true);
+      }
+
       final foundInFiles = <String>{};
-      final sample = imageFiles.take(8).toList();
-      for (final path in sample) {
-        final raw = await _readIptcRawFromFile(path);
-        if (raw == null) continue;
+      final Map<String, String> merged;
+      if (overrideWithFolder) {
+        // Replace entirely with folder IPTC.
+        merged = IptcTemplateApplyService.panelValuesFromImportedTemplate(
+          folderIptc,
+          _iptcWireStyle,
+        );
+        for (final key in merged.keys) {
+          if (!IptcTemplateApplyService.isInAppGeneratedFieldKey(key)) {
+            foundInFiles.add(key);
+          }
+        }
+      } else if (userChoseToKeep) {
+        // User explicitly kept the template — don't let folder IPTC fill blank fields.
+        merged = Map<String, String>.from(_iptcTemplateValues);
+      } else {
+        // No prior template — fill empty fields from folder as usual.
+        merged = Map<String, String>.from(_iptcTemplateValues);
         _mergeIptcValues(
           merged,
-          _iptcDisplayFromRaw(raw),
+          folderIptc,
           onlyIfEmpty: true,
           foundInFilesKeys: foundInFiles,
         );
       }
+
       if (!mounted) return;
       setState(() {
         _iptcTemplateValues = merged;
@@ -589,10 +788,19 @@ class _StartupDialogState extends State<StartupDialog> {
           ..clear()
           ..addAll(foundInFiles);
         _loadingIptcFromFiles = false;
+        _iptcTemplateLoadedBeforeFolder = false;
+        if (overrideWithFolder) {
+          _iptcTemplateRevision++;
+        }
       });
     } catch (e) {
       print('Error loading IPTC from folder images: $e');
-      if (mounted) setState(() => _loadingIptcFromFiles = false);
+      if (mounted) {
+        setState(() {
+          _loadingIptcFromFiles = false;
+          _iptcTemplateLoadedBeforeFolder = false;
+        });
+      }
     }
   }
 
@@ -922,19 +1130,7 @@ class _StartupDialogState extends State<StartupDialog> {
 
       if (result != null) {
         // Check if folder contains images
-        final directory = Directory(result);
-        final List<FileSystemEntity> entities = await directory.list().toList();
-
-        final List<String> imageFiles = entities
-            .whereType<File>()
-            .map((entity) => entity.path)
-            .where((path) =>
-                path.toLowerCase().endsWith('.jpg') ||
-                path.toLowerCase().endsWith('.jpeg') ||
-                path.toLowerCase().endsWith('.png') ||
-                path.toLowerCase().endsWith('.tiff') ||
-                path.toLowerCase().endsWith('.bmp'))
-            .toList();
+        final imageFiles = await _imageFilesInDirectory(result);
 
         // Save the directory for next time
         try {
@@ -947,6 +1143,7 @@ class _StartupDialogState extends State<StartupDialog> {
 
         setState(() {
           selectedFolderPath = result;
+          _selectedImageFiles = imageFiles;
           hasImagesInFolder = imageFiles.isNotEmpty;
           isLoadingFolder = false;
         });
@@ -965,6 +1162,8 @@ class _StartupDialogState extends State<StartupDialog> {
           setState(() {
             _iptcTemplateValues = {};
             _iptcKeysFoundInFiles.clear();
+            _selectedImageFiles = [];
+            _iptcTemplateLoadedBeforeFolder = false;
           });
         }
 
@@ -1392,14 +1591,20 @@ class _StartupDialogState extends State<StartupDialog> {
     );
   }
 
-  /// Grey out and block interaction until an images folder is chosen.
-  Widget _lockedUntilFolder(Widget child) {
-    if (_folderChosen) return child;
+  /// Grey out and block interaction until a prior startup step is complete.
+  Widget _lockedUntil(bool unlocked, Widget child) {
+    if (unlocked) return child;
     return Opacity(
       opacity: 0.38,
       child: AbsorbPointer(child: child),
     );
   }
+
+  Widget _lockedUntilSport(Widget child) => _lockedUntil(_sportChosen, child);
+
+  Widget _lockedUntilFolder(Widget child) => _lockedUntil(_folderChosen, child);
+
+  Widget _lockedUntilTeams(Widget child) => _lockedUntil(_teamsChosen, child);
 
   Widget _buildGameDateRow() {
     if (!_folderChosen) return const SizedBox.shrink();
@@ -1550,70 +1755,72 @@ class _StartupDialogState extends State<StartupDialog> {
       children: [
         _buildSportSection(),
         const SizedBox(height: 10),
-        _sectionCard(
-          label: 'IMAGES FOLDER',
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                ElevatedGreyButton(
-                  label: isLoadingFolder
-                      ? 'Loading...'
-                      : 'Pick images folder',
-                  fontSize: 10,
-                  icon: Icons.folder_open,
-                  onPressed: (!_sportChosen || isLoadingFolder)
-                      ? null
-                      : _pickFolder,
-                ),
-                if (selectedFolderPath != null) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _pill(
-                      icon: Icons.folder_outlined,
-                      text: selectedFolderPath!,
-                      expand: true,
+        _lockedUntilSport(
+          _sectionCard(
+            label: 'IMAGES FOLDER',
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 180,
+                    child: ElevatedGreyButton(
+                      label: isLoadingFolder
+                          ? 'Loading…'
+                          : 'Pick images folder',
+                      fontSize: 10,
+                      icon: Icons.folder_open,
+                      isTealGradient: true,
+                      fullWidth: true,
+                      onPressed: (!_sportChosen || isLoadingFolder)
+                          ? null
+                          : _pickFolder,
                     ),
                   ),
-                  if (selectedGameDate != null) ...[
+                  if (selectedFolderPath != null) ...[
                     const SizedBox(width: 8),
-                    _pill(
-                      icon: Icons.circle,
-                      iconSize: 6,
-                      iconColor: Colors.green,
-                      text: _formatDate(selectedGameDate!),
+                    Expanded(
+                      child: _pill(
+                        icon: Icons.folder_outlined,
+                        text: selectedFolderPath!,
+                        expand: true,
+                      ),
                     ),
+                    if (selectedGameDate != null) ...[
+                      const SizedBox(width: 8),
+                      _pill(
+                        icon: Icons.circle,
+                        iconSize: 6,
+                        iconColor: Colors.green,
+                        text: _formatDate(selectedGameDate!),
+                      ),
+                    ],
                   ],
                 ],
-              ],
-            ),
-            _buildGameDateRow(),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _lockedUntilFolder(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTeamsSection(),
-              const SizedBox(height: 10),
-              _sectionCard(
-                label: 'CAPTION LAYOUT',
-                children: [
-                  StartupCaptionLayoutPreview(
-                    sport: widget.sport,
-                    compact: false,
-                    onWireStyleChanged: _onCaptionWireStyleChanged,
-                  ),
-                ],
               ),
-              const SizedBox(height: 10),
-              _buildOptionalSection(),
-              const SizedBox(height: 12),
-              _buildGoTimeButton(),
+              _buildGameDateRow(),
             ],
           ),
         ),
+        const SizedBox(height: 10),
+        _lockedUntilFolder(_buildTeamsSection()),
+        const SizedBox(height: 10),
+        _lockedUntilTeams(
+          _sectionCard(
+            label: 'CAPTION LAYOUT',
+            children: [
+              StartupCaptionLayoutPreview(
+                sport: widget.sport,
+                compact: false,
+                onWireStyleChanged: _onCaptionWireStyleChanged,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _lockedUntilTeams(_buildOptionalSection()),
+        const SizedBox(height: 12),
+        _lockedUntilTeams(_buildGoTimeButton()),
       ],
     );
   }
@@ -1650,48 +1857,42 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   Widget _buildRightIptcPanel() {
-    return Container(
-      decoration: _panelDecoration(),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildIptcInfoHeader(),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-              child: StartupIptcTemplatePanel(
-                selectedWire: _iptcWireStyle,
-                wireLabels: _wireLabels,
-                values: _iptcTemplateValues,
-                foundInFilesKeys: _iptcKeysFoundInFiles,
-                isLoading: _loadingIptcFromFiles,
-                onValueChanged: _onIptcTemplateValueChanged,
-                onWireSelected: _onCaptionWireStyleChanged,
-                iptcApplyMode: _iptcApplyMode,
-                onIptcApplyModeChanged: (mode) {
-                  setState(() => _iptcApplyMode = mode);
-                },
+    return _lockedUntilTeams(
+      Container(
+        decoration: _panelDecoration(),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildIptcInfoHeader(),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                child: StartupIptcTemplatePanel(
+                  selectedWire: _iptcWireStyle,
+                  wireLabels: _wireLabels,
+                  values: _iptcTemplateValues,
+                  foundInFilesKeys: _iptcKeysFoundInFiles,
+                  isLoading: _loadingIptcFromFiles,
+                  onValueChanged: _onIptcTemplateValueChanged,
+                  onWireSelected: _onCaptionWireStyleChanged,
+                  iptcApplyMode: _iptcApplyMode,
+                  onIptcApplyModeChanged: (mode) {
+                    setState(() => _iptcApplyMode = mode);
+                  },
+                  onLoadTemplate: _loadExternalIptcTemplate,
+                  onClearTemplate: _clearIptcTemplateValues,
+                  onLoadOriginalValues: _loadOriginalIptcValuesFromFiles,
+                  isLoadTemplateLoading: _loadingExternalTemplate,
+                  isLoadTemplateDisabled: _loadingIptcFromFiles,
+                  isLoadOriginalValuesDisabled:
+                      _selectedImageFiles.isEmpty && !hasImagesInFolder,
+                  templateRevision: _iptcTemplateRevision,
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedGreyButton(
-                label: _loadingExternalTemplate
-                    ? 'Loading template…'
-                    : 'Load template…',
-                fontSize: 10,
-                icon: Icons.upload_file_outlined,
-                onPressed: _loadingExternalTemplate || _loadingIptcFromFiles
-                    ? null
-                    : _loadExternalIptcTemplate,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1738,71 +1939,72 @@ class _StartupDialogState extends State<StartupDialog> {
       children: [
         _buildSportSection(),
         const SizedBox(height: 10),
-        // ── IMAGES FOLDER (always active) ──
-        _sectionCard(
-          label: 'IMAGES FOLDER',
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                ElevatedGreyButton(
-                  label: isLoadingFolder
-                      ? 'Loading...'
-                      : 'Pick images folder',
-                  fontSize: 10,
-                  icon: Icons.folder_open,
-                  onPressed: (!_sportChosen || isLoadingFolder)
-                      ? null
-                      : _pickFolder,
-                ),
-                if (selectedFolderPath != null) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _pill(
-                      icon: Icons.folder_outlined,
-                      text: selectedFolderPath!,
-                      expand: true,
+        _lockedUntilSport(
+          _sectionCard(
+            label: 'IMAGES FOLDER',
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 180,
+                    child: ElevatedGreyButton(
+                      label: isLoadingFolder
+                          ? 'Loading…'
+                          : 'Pick images folder',
+                      fontSize: 10,
+                      icon: Icons.folder_open,
+                      isTealGradient: true,
+                      fullWidth: true,
+                      onPressed: (!_sportChosen || isLoadingFolder)
+                          ? null
+                          : _pickFolder,
                     ),
                   ),
-                  if (selectedGameDate != null) ...[
+                  if (selectedFolderPath != null) ...[
                     const SizedBox(width: 8),
-                    _pill(
-                      icon: Icons.circle,
-                      iconSize: 6,
-                      iconColor: Colors.green,
-                      text: _formatDate(selectedGameDate!),
+                    Expanded(
+                      child: _pill(
+                        icon: Icons.folder_outlined,
+                        text: selectedFolderPath!,
+                        expand: true,
+                      ),
                     ),
+                    if (selectedGameDate != null) ...[
+                      const SizedBox(width: 8),
+                      _pill(
+                        icon: Icons.circle,
+                        iconSize: 6,
+                        iconColor: Colors.green,
+                        text: _formatDate(selectedGameDate!),
+                      ),
+                    ],
                   ],
                 ],
-              ],
-            ),
-            _buildGameDateRow(),
-          ],
-        ),
-        const SizedBox(height: 10),
-        _lockedUntilFolder(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTeamsSection(),
-              const SizedBox(height: 10),
-              _sectionCard(
-                label: 'CAPTION LAYOUT',
-                children: [
-                  StartupCaptionLayoutPreview(
-                    sport: widget.sport,
-                    compact: false,
-                    onWireStyleChanged: _onCaptionWireStyleChanged,
-                  ),
-                ],
               ),
-              const SizedBox(height: 10),
-              _buildOptionalSection(),
-              const SizedBox(height: 12),
-              _buildGoTimeButton(),
+              _buildGameDateRow(),
             ],
           ),
         ),
+        const SizedBox(height: 10),
+        _lockedUntilFolder(_buildTeamsSection()),
+        const SizedBox(height: 10),
+        _lockedUntilTeams(
+          _sectionCard(
+            label: 'CAPTION LAYOUT',
+            children: [
+              StartupCaptionLayoutPreview(
+                sport: widget.sport,
+                compact: false,
+                onWireStyleChanged: _onCaptionWireStyleChanged,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _lockedUntilTeams(_buildOptionalSection()),
+        const SizedBox(height: 12),
+        _lockedUntilTeams(_buildGoTimeButton()),
       ],
     );
   }
