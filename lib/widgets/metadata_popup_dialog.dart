@@ -6,9 +6,25 @@ import '../caption_style/caption_template.dart';
 import '../services/iptc_template_apply_service.dart';
 import '../services/iptc_template_import_service.dart';
 import '../utils/exiftool_helper.dart';
+import 'app_styled_dialogs.dart';
 import 'oriented_file_preview.dart';
 import 'startup_iptc_template_panel.dart';
 import '../helpers.dart';
+
+const List<BoxShadow> _kMetadataPanelShadow = [
+  BoxShadow(
+    color: Color(0x14000000),
+    blurRadius: 3,
+    offset: Offset(0, 1.5),
+  ),
+];
+
+BoxDecoration _metadataPanelDecoration({Color? color}) => BoxDecoration(
+      color: color ?? Colors.white,
+      borderRadius: BorderRadius.circular(4),
+      border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+      boxShadow: _kMetadataPanelShadow,
+    );
 
 class MetadataPopupDialog extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -466,11 +482,7 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
   Widget _buildIptcFieldsPanel() {
     return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
-        borderRadius: BorderRadius.circular(4),
-        color: Colors.white,
-      ),
+      decoration: _metadataPanelDecoration(),
       child: Padding(
         padding: const EdgeInsets.all(6),
         child: StartupIptcTemplatePanel(
@@ -583,17 +595,13 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
           // Format specific EXIF values for better display
           if (exifKey == 'DateTimeOriginal') {
-            // Format date/time for display with milliseconds
             try {
-              final subSecTime = exifData!['SubSecTimeOriginal']?.toString();
-              final dt = _parseExifDateTime(value, subSecTime);
-              final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-              final minute = dt.minute.toString().padLeft(2, '0');
-              final second = dt.second.toString().padLeft(2, '0');
-              final millisecond = dt.millisecond.toString().padLeft(3, '0');
-              final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-              value =
-                  '${dt.month}/${dt.day}/${dt.year} $hour:$minute:$second.$millisecond $ampm';
+              final dt =
+                  IptcTemplateImportService.parseExifDateTimeFromMeta(exifData!);
+              if (dt != null) {
+                value =
+                    '${dt.month}/${dt.day}/${dt.year} ${IptcTemplateImportService.formatExifTimeHeading(exifData!)}';
+              }
             } catch (e) {
               // Keep original value if parsing fails
             }
@@ -651,115 +659,22 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
     );
   }
 
-  // Parse EXIF DateTime with support for milliseconds
-  DateTime _parseExifDateTime(String dateStr, [String? subSecTime]) {
-    // Handle EXIF date format: YYYY:MM:DD HH:MM:SS or YYYY:MM:DD HH:MM:SS.sss
-    // Replace colons in date part with dashes for ISO format
-    String isoStr = dateStr.replaceFirst(':', '-').replaceFirst(':', '-');
-
-    // Check if milliseconds are present in the main date string
-    if (isoStr.contains('.')) {
-      // Already has milliseconds, parse directly
-      return DateTime.parse(isoStr);
-    } else if (subSecTime != null && subSecTime.isNotEmpty) {
-      // Combine DateTimeOriginal with SubSecTimeOriginal for milliseconds
-      // SubSecTimeOriginal is typically in format like "123" (milliseconds) or "1234" (microseconds)
-      int milliseconds = 0;
-      try {
-        final subSec = int.parse(subSecTime);
-        if (subSecTime.length <= 3) {
-          // Direct milliseconds
-          milliseconds = subSec;
-        } else if (subSecTime.length == 4) {
-          // Microseconds, convert to milliseconds
-          milliseconds = subSec ~/ 10;
-        } else if (subSecTime.length == 6) {
-          // Nanoseconds, convert to milliseconds
-          milliseconds = subSec ~/ 1000000;
-        }
-      } catch (e) {
-        print('Error parsing SubSecTimeOriginal: $e');
-      }
-
-      // Parse the base datetime and add milliseconds
-      final baseDateTime = DateTime.parse(isoStr);
-      return DateTime(
-        baseDateTime.year,
-        baseDateTime.month,
-        baseDateTime.day,
-        baseDateTime.hour,
-        baseDateTime.minute,
-        baseDateTime.second,
-        milliseconds,
-      );
-    } else {
-      // No milliseconds, parse and return with 0 milliseconds
-      return DateTime.parse(isoStr);
-    }
-  }
-
-  String _formatDateForDisplay() {
-    if (exifData == null || exifData!['DateTimeOriginal'] == null) return '';
-
-    try {
-      final dateTimeStr = exifData!['DateTimeOriginal'].toString();
-      final subSecTime = exifData!['SubSecTimeOriginal']?.toString();
-      final dt = _parseExifDateTime(dateTimeStr, subSecTime);
-
-      const months = [
-        'Jan',
-        'Feb',
-        'Mar',
-        'Apr',
-        'May',
-        'Jun',
-        'Jul',
-        'Aug',
-        'Sep',
-        'Oct',
-        'Nov',
-        'Dec'
-      ];
-
-      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-    } catch (e) {
-      return '';
-    }
-  }
-
-  String _formatTimeForDisplay() {
-    if (exifData == null || exifData!['DateTimeOriginal'] == null) return '';
-
-    try {
-      final dateTimeStr = exifData!['DateTimeOriginal'].toString();
-      final subSecTime = exifData!['SubSecTimeOriginal']?.toString();
-      final dt = _parseExifDateTime(dateTimeStr, subSecTime);
-      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-      final minute = dt.minute.toString().padLeft(2, '0');
-      final second = dt.second.toString().padLeft(2, '0');
-      final millisecond = dt.millisecond.toString().padLeft(3, '0');
-      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-      return '$hour:$minute:$second.$millisecond $ampm';
-    } catch (e) {
-      return '';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.7,
-        height: MediaQuery.of(context).size.height * 0.8,
+        width: MediaQuery.of(context).size.width * 0.85,
+        height: MediaQuery.of(context).size.height * 0.85,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
+              color: Colors.black.withValues(alpha: 0.18),
+              blurRadius: 24,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
@@ -767,33 +682,42 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
           children: [
             // Header
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                gradient: const LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
+                ),
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  topRight: Radius.circular(12),
+                  topLeft: Radius.circular(6),
+                  topRight: Radius.circular(6),
+                ),
+                border: Border(
+                  bottom: BorderSide(
+                    color: const Color(0xFFD0D0D0).withValues(alpha: 0.7),
+                    width: 0.7,
+                  ),
                 ),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.edit_note, color: Colors.black87),
-                  const SizedBox(width: 12),
                   const Text(
                     'Edit IPTC Metadata',
                     style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                      fontFamily: 'Inter',
+                      fontSize: 13,
+                      fontVariations: [FontVariation('wght', 800)],
+                      color: Color(0xFF333333),
+                      letterSpacing: -0.5,
                     ),
                   ),
                   const Spacer(),
-                  IconButton(
+                  ElevatedGreyButton(
+                    label: 'Close',
+                    fontSize: 10,
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.close, color: Colors.black87),
-                    tooltip: 'Close',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
@@ -809,29 +733,24 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                     Padding(
                       padding: const EdgeInsets.all(6),
                       child: Container(
-                        width: 600,
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                          border:
-                              Border.all(color: Colors.grey.shade400, width: 1),
-                        ),
+                        width: 340,
+                        padding: const EdgeInsets.all(10),
+                        decoration: _metadataPanelDecoration(),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.start,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
+                              borderRadius: BorderRadius.circular(4),
                               child: SizedBox(
-                                width: 568,
-                                height: 400,
+                                width: 320,
+                                height: 220,
                                 child: OrientedFilePreview(
                                   key: ValueKey(
                                       _currentImagePath ?? widget.imagePath),
                                   path: _currentImagePath ?? widget.imagePath!,
                                   fit: BoxFit.contain,
-                                  cacheWidth: 1200,
+                                  cacheWidth: 640,
                                   filterQuality: FilterQuality.high,
                                 ),
                               ),
@@ -842,134 +761,53 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                // Previous button (left)
-                                GestureDetector(
-                                  onTap: () async {
-                                    // Save current metadata before moving to previous image
+                                ElevatedGreyButton(
+                                  label: 'Prev',
+                                  fontSize: 10,
+                                  onPressed: () async {
                                     final outgoing =
                                         _buildOutgoingMetadataFromState();
                                     widget.onMetadataUpdated(outgoing);
 
                                     if (widget.onRequestImageChange != null) {
-                                      // Ask parent to move -1 and return new path/metadata
                                       try {
                                         final result = await widget
                                             .onRequestImageChange!(-1);
-                                        // Update without animation to prevent flashing
                                         _currentImagePath =
                                             (result['path'] as String?);
                                         currentMetadata =
                                             Map<String, dynamic>.from(
                                                 (result['metadata'] ?? {})
                                                     as Map);
-                                        _normalizeMetadataForUi(); // Split supplemental categories
+                                        _normalizeMetadataForUi();
                                         _syncPanelValuesFromMetadata();
                                         setState(() {});
                                         _loadExifData(path: _currentImagePath);
                                       } catch (_) {}
                                     } else if (widget.onPreviousImage != null) {
-                                      print(
-                                          'DEBUG: Calling widget.onPreviousImage from popup');
                                       widget.onPreviousImage!();
                                     }
                                   },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 7),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          'Prev',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                                 ),
-
-                                // Copy and Paste buttons grouped in the middle
                                 Row(
                                   children: [
-                                    // Copy button
-                                    GestureDetector(
-                                      onTap: _copyMetadata,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 7),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade100,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: Colors.grey.shade300),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              'Copy',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.grey.shade700,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                                    ElevatedGreyButton(
+                                      label: 'Copy',
+                                      fontSize: 10,
+                                      onPressed: _copyMetadata,
                                     ),
-
-                                    const SizedBox(width: 12),
-
-                                    // Paste button
-                                    GestureDetector(
-                                      onTap: _pasteMetadata,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 10, vertical: 7),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade100,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          border: Border.all(
-                                              color: Colors.grey.shade300),
-                                        ),
-                                        child: Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.center,
-                                          children: [
-                                            Text(
-                                              'Paste',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w500,
-                                                color: Colors.grey.shade700,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                                    const SizedBox(width: 6),
+                                    ElevatedGreyButton(
+                                      label: 'Paste',
+                                      fontSize: 10,
+                                      onPressed: _pasteMetadata,
                                     ),
                                   ],
                                 ),
-
-                                // Next button (right)
-                                GestureDetector(
-                                  onTap: () async {
-                                    // Save current metadata before moving to next image
+                                ElevatedGreyButton(
+                                  label: 'Next',
+                                  fontSize: 10,
+                                  onPressed: () async {
                                     final outgoing =
                                         _buildOutgoingMetadataFromState();
                                     widget.onMetadataUpdated(outgoing);
@@ -978,102 +816,87 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
                                       try {
                                         final result = await widget
                                             .onRequestImageChange!(1);
-                                        // Update without animation to prevent flashing
                                         _currentImagePath =
                                             (result['path'] as String?);
                                         currentMetadata =
                                             Map<String, dynamic>.from(
                                                 (result['metadata'] ?? {})
                                                     as Map);
-                                        _normalizeMetadataForUi(); // Split supplemental categories
+                                        _normalizeMetadataForUi();
                                         _syncPanelValuesFromMetadata();
                                         setState(() {});
                                         _loadExifData(path: _currentImagePath);
                                       } catch (_) {}
                                     } else if (widget.onNextImage != null) {
-                                      print(
-                                          'DEBUG: Calling widget.onNextImage from popup');
                                       widget.onNextImage!();
                                     }
                                   },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 7),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(4),
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          'Next',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
                                 ),
                               ],
                             ),
 
-                            // Divider under buttons
-                            const SizedBox(height: 6),
+                            const SizedBox(height: 8),
                             Container(
-                              height: 1,
+                              height: 0.7,
                               width: double.infinity,
-                              color: Colors.grey.shade300,
+                              color: const Color(0xFFD0D0D0),
                             ),
 
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 10),
                             // EXIF data section
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
+                              padding: const EdgeInsets.all(10),
+                              decoration: _metadataPanelDecoration(),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  RichText(
-                                    text: TextSpan(
-                                      children: [
-                                        TextSpan(
-                                          text: (_currentImagePath ??
-                                                      widget.imagePath) !=
-                                                  null
-                                              ? (_currentImagePath ??
-                                                      widget.imagePath)!
-                                                  .split('/')
-                                                  .last
-                                              : 'Image',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                        TextSpan(
-                                          text:
-                                              ' • ${_formatDateForDisplay()} • ${_formatTimeForDisplay()}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w400,
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
+                                  Text(
+                                    (_currentImagePath ?? widget.imagePath) !=
+                                            null
+                                        ? (_currentImagePath ??
+                                                widget.imagePath)!
+                                            .split('/')
+                                            .last
+                                        : 'Image',
+                                    style: TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontSize: 12,
+                                      fontVariations: const [
+                                        FontVariation('wght', 600),
                                       ],
+                                      letterSpacing: -0.5,
+                                      color: Colors.grey.shade700,
                                     ),
                                   ),
+                                  if (exifData != null &&
+                                      (IptcTemplateImportService
+                                              .formatExifDateHeading(exifData!)
+                                              .isNotEmpty ||
+                                          IptcTemplateImportService
+                                              .formatExifTimeHeading(exifData!)
+                                              .isNotEmpty)) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      [
+                                        IptcTemplateImportService
+                                            .formatExifDateHeading(exifData!),
+                                        IptcTemplateImportService
+                                            .formatExifTimeHeading(exifData!),
+                                      ]
+                                          .where((s) => s.isNotEmpty)
+                                          .join(' • '),
+                                      style: TextStyle(
+                                        fontFamily: 'Inter',
+                                        fontSize: 11,
+                                        fontVariations: const [
+                                          FontVariation('wght', 400),
+                                        ],
+                                        letterSpacing: -0.5,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 8),
                                   _buildExifRow('Settings', 'Settings'),
                                   _buildExifRow('ISO', 'ISO'),
@@ -1104,70 +927,34 @@ class _MetadataPopupDialogState extends State<MetadataPopupDialog> {
 
             // Footer with action buttons
             Container(
-              padding: const EdgeInsets.only(
-                  left: 16, right: 16, top: 16, bottom: 0),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                color: Colors.white,
                 borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(12),
-                  bottomRight: Radius.circular(12),
+                  bottomLeft: Radius.circular(6),
+                  bottomRight: Radius.circular(6),
+                ),
+                border: Border(
+                  top: BorderSide(
+                    color: const Color(0xFFD0D0D0).withValues(alpha: 0.7),
+                    width: 0.7,
+                  ),
                 ),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  GestureDetector(
-                    onTap: _discardChanges,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  ElevatedGreyButton(
+                    label: 'Cancel',
+                    fontSize: 11,
+                    onPressed: _discardChanges,
                   ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () {
-                      _saveChanges();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Save Changes',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  const SizedBox(width: 8),
+                  ElevatedGreyButton(
+                    label: 'Save Changes',
+                    fontSize: 11,
+                    isPrimary: true,
+                    onPressed: _saveChanges,
                   ),
                 ],
               ),

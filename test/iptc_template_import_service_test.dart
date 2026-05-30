@@ -56,4 +56,23 @@ void main() {
       expect(result.skippedCount, 2);
     });
   });
+
+  group('formatExifDateTimeForPanel', () {
+    test('drops sub-second precision from display', () {
+      final formatted = IptcTemplateImportService.formatExifDateTimeForPanel({
+        'DateTimeOriginal': '2026:05:27 14:30:45.123456789',
+      });
+
+      expect(formatted, '2026-05-27 14:30:45');
+    });
+
+    test('ignores SubSecTimeOriginal in display', () {
+      final formatted = IptcTemplateImportService.formatExifDateTimeForPanel({
+        'DateTimeOriginal': '2026:05:27 14:30:45',
+        'SubSecTimeOriginal': '456789',
+      });
+
+      expect(formatted, '2026-05-27 14:30:45');
+    });
+  });
 }

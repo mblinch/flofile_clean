@@ -509,21 +509,7 @@ class _StartupDialogState extends State<StartupDialog> {
   ];
 
   String _formatExifDateTime(Map<String, dynamic> meta) {
-    final raw = _firstMetaValue(meta, [
-      'DateTimeOriginal',
-      'CreateDate',
-      'ModifyDate',
-    ]);
-    if (raw.isEmpty) return '';
-    try {
-      final parts = raw.split(' ');
-      if (parts.isEmpty) return raw;
-      final datePart = parts[0].replaceAll(':', '-');
-      if (parts.length < 2) return datePart;
-      return '$datePart ${parts[1]}';
-    } catch (_) {
-      return raw;
-    }
+    return IptcTemplateImportService.formatExifDateTimeForPanel(meta);
   }
 
   Future<Map<String, dynamic>?> _readIptcRawFromFile(String imagePath) async {

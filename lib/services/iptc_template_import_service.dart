@@ -505,17 +505,126 @@ class IptcTemplateImportService {
     return values.where((e) => seen.add(e)).toList(growable: false);
   }
 
+  /// IPTC panel value for the "Time and Date" field.
+  static String formatExifDateTimeForPanel(Map<String, dynamic> meta) =>
+      _formatExifDateTime(meta);
+
   static String _formatExifDateTime(Map<String, dynamic> meta) {
-    final raw = _first(meta, ['DateTimeOriginal', 'CreateDate', 'ModifyDate']);
-    if (raw.isEmpty) return '';
-    try {
-      final parts = raw.split(' ');
-      if (parts.isEmpty) return raw;
-      final datePart = parts[0].replaceAll(':', '-');
-      if (parts.length < 2) return datePart;
-      return '$datePart ${parts[1]}';
-    } catch (_) {
+    final dt = parseExifDateTimeFromMeta(meta);
+    if (dt == null) {
+      final raw = _first(meta, ['DateTimeOriginal', 'CreateDate', 'ModifyDate']);
       return raw;
     }
+    final datePart =
+        '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+    final timePart = _formatClockTime(
+      hour: dt.hour,
+      minute: dt.minute,
+      second: dt.second,
+      use24Hour: true,
+    );
+    return '$datePart $timePart';
+  }
+
+  /// Parses EXIF date/time from metadata, truncating sub-second precision to ms.
+  static DateTime? parseExifDateTimeFromMeta(Map<String, dynamic> meta) {
+    final raw = _first(meta, ['DateTimeOriginal', 'CreateDate', 'ModifyDate']);
+    if (raw.isEmpty) return null;
+    final subSec = _first(meta, ['SubSecTimeOriginal']);
+    try {
+      return _parseExifDateTimeString(raw, subSec);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Compact date for UI previews: `May 27, 2026`.
+  static String formatExifDateHeading(Map<String, dynamic> meta) {
+    final dt = parseExifDateTimeFromMeta(meta);
+    if (dt == null) return '';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+
+  /// Compact time for UI previews: `3:45:12 PM`.
+  static String formatExifTimeHeading(Map<String, dynamic> meta) {
+    final dt = parseExifDateTimeFromMeta(meta);
+    if (dt == null) return '';
+    return _formatClockTime(
+      hour: dt.hour,
+      minute: dt.minute,
+      second: dt.second,
+      use24Hour: false,
+    );
+  }
+
+  static String _formatClockTime({
+    required int hour,
+    required int minute,
+    required int second,
+    required bool use24Hour,
+  }) {
+    final minuteStr = minute.toString().padLeft(2, '0');
+    final secondStr = second.toString().padLeft(2, '0');
+
+    if (use24Hour) {
+      final hourStr = hour.toString().padLeft(2, '0');
+      return '$hourStr:$minuteStr:$secondStr';
+    }
+
+    final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+    final ampm = hour >= 12 ? 'PM' : 'AM';
+    return '$displayHour:$minuteStr:$secondStr $ampm';
+  }
+
+  static DateTime _parseExifDateTimeString(String dateStr, [String? subSecTime]) {
+    var normalized = dateStr.trim().replaceFirst('T', ' ');
+    normalized = normalized.replaceFirst(RegExp(r'[+-]\d{2}:\d{2}$'), '');
+    normalized = normalized.replaceFirst(RegExp(r'Z$'), '');
+
+    var isoStr = normalized.replaceFirst(':', '-').replaceFirst(':', '-');
+
+    int milliseconds = 0;
+    String baseStr = isoStr;
+
+    if (isoStr.contains('.')) {
+      final dotIndex = isoStr.indexOf('.');
+      baseStr = isoStr.substring(0, dotIndex);
+      milliseconds = _subSecToMilliseconds(isoStr.substring(dotIndex + 1));
+    } else if (subSecTime != null && subSecTime.isNotEmpty) {
+      milliseconds = _subSecToMilliseconds(subSecTime);
+    }
+
+    final baseDateTime = DateTime.parse(baseStr);
+    return DateTime(
+      baseDateTime.year,
+      baseDateTime.month,
+      baseDateTime.day,
+      baseDateTime.hour,
+      baseDateTime.minute,
+      baseDateTime.second,
+      milliseconds,
+    );
+  }
+
+  /// Sub-second EXIF values may include microseconds or more; display only ms.
+  static int _subSecToMilliseconds(String subSec) {
+    final digits = subSec.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.isEmpty) return 0;
+    if (digits.length <= 3) return int.parse(digits);
+    return int.parse(digits.substring(0, 3));
   }
 }
