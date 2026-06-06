@@ -2756,387 +2756,258 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
     showDialog(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-                side: const BorderSide(color: Colors.black, width: 1),
-              ),
-              child: Container(
-                width: 500,
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.9,
-                ),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title
-                      Text(
-                        verb.isCustom ? 'Edit Custom Verb' : 'Edit Verb',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Label field
-                      Text(
-                        'Display Name',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade700),
-                      ),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: labelController,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'e.g., Skates',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+            return Center(
+              child: SizedBox(
+                width: kVerbEditDialogWidth,
+                child: AlertDialog(
+                  shape: kAppDialogShape,
+                  backgroundColor: Colors.white,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                  contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  title: Text(
+                    verb.isCustom ? 'Edit custom verb' : 'Edit verb',
+                    style: kAppDialogTitleStyle,
+                  ),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        TextField(
+                          controller: labelController,
+                          style: kAppDialogFieldTextStyle,
+                          decoration: appDialogFieldDecoration(
+                            hintText: 'e.g., Skates',
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          isDense: true,
                         ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Singular phrase field
-                      Text(
-                        'Singular Phrase (1 player)',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade700),
-                      ),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: singularController,
-                        style: const TextStyle(fontSize: 12),
-                        onChanged: (_) => setDialogState(() {}),
-                        decoration: InputDecoration(
-                          hintText: 'e.g., skates, battles, shoots',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: singularController,
+                          style: kAppDialogFieldTextStyle,
+                          onChanged: (_) => setDialogState(() {}),
+                          decoration: appDialogFieldDecoration(
+                            hintText: 'e.g., skates, battles, shoots',
                           ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          isDense: true,
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      // Example with 1 player
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.blue.shade200),
+                        const SizedBox(height: 6),
+                        AppDialogExamplePreview(
+                          title: 'Example (1 player)',
+                          text: buildExampleCaption(singularController.text, 1),
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            Expanded(
+                              child: Text(
+                                'Plural phrase (2+ players)',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
                             Text(
-                              'Example (1 player):',
+                              'Use plural',
                               style: TextStyle(
-                                  fontSize: 9,
-                                  color: Colors.blue.shade700,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              buildExampleCaption(singularController.text, 1),
-                              style: TextStyle(
-                                  fontSize: 10, color: Colors.blue.shade900),
-                              softWrap: true,
-                              overflow: TextOverflow.visible,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Plural phrase field
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Plural Phrase (2+ players)',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade700),
-                            ),
-                          ),
-                          Text(
-                            'Use plural',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade700),
-                          ),
-                          const SizedBox(width: 4),
-                          AppCompactCheckbox(
-                            value: usePluralPhrase,
-                            onChanged: (v) {
-                              setDialogState(() => usePluralPhrase = v);
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: pluralController,
-                        style: const TextStyle(fontSize: 12),
-                        enabled: usePluralPhrase,
-                        onChanged: (_) => setDialogState(() {}),
-                        decoration: InputDecoration(
-                          hintText: 'e.g., skate, battle, shoot',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      // Example with 2+ players
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.green.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Example (2+ players):',
-                              style: TextStyle(
-                                  fontSize: 9,
-                                  color: Colors.green.shade700,
-                                  fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              buildExampleCaption(
-                                  usePluralPhrase
-                                      ? pluralController.text
-                                      : singularController.text,
-                                  2),
-                              style: TextStyle(
-                                  fontSize: 10, color: Colors.green.shade900),
-                              softWrap: true,
-                              overflow: TextOverflow.visible,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Keywords (comma-separated; IPTC-style tags for this verb)
-                      Text(
-                        'Keywords',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade700),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: showKeywordsEditor
-                                ? TextField(
-                                    controller: keywordsController,
-                                    style: const TextStyle(fontSize: 12),
-                                    maxLines: 2,
-                                    onChanged: (_) => setDialogState(() {}),
-                                    decoration: InputDecoration(
-                                      hintText:
-                                          'e.g., pitch, pitcher, pitching (comma-separated)',
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(4),
-                                      ),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 8),
-                                      isDense: true,
-                                    ),
-                                  )
-                                : Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                      borderRadius: BorderRadius.circular(4),
-                                      color: Colors.grey.shade50,
-                                    ),
-                                    child: Text(
-                                      keywordsController.text.trim().isEmpty
-                                          ? '—'
-                                          : keywordsController.text,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: keywordsController.text
-                                                .trim()
-                                                .isEmpty
-                                            ? Colors.grey.shade400
-                                            : Colors.grey.shade800,
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                          const SizedBox(width: 2),
-                          Tooltip(
-                            message: showKeywordsEditor
-                                ? 'Hide keywords editor'
-                                : 'Show keywords editor',
-                            child: IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 36, minHeight: 36),
-                              icon: Icon(
-                                showKeywordsEditor
-                                    ? Icons.expand_less
-                                    : Icons.expand_more,
-                                size: 22,
+                                fontFamily: 'Inter',
+                                fontSize: 11,
                                 color: Colors.grey.shade700,
                               ),
-                              onPressed: () => setDialogState(
-                                  () => showKeywordsEditor =
-                                      !showKeywordsEditor),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Category dropdown
-                      Text(
-                        'Category',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade700),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedCategory,
-                            isExpanded: true,
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade800),
-                            items: _verbCategories.keys.map((cat) {
-                              return DropdownMenuItem(
-                                value: cat,
-                                child: Text(cat),
-                              );
-                            }).toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                setDialogState(() {
-                                  selectedCategory = value;
-                                });
-                              }
-                            },
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Omit "against" checkbox
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AppCompactCheckbox(
-                            value: omitAgainst,
-                            onChanged: (value) {
-                              setDialogState(() {
-                                omitAgainst = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Omit "against" (e.g., "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} player" instead of "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} against player")',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade700),
-                              softWrap: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // Remove opposing player from example checkbox
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AppCompactCheckbox(
-                            value: removePlayerFromExample,
-                            onChanged: (value) {
-                              setDialogState(() {
-                                removePlayerFromExample = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Remove opposing player from caption',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade700),
-                              softWrap: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Buttons
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          if (verb.isCustom)
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).pop();
-                                _deleteCustomVerb(verb);
+                            const SizedBox(width: 4),
+                            AppCompactCheckbox(
+                              value: usePluralPhrase,
+                              accentColor: kFloTealLight,
+                              onChanged: (v) {
+                                setDialogState(() => usePluralPhrase = v);
                               },
-                              child: Text(
-                                'Delete',
-                                style: TextStyle(
-                                    fontSize: 11, color: Colors.red.shade600),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        TextField(
+                          controller: pluralController,
+                          style: kAppDialogFieldTextStyle,
+                          enabled: usePluralPhrase,
+                          onChanged: (_) => setDialogState(() {}),
+                          decoration: appDialogFieldDecoration(
+                            hintText: 'e.g., skate, battle, shoot',
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        AppDialogExamplePreview(
+                          title: 'Example (2+ players)',
+                          text: buildExampleCaption(
+                            usePluralPhrase
+                                ? pluralController.text
+                                : singularController.text,
+                            2,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: showKeywordsEditor
+                                  ? TextField(
+                                      controller: keywordsController,
+                                      style: kAppDialogFieldTextStyle,
+                                      maxLines: 2,
+                                      onChanged: (_) => setDialogState(() {}),
+                                      decoration: appDialogFieldDecoration(
+                                        hintText:
+                                            'e.g., pitch, pitcher, pitching (comma-separated)',
+                                      ),
+                                    )
+                                  : InputDecorator(
+                                      decoration: appDialogFieldDecoration(),
+                                      child: Text(
+                                        keywordsController.text.trim().isEmpty
+                                            ? '—'
+                                            : keywordsController.text,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 11,
+                                          color: keywordsController.text
+                                                  .trim()
+                                                  .isEmpty
+                                              ? Colors.grey.shade400
+                                              : Colors.grey.shade800,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                            Tooltip(
+                              message: showKeywordsEditor
+                                  ? 'Hide keywords editor'
+                                  : 'Show keywords editor',
+                              child: IconButton(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                    minWidth: 32, minHeight: 32),
+                                icon: Icon(
+                                  showKeywordsEditor
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 20,
+                                  color: Colors.grey.shade700,
+                                ),
+                                onPressed: () => setDialogState(
+                                  () => showKeywordsEditor =
+                                      !showKeywordsEditor,
+                                ),
                               ),
                             ),
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: Text(
-                              'Cancel',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade600),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<String>(
+                          value: selectedCategory,
+                          items: _verbCategories.keys
+                              .map((cat) => DropdownMenuItem(
+                                    value: cat,
+                                    child: Text(cat),
+                                  ))
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setDialogState(() => selectedCategory = value);
+                            }
+                          },
+                          decoration: appDialogFieldDecoration(),
+                          style: kAppDialogFieldTextStyle,
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AppCompactCheckbox(
+                              value: omitAgainst,
+                              accentColor: kFloTealLight,
+                              onChanged: (value) {
+                                setDialogState(() => omitAgainst = value);
+                              },
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () async {
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Omit "against" (e.g., "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} player" instead of "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} against player")',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
+                                softWrap: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AppCompactCheckbox(
+                              value: removePlayerFromExample,
+                              accentColor: kFloTealLight,
+                              onChanged: (value) {
+                                setDialogState(
+                                    () => removePlayerFromExample = value);
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Remove opposing player from caption',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
+                                softWrap: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  actionsAlignment: MainAxisAlignment.end,
+                  actionsOverflowAlignment: OverflowBarAlignment.end,
+                  actions: [
+                    if (verb.isCustom)
+                      ElevatedGreyButton(
+                        label: 'Delete',
+                        fontSize: 11,
+                        isDanger: true,
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _deleteCustomVerb(verb);
+                        },
+                      ),
+                    if (verb.isCustom) const SizedBox(width: 8),
+                    ElevatedGreyButton(
+                      label: 'Cancel',
+                      fontSize: 11,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedGreyButton(
+                      label: 'Save',
+                      fontSize: 11,
+                      isPrimary: true,
+                      onPressed: () async {
                               print(
                                   'DEBUG: ========== SAVE BUTTON PRESSED ==========');
                               // First save, then close dialog
@@ -3159,21 +3030,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                 Navigator.of(context).pop();
                               }
                             },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0052CC),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 8),
-                            ),
-                            child: const Text(
-                              'Save',
-                              style:
-                                  TextStyle(fontSize: 11, color: Colors.white),
-                            ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             );

@@ -847,8 +847,9 @@ class CaptionFormulaRenderer {
               '$gameIdentifier'
               '${template.gameIdentifierSuffix}';
         case CaptionSegment.separator:
+          return separatorSnippetFor(template, segmentIndex);
         case CaptionSegment.punctuation:
-          return '';
+          return punctuationSnippetFor(template, segmentIndex);
         case CaptionSegment.venue:
           return '${template.venuePrefix}$venue${template.venueSuffix}';
         case CaptionSegment.credit:
@@ -871,33 +872,105 @@ class CaptionFormulaRenderer {
     if (order.isEmpty) return '';
 
     final n = order.length;
+    final hasGlueSegments = order.any(
+      (s) =>
+          s == CaptionSegment.punctuation || s == CaptionSegment.separator,
+    );
 
-    // Main-layout separator/punctuation segments are legacy glue controls.
-    // They are no longer part of the visible layout model; spacing/punctuation
-    // belongs inside the sub-editors, so rendering only joins content blocks.
-    final List<int> indices;
-    indices = <int>[];
-    for (var i = 0; i < n; i++) {
-      final segment = order[i];
-      if (segment == CaptionSegment.separator ||
-          segment == CaptionSegment.punctuation) {
-        continue;
+    // Build incrementally: join each new piece, removing duplicated punctuation
+    // at the boundary so we never get "- -", ": :", ". .", "atat", etc.
+    String joined = '';
+
+    if (hasGlueSegments) {
+      for (var i = 0; i < n; i++) {
+        final s = order[i];
+        if (customSegmentPlaceholderIndex == null &&
+            s == CaptionSegment.customText &&
+            valueAt(i).trim().isEmpty) {
+          continue;
+        }
+        final part = valueAt(i);
+        if (part.isEmpty) continue;
+        joined = joined.isEmpty ? part : _joinWithoutDuplicateOverlap(joined, part);
       }
+      return _cleanDuplicatePunctuation(joined);
+    }
+
+    final gaps = effectiveSegmentGaps(template);
+    for (var i = 0; i < n; i++) {
+      final s = order[i];
       if (customSegmentPlaceholderIndex == null &&
-          segment == CaptionSegment.customText &&
+          s == CaptionSegment.customText &&
           valueAt(i).trim().isEmpty) {
         continue;
       }
-      indices.add(i);
+      final part = valueAt(i);
+      if (part.isNotEmpty) {
+        joined = joined.isEmpty ? part : _joinWithoutDuplicateOverlap(joined, part);
+      }
+      if (i < n - 1 && i < gaps.length) {
+        final gap = gaps[i];
+        if (gap.isNotEmpty) {
+          joined = joined.isEmpty ? gap : _joinWithoutDuplicateOverlap(joined, gap);
+        }
+      }
     }
-    if (indices.isEmpty) return '';
+    return _cleanDuplicatePunctuation(joined);
+  }
 
-    final b = StringBuffer()..write(valueAt(indices[0]));
-    for (var j = 1; j < indices.length; j++) {
-      final cur = indices[j];
-      b.write(valueAt(cur));
+  /// Joins two adjacent caption parts, removing any duplicate punctuation at
+  /// the boundary so the rendered preview never shows `- -`, `: :`, `. .`, etc.
+  static String _joinWithoutDuplicateOverlap(String left, String right) {
+    if (left.isEmpty) return right;
+    if (right.isEmpty) return left;
+
+    // Phase 1 — exact suffix / prefix overlap (handles most cases).
+    final max = left.length < right.length ? left.length : right.length;
+    for (var len = max; len > 0; len--) {
+      if (left.endsWith(right.substring(0, len))) {
+        return left + right.substring(len);
+      }
     }
-    return b.toString();
+
+    // Phase 2 — whitespace-normalised overlap.
+    // e.g. left = "…game at " · right = "at the…"  → leftT = "…game at", rightT = "at the…"
+    //      leftT ends with "at" which matches rightT[0..2] "at" → keep one copy.
+    final leftT = left.trimRight();
+    final rightT = right.trimLeft();
+    if ((leftT.length < left.length || rightT.length < right.length) &&
+        leftT.isNotEmpty &&
+        rightT.isNotEmpty) {
+      final maxT =
+          leftT.length < rightT.length ? leftT.length : rightT.length;
+      for (var len = maxT; len > 0; len--) {
+        if (leftT.endsWith(rightT.substring(0, len))) {
+          // Preserve left's original trailing whitespace; any resulting double
+          // space is collapsed by _cleanDuplicatePunctuation below.
+          return left + rightT.substring(len);
+        }
+      }
+    }
+
+    return left + right;
+  }
+
+  /// Final-pass cleanup: collapse any duplicate punctuation that slipped
+  /// through the join algorithm (e.g. when the location formula itself
+  /// embeds a trailing dash that matches the following glue snippet).
+  static String _cleanDuplicatePunctuation(String s) {
+    var r = s;
+    // Two or more dashes (with optional surrounding spaces) → single " - "
+    // Handles: "- -", " - -", "- - ", " - - ", "--", etc.
+    r = r.replaceAll(RegExp(r'\s*-\s+-\s*'), ' - ');
+    // Two colons (with optional space between) → single ": "
+    // Handles: ": :", "::", ": : "
+    r = r.replaceAll(RegExp(r':\s*:'), ': ');
+    // Two periods (with optional space between) → single ". "
+    // Handles: ". .", "..", ". . "
+    r = r.replaceAll(RegExp(r'\.\s+\.'), '. ');
+    // Collapse multiple spaces down to one
+    r = r.replaceAll(RegExp(r'  +'), ' ');
+    return r;
   }
 
   static bool _segmentPairEither(

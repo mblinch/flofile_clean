@@ -10,6 +10,7 @@ import '../services/api_manager.dart';
 import '../utils/default_verb_keywords.dart';
 import '../utils/home_run_type_ui.dart';
 import 'verb_keyword_quick_bar.dart';
+import '../caption_style/verb_sub_options.dart';
 import '../flo_layout_constants.dart';
 import '../utils/baseball_tags_popup_rows.dart';
 import 'app_compact_checkbox.dart';
@@ -4005,24 +4006,18 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     kbSport = (state as dynamic).currentSportName as String? ??
                         'baseball';
                   } catch (_) {}
+                  final subOpts = state != null
+                      ? (state as dynamic)
+                          .getVerbSubOptionsFromKeyboardFire(verb)
+                      as VerbSubOptions
+                      : VerbSubOptions.defaultsFor(verb);
                   final showTagsMenu = isActive &&
                       kbSport == 'baseball' &&
-                      canonVerb.trim() == 'Tags';
-                  const hitVerbs = {
-                    'Single',
-                    'Double',
-                    'Triple',
-                    'Home Run',
-                    'Sacrifice Fly',
-                    'Bunt',
-                    'Hit by Pitch'
-                  };
-                  const runningVerbs = {'Steals', 'Slides', 'Runs', 'Rounds'};
-                  final isHitVerb = hitVerbs.contains(verb);
-                  final isRunningVerb = runningVerbs.contains(verb);
-                  final isHomeRun = verb == 'Home Run';
-                  final showRbiMenu = isActive && isHitVerb;
-                  final showBaseMenu = isActive && isRunningVerb;
+                      VerbSubOptions.legacyTagsSubMenu(canonVerb);
+                  final isHomeRun = VerbSubOptions.legacyHomeRunTypeMenu(verb);
+                  final showRbiMenu = isActive && subOpts.rbiEnabled;
+                  final showBaseMenu =
+                      isActive && VerbSubOptions.legacyBaseSubMenu(verb);
 
                   final allowVerbReorder =
                       name != 'Favorites' && canonVerb.trim().isNotEmpty;
@@ -4255,9 +4250,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     children: [
                       wrappedVerbRow,
                       if (isHomeRun)
-                        _buildHomeRunTypeSubMenu(state, currentHrType)
-                      else
-                        _buildRbiSubMenu(state, verb, currentRbi),
+                        _buildHomeRunTypeSubMenu(state, currentHrType, subOpts)
+                      else if (subOpts.rbiEnabled)
+                        _buildRbiSubMenu(state, verb, currentRbi, subOpts),
                     ],
                   );
                 }
@@ -4277,11 +4272,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     );
   }
 
-  Widget _buildRbiSubMenu(dynamic captionState, String verb, int? currentRbi) {
-    final maxRbi =
-        (verb == 'Sacrifice Fly' || verb == 'Bunt' || verb == 'Hit by Pitch')
-            ? 1
-            : 3;
+  Widget _buildRbiSubMenu(
+    dynamic captionState,
+    String verb,
+    int? currentRbi,
+    VerbSubOptions subOpts,
+  ) {
+    const maxRbi = 3;
     String? currentAction;
     try {
       currentAction = (captionState as dynamic).currentHittingAction as String?;
@@ -4351,14 +4348,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             );
           }),
-          const SizedBox(width: 4),
-          _buildCeleButton(captionState, isCele),
+          if (subOpts.celebrationEnabled) ...[
+            const SizedBox(width: 4),
+            _buildCeleButton(captionState, isCele),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildHomeRunTypeSubMenu(dynamic captionState, String? currentType) {
+  Widget _buildHomeRunTypeSubMenu(
+    dynamic captionState,
+    String? currentType,
+    VerbSubOptions subOpts,
+  ) {
     const types = ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam'];
     String? currentAction;
     try {
@@ -4417,8 +4420,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             );
           }),
-          const SizedBox(width: 4),
-          _buildCeleButton(captionState, isCele),
+          if (subOpts.celebrationEnabled) ...[
+            const SizedBox(width: 4),
+            _buildCeleButton(captionState, isCele),
+          ],
         ],
       ),
     );

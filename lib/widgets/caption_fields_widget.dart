@@ -30,6 +30,9 @@ import '../caption_style/caption_text_normalize.dart';
 import '../caption_style/position_labels.dart';
 import '../caption_style/region_abbrev.dart';
 import 'app_compact_checkbox.dart';
+import '../caption_style/verb_sub_options.dart';
+import 'verb_edit_plural_field.dart';
+import 'verb_edit_sub_options_section.dart';
 import 'ftp_settings_panel.dart';
 import '../flo_layout_constants.dart';
 
@@ -392,6 +395,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Map<String, String> _customVerbWordings = {}; // Custom wordings for verbs
   Map<String, Map<String, dynamic>> _verbOverrides =
       {}; // Verb phrase overrides from editor
+  List<Map<String, dynamic>> _customVerbRecords = [];
   Set<String> _deletedVerbs = {}; // Verbs hidden from the list
 
   // Prevent recursive onChanged updates for caption shortcuts
@@ -553,14 +557,79 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Timer? _numberBufferTimer;
 
   bool _shouldShowRbiInlineHint() {
-    const verbsWithRbi = {
-      'Single',
-      'Double',
-      'Triple',
-      'Home Run',
-      'Sacrifice Fly',
-    };
-    return verbsWithRbi.contains(_selectedVerb);
+    final verb = _selectedVerb ?? '';
+    final opts = _verbSubOptionsFor(verb);
+    return opts.rbiEnabled || VerbSubOptions.legacyHomeRunTypeMenu(verb);
+  }
+
+  String _celebrationPhraseFor(String verbLabel) {
+    final opts = _verbSubOptionsFor(verbLabel);
+    if (!opts.celebrationEnabled) return 'celebrates';
+    final phrase = opts.celebrationPhrase.trim();
+    return phrase.isEmpty ? 'celebrates' : phrase;
+  }
+
+  /// Sub-options for [displayLabel] (override / custom verb / factory default).
+  VerbSubOptions _verbSubOptionsFor(String displayLabel) {
+    if (displayLabel.trim().isEmpty) {
+      return const VerbSubOptions();
+    }
+    final label = displayLabel.trim();
+
+    if (_verbOverrides.containsKey(label)) {
+      return VerbSubOptions.fromJson(
+        _verbOverrides[label]!['subOptions'],
+        verbLabel: label,
+      );
+    }
+    for (final entry in _verbOverrides.entries) {
+      final o = entry.value;
+      if (o['label']?.toString() == label) {
+        return VerbSubOptions.fromJson(
+          o['subOptions'],
+          verbLabel: o['label']?.toString() ?? entry.key,
+        );
+      }
+    }
+
+    for (final c in _customVerbRecords) {
+      if (c['label']?.toString() == label) {
+        return VerbSubOptions.fromJson(
+          c['subOptions'],
+          verbLabel: label,
+        );
+      }
+    }
+
+    return VerbSubOptions.defaultsFor(label);
+  }
+
+  /// Keyboard Fire: sub-options for a verb row label.
+  VerbSubOptions getVerbSubOptionsFromKeyboardFire(String verb) =>
+      _verbSubOptionsFor(verb);
+
+  Widget _verbEditFlagCard({
+    required bool value,
+    required String label,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: appDialogCardDecoration(radius: 6),
+      child: Row(
+        children: [
+          AppCompactCheckbox(
+            value: value,
+            accentColor: kFloTealLight,
+            onChanged: onChanged,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(label, style: kAppDialogFieldTextStyle),
+          ),
+        ],
+      ),
+    );
   }
 
   String _rbiShortcutExample() {
@@ -2029,118 +2098,49 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     print('DEBUG: About to show dialog');
     showDialog(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(3),
-              ),
-              titlePadding: EdgeInsets.zero,
-              title: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(4),
-                    topRight: Radius.circular(4),
+            return Center(
+              child: SizedBox(
+                width: 520,
+                child: AlertDialog(
+                  shape: kAppDialogShape,
+                  backgroundColor: Colors.white,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 0,
+                  titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+                  contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                  actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                  title: Text(
+                    'Edit "$originalVerbName" wording',
+                    style: kAppDialogTitleStyle,
                   ),
-                ),
-                child: Text(
-                  'Edit "$originalVerbName" wording',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade800,
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppDialogLabeledTextField(
+                          label: 'Custom wording',
+                          controller: controller,
+                          hintText: 'Enter custom wording',
+                          autofocus: true,
+                          maxLines: 3,
+                          bottomGap: 12,
+                          onChanged: (_) => setDialogState(() {}),
+                        ),
+                        AppDialogExamplePreview(
+                          title: 'Example caption',
+                          text: _getExampleCaption(verb, controller.text),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-              contentPadding: const EdgeInsets.all(16),
-              content: SizedBox(
-                width: 450,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Customize wording',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      maxLines: 3,
-                      style: const TextStyle(fontSize: 12),
-                      onChanged: (value) {
-                        setDialogState(() {
-                          // Update the example caption when text changes
-                        });
-                      },
-                      decoration: InputDecoration(
-                        hintText: 'Enter custom wording',
-                        hintStyle: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade400),
-                        filled: true,
-                        fillColor: Colors.white,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
-                        ),
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(3),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(3),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(3),
-                          borderSide: BorderSide(color: Colors.grey.shade400),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(3),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Example caption:',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _getExampleCaption(verb, controller.text),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              actions: [
+                  actionsAlignment: MainAxisAlignment.end,
+                  actionsOverflowAlignment: OverflowBarAlignment.end,
+                  actions: [
                 ElevatedGreyButton(
                   label: 'Reset to Default',
                   fontSize: 11,
@@ -2290,6 +2290,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   },
                 ),
               ],
+                ),
+              ),
             );
           },
         );
@@ -2476,6 +2478,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Load verb overrides (from verb editor)
     _verbOverrides =
         await _preferencesService.getVerbOverrides(sport: _currentSport);
+
+    _customVerbRecords = (await _preferencesService.getCustomVerbs(
+            sport: _currentSport))
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
 
     // Load deleted verbs (hidden from list)
     _deletedVerbs =
@@ -9945,7 +9952,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             : _getTrueDefaultVerbWording(canonicalKey);
       }
       var plural = (o['pluralPhrase'] as String?)?.trim();
-      if (plural == null || plural.isEmpty) plural = vp;
+      if (plural == null || plural.isEmpty) {
+        plural = VerbCaptionWording.defaultPluralWording(canonicalKey, vp);
+      }
       var kw = verbKeywordsFromJson(o['keywords']);
       if (kw.isEmpty) kw = defaultKeywordsForVerbLabel(label);
       return {
@@ -9957,7 +9966,38 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'omitAgainst': o['omitAgainst'] as bool? ?? false,
         'wantsOpponent': o['wantsOpponent'] as bool? ?? false,
         'category': o['category'] as String? ?? _findVerbCategory(verb),
+        'subOptions': VerbSubOptions.fromJson(
+          o['subOptions'],
+          verbLabel: label,
+        ),
       };
+    }
+
+    for (final c in _customVerbRecords) {
+      if (c['label']?.toString() == verb) {
+        final label = c['label']?.toString() ?? verb;
+        final vp = (c['verbPhrase'] as String?)?.trim() ?? '';
+        return {
+          'label': label,
+          'verbPhrase': vp.isNotEmpty ? vp : _getTrueDefaultVerbWording(verb),
+          'pluralPhrase': () {
+            final p = (c['pluralPhrase'] as String?)?.trim() ?? '';
+            final s = vp.isNotEmpty ? vp : _getTrueDefaultVerbWording(verb);
+            return p.isNotEmpty
+                ? p
+                : VerbCaptionWording.defaultPluralWording(verb, s);
+          }(),
+          'usePluralPhrase': c['usePluralPhrase'] as bool? ?? true,
+          'keywords': verbKeywordsFromJson(c['keywords']),
+          'omitAgainst': c['omitAgainst'] as bool? ?? false,
+          'wantsOpponent': c['wantsOpponent'] as bool? ?? false,
+          'category': c['category'] as String? ?? _findVerbCategory(verb),
+          'subOptions': VerbSubOptions.fromJson(
+            c['subOptions'],
+            verbLabel: label,
+          ),
+        };
+      }
     }
 
     final category = _findVerbCategory(verb);
@@ -9968,13 +10008,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return {
       'label': verb,
       'verbPhrase': vp,
-      'pluralPhrase': vp,
+      'pluralPhrase': VerbCaptionWording.defaultPluralWording(verb, vp),
       'usePluralPhrase': true,
       'keywords': defaultKeywordsForVerbLabel(verb),
       'omitAgainst': false,
       'wantsOpponent': false,
       'category': category ??
           (verbCategories.isNotEmpty ? verbCategories.keys.first : null),
+      'subOptions': VerbSubOptions.defaultsFor(verb),
     };
   }
 
@@ -10030,6 +10071,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     bool showKeywordsEditor = keywordsList.isNotEmpty;
     String selectedCategory = initial['category'] as String? ??
         ((_categoryOrder.isNotEmpty) ? _categoryOrder.first : '');
+    var subOptions = initial['subOptions'] as VerbSubOptions? ??
+        VerbSubOptions.defaultsFor(verb);
 
     final categories = _categoryOrder
         .where((c) => c == 'Favorites' || verbCategories.containsKey(c))
@@ -10047,6 +10090,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (!mounted) return;
     showDialog(
       context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
@@ -10062,336 +10106,292 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               }
             }
 
-            return Dialog(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(3),
-                  side: const BorderSide(color: Colors.black, width: 1)),
-              child: Container(
-                width: 500,
-                constraints: BoxConstraints(
-                    maxHeight: MediaQuery.of(context).size.height * 0.9),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(3)),
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Edit Verb',
-                          style: const TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 16),
-                      Text('Display Name',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade700)),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: labelController,
-                        style: const TextStyle(fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'e.g., Skates',
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(3)),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text('Singular Phrase (1 player)',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade700)),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: singularController,
-                        style: const TextStyle(fontSize: 12),
-                        onChanged: (_) => setDialogState(() {}),
-                        decoration: InputDecoration(
-                          hintText: 'e.g., skates, battles, shoots',
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(3)),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(color: Colors.blue.shade200),
-                        ),
-                        child: Column(
+            final maxH = MediaQuery.sizeOf(context).height * 0.88;
+            return Center(
+              child: SizedBox(
+                width: kVerbEditDialogWidth,
+                child: AlertDialog(
+                  shape: kAppDialogShape,
+                  backgroundColor: Colors.white,
+                  surfaceTintColor: Colors.transparent,
+                  elevation: 8,
+                  shadowColor: Colors.black.withValues(alpha: 0.18),
+                  titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
+                  contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                  actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  title: const Text('Edit Verb', style: kAppDialogTitleStyle),
+                  content: SizedBox(
+                    width: kVerbEditDialogWidth - 48,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxHeight: maxH),
+                      child: SingleChildScrollView(
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Example (1 player):',
-                                style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.blue.shade700,
-                                    fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 2),
-                            Text(
-                              buildExampleCaption(
-                                  singularController.text.trim().isEmpty
-                                      ? verb
-                                      : singularController.text,
-                                  1),
-                              style: TextStyle(
-                                  fontSize: 10, color: Colors.blue.shade900),
-                              softWrap: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Expanded(
-                            child: Text('Plural Phrase (2+ players)',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade700)),
-                          ),
-                          Text('Use plural',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade700)),
-                          const SizedBox(width: 4),
-                          AppCompactCheckbox(
-                            value: usePluralPhrase,
-                            onChanged: (v) =>
-                                setDialogState(() => usePluralPhrase = v),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      TextField(
-                        controller: pluralController,
-                        style: const TextStyle(fontSize: 12),
-                        enabled: usePluralPhrase,
-                        onChanged: (_) => setDialogState(() {}),
-                        decoration: InputDecoration(
-                          hintText: 'e.g., skate, battle, shoot',
-                          border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(3)),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 8),
-                          isDense: true,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(3),
-                          border: Border.all(color: Colors.green.shade200),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Example (2+ players):',
-                                style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.green.shade700,
-                                    fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 2),
-                            Text(
-                              buildExampleCaption(
-                                  !usePluralPhrase
-                                      ? (singularController.text.trim().isEmpty
-                                          ? verb
-                                          : singularController.text)
-                                      : (pluralController.text.trim().isEmpty
-                                          ? (singularController.text.trim().isEmpty
-                                              ? verb
-                                              : singularController.text)
-                                          : pluralController.text),
-                                  2),
-                              style: TextStyle(
-                                  fontSize: 10, color: Colors.green.shade900),
-                              softWrap: true,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text('Keywords',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade700)),
-                      const SizedBox(height: 4),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: showKeywordsEditor
-                                ? TextField(
-                                    controller: keywordsController,
-                                    style: const TextStyle(fontSize: 12),
-                                    maxLines: 2,
-                                    onChanged: (_) => setDialogState(() {}),
-                                    decoration: InputDecoration(
-                                      hintText:
-                                          'e.g., pitch, pitcher, pitching (comma-separated)',
-                                      border: OutlineInputBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(3)),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 8),
-                                      isDense: true,
-                                    ),
-                                  )
-                                : Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 10),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                          color: Colors.grey.shade300),
-                                      borderRadius: BorderRadius.circular(3),
-                                      color: Colors.grey.shade50,
-                                    ),
-                                    child: Text(
-                                      keywordsController.text.trim().isEmpty
-                                          ? '—'
-                                          : keywordsController.text,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: keywordsController.text
-                                                .trim()
-                                                .isEmpty
-                                            ? Colors.grey.shade400
-                                            : Colors.grey.shade800,
+                            Expanded(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        flex: 2,
+                                        child: AppDialogLabeledTextField(
+                                          label: 'Display name',
+                                          controller: labelController,
+                                          hintText: 'e.g., Skates',
+                                          bottomGap: 0,
+                                        ),
                                       ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: AppDialogLabeledDropdown<String>(
+                                          label: 'Category',
+                                          value: selectedCategory,
+                                          items: categories
+                                              .map((cat) => DropdownMenuItem(
+                                                  value: cat,
+                                                  child: Text(cat)))
+                                              .toList(),
+                                          onChanged: (value) {
+                                            if (value != null) {
+                                              setDialogState(() =>
+                                                  selectedCategory = value);
+                                            }
+                                          },
+                                          bottomGap: 0,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: AppDialogLabeledTextField(
+                                          label: 'Singular phrase (1 player)',
+                                          controller: singularController,
+                                          hintText:
+                                              'e.g., skates, battles, shoots',
+                                          onChanged: (_) =>
+                                              setDialogState(() {}),
+                                          bottomGap: 0,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: VerbEditPluralPhraseField(
+                                          pluralController: pluralController,
+                                          usePluralPhrase: usePluralPhrase,
+                                          onUsePluralChanged: (v) =>
+                                              setDialogState(
+                                                  () => usePluralPhrase = v),
+                                          onPluralChanged: (_) =>
+                                              setDialogState(() {}),
+                                          bottomGap: 0,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: AppDialogExamplePreview(
+                                          title: 'Example (1 player)',
+                                          text: buildExampleCaption(
+                                            singularController.text
+                                                    .trim()
+                                                    .isEmpty
+                                                ? verb
+                                                : singularController.text,
+                                            1,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: AppDialogExamplePreview(
+                                          title: 'Example (2+ players)',
+                                          text: buildExampleCaption(
+                                            !usePluralPhrase
+                                                ? (singularController.text
+                                                        .trim()
+                                                        .isEmpty
+                                                    ? verb
+                                                    : singularController.text)
+                                                : (pluralController.text
+                                                        .trim()
+                                                        .isEmpty
+                                                    ? (singularController.text
+                                                            .trim()
+                                                            .isEmpty
+                                                        ? verb
+                                                        : singularController
+                                                            .text)
+                                                    : pluralController.text),
+                                            2,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  AppDialogLabeledField(
+                                    label: 'Keywords',
+                                    bottomGap: 8,
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: showKeywordsEditor
+                                              ? TextField(
+                                                  controller:
+                                                      keywordsController,
+                                                  style:
+                                                      kAppDialogFieldTextStyle,
+                                                  maxLines: 2,
+                                                  onChanged: (_) =>
+                                                      setDialogState(() {}),
+                                                  decoration:
+                                                      appDialogFieldDecoration(
+                                                    hintText: 'comma-separated',
+                                                  ),
+                                                )
+                                              : Container(
+                                                  width: double.infinity,
+                                                  padding:
+                                                      const EdgeInsets.all(10),
+                                                  decoration:
+                                                      appDialogCardDecoration(),
+                                                  child: Text(
+                                                    keywordsController.text
+                                                            .trim()
+                                                            .isEmpty
+                                                        ? '—'
+                                                        : keywordsController
+                                                            .text,
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: TextStyle(
+                                                      fontFamily: 'Inter',
+                                                      fontSize: 11,
+                                                      color: keywordsController
+                                                              .text
+                                                              .trim()
+                                                              .isEmpty
+                                                          ? const Color(
+                                                              0xFFB0B0B0)
+                                                          : const Color(
+                                                              0xFF444444),
+                                                    ),
+                                                  ),
+                                                ),
+                                        ),
+                                        Tooltip(
+                                          message: showKeywordsEditor
+                                              ? 'Hide keywords editor'
+                                              : 'Show keywords editor',
+                                          child: IconButton(
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(
+                                                minWidth: 32, minHeight: 32),
+                                            icon: Icon(
+                                              showKeywordsEditor
+                                                  ? Icons.expand_less
+                                                  : Icons.expand_more,
+                                              size: 20,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                            onPressed: () => setDialogState(
+                                              () => showKeywordsEditor =
+                                                  !showKeywordsEditor,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                          ),
-                          const SizedBox(width: 2),
-                          Tooltip(
-                            message: showKeywordsEditor
-                                ? 'Hide keywords editor'
-                                : 'Show keywords editor',
-                            child: IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 36, minHeight: 36),
-                              icon: Icon(
-                                showKeywordsEditor
-                                    ? Icons.expand_less
-                                    : Icons.expand_more,
-                                size: 22,
-                                color: Colors.grey.shade700,
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _verbEditFlagCard(
+                                          value: omitAgainst,
+                                          label: 'Omit "against"',
+                                          onChanged: (v) => setDialogState(
+                                              () => omitAgainst = v),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: _verbEditFlagCard(
+                                          value: wantsOpponent,
+                                          label: 'Include opponent',
+                                          onChanged: (v) => setDialogState(
+                                              () => wantsOpponent = v),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
                               ),
-                              onPressed: () => setDialogState(
-                                  () => showKeywordsEditor =
-                                      !showKeywordsEditor),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text('Category',
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade700)),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedCategory,
-                            isExpanded: true,
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey.shade800),
-                            items: categories
-                                .map((cat) => DropdownMenuItem(
-                                    value: cat, child: Text(cat)))
-                                .toList(),
-                            onChanged: (value) {
-                              if (value != null)
-                                setDialogState(() => selectedCategory = value);
-                            },
-                          ),
+                            const SizedBox(width: 16),
+                            VerbEditSubOptionsSection(
+                              verbLabel: labelController.text.trim().isEmpty
+                                  ? verb
+                                  : labelController.text.trim(),
+                              value: subOptions,
+                              onChanged: (v) =>
+                                  setDialogState(() => subOptions = v),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AppCompactCheckbox(
-                            value: omitAgainst,
-                            onChanged: (v) => setDialogState(
-                                () => omitAgainst = v),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Omit "against" in caption',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade700),
-                              softWrap: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          AppCompactCheckbox(
-                            value: wantsOpponent,
-                            onChanged: (v) => setDialogState(
-                                () => wantsOpponent = v),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Include opposing player in caption',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.grey.shade700),
-                              softWrap: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          ElevatedGreyButton(
-                            label: 'Cancel',
-                            fontSize: 11,
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedGreyButton(
-                            label: 'Save',
-                            fontSize: 11,
-                            isPrimary: true,
-                            onPressed: () async {
+                    ),
+                  ),
+                  actionsAlignment: MainAxisAlignment.end,
+                  actionsOverflowAlignment: OverflowBarAlignment.end,
+                  actions: [
+                    ElevatedGreyButton(
+                      label: 'Cancel',
+                      fontSize: 11,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedGreyButton(
+                      label: 'Save',
+                      fontSize: 11,
+                      isPrimary: true,
+                      onPressed: () async {
                               final newLabel = labelController.text.trim();
                               final newSingular =
                                   singularController.text.trim();
                               if (newLabel.isEmpty || newSingular.isEmpty)
                                 return;
                               final overrideKey = verb;
+                              final pluralText = pluralController.text.trim();
                               final override = {
                                 'label': newLabel,
                                 'verbPhrase': newSingular,
-                                'pluralPhrase':
-                                    pluralController.text.trim().isEmpty
-                                        ? null
-                                        : pluralController.text.trim(),
+                                'pluralPhrase': usePluralPhrase
+                                    ? (pluralText.isNotEmpty
+                                        ? pluralText
+                                        : VerbCaptionWording
+                                            .defaultPluralWording(
+                                            overrideKey, newSingular))
+                                    : null,
                                 'usePluralPhrase': usePluralPhrase,
                                 'keywords': parseVerbKeywordsField(
                                     keywordsController.text),
@@ -10399,6 +10399,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 'omitAgainst': omitAgainst,
                                 'isCustom': false,
                                 'category': selectedCategory,
+                                if (subOptions.differsFromDefaults(newLabel))
+                                  'subOptions': subOptions.toJson(),
                               };
                               await _preferencesService.saveVerbOverride(
                                   overrideKey, override,
@@ -10408,6 +10410,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   sport: _currentSport);
                               _verbOverrides = await _preferencesService
                                   .getVerbOverrides(sport: _currentSport);
+                              _customVerbRecords =
+                                  (await _preferencesService.getCustomVerbs(
+                                          sport: _currentSport))
+                                      .map((e) => Map<String, dynamic>.from(e))
+                                      .toList();
                               _customVerbWordings = await _preferencesService
                                   .getCustomVerbWordings(sport: _currentSport);
                               if (mounted) setState(() {});
@@ -10415,10 +10422,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               if (context.mounted) Navigator.of(context).pop();
                             },
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             );
@@ -11385,75 +11389,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   bool _shouldShowInningSelector(String verb) {
-    // Define which verbs ONLY need inning/period selection (no other options)
-    const verbsNeedingOnlyInning = {
-      // Baseball verbs
-      'At Bat',
-      'Pitching',
-      'Swings',
-      'Bunts',
-      'Hit by Pitch',
-      'Walks',
-      'Catches',
-      'Throws',
-      'Groundball',
-      'Double Play',
-      'Triple Play',
-      'Steals',
-      'Slides',
-      'Runs',
-      'Rounds',
-      'Fielding Position',
-      'Looks On',
-      'Walks Off Field',
-      'Runs Off Field',
-      'Takes the Field',
-      'Comes Off the Field',
-      'Strikeout',
-      // Hockey verbs
-      'Shoots',
-      'Scores',
-      'Passes',
-      'Skates',
-      'Battles',
-      'Faceoff',
-      'Goes to the Net',
-      'Power Play',
-      'Breakaway',
-      'Blocks',
-      'Saves',
-      'Handles the Puck',
-      'Stands in Net',
-      'Guards the Net',
-      'Clears',
-      'Checks',
-      'Defends',
-      'Warm Ups',
-      'Takes the Ice',
-      'Comes Off the Ice',
-      'National Anthem',
-      'Stretching',
-      'Bench',
-      'Celebrates',
-      'Celebrates a Goal',
-      'Dejection',
-      'Post Game Win',
-      'Post Game Loss',
-    };
-
-    return verbsNeedingOnlyInning.contains(verb);
+    return VerbSubOptions.legacyInningSelector(verb);
   }
 
   bool _shouldShowFullPopupInterface(String verb) {
-    // Define which verbs should show a full popup interface (like Home Run)
-    const verbsNeedingFullPopup = {
-      'Home Run',
-      'Single',
-      'Double',
-      'Triple',
-    };
-
-    return verbsNeedingFullPopup.contains(verb);
+    return VerbSubOptions.legacyFullHittingPopup(verb);
   }
 
   String?
@@ -22169,9 +22109,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     String hitPhrase = '';
     final bool homeRunStyleRunsNotRbi =
         originalVerb == 'Home Run' || originalVerb == 'Grand Slam';
+    final hitSubOpts = _verbSubOptionsFor(originalVerb);
     if (!homeRunStyleRunsNotRbi && _rbiCount != null && _rbiCount! > 0) {
-      final rbiText =
-          _rbiCount == 1 ? 'RBI' : '${_numberToWord(_rbiCount!)}-RBI';
+      final rbiText = hitSubOpts.rbiCountLabel(_rbiCount!);
       hitPhrase = 'hits a $rbiText $baseAction';
     } else {
       hitPhrase = 'hits a $baseAction';
@@ -22181,14 +22121,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       switch (_selectedHittingAction!) {
         case 'celebrates':
         case 'celebrates_in_dugout':
-          const celebrationType = 'celebrates';
+          final celebrationType = _celebrationPhraseFor(originalVerb);
           final affixes = _baseballCelebrationHitAffixes();
 
           if (!homeRunStyleRunsNotRbi &&
               _rbiCount != null &&
               _rbiCount! > 0) {
-            final rbiText =
-                _rbiCount == 1 ? 'RBI' : '${_numberToWord(_rbiCount!)}-RBI';
+            final rbiText = hitSubOpts.rbiCountLabel(_rbiCount!);
             return '$celebrationType a $rbiText $baseAction$affixes';
           } else {
             return '$celebrationType a $baseAction$affixes';
@@ -26088,14 +26027,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 child: Wrap(
                   spacing: 2,
                   runSpacing: 2,
-                  children: [
-                    _buildCelebrationChip('Scoring', 'Scoring'),
-                    _buildCelebrationChip('Single', 'Single'),
-                    _buildCelebrationChip('Double', 'Double'),
-                    _buildCelebrationChip('Triple', 'Triple'),
-                    _buildCelebrationChip('Home Run', 'Home Run'),
-                    _buildCelebrationChip('Strikeout', 'Strikeout'),
-                  ],
+                  children: _verbSubOptionsFor(_selectedVerb ?? '')
+                      .celebrationTypeList()
+                      .map((label) => _buildCelebrationChip(label, label))
+                      .toList(),
                 ),
               ),
 
@@ -26136,9 +26071,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         isDense: true,
                       ),
                       onTap: () {
-                        // When text field is tapped, insert "celebrates " if empty
+                        // When text field is tapped, insert celebration verb if empty
                         if (customCelebrationController.text.isEmpty) {
-                          customCelebrationController.text = 'celebrates ';
+                          final phrase =
+                              _celebrationPhraseFor(_selectedVerb ?? '');
+                          customCelebrationController.text = '$phrase ';
                           customCelebrationController.selection =
                               TextSelection.fromPosition(
                             TextPosition(

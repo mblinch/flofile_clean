@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../caption_style/caption_template.dart';
 import '../caption_style/wire_iptc_specs.dart';
+import '../services/app_defaults_firestore_service.dart';
 import '../services/iptc_template_apply_service.dart';
 import 'app_styled_dialogs.dart';
 
@@ -27,10 +28,16 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     this.isLoadOriginalValuesDisabled = false,
     this.templateRevision = 0,
     this.fieldsOnly = false,
+    this.visibleTemplates = const [],
+    this.selectedTemplateId,
+    this.onTemplateSelected,
   });
 
   final WireStyle selectedWire;
   final Map<WireStyle, String> wireLabels;
+  final List<IptcTemplateCatalogEntry> visibleTemplates;
+  final String? selectedTemplateId;
+  final ValueChanged<IptcTemplateCatalogEntry>? onTemplateSelected;
   final Map<String, String> values;
   final Set<String> foundInFilesKeys;
   final void Function(String storageKey, String value)? onValueChanged;
@@ -148,7 +155,10 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                 child: _WireTemplateDropdown(
                   selectedWire: selectedWire,
                   wireLabels: wireLabels,
-                  onSelected: onWireSelected,
+                  templates: visibleTemplates,
+                  selectedTemplateId: selectedTemplateId,
+                  onTemplateSelected: onTemplateSelected,
+                  onWireSelected: onWireSelected,
                   compact: true,
                 ),
               ),
@@ -208,7 +218,6 @@ class StartupIptcTemplatePanel extends StatelessWidget {
               ],
             ),
           ],
-          const SizedBox(height: 4),
         ],
         Expanded(
           child: SingleChildScrollView(
@@ -946,36 +955,48 @@ class _WireTemplateDropdown extends StatelessWidget {
   const _WireTemplateDropdown({
     required this.selectedWire,
     required this.wireLabels,
-    this.onSelected,
+    required this.templates,
+    this.selectedTemplateId,
+    this.onTemplateSelected,
+    this.onWireSelected,
     this.compact = false,
   });
 
   final WireStyle selectedWire;
   final Map<WireStyle, String> wireLabels;
-  final ValueChanged<WireStyle>? onSelected;
+  final List<IptcTemplateCatalogEntry> templates;
+  final String? selectedTemplateId;
+  final ValueChanged<IptcTemplateCatalogEntry>? onTemplateSelected;
+  final ValueChanged<WireStyle>? onWireSelected;
   final bool compact;
 
-  static List<String> get _itemKeys =>
-      WireIptcSpecs.builtInWires.map((w) => w.name).toList();
-
-  String _labelForKey(String key) {
-    final wire = WireStyle.values.firstWhere((w) => w.name == key);
-    return WireIptcSpecs.displayWireLabel(wire, wireLabels[wire]);
+  List<IptcTemplateCatalogEntry> get _entries {
+    if (templates.isNotEmpty) return templates;
+    return AppDefaultsFirestoreService.builtInCatalogEntries();
   }
 
-  WireStyle _wireFromKey(String key) =>
-      WireStyle.values.firstWhere((w) => w.name == key);
+  String _labelForEntry(IptcTemplateCatalogEntry entry) {
+    return WireIptcSpecs.displayWireLabel(
+      entry.wireStyle,
+      entry.displayName != WireIptcSpecs.factoryWireLabel(entry.wireStyle)
+          ? entry.displayName
+          : wireLabels[entry.wireStyle],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final initialKey = selectedWire.name;
+    final entries = _entries;
+    final itemIds = entries.map((e) => e.id).toList();
+    final initialId = selectedTemplateId ??
+        AppDefaultsFirestoreService.templateIdForWire(selectedWire);
     final safeInitial =
-        _itemKeys.contains(initialKey) ? initialKey : _itemKeys.first;
+        itemIds.contains(initialId) ? initialId : itemIds.first;
 
     return DropdownFlutter<String>(
       key: ValueKey('startup_iptc_wire_$safeInitial'),
       hintText: 'Select IPTC template',
-      items: _itemKeys,
+      items: itemIds,
       initialItem: safeInitial,
       excludeSelected: false,
       hideSelectedFieldWhenExpanded: true,
@@ -993,8 +1014,9 @@ class _WireTemplateDropdown extends StatelessWidget {
         vertical: compact ? 3 : 4,
       ),
       headerBuilder: (context, selectedItem, enabled) {
+        final entry = entries.firstWhere((e) => e.id == selectedItem);
         return Text(
-          _labelForKey(selectedItem),
+          _labelForEntry(entry),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
@@ -1006,12 +1028,13 @@ class _WireTemplateDropdown extends StatelessWidget {
         );
       },
       listItemBuilder: (context, item, isSelected, onItemSelect) {
+        final entry = entries.firstWhere((e) => e.id == item);
         return InkWell(
           onTap: onItemSelect,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
             child: Text(
-              _labelForKey(item),
+              _labelForEntry(entry),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -1042,9 +1065,10 @@ class _WireTemplateDropdown extends StatelessWidget {
           selectedColor: Color(0xFFEEF3F6),
         ),
       ),
-      onChanged: (key) {
-        if (key == null || onSelected == null) return;
-        onSelected!(_wireFromKey(key));
+      onChanged: (id) {
+        if (id == null) return;
+        final entry = entries.firstWhere((e) => e.id == id);
+        onTemplateSelected?.call(entry);
       },
     );
   }

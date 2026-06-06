@@ -175,4 +175,72 @@ class VerbCaptionWording {
         return verb.toLowerCase();
     }
   }
+
+  /// Default plural caption phrase for [verb] when none is saved.
+  /// Uses [singularPhrase] for heuristics when there is no explicit map entry.
+  static String defaultPluralWording(String verb, String singularPhrase) {
+    const byVerb = <String, String>{
+      'Single': 'hit a single',
+      'Double': 'hit a double',
+      'Triple': 'hit a triple',
+      'Home Run': 'hit a home run',
+      'Grand Slam': 'hit a grand slam',
+      'Sacrifice Fly': 'hits a sacrifice fly',
+      'At Bat': 'take an at bat in their batting stance',
+      'Pitching': 'deliver a pitch',
+      'Swings': 'swing',
+      'Bunts': 'bunt',
+      'Walks': 'take a walk',
+      'Catches': 'catch a ball',
+      'Throws': 'throw a ball',
+      'Steals': 'steal a base',
+      'Slides': 'slide into a base',
+      'Runs': 'run to a base',
+      'Rounds': 'round a base',
+      'Looks On': 'look on',
+      'Skates': 'skate',
+      'Shoots': 'shoot',
+      'Battles': 'battle',
+      'Scores': 'score',
+      'Blocks': 'block a shot',
+      'Checks': 'check',
+      'Defends': 'defend',
+      'Saves': 'make a save',
+      'Celebrates': 'celebrate',
+      'Celebrates a Goal': 'celebrate a goal',
+      'Goes to the Net': 'go to the net',
+      'Drives': 'drive',
+      'Dribbles': 'dribble',
+      'Dunks': 'dunk',
+      'Kicks': 'kick',
+    };
+    final explicit = byVerb[verb];
+    if (explicit != null) return explicit;
+    return inferPluralFromSingular(singularPhrase);
+  }
+
+  /// Rough third-person singular → base form for multi-player captions.
+  static String inferPluralFromSingular(String singularPhrase) {
+    final s = singularPhrase.trim();
+    if (s.isEmpty) return s;
+    final words = s.split(RegExp(r'\s+'));
+    if (words.isEmpty) return s;
+    var first = words.first;
+    if (first.endsWith('ies') && first.length > 3) {
+      first = '${first.substring(0, first.length - 3)}y';
+    } else if (first.endsWith('ches') ||
+        first.endsWith('shes') ||
+        first.endsWith('xes') ||
+        first.endsWith('zes')) {
+      first = first.substring(0, first.length - 2);
+    } else if (first.endsWith('es') && first.length > 2) {
+      first = first.substring(0, first.length - 2);
+    } else if (first.endsWith('s') &&
+        !first.endsWith('ss') &&
+        first.length > 1) {
+      first = first.substring(0, first.length - 1);
+    }
+    words[0] = first;
+    return words.join(' ');
+  }
 }

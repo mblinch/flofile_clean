@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import 'admin_service.dart';
+
 /// Gates MLB “inning from photo time” behind an allowlist so you can ship a
 /// build with the code present but inert for everyone except chosen accounts.
 ///
@@ -21,6 +23,10 @@ class MlbInningFeatureGate {
   static const bool enableInDebugBuilds = true;
 
   static bool isEnabled(String? syncAccountId) {
+    if (AdminService.isCurrentUserAdminSync()) {
+      return true;
+    }
+
     final id = syncAccountId?.trim().toLowerCase() ?? '';
     if (id.isNotEmpty && allowedSyncAccountIds.contains(id)) {
       return true;

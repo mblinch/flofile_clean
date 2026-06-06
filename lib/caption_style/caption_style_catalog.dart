@@ -18,6 +18,7 @@ class CaptionStyleCatalog {
     required this.options,
     required this.activeToken,
     required this.sport,
+    required this.gameIdByWire,
     required this.gettyWireDefault,
     required this.imagnWireDefault,
     required this.apWireDefault,
@@ -41,6 +42,7 @@ class CaptionStyleCatalog {
   final List<CaptionStyleOption> options;
   final String activeToken;
   final String sport;
+  final Map<WireStyle, String> gameIdByWire;
   final CaptionTemplate? gettyWireDefault;
   final CaptionTemplate? imagnWireDefault;
   final CaptionTemplate? apWireDefault;
@@ -86,10 +88,23 @@ class CaptionStyleCatalog {
     final gettyIntlLabel =
         await prefs.getCaptionWireLabel(WireStyle.gettyInternational);
 
+    final gameIdByWire = <WireStyle, String>{};
+    for (final wire in [
+      WireStyle.getty,
+      WireStyle.imagn,
+      WireStyle.ap,
+      WireStyle.cp,
+      WireStyle.gettyInternational,
+    ]) {
+      gameIdByWire[wire] =
+          await prefs.resolveGameIdentifierText(wire, resolvedSport);
+    }
+
     final catalog = CaptionStyleCatalog._(
       options: const [],
       activeToken: tokGetty,
       sport: resolvedSport.isEmpty ? 'baseball' : resolvedSport,
+      gameIdByWire: gameIdByWire,
       gettyWireDefault: gettyDef,
       imagnWireDefault: imagnDef,
       apWireDefault: apDef,
@@ -124,6 +139,7 @@ class CaptionStyleCatalog {
       options: options,
       activeToken: activeToken,
       sport: catalog.sport,
+      gameIdByWire: gameIdByWire,
       gettyWireDefault: gettyDef,
       imagnWireDefault: imagnDef,
       apWireDefault: apDef,
@@ -200,8 +216,10 @@ class CaptionStyleCatalog {
     }
   }
 
-  CaptionTemplate _withSport(CaptionTemplate t) =>
-      CaptionTemplate.withSportGameIdentifierDefault(t, sport);
+  CaptionTemplate _withSport(CaptionTemplate t) {
+    final gid = gameIdByWire[t.wireStyle] ?? defaultGameIdentifierText(sport);
+    return CaptionTemplate.applyGameIdentifierText(t, gid);
+  }
 
   CaptionTemplate _wiredBaseline(WireStyle wire) {
     CaptionTemplate apply(CaptionTemplate? saved, CaptionTemplate factory) {

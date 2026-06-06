@@ -38,5 +38,18 @@
 	<string>https://mblinch.github.io/flofile_clean/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>4yqvvc7eAvcggD6+srm+dBvCpwIaaYHZyaDoMc9mfVs=</string>
+	<key>GIDClientID</key>
+	<string>737938045380-1om7uanapjhddrt8l9lncbmhmd1k2q0p.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.737938045380-1om7uanapjhddrt8l9lncbmhmd1k2q0p</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

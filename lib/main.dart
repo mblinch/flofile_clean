@@ -6,6 +6,8 @@ import 'package:timezone/data/latest.dart' as tz_data;
 
 import 'firebase_options.dart';
 import 'screens/caption_builder_screen.dart';
+import 'services/auth_service.dart';
+import 'widgets/app_auth_shell.dart';
 import 'widgets/preferences_dialog.dart';
 import 'intents.dart';
 import 'widgets/app_styled_dialogs.dart';
@@ -18,6 +20,7 @@ Future<void> main() async {
   tz_data.initializeTimeZones();
 
   await _initFirebaseIfConfigured();
+  await AuthService.instance.initialize();
 
   // Suppress debug output in console
   debugPrint = (String? message, {int? wrapWidth}) {
@@ -187,7 +190,9 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
-          home: const CaptionBuilderScreen(),
+          home: const AppAuthShell(
+            child: CaptionBuilderScreen(),
+          ),
         ),
       ),
     );

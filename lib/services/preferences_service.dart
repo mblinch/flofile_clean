@@ -4,6 +4,7 @@ import 'dart:convert';
 
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
+import 'app_defaults_firestore_service.dart';
 import 'iptc_template_apply_service.dart';
 
 class PreferencesService {
@@ -113,6 +114,13 @@ class PreferencesService {
   /// `gettyImages` | `imagn` | `ap` for sample credit line in caption layout preview.
   static const String _keyCaptionCreditSampleAgency = 'caption_credit_sample_agency';
   static const String _keySavedDefaultPreferences = 'saved_default_preferences';
+  static const String _keyHiddenIptcTemplateIds = 'hidden_iptc_template_ids';
+  static const String _keyIptcWirePresetPrefix = 'iptc_wire_preset_';
+  static const String _keyIptcWireClearedPrefix = 'iptc_wire_cleared_';
+  static const String _keySelectedIptcTemplateId = 'selected_iptc_template_id';
+  /// Per-wire, per-sport game identifier phrases (mirrors Firebase catalog).
+  static const String _keyGameIdentifierByWireAndSportJson =
+      'game_identifier_by_wire_and_sport_json';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -394,14 +402,99 @@ class PreferencesService {
 
     final active = CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
     if (active != null) {
-      final updated = CaptionTemplate.withSportGameIdentifierDefault(
-        active,
-        normalized,
-      );
+      final gid = await resolveGameIdentifierText(active.wireStyle, normalized);
+      final updated = CaptionTemplate.applyGameIdentifierText(active, gid);
       if (updated.gameIdentifierText != active.gameIdentifierText) {
         await prefs.setString(_keyCaptionTemplateJson, updated.encode());
       }
     }
+  }
+
+  /// Local per-wire-per-sport game identifier map (wire name → sport → text).
+  Future<Map<String, Map<String, String>>>
+      getGameIdentifierByWireAndSport() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyGameIdentifierByWireAndSportJson);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! Map) return {};
+      final out = <String, Map<String, String>>{};
+      decoded.forEach((wireKey, sportMap) {
+        if (sportMap is! Map) return;
+        final bySport = <String, String>{};
+        sportMap.forEach((sportKey, value) {
+          final text = value?.toString().trim() ?? '';
+          if (text.isNotEmpty) {
+            bySport[sportKey.toString().toLowerCase().trim()] = text;
+          }
+        });
+        if (bySport.isNotEmpty) out[wireKey.toString()] = bySport;
+      });
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> saveGameIdentifierByWireAndSport(
+    Map<String, Map<String, String>> map,
+  ) async {
+    final prefs = await _getPrefs();
+    if (map.isEmpty) {
+      await prefs.remove(_keyGameIdentifierByWireAndSportJson);
+      return;
+    }
+    await prefs.setString(
+      _keyGameIdentifierByWireAndSportJson,
+      json.encode(map),
+    );
+  }
+
+  Future<void> setGameIdentifierForWireAndSport(
+    WireStyle wire,
+    String sport,
+    String text,
+  ) async {
+    final map = await getGameIdentifierByWireAndSport();
+    final bySport = Map<String, String>.from(map[wire.name] ?? {});
+    final normalizedSport = sport.toLowerCase().trim();
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) {
+      bySport.remove(normalizedSport);
+    } else {
+      bySport[normalizedSport] = trimmed;
+    }
+    if (bySport.isEmpty) {
+      map.remove(wire.name);
+    } else {
+      map[wire.name] = bySport;
+    }
+    await saveGameIdentifierByWireAndSport(map);
+  }
+
+  /// Local overlay → Firebase catalog → [defaultGameIdentifierText].
+  Future<String> resolveGameIdentifierText(
+    WireStyle wire,
+    String sport,
+  ) async {
+    final normalizedSport = sport.toLowerCase().trim();
+    final local = await getGameIdentifierByWireAndSport();
+    final fromLocal = local[wire.name]?[normalizedSport]?.trim();
+    if (fromLocal != null && fromLocal.isNotEmpty) return fromLocal;
+    return AppDefaultsFirestoreService.resolveGameIdentifierText(
+      wire,
+      normalizedSport,
+    );
+  }
+
+  Future<CaptionTemplate> applyGameIdentifierForSport(
+    CaptionTemplate template,
+    WireStyle wire,
+    String sport,
+  ) async {
+    final text = await resolveGameIdentifierText(wire, sport);
+    return CaptionTemplate.applyGameIdentifierText(template, text);
   }
 
   Future<String> getCurrentSport() async {
@@ -442,15 +535,24 @@ class PreferencesService {
   Future<Map<String, List<String>>> getVerbOrder({String sport = 'baseball'}) async {
     final prefs = await _getPrefs();
     final raw = prefs.getString(_getVerbOrderKey(sport));
-    if (raw == null || raw.isEmpty) return {};
-    try {
-      final decoded = json.decode(raw) as Map<String, dynamic>;
-      return decoded.map(
-        (k, v) => MapEntry(k, List<String>.from(v as List<dynamic>)),
-      );
-    } catch (_) {
-      return {};
+    if (raw != null && raw.isNotEmpty) {
+      try {
+        final decoded = json.decode(raw) as Map<String, dynamic>;
+        return decoded.map(
+          (k, v) => MapEntry(k, List<String>.from(v as List<dynamic>)),
+        );
+      } catch (_) {}
     }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['verbOrder'] is Map) {
+      try {
+        final vo = sportDefault['verbOrder'] as Map<String, dynamic>;
+        return vo.map(
+          (k, v) => MapEntry(k, List<String>.from(v as List<dynamic>)),
+        );
+      } catch (_) {}
+    }
+    return {};
   }
 
   Future<void> saveVerbOrder(
@@ -471,6 +573,11 @@ class PreferencesService {
       '$_keySportDefaultPrefix${sport.toLowerCase()}';
 
   Future<Map<String, dynamic>?> getSportDefault(String sport) async {
+    final fromAppDefaults =
+        await AppDefaultsFirestoreService.getCachedSportVerbSettings(sport);
+    if (fromAppDefaults != null && fromAppDefaults.isNotEmpty) {
+      return fromAppDefaults;
+    }
     final prefs = await _getPrefs();
     final raw = prefs.getString(_getSportDefaultKey(sport));
     if (raw == null) return null;
@@ -1044,14 +1151,24 @@ class PreferencesService {
           (await getCaptionStyleLibrary()).map((e) => e.toJson()).toList(),
       'captionTemplateWireDefaults': <String, dynamic>{
         if (captionWireDefaultGetty != null)
-          'getty': captionWireDefaultGetty.toJson(),
+          'getty': CaptionTemplate.wireMasterJsonFromTemplate(
+            captionWireDefaultGetty,
+          ),
         if (captionWireDefaultImagn != null)
-          'imagn': captionWireDefaultImagn.toJson(),
-        if (captionWireDefaultAp != null) 'ap': captionWireDefaultAp.toJson(),
-        if (captionWireDefaultCp != null) 'cp': captionWireDefaultCp.toJson(),
+          'imagn': CaptionTemplate.wireMasterJsonFromTemplate(
+            captionWireDefaultImagn,
+          ),
+        if (captionWireDefaultAp != null)
+          'ap': CaptionTemplate.wireMasterJsonFromTemplate(captionWireDefaultAp),
+        if (captionWireDefaultCp != null)
+          'cp': CaptionTemplate.wireMasterJsonFromTemplate(captionWireDefaultCp),
         if (captionWireDefaultGettyIntl != null)
-          'gettyInternational': captionWireDefaultGettyIntl.toJson(),
+          'gettyInternational': CaptionTemplate.wireMasterJsonFromTemplate(
+            captionWireDefaultGettyIntl,
+          ),
       },
+      'gameIdentifierByWireAndSport':
+          await getGameIdentifierByWireAndSport(),
       'captionGameInfo': (await getCaptionGameInfo()).toJson(),
       'captionCreditSampleAgency': await getCaptionCreditSampleAgency(),
     };
@@ -1250,6 +1367,24 @@ class PreferencesService {
         }
       }
     }
+    if (preferences.containsKey('gameIdentifierByWireAndSport')) {
+      final raw = preferences['gameIdentifierByWireAndSport'];
+      if (raw is Map) {
+        final map = <String, Map<String, String>>{};
+        raw.forEach((wireKey, sportMap) {
+          if (sportMap is! Map) return;
+          final bySport = <String, String>{};
+          sportMap.forEach((sportKey, value) {
+            final text = value?.toString().trim() ?? '';
+            if (text.isNotEmpty) {
+              bySport[sportKey.toString().toLowerCase().trim()] = text;
+            }
+          });
+          if (bySport.isNotEmpty) map[wireKey.toString()] = bySport;
+        });
+        await saveGameIdentifierByWireAndSport(map);
+      }
+    }
     if (preferences.containsKey('captionStyleLibrary')) {
       final raw = preferences['captionStyleLibrary'];
       if (raw is List) {
@@ -1321,7 +1456,7 @@ class PreferencesService {
       final migrated = await _migrateCaptionTemplateFromLegacy();
       template = migrated ?? CaptionTemplate.getty();
     }
-    return CaptionTemplate.withSportGameIdentifierDefault(template, sport);
+    return await applyGameIdentifierForSport(template, template.wireStyle, sport);
   }
 
   Future<CaptionTemplate?> _migrateCaptionTemplateFromLegacy() async {
@@ -1374,7 +1509,7 @@ class PreferencesService {
     final decoded = CaptionTemplate.tryDecode(prefs.getString(key));
     if (decoded == null) return null;
     final sport = await getCurrentSport();
-    return CaptionTemplate.withSportGameIdentifierDefault(decoded, sport);
+    return applyGameIdentifierForSport(decoded, wire, sport);
   }
 
   Future<void> saveCaptionTemplateWireDefault(
@@ -1680,6 +1815,182 @@ class PreferencesService {
   Future<void> clearAllPreferences() async {
     final prefs = await _getPrefs();
     await prefs.clear();
+  }
+
+  // --- App originals (Firebase catalog) — IPTC templates + restore ---
+
+  Future<Set<String>> getHiddenIptcTemplateIds() async {
+    final prefs = await _getPrefs();
+    final list = prefs.getStringList(_keyHiddenIptcTemplateIds);
+    if (list == null) return <String>{};
+    return list.map((e) => e.trim()).where((e) => e.isNotEmpty).toSet();
+  }
+
+  Future<void> hideIptcTemplate(String templateId) async {
+    final id = templateId.trim();
+    if (id.isEmpty) return;
+    final hidden = await getHiddenIptcTemplateIds();
+    hidden.add(id);
+    final prefs = await _getPrefs();
+    await prefs.setStringList(_keyHiddenIptcTemplateIds, hidden.toList());
+  }
+
+  Future<void> clearHiddenIptcTemplateIds() async {
+    final prefs = await _getPrefs();
+    await prefs.remove(_keyHiddenIptcTemplateIds);
+  }
+
+  Future<String?> getSelectedIptcTemplateId() async {
+    final prefs = await _getPrefs();
+    final v = prefs.getString(_keySelectedIptcTemplateId);
+    if (v == null || v.trim().isEmpty) return null;
+    return v.trim();
+  }
+
+  Future<void> setSelectedIptcTemplateId(String id) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keySelectedIptcTemplateId, id.trim());
+  }
+
+  String _iptcWirePresetKey(WireStyle wire) =>
+      '$_keyIptcWirePresetPrefix${wire.name}';
+
+  String _iptcWireClearedKey(WireStyle wire) =>
+      '$_keyIptcWireClearedPrefix${wire.name}';
+
+  Future<void> saveIptcWirePreset(
+    WireStyle wire, {
+    required Map<String, String> preset,
+    List<String> clearedFields = const [],
+  }) async {
+    final prefs = await _getPrefs();
+    final key = _iptcWirePresetKey(wire);
+    if (preset.isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, json.encode(preset));
+    }
+    final clearedKey = _iptcWireClearedKey(wire);
+    if (clearedFields.isEmpty) {
+      await prefs.remove(clearedKey);
+    } else {
+      await prefs.setStringList(clearedKey, clearedFields);
+    }
+  }
+
+  Future<Map<String, String>> getIptcWirePreset(WireStyle wire) async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_iptcWirePresetKey(wire));
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = json.decode(raw) as Map<String, dynamic>;
+      return decoded.map(
+        (k, v) => MapEntry(k.toString(), v.toString()),
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<List<String>> getIptcWireClearedFields(WireStyle wire) async {
+    final prefs = await _getPrefs();
+    return prefs.getStringList(_iptcWireClearedKey(wire)) ?? const [];
+  }
+
+  /// Writes [selected_metadata_preset] for the active wire from per-wire storage.
+  Future<void> syncActiveMetadataPresetFromWire(WireStyle wire) async {
+    final preset = await getIptcWirePreset(wire);
+    final cleared = await getIptcWireClearedFields(wire);
+    final prefs = await _getPrefs();
+    if (preset.isNotEmpty) {
+      await prefs.setString(
+        'selected_metadata_preset',
+        json.encode(preset),
+      );
+    } else {
+      await prefs.remove('selected_metadata_preset');
+    }
+    await prefs.setStringList(
+      'selected_metadata_preset_cleared_fields',
+      cleared,
+    );
+    await setSelectedIptcTemplateId(AppDefaultsFirestoreService.templateIdForWire(wire));
+  }
+
+  Future<void> applyIptcCatalogToLocal(
+    List<IptcTemplateCatalogEntry> templates,
+  ) async {
+    for (final t in templates) {
+      await saveIptcWirePreset(
+        t.wireStyle,
+        preset: t.preset,
+        clearedFields: t.clearedFields,
+      );
+    }
+    if (templates.isNotEmpty) {
+      final wire = templates.first.wireStyle;
+      await syncActiveMetadataPresetFromWire(wire);
+    }
+  }
+
+  /// Per-sport verb bundle for admin publish (matches export format).
+  Future<Map<String, Map<String, dynamic>>> exportVerbSettingsBySport() async {
+    final out = <String, Map<String, dynamic>>{};
+    for (final sport in AppDefaultsFirestoreService.catalogSports) {
+      out[sport] = {
+        'categoryOrder': await getCategoryOrder(sport: sport),
+        'verbOrder': await getVerbOrder(sport: sport),
+        'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
+        'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
+        'customVerbWordings': await getCustomVerbWordings(sport: sport),
+        'verbOverrides': await getVerbOverrides(sport: sport),
+        'customVerbs': await getCustomVerbs(sport: sport),
+        'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
+      };
+    }
+    return out;
+  }
+
+  /// When the user has no saved category order for [sport], apply cached app defaults.
+  Future<void> seedVerbsFromAppDefaultsIfEmpty(String sport) async {
+    final prefs = await _getPrefs();
+    if (prefs.containsKey(_getCategoryOrderKey(sport))) return;
+    final slice =
+        await AppDefaultsFirestoreService.getCachedSportVerbSettings(sport);
+    if (slice == null || slice.isEmpty) return;
+    await importPreferences({'verbSettingsBySport': {sport: slice}});
+  }
+
+  /// Fetches latest app originals from Firebase and applies verbs + caption structures.
+  Future<void> restoreAppOriginals() async {
+    await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(
+      forceNetwork: true,
+    );
+    final catalog = AppDefaultsFirestoreService.getCachedCatalog();
+    if (catalog == null) {
+      throw StateError(
+        'Could not load app originals. Sign in and check your connection.',
+      );
+    }
+    if (catalog.verbSettingsBySport.isNotEmpty) {
+      await importPreferences({
+        'verbSettingsBySport': catalog.verbSettingsBySport,
+      });
+    }
+    if (catalog.captionTemplateWireDefaults.isNotEmpty) {
+      await importPreferences({
+        'captionTemplateWireDefaults': catalog.captionTemplateWireDefaults,
+      });
+    }
+    if (catalog.gameIdentifierByWireAndSport.isNotEmpty) {
+      await importPreferences({
+        'gameIdentifierByWireAndSport': catalog.gameIdentifierByWireAndSport,
+      });
+    } else if (catalog.captionTemplateWireDefaults.isNotEmpty) {
+      await saveGameIdentifierByWireAndSport(
+        AppDefaultsFirestoreService.seededGameIdentifierByWireAndSport(),
+      );
+    }
   }
 
   /// Reset to defaults. If a "Save as default" bundle exists, restores that; otherwise clears and applies hardcoded defaults.

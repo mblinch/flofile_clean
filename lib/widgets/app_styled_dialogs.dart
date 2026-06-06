@@ -7,6 +7,240 @@ import '../flo_layout_constants.dart';
 /// Matches [KeyboardFirePanel] FTP / burst primary actions (`keyboard_fire_dialog.dart`).
 const Color kAppDialogPrimaryBlue = Color(0xFF0052CC);
 
+/// Full verb editor (in-app + admin) — wide enough for two columns, minimal scroll.
+const double kVerbEditDialogWidth = 960.0;
+
+/// Right column width for caption sub-options in the verb editor.
+const double kVerbEditDialogSubOptionsWidth = 300.0;
+
+const TextStyle kAppDialogTitleStyle = TextStyle(
+  fontFamily: 'Inter',
+  fontSize: 14,
+  fontWeight: FontWeight.w600,
+  color: Colors.black87,
+  height: 1.35,
+);
+
+const TextStyle kAppDialogFieldTextStyle = TextStyle(
+  fontFamily: 'Inter',
+  fontSize: 11,
+);
+
+const TextStyle kAppDialogLabelTextStyle = TextStyle(
+  fontFamily: 'Inter',
+  fontSize: 11,
+  color: Colors.black87,
+);
+
+/// Label above inputs (not on the outline border).
+const TextStyle kAppDialogFieldLabelStyle = TextStyle(
+  fontFamily: 'Inter',
+  fontSize: 10,
+  fontWeight: FontWeight.w500,
+  color: Color(0xFF6B6B6B),
+  letterSpacing: -0.2,
+  height: 1.2,
+);
+
+const List<BoxShadow> kAppDialogCardShadow = [
+  BoxShadow(
+    color: Color(0x12000000),
+    blurRadius: 10,
+    offset: Offset(0, 3),
+  ),
+  BoxShadow(
+    color: Color(0x06000000),
+    blurRadius: 2,
+    offset: Offset(0, 1),
+  ),
+];
+
+/// White elevated surface for verb editor panels and example cards.
+BoxDecoration appDialogCardDecoration({double radius = 6}) => BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: const Color(0xFFE4E4E4)),
+      boxShadow: kAppDialogCardShadow,
+    );
+
+/// Standard [AlertDialog] shell for form dialogs (verb editor, admin, etc.).
+ShapeBorder get kAppDialogShape => const RoundedRectangleBorder(
+      borderRadius: BorderRadius.zero,
+    );
+
+/// Outlined input — label sits above via [AppDialogLabeledField], not in the border.
+InputDecoration appDialogFieldDecoration({String? hintText}) => InputDecoration(
+      hintText: hintText,
+      hintStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 11,
+        color: Color(0xFFB0B0B0),
+      ),
+      filled: true,
+      fillColor: Colors.white,
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: Color(0xFFD8D8D8)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: Color(0xFFD8D8D8)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: const BorderSide(color: kFloTealLight, width: 1.2),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+    );
+
+/// Label stacked above a form control.
+class AppDialogLabeledField extends StatelessWidget {
+  const AppDialogLabeledField({
+    super.key,
+    required this.label,
+    required this.child,
+    this.spacing = 5,
+    this.bottomGap = 12,
+  });
+
+  final String label;
+  final Widget child;
+  final double spacing;
+  final double bottomGap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomGap),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(label, style: kAppDialogFieldLabelStyle),
+          SizedBox(height: spacing),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class AppDialogLabeledTextField extends StatelessWidget {
+  const AppDialogLabeledTextField({
+    super.key,
+    required this.label,
+    required this.controller,
+    this.hintText,
+    this.onChanged,
+    this.enabled = true,
+    this.autofocus = false,
+    this.maxLines = 1,
+    this.bottomGap = 12,
+  });
+
+  final String label;
+  final TextEditingController controller;
+  final String? hintText;
+  final ValueChanged<String>? onChanged;
+  final bool enabled;
+  final bool autofocus;
+  final int maxLines;
+  final double bottomGap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppDialogLabeledField(
+      label: label,
+      bottomGap: bottomGap,
+      child: TextField(
+        controller: controller,
+        enabled: enabled,
+        autofocus: autofocus,
+        maxLines: maxLines,
+        style: kAppDialogFieldTextStyle,
+        onChanged: onChanged,
+        decoration: appDialogFieldDecoration(hintText: hintText),
+      ),
+    );
+  }
+}
+
+class AppDialogLabeledDropdown<T> extends StatelessWidget {
+  const AppDialogLabeledDropdown({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.bottomGap = 12,
+  });
+
+  final String label;
+  final T? value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?>? onChanged;
+  final double bottomGap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppDialogLabeledField(
+      label: label,
+      bottomGap: bottomGap,
+      child: DropdownButtonFormField<T>(
+        value: value,
+        items: items,
+        onChanged: onChanged,
+        isExpanded: true,
+        style: kAppDialogFieldTextStyle,
+        decoration: appDialogFieldDecoration(),
+        dropdownColor: Colors.white,
+      ),
+    );
+  }
+}
+
+/// Neutral preview box for live caption examples inside form dialogs.
+class AppDialogExamplePreview extends StatelessWidget {
+  const AppDialogExamplePreview({
+    super.key,
+    required this.title,
+    required this.text,
+  });
+
+  final String title;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: appDialogCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: kAppDialogFieldLabelStyle),
+          const SizedBox(height: 6),
+          Text(
+            text,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11,
+              color: Color(0xFF444444),
+              height: 1.4,
+            ),
+            softWrap: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Square, white dialogs consistent with burst caption UI
 /// (`burst_caption_confirm_dialog.dart`) — not default M3 rounded/surface tint.
 Future<bool?> showAppConfirmDialog({

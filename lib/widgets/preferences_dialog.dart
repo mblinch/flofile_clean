@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dropdown_flutter/custom_dropdown.dart';
 
+import '../services/admin_service.dart';
+import '../services/app_defaults_firestore_service.dart';
+import '../services/auth_service.dart';
 import '../services/camera_serial_service.dart';
 import '../services/preferences_service.dart';
 import '../utils/native_file_picker.dart';
@@ -36,8 +39,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   final TextEditingController _resolutionController = TextEditingController();
   final TextEditingController _mlbInningTzController = TextEditingController();
   String _sportForDefault = 'baseball';
+  String _publishSport = 'baseball';
   Map<String, dynamic>? _currentPreferences;
   bool _isLoading = true;
+  bool _isAdmin = false;
+  bool _appDefaultsBusy = false;
   _PrefsCategory _selectedCategory = _PrefsCategory.application;
 
   @override
@@ -65,8 +71,10 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     });
 
     _currentPreferences = await _preferencesService.exportAllPreferences();
+    final admin = await AdminService.isCurrentUserAdmin();
 
     setState(() {
+      _isAdmin = admin;
       _isLoading = false;
       _photoshopPathController.text = _currentPreferences?['photoshopPath']?.toString() ?? '';
       final res = _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
@@ -245,6 +253,12 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (AuthService.instance.isFirebaseReady) ...[
+          _buildAccountSection(),
+          const SizedBox(height: 20),
+          Divider(height: 1, color: Colors.grey.shade300),
+          const SizedBox(height: 20),
+        ],
         _buildInlineRow(
           'Serial Number Bylines',
           child: Expanded(
@@ -695,6 +709,242 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           'Favorite Teams',
           '${(_currentPreferences?['favoriteTeams'] as List?)?.length ?? 0} teams',
           icon: Icons.sports_baseball,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'App originals',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Restore verb layouts and caption structures from the cloud catalog '
+          'published by FloFile admins. Your FTP and caption library are not changed.',
+          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 10),
+        ElevatedGreyButton(
+          label: _appDefaultsBusy ? 'Restoring…' : 'Restore app originals',
+          fontSize: 11,
+          icon: Icons.cloud_download_outlined,
+          onPressed: _appDefaultsBusy ? null : _restoreAppOriginals,
+        ),
+        if (_isAdmin) ...[
+          const SizedBox(height: 20),
+          Text(
+            'Admin — publish defaults',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Saves your current verb arrangement to Firebase for all users '
+            '(used on restore and first sign-in).',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: 220,
+            child: DropdownFlutter<String>(
+              hintText: 'Sport',
+              items: const ['Baseball', 'Hockey', 'Basketball', 'Soccer'],
+              initialItem: _publishSport[0].toUpperCase() + _publishSport.substring(1),
+              closedHeaderPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              expandedHeaderPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              listItemPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: CustomDropdownDecoration(
+                closedFillColor: Colors.grey.shade50,
+                expandedFillColor: Colors.white,
+                closedBorder: Border.all(color: Colors.grey.shade300),
+                expandedBorder: Border.all(color: Colors.grey.shade300),
+                closedBorderRadius: BorderRadius.circular(6),
+                expandedBorderRadius: BorderRadius.circular(8),
+                hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                headerStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                listItemStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+              ),
+              onChanged: (label) {
+                if (label == null) return;
+                final map = {
+                  'Baseball': 'baseball',
+                  'Hockey': 'hockey',
+                  'Basketball': 'basketball',
+                  'Soccer': 'soccer',
+                };
+                setState(() => _publishSport = map[label] ?? 'baseball');
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedGreyButton(
+                label: _appDefaultsBusy ? 'Publishing…' : 'Publish verb defaults (sport)',
+                fontSize: 11,
+                icon: Icons.cloud_upload_outlined,
+                isTealGradient: true,
+                onPressed: _appDefaultsBusy ? null : () => _publishVerbsForSport(_publishSport),
+              ),
+              ElevatedGreyButton(
+                label: _appDefaultsBusy ? 'Publishing…' : 'Publish all sports',
+                fontSize: 11,
+                icon: Icons.cloud_upload_outlined,
+                onPressed: _appDefaultsBusy ? null : _publishAllVerbs,
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _restoreAppOriginals() async {
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: 'Restore app originals?',
+      message:
+          'This replaces your verb layouts and IPTC wire templates with the '
+          'latest catalog from Firebase. Hidden IPTC templates will reappear.',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Restore',
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _appDefaultsBusy = true);
+    try {
+      await _preferencesService.restoreAppOriginals();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('App originals restored from Firebase.'),
+          backgroundColor: Color(0xFF4A7A96),
+        ),
+      );
+      await _loadCurrentPreferences();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Restore failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _appDefaultsBusy = false);
+    }
+  }
+
+  Future<void> _publishVerbsForSport(String sport) async {
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: 'Publish verb defaults?',
+      message:
+          'This updates app originals for $sport for all signed-in users '
+          '(on restore and new installs). Continue?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Publish',
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _appDefaultsBusy = true);
+    try {
+      final bySport = await _preferencesService.exportVerbSettingsBySport();
+      final data = bySport[sport];
+      if (data == null) throw StateError('No verb data for $sport');
+      await AppDefaultsFirestoreService.publishVerbsForSport(sport, data);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Published verb defaults for $sport.'),
+          backgroundColor: const Color(0xFF4A7A96),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Publish failed: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _appDefaultsBusy = false);
+    }
+  }
+
+  Future<void> _publishAllVerbs() async {
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: 'Publish all verb defaults?',
+      message:
+          'This updates app originals for every sport in Firebase. Continue?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Publish all',
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _appDefaultsBusy = true);
+    try {
+      final bySport = await _preferencesService.exportVerbSettingsBySport();
+      await AppDefaultsFirestoreService.publishAllVerbs(bySport);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Published verb defaults for all sports.'),
+          backgroundColor: Color(0xFF4A7A96),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Publish failed: $e'), backgroundColor: Colors.red),
+      );
+    } finally {
+      if (mounted) setState(() => _appDefaultsBusy = false);
+    }
+  }
+
+  Widget _buildAccountSection() {
+    final user = AuthService.instance.currentUser;
+    final email = user?.email?.trim();
+    final label = (email != null && email.isNotEmpty)
+        ? email
+        : (user?.uid ?? 'Signed in');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Account',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade900,
+          ),
+        ),
+        const SizedBox(height: 10),
+        _buildModernPreferenceItem(
+          'Signed in as',
+          label,
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: ElevatedGreyButton(
+            label: 'Sign out',
+            fontSize: 11,
+            isDanger: true,
+            onPressed: () async {
+              await AuthService.instance.signOut();
+              if (!context.mounted) return;
+              Navigator.pop(context);
+            },
+          ),
         ),
       ],
     );

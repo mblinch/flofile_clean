@@ -75,7 +75,6 @@ class _StartupCaptionLayoutPreviewState
       _preview = preview;
       _loading = false;
     });
-    widget.onWireStyleChanged?.call(template.wireStyle);
   }
 
   Future<void> _toggleFavoriteCaptionStyle(String token) async {

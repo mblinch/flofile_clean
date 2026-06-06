@@ -10,6 +10,7 @@ import '../caption_style/caption_session_context.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/date_formula.dart';
 import '../caption_style/game_info.dart';
+import '../services/app_defaults_firestore_service.dart';
 import '../services/current_user_service.dart';
 import '../services/preferences_service.dart';
 import 'app_compact_checkbox.dart';
@@ -23,7 +24,33 @@ const Color _captionLayoutBlue = Color(0xFF0052CC);
 
 /// Caption layout: wire preset or custom formula; preview uses fixed sample metadata.
 class CaptionLayoutBuilderDialog extends StatefulWidget {
-  const CaptionLayoutBuilderDialog({super.key});
+  const CaptionLayoutBuilderDialog({
+    super.key,
+    this.embedded = false,
+    this.adminMode = false,
+    this.initialWire,
+    this.initialTemplate,
+    this.wireDraftsSeed,
+    this.gameIdDraftsSeed,
+    this.initialSport,
+    this.onDraftChanged,
+    this.onWireChanged,
+    this.onRegisterFlush,
+  });
+
+  /// When true, renders without [Dialog] chrome (for embedding in admin).
+  final bool embedded;
+
+  /// Edits in-memory wire drafts instead of writing user preferences.
+  final bool adminMode;
+  final WireStyle? initialWire;
+  final CaptionTemplate? initialTemplate;
+  final Map<WireStyle, CaptionTemplate>? wireDraftsSeed;
+  final Map<WireStyle, Map<String, String>>? gameIdDraftsSeed;
+  final String? initialSport;
+  final void Function(WireStyle wire, CaptionTemplate template)? onDraftChanged;
+  final ValueChanged<WireStyle>? onWireChanged;
+  final void Function(Future<void> Function() flush)? onRegisterFlush;
 
   static Future<void> show(BuildContext context) async {
     await showDialog<void>(
@@ -35,11 +62,10 @@ class CaptionLayoutBuilderDialog extends StatefulWidget {
 
   @override
   State<CaptionLayoutBuilderDialog> createState() =>
-      _CaptionLayoutBuilderDialogState();
+      CaptionLayoutBuilderDialogState();
 }
 
-class _CaptionLayoutBuilderDialogState
-    extends State<CaptionLayoutBuilderDialog> {
+class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> {
   /// Sample city / date / venue for preview only (matches sample sentence in renderer).
   /// Photographer is resolved from the signed-in user at build time via
   /// [CurrentUserService]; agency is left blank so the renderer falls back to
@@ -156,6 +182,9 @@ class _CaptionLayoutBuilderDialogState
   /// Application sport (baseball / hockey / basketball / soccer) for defaults.
   String _sessionSport = 'baseball';
 
+  /// Resolved game identifier per built-in wire for [_sessionSport].
+  final Map<WireStyle, String> _gameIdByWire = {};
+
   /// Favorite caption-style menu token (per sport), shown with a star in the dropdown.
   String? _favoriteCaptionStyleToken;
 
@@ -204,7 +233,96 @@ class _CaptionLayoutBuilderDialogState
     _customCreatorCtrl.addListener(_onCustomCreatorEdited);
     _customCreditCtrl.addListener(_onCustomCreditEdited);
     _snippetLiteralCtrl.addListener(_onSnippetLiteralEdited);
-    _load = _loadFromPrefs();
+    _load = widget.adminMode ? _loadForAdmin() : _loadFromPrefs();
+  }
+
+  /// Flushes pending edits (used before admin publish).
+  Future<void> flushDraft() async {
+    await _persistCaptionLayoutToPreferences(
+      syncBuiltInWireDefault: true,
+      allowSkipIfUnchanged: false,
+    );
+  }
+
+  void _seedWireDefaultFromDraft(WireStyle wire, CaptionTemplate template) {
+    final copy = _deepCopyCaptionTemplate(template).copyWith(wireStyle: wire);
+    switch (wire) {
+      case WireStyle.getty:
+        _gettyWireDefault = copy;
+        break;
+      case WireStyle.imagn:
+        _imagnWireDefault = copy;
+        break;
+      case WireStyle.ap:
+        _apWireDefault = copy;
+        break;
+      case WireStyle.cp:
+        _cpWireDefault = copy;
+        break;
+      case WireStyle.gettyInternational:
+        _gettyIntlWireDefault = copy;
+        break;
+      case WireStyle.custom:
+        break;
+    }
+  }
+
+  Future<void> _loadGameIdByWire() async {
+    _gameIdByWire.clear();
+    if (widget.adminMode && widget.gameIdDraftsSeed != null) {
+      for (final wire in AppDefaultsFirestoreService.captionWireStyles) {
+        final fromDraft = widget.gameIdDraftsSeed![wire]?[_sessionSport]?.trim();
+        _gameIdByWire[wire] = (fromDraft != null && fromDraft.isNotEmpty)
+            ? fromDraft
+            : defaultGameIdentifierText(_sessionSport);
+      }
+      return;
+    }
+    final prefs = await PreferencesService.getInstance();
+    for (final wire in AppDefaultsFirestoreService.captionWireStyles) {
+      _gameIdByWire[wire] =
+          await prefs.resolveGameIdentifierText(wire, _sessionSport);
+    }
+  }
+
+  Future<void> _loadForAdmin() async {
+    _sessionSport = widget.initialSport ?? 'baseball';
+    await _loadGameIdByWire();
+    final wire = widget.initialWire ?? WireStyle.getty;
+    _wireDrafts.clear();
+    if (widget.wireDraftsSeed != null) {
+      for (final entry in widget.wireDraftsSeed!.entries) {
+        final copy =
+            _deepCopyCaptionTemplate(entry.value).copyWith(wireStyle: entry.key);
+        _wireDrafts[entry.key] = copy;
+        _seedWireDefaultFromDraft(entry.key, copy);
+      }
+    }
+    var template = widget.initialTemplate != null
+        ? _deepCopyCaptionTemplate(widget.initialTemplate!)
+        : _draftOrBaseline(wire);
+    template = _withSessionSportGameId(template.copyWith(wireStyle: wire));
+    final mergedGaps = CaptionFormulaRenderer.effectiveSegmentGaps(template);
+    if (template.customSeparators == null ||
+        template.customSeparators!.length != mergedGaps.length) {
+      template = template.copyWith(customSeparators: mergedGaps);
+    }
+    template = template.normalizePerOccurrenceLists();
+    if (!mounted) return;
+    setState(() {
+      _template = template;
+      _selectedWire = wire;
+      _selectedSavedStyleId = null;
+      _prefsLoaded = true;
+      _lastSavedTemplateSnapshot = _templateSnapshot(template);
+      _lastPreset = _clonePreset(template);
+      _initGapControllers(_template);
+      _syncBylineControllersFromTemplate();
+    });
+    widget.onRegisterFlush?.call(flushDraft);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncDateUiFromTemplate();
+    });
   }
 
   /// Rebuilds local editor state from [_template]. Called after prefs load and
@@ -672,12 +790,16 @@ class _CaptionLayoutBuilderDialogState
     });
   }
 
-  CaptionTemplate _withSessionSportGameId(CaptionTemplate t) =>
-      CaptionTemplate.withSportGameIdentifierDefault(t, _sessionSport);
+  CaptionTemplate _withSessionSportGameId(CaptionTemplate t) {
+    final gid = _gameIdByWire[t.wireStyle] ??
+        defaultGameIdentifierText(_sessionSport);
+    return CaptionTemplate.applyGameIdentifierText(t, gid);
+  }
 
   Future<void> _loadFromPrefs() async {
     final prefs = await PreferencesService.getInstance();
     _sessionSport = await prefs.getCurrentSport();
+    await _loadGameIdByWire();
     _favoriteCaptionStyleToken =
         await prefs.getFavoriteCaptionStyleToken(sport: _sessionSport);
     // Promote any legacy "Getty International" library entry before we read
@@ -738,6 +860,7 @@ class _CaptionLayoutBuilderDialogState
   }
 
   Future<void> _toggleFavoriteCaptionStyle(String token) async {
+    if (widget.adminMode) return;
     final prefs = await PreferencesService.getInstance();
     setState(() {
       if (_favoriteCaptionStyleToken == token) {
@@ -779,6 +902,20 @@ class _CaptionLayoutBuilderDialogState
     if (allowSkipIfUnchanged &&
         saveSnapshot == _lastSavedTemplateSnapshot &&
         !syncBuiltInWireDefault) {
+      return;
+    }
+    if (widget.adminMode) {
+      if (syncBuiltInWireDefault &&
+          _isBuiltInWire(_selectedWire) &&
+          _selectedSavedStyleId == null) {
+        _wireDrafts[_selectedWire] = _deepCopyCaptionTemplate(normalized);
+        _seedWireDefaultFromDraft(_selectedWire, normalized);
+      }
+      widget.onDraftChanged?.call(_selectedWire, normalized);
+      _lastSavedTemplateSnapshot = saveSnapshot;
+      if (mounted) {
+        setState(() => _template = normalized);
+      }
       return;
     }
     final prefs = await PreferencesService.getInstance();
@@ -918,6 +1055,15 @@ class _CaptionLayoutBuilderDialogState
   }
 
   List<String> _captionStyleDropdownTokens() {
+    if (widget.adminMode) {
+      return const [
+        _menuTokGetty,
+        _menuTokGettyIntl,
+        _menuTokImagn,
+        _menuTokAp,
+        _menuTokCp,
+      ];
+    }
     final tokens = [
       _menuTokGetty,
       _menuTokImagn,
@@ -1193,7 +1339,11 @@ class _CaptionLayoutBuilderDialogState
 
   void _rememberCurrentWireDraft() {
     if (!_isBuiltInWire(_selectedWire) || _selectedSavedStyleId != null) return;
-    _wireDrafts[_selectedWire] = _deepCopyCaptionTemplate(_template);
+    _flushGapControllersIntoTemplate();
+    final normalized = _template.normalizePerOccurrenceLists();
+    _wireDrafts[_selectedWire] = _deepCopyCaptionTemplate(normalized);
+    _seedWireDefaultFromDraft(_selectedWire, normalized);
+    widget.onDraftChanged?.call(_selectedWire, normalized);
   }
 
   CaptionTemplate _draftOrBaseline(WireStyle wire) {
@@ -1617,6 +1767,7 @@ class _CaptionLayoutBuilderDialogState
       _punctuationSnippetEditorOpen = false;
       _disposeGapControllers();
       _selectedWire = w;
+      widget.onWireChanged?.call(w);
       switch (w) {
         case WireStyle.getty:
         case WireStyle.gettyInternational:
@@ -3774,12 +3925,9 @@ class _CaptionLayoutBuilderDialogState
     // stays usable on short windows while using more height on large displays.
     final dialogWidth = (mq.width - 32).clamp(320.0, 1100.0);
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: SizedBox(
-        width: dialogWidth,
-        height: dialogHeight,
+    final shell = SizedBox(
+        width: widget.embedded ? double.infinity : dialogWidth,
+        height: widget.embedded ? double.infinity : dialogHeight,
         child: Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -3799,43 +3947,44 @@ class _CaptionLayoutBuilderDialogState
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border(
-                        bottom:
-                            BorderSide(color: Colors.grey.shade200, width: 1),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Caption Layout',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade900,
-                            letterSpacing: -0.2,
-                          ),
+                  if (!widget.embedded)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border(
+                          bottom:
+                              BorderSide(color: Colors.grey.shade200, width: 1),
                         ),
-                        const Spacer(),
-                        Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => Navigator.of(context).pop(),
-                            borderRadius: BorderRadius.circular(0),
-                            child: Padding(
-                              padding: const EdgeInsets.all(3),
-                              child: Icon(Icons.close,
-                                  size: 18, color: Colors.grey.shade600),
+                      ),
+                      child: Row(
+                        children: [
+                          Text(
+                            'Caption Layout',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade900,
+                              letterSpacing: -0.2,
                             ),
                           ),
-                        ),
-                      ],
+                          const Spacer(),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => Navigator.of(context).pop(),
+                              borderRadius: BorderRadius.circular(0),
+                              child: Padding(
+                                padding: const EdgeInsets.all(3),
+                                child: Icon(Icons.close,
+                                    size: 18, color: Colors.grey.shade600),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
                   Expanded(
                     child: FutureBuilder<void>(
                       future: _load,
@@ -4137,58 +4286,98 @@ class _CaptionLayoutBuilderDialogState
                                                             ),
                                                           ],
                                                         ),
-                                                        const SizedBox(
-                                                            height: 2),
-                                                        Align(
-                                                          alignment: Alignment
-                                                              .centerRight,
-                                                          child: Wrap(
-                                                            spacing: 0,
-                                                            runSpacing: 2,
-                                                            alignment:
-                                                                WrapAlignment
-                                                                    .end,
-                                                            children: [
-                                                              Builder(
-                                                                  builder: (_) {
-                                                                final mode =
-                                                                    _currentRenameMode();
-                                                                String label;
-                                                                String tooltip;
-                                                                switch (mode) {
-                                                                  case _RenamePromptMode
-                                                                      .libraryEntry:
-                                                                    label =
-                                                                        'Rename';
-                                                                    tooltip =
-                                                                        'Change the name of the saved caption style '
-                                                                        'currently selected in the Caption Style menu.';
-                                                                    break;
-                                                                  case _RenamePromptMode
-                                                                      .wireLabel:
-                                                                    label =
-                                                                        'Rename';
-                                                                    tooltip =
-                                                                        'Change how “${_factoryWireLabel(_selectedWire)}” is labelled in your '
-                                                                        'Caption Style menu (e.g. a shorter label than the default). '
-                                                                        'The layout itself is unchanged.';
-                                                                    break;
-                                                                  case _RenamePromptMode
-                                                                      .saveAsNewLibrary:
-                                                                    label =
-                                                                        'Save as…';
-                                                                    tooltip =
-                                                                        'Save the current layout to your Caption Style '
-                                                                        'menu with a name of your choice.';
-                                                                    break;
-                                                                }
-                                                                return Tooltip(
+                                                        if (!widget.adminMode) ...[
+                                                          const SizedBox(
+                                                              height: 2),
+                                                          Align(
+                                                            alignment: Alignment
+                                                                .centerRight,
+                                                            child: Wrap(
+                                                              spacing: 0,
+                                                              runSpacing: 2,
+                                                              alignment:
+                                                                  WrapAlignment
+                                                                      .end,
+                                                              children: [
+                                                                Builder(
+                                                                    builder: (_) {
+                                                                  final mode =
+                                                                      _currentRenameMode();
+                                                                  String label;
+                                                                  String tooltip;
+                                                                  switch (mode) {
+                                                                    case _RenamePromptMode
+                                                                        .libraryEntry:
+                                                                      label =
+                                                                          'Rename';
+                                                                      tooltip =
+                                                                          'Change the name of the saved caption style '
+                                                                          'currently selected in the Caption Style menu.';
+                                                                      break;
+                                                                    case _RenamePromptMode
+                                                                        .wireLabel:
+                                                                      label =
+                                                                          'Rename';
+                                                                      tooltip =
+                                                                          'Change how “${_factoryWireLabel(_selectedWire)}” is labelled in your '
+                                                                          'Caption Style menu (e.g. a shorter label than the default). '
+                                                                          'The layout itself is unchanged.';
+                                                                      break;
+                                                                    case _RenamePromptMode
+                                                                        .saveAsNewLibrary:
+                                                                      label =
+                                                                          'Save as…';
+                                                                      tooltip =
+                                                                          'Save the current layout to your Caption Style '
+                                                                          'menu with a name of your choice.';
+                                                                      break;
+                                                                  }
+                                                                  return Tooltip(
+                                                                    message:
+                                                                        tooltip,
+                                                                    waitDuration:
+                                                                        const Duration(
+                                                                            milliseconds:
+                                                                                400),
+                                                                    child:
+                                                                        TextButton(
+                                                                      style: TextButton
+                                                                          .styleFrom(
+                                                                        padding:
+                                                                            const EdgeInsets
+                                                                                .symmetric(
+                                                                          horizontal:
+                                                                              6,
+                                                                          vertical:
+                                                                              2,
+                                                                        ),
+                                                                        minimumSize:
+                                                                            Size.zero,
+                                                                        tapTargetSize:
+                                                                            MaterialTapTargetSize
+                                                                                .shrinkWrap,
+                                                                      ),
+                                                                      onPressed:
+                                                                          _openRenameCaptionStylePrompt,
+                                                                      child: Text(
+                                                                        label,
+                                                                        style:
+                                                                            TextStyle(
+                                                                          fontSize:
+                                                                              10,
+                                                                          fontWeight:
+                                                                              FontWeight.w600,
+                                                                          color:
+                                                                              _captionLayoutBlue,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                  );
+                                                                }),
+                                                                Tooltip(
                                                                   message:
-                                                                      tooltip,
-                                                                  waitDuration:
-                                                                      const Duration(
-                                                                          milliseconds:
-                                                                              400),
+                                                                      'Copy this layout as Custom so you can edit it '
+                                                                      'without changing your Getty USA, Imagn, or AP default.',
                                                                   child:
                                                                       TextButton(
                                                                     style: TextButton
@@ -4208,158 +4397,120 @@ class _CaptionLayoutBuilderDialogState
                                                                               .shrinkWrap,
                                                                     ),
                                                                     onPressed:
-                                                                        _openRenameCaptionStylePrompt,
+                                                                        _duplicateCaptionStyle,
                                                                     child: Text(
-                                                                      label,
+                                                                      'Duplicate',
                                                                       style:
                                                                           TextStyle(
                                                                         fontSize:
                                                                             10,
                                                                         fontWeight:
-                                                                            FontWeight.w600,
+                                                                            FontWeight
+                                                                                .w600,
                                                                         color:
                                                                             _captionLayoutBlue,
                                                                       ),
                                                                     ),
                                                                   ),
-                                                                );
-                                                              }),
-                                                              Tooltip(
-                                                                message:
-                                                                    'Copy this layout as Custom so you can edit it '
-                                                                    'without changing your Getty USA, Imagn, or AP default.',
-                                                                child:
-                                                                    TextButton(
-                                                                  style: TextButton
-                                                                      .styleFrom(
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .symmetric(
-                                                                      horizontal:
-                                                                          6,
-                                                                      vertical:
-                                                                          2,
+                                                                ),
+                                                                Tooltip(
+                                                                  message:
+                                                                      'After you tune Getty USA / Imagn / AP / Getty International, '
+                                                                      'save all of them as your new defaults at once.',
+                                                                  child:
+                                                                      TextButton(
+                                                                    style: TextButton
+                                                                        .styleFrom(
+                                                                      padding:
+                                                                          const EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            6,
+                                                                        vertical:
+                                                                            2,
+                                                                      ),
+                                                                      minimumSize:
+                                                                          Size.zero,
+                                                                      tapTargetSize:
+                                                                          MaterialTapTargetSize
+                                                                              .shrinkWrap,
                                                                     ),
-                                                                    minimumSize:
-                                                                        Size.zero,
-                                                                    tapTargetSize:
-                                                                        MaterialTapTargetSize
-                                                                            .shrinkWrap,
-                                                                  ),
-                                                                  onPressed:
-                                                                      _duplicateCaptionStyle,
-                                                                  child: Text(
-                                                                    'Duplicate',
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                      color:
-                                                                          _captionLayoutBlue,
+                                                                    onPressed:
+                                                                        _setAllStylesAsDefaults,
+                                                                    child: Text(
+                                                                      'Set all as defaults',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w600,
+                                                                        color:
+                                                                            _captionLayoutBlue,
+                                                                      ),
                                                                     ),
                                                                   ),
                                                                 ),
-                                                              ),
-                                                              Tooltip(
-                                                                message:
-                                                                    'After you tune Getty USA / Imagn / AP / Getty International, '
-                                                                    'save all of them as your new defaults at once.',
-                                                                child:
-                                                                    TextButton(
-                                                                  style: TextButton
-                                                                      .styleFrom(
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .symmetric(
-                                                                      horizontal:
-                                                                          6,
-                                                                      vertical:
-                                                                          2,
+                                                                Tooltip(
+                                                                  message:
+                                                                      'Only your own saved caption styles can be removed '
+                                                                      '(entries at the bottom of the Caption Style menu). '
+                                                                      'Select one of those first. Built-in Getty USA / Getty International / Imagn / AP '
+                                                                      'cannot be deleted. Your current layout stays open; '
+                                                                      'use Save to update the active template.',
+                                                                  waitDuration:
+                                                                      const Duration(
+                                                                          milliseconds:
+                                                                              500),
+                                                                  child:
+                                                                      TextButton(
+                                                                    style: TextButton
+                                                                        .styleFrom(
+                                                                      padding:
+                                                                          const EdgeInsets
+                                                                              .symmetric(
+                                                                        horizontal:
+                                                                            6,
+                                                                        vertical:
+                                                                            2,
+                                                                      ),
+                                                                      minimumSize:
+                                                                          Size.zero,
+                                                                      tapTargetSize:
+                                                                          MaterialTapTargetSize
+                                                                              .shrinkWrap,
                                                                     ),
-                                                                    minimumSize:
-                                                                        Size.zero,
-                                                                    tapTargetSize:
-                                                                        MaterialTapTargetSize
-                                                                            .shrinkWrap,
-                                                                  ),
-                                                                  onPressed:
-                                                                      _setAllStylesAsDefaults,
-                                                                  child: Text(
-                                                                    'Set all as defaults',
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                      color:
-                                                                          _captionLayoutBlue,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              Tooltip(
-                                                                message:
-                                                                    'Only your own saved caption styles can be removed '
-                                                                    '(entries at the bottom of the Caption Style menu). '
-                                                                    'Select one of those first. Built-in Getty USA / Getty International / Imagn / AP '
-                                                                    'cannot be deleted. Your current layout stays open; '
-                                                                    'use Save to update the active template.',
-                                                                waitDuration:
-                                                                    const Duration(
-                                                                        milliseconds:
-                                                                            500),
-                                                                child:
-                                                                    TextButton(
-                                                                  style: TextButton
-                                                                      .styleFrom(
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .symmetric(
-                                                                      horizontal:
-                                                                          6,
-                                                                      vertical:
-                                                                          2,
-                                                                    ),
-                                                                    minimumSize:
-                                                                        Size.zero,
-                                                                    tapTargetSize:
-                                                                        MaterialTapTargetSize
-                                                                            .shrinkWrap,
-                                                                  ),
-                                                                  onPressed:
-                                                                      _selectedSavedStyleId ==
-                                                                              null
-                                                                          ? null
-                                                                          : _deleteSelectedCaptionStyle,
-                                                                  child: Text(
-                                                                    'Delete',
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          10,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                      color: _selectedSavedStyleId ==
-                                                                              null
-                                                                          ? Colors
-                                                                              .grey
-                                                                              .shade400
-                                                                          : Colors
-                                                                              .red
-                                                                              .shade700,
+                                                                    onPressed:
+                                                                        _selectedSavedStyleId ==
+                                                                                null
+                                                                            ? null
+                                                                            : _deleteSelectedCaptionStyle,
+                                                                    child: Text(
+                                                                      'Delete',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w600,
+                                                                        color: _selectedSavedStyleId ==
+                                                                                null
+                                                                            ? Colors
+                                                                                .grey
+                                                                                .shade400
+                                                                            : Colors
+                                                                                .red
+                                                                                .shade700,
+                                                                      ),
                                                                     ),
                                                                   ),
                                                                 ),
-                                                              ),
-                                                            ],
+                                                              ],
+                                                            ),
                                                           ),
-                                                        ),
+                                                        ],
                                                         const SizedBox(
                                                             height: 8),
                                                         Align(
@@ -4989,36 +5140,37 @@ class _CaptionLayoutBuilderDialogState
                       },
                     ),
                   ),
-                  Container(
-                    width: double.infinity,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
-                      border: Border(
-                        top: BorderSide(color: Colors.grey.shade200, width: 1),
+                  if (!widget.embedded)
+                    Container(
+                      width: double.infinity,
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        border: Border(
+                          top: BorderSide(color: Colors.grey.shade200, width: 1),
+                        ),
+                      ),
+                      child: Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 4,
+                        runSpacing: 6,
+                        children: [
+                          ElevatedGreyButton(
+                            label: 'Cancel',
+                            fontSize: 10,
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                          const SizedBox(width: 4),
+                          ElevatedGreyButton(
+                            label: 'Save',
+                            fontSize: 10,
+                            isPrimary: true,
+                            onPressed: _save,
+                          ),
+                        ],
                       ),
                     ),
-                    child: Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 4,
-                      runSpacing: 6,
-                      children: [
-                        ElevatedGreyButton(
-                          label: 'Cancel',
-                          fontSize: 10,
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                        const SizedBox(width: 4),
-                        ElevatedGreyButton(
-                          label: 'Save',
-                          fontSize: 10,
-                          isPrimary: true,
-                          onPressed: _save,
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
               if (_renameCaptionStylePromptOpen)
@@ -5026,7 +5178,13 @@ class _CaptionLayoutBuilderDialogState
             ],
           ),
         ),
-      ),
+      );
+
+    if (widget.embedded) return shell;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: shell,
     );
   }
 }
@@ -5086,7 +5244,7 @@ class _GapSeparatorFieldState extends State<_GapSeparatorField> {
     // Normalize on blur so pre-existing or hand-typed bad spacing is fixed.
     if (_wasFocused && !focused) {
       final raw = widget.controller.text;
-      final normalized = _CaptionLayoutBuilderDialogState._normalizeSep(raw);
+      final normalized = CaptionLayoutBuilderDialogState._normalizeSep(raw);
       if (normalized != raw) {
         widget.controller.value = TextEditingValue(
           text: normalized,

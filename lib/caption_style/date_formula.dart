@@ -171,6 +171,9 @@ class DateFormula {
       }
       buf.write(fields[origIdx].render(date));
     }
+    // Emit the separator that immediately follows the last enabled field.
+    // e.g. if Day is kept and Year is disabled, the separator between Day and
+    // Year acts as a "trailing suffix" (the user configured it intentionally).
     final trailingIdx = keptIndices.last + 1;
     if (trailingIdx < separators.length) {
       buf.write(separators[trailingIdx]);

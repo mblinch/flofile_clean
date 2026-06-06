@@ -5,11 +5,15 @@ import '../utils/native_file_picker.dart';
 import 'dart:io';
 import 'dart:async';
 import '../services/api_manager.dart';
+import '../services/admin_service.dart';
+import '../services/auth_service.dart';
 import '../services/preferences_service.dart';
 import 'preferences_dialog.dart';
 import 'app_styled_dialogs.dart';
 import '../services/camera_serial_service.dart';
 import 'app_compact_checkbox.dart';
+import 'flo_chrome_header.dart';
+import 'admin_screen.dart';
 
 /// Accent for compact checkboxes (matches Preferences / FTP blue).
 const Color _kHeaderPrefsBlue = Color(0xFF0052CC);
@@ -308,6 +312,11 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
         child: _buildFileInfoTitle(),
       ),
       actions: [
+        if (AuthService.instance.isFirebaseReady &&
+            AuthService.instance.currentUser != null)
+          FloHeaderSignOutButton(
+            tooltip: 'Signed in as ${AuthService.instance.currentUser?.email ?? AuthService.instance.currentUser?.displayName ?? 'Account'}',
+          ),
         IconButton(
           onPressed: () async {
             await showDialog(
@@ -358,6 +367,15 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           ),
           const SizedBox(width: 8),
           _topbarBadge('Beta'),
+          if (AdminService.isCurrentUserAdminSync()) ...[
+            const SizedBox(width: 6),
+            AdminBadgeButton(
+              child: _topbarBadge(
+                'Admin',
+                color: const Color(0xFFE8C547).withValues(alpha: 0.45),
+              ),
+            ),
+          ],
         ],
       );
     }
@@ -999,3 +1017,4 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     }
   }
 }
+

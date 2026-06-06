@@ -1425,6 +1425,23 @@ class CaptionTemplate {
     return template.copyWith(gameIdentifierText: next);
   }
 
+  /// Applies an explicit per-wire-per-sport game identifier (catalog or local overlay).
+  static CaptionTemplate applyGameIdentifierText(
+    CaptionTemplate template,
+    String gameIdentifierText,
+  ) {
+    final trimmed = gameIdentifierText.trim();
+    if (trimmed.isEmpty) return template;
+    return template.copyWith(gameIdentifierText: trimmed);
+  }
+
+  /// Wire layout masters should not store sport-specific game ID text.
+  CaptionTemplate stripGameIdentifierForWireMaster() =>
+      copyWith(gameIdentifierText: '');
+
+  static Map<String, dynamic> wireMasterJsonFromTemplate(CaptionTemplate t) =>
+      t.copyWith(wireStyle: t.wireStyle).stripGameIdentifierForWireMaster().toJson();
+
   /// Migrates from legacy prefs (`game_date`, `body`, …) + `getty` / `imagn` flavor.
   static CaptionTemplate fromLegacySegmentOrder(
     List<String> legacyIds,

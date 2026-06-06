@@ -8,7 +8,9 @@ import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
+import '../services/app_defaults_firestore_service.dart';
 import '../services/preferences_service.dart';
+import 'flo_chrome_header.dart';
 import '../caption_style/caption_template.dart';
 import 'startup_caption_layout_preview.dart';
 import '../caption_style/wire_iptc_specs.dart';
@@ -92,6 +94,8 @@ class _StartupDialogState extends State<StartupDialog> {
   bool _iptcTemplateLoadedBeforeFolder = false;
   int _iptcTemplateRevision = 0;
   WireStyle _iptcWireStyle = WireStyle.getty;
+  String _selectedIptcTemplateId = 'getty';
+  List<IptcTemplateCatalogEntry> _visibleIptcTemplates = [];
   /// Panel keys whose template value is intentionally blank → cleared from files on import.
   Set<String> _iptcTemplateClearedFields = {};
   List<String> _selectedImageFiles = [];
@@ -155,12 +159,22 @@ class _StartupDialogState extends State<StartupDialog> {
 
   Future<void> _initializeAndLoadData() async {
     _preferencesService = await PreferencesService.getInstance();
+    await AppDefaultsFirestoreService.loadCacheFromDisk();
+    await _loadIptcCatalog();
     await _loadIptcWireContext();
-    _resetIptcTemplate();
+    await _loadPresetForWire(
+      _wireStyleForSelectedTemplateId(_selectedIptcTemplateId),
+    );
     await _loadIptcApplyOptions();
     if (_sportChosen) {
       await _initializePreferences();
       await _loadTeams();
+    }
+    // Folder may have been chosen while prefs were still loading; ensure IPTC
+    // from files is not overwritten by the preset load above.
+    if (_selectedImageFiles.isNotEmpty &&
+        (_iptcTemplateValues.isEmpty || _iptcKeysFoundInFiles.isEmpty)) {
+      await _loadIptcFromFolderImages(_selectedImageFiles);
     }
   }
 
@@ -173,7 +187,6 @@ class _StartupDialogState extends State<StartupDialog> {
 
   Future<void> _loadIptcWireContext() async {
     final prefs = await PreferencesService.getInstance();
-    final template = await prefs.getCaptionTemplate();
     final gettyLabel = await prefs.getCaptionWireLabel(WireStyle.getty);
     final gettyIntlLabel =
         await prefs.getCaptionWireLabel(WireStyle.gettyInternational);
@@ -182,7 +195,6 @@ class _StartupDialogState extends State<StartupDialog> {
     final cpLabel = await prefs.getCaptionWireLabel(WireStyle.cp);
     if (!mounted) return;
     setState(() {
-      _iptcWireStyle = template.wireStyle;
       _wireLabels[WireStyle.getty] = gettyLabel ?? '';
       _wireLabels[WireStyle.gettyInternational] = gettyIntlLabel ?? '';
       _wireLabels[WireStyle.imagn] = imagnLabel ?? '';
@@ -190,6 +202,25 @@ class _StartupDialogState extends State<StartupDialog> {
       _wireLabels[WireStyle.cp] = cpLabel ?? '';
     });
   }
+
+  WireStyle _wireStyleForSelectedTemplateId(String templateId) {
+    for (final t in _visibleIptcTemplates) {
+      if (t.id == templateId) return t.wireStyle;
+    }
+    try {
+      return WireStyle.values.firstWhere((w) => w.name == templateId);
+    } catch (_) {
+      return WireStyle.getty;
+    }
+  }
+
+  bool get _hasActiveIptcContent =>
+      _iptcKeysFoundInFiles.isNotEmpty ||
+      _iptcTemplateValues.entries.any(
+        (e) =>
+            e.value.trim().isNotEmpty &&
+            !IptcTemplateApplyService.isInAppGeneratedPlaceholder(e.value),
+      );
 
   Map<String, String> _normalizeIptcPresetMap(Map<String, dynamic> preset) {
     final raw = <String, String>{};
@@ -213,9 +244,93 @@ class _StartupDialogState extends State<StartupDialog> {
     widget.onSportSelected?.call(sport);
   }
 
+  Future<void> _loadIptcCatalog() async {
+    final prefs = _preferencesService;
+    final hidden = await prefs.getHiddenIptcTemplateIds();
+    final visible = await AppDefaultsFirestoreService.getVisibleIptcTemplates(
+      hiddenIds: hidden,
+    );
+    final selectedId = await prefs.getSelectedIptcTemplateId();
+    if (!mounted) return;
+    setState(() {
+      _visibleIptcTemplates = visible;
+      if (selectedId != null &&
+          visible.any((t) => t.id == selectedId)) {
+        _selectedIptcTemplateId = selectedId;
+      } else if (visible.isNotEmpty) {
+        _selectedIptcTemplateId = visible.first.id;
+      }
+    });
+  }
+
+  Future<void> _loadPresetForWire(WireStyle wire) async {
+    final prefs = _preferencesService;
+    var preset = await prefs.getIptcWirePreset(wire);
+    var cleared = await prefs.getIptcWireClearedFields(wire);
+    if (preset.isEmpty) {
+      IptcTemplateCatalogEntry? entry;
+      final catalog = AppDefaultsFirestoreService.getCachedCatalog();
+      if (catalog != null) {
+        for (final t in catalog.iptcTemplates) {
+          if (t.wireStyle == wire) {
+            entry = t;
+            break;
+          }
+        }
+      }
+      if (entry == null) {
+        for (final t in _visibleIptcTemplates) {
+          if (t.wireStyle == wire) {
+            entry = t;
+            break;
+          }
+        }
+      }
+      if (entry != null && entry.preset.isNotEmpty) {
+        preset = entry.preset;
+        cleared = entry.clearedFields;
+      }
+    }
+    if (!mounted) return;
+    // Keep folder / in-progress values when switching wire layouts.
+    if (_hasActiveIptcContent) {
+      setState(() {
+        _iptcWireStyle = wire;
+        _selectedIptcTemplateId =
+            AppDefaultsFirestoreService.templateIdForWire(wire);
+        _iptcTemplateValues =
+            IptcTemplateApplyService.panelValuesFromImportedTemplate(
+          _iptcTemplateValues,
+          wire,
+        );
+        _iptcTemplateRevision++;
+      });
+      return;
+    }
+    setState(() {
+      _iptcWireStyle = wire;
+      _selectedIptcTemplateId =
+          AppDefaultsFirestoreService.templateIdForWire(wire);
+      _iptcTemplateValues =
+          IptcTemplateApplyService.denormalizeForPanel(preset);
+      _iptcTemplateClearedFields = cleared.toSet();
+      _iptcKeysFoundInFiles.clear();
+      _iptcTemplateRevision++;
+    });
+  }
+
+  void _onIptcTemplateSelected(IptcTemplateCatalogEntry entry) {
+    if (_iptcWireStyle == entry.wireStyle &&
+        _selectedIptcTemplateId == entry.id) {
+      return;
+    }
+    setState(() => _selectedIptcTemplateId = entry.id);
+    unawaited(_loadPresetForWire(entry.wireStyle));
+  }
+
   void _onCaptionWireStyleChanged(WireStyle wire) {
-    if (_iptcWireStyle == wire) return;
-    setState(() => _iptcWireStyle = wire);
+    if (wire == _iptcWireStyle) return;
+    unawaited(_loadPresetForWire(wire));
   }
 
   void _onIptcTemplateValueChanged(String storageKey, String value) {
@@ -395,7 +510,13 @@ class _StartupDialogState extends State<StartupDialog> {
       'selected_metadata_preset_cleared_fields',
       _iptcTemplateClearedFields.toList(),
     );
-    final prefsService = await PreferencesService.getInstance();
+    final prefsService = _preferencesService;
+    await prefsService.saveIptcWirePreset(
+      _iptcWireStyle,
+      preset: preset,
+      clearedFields: _iptcTemplateClearedFields.toList(),
+    );
+    await prefsService.setSelectedIptcTemplateId(_selectedIptcTemplateId);
     await prefsService.saveIptcApplyMode(_iptcApplyMode);
     return preset;
   }
@@ -768,6 +889,7 @@ class _StartupDialogState extends State<StartupDialog> {
       }
 
       if (!mounted) return;
+      final valuesChanged = merged.toString() != _iptcTemplateValues.toString();
       setState(() {
         _iptcTemplateValues = merged;
         _iptcKeysFoundInFiles
@@ -775,7 +897,7 @@ class _StartupDialogState extends State<StartupDialog> {
           ..addAll(foundInFiles);
         _loadingIptcFromFiles = false;
         _iptcTemplateLoadedBeforeFolder = false;
-        if (overrideWithFolder) {
+        if (overrideWithFolder || valuesChanged) {
           _iptcTemplateRevision++;
         }
       });
@@ -1654,35 +1776,9 @@ class _StartupDialogState extends State<StartupDialog> {
     }
   }
 
+  /// Panel header for modal startup only; inline mode uses screen-level [FloChromeHeader].
   Widget _buildDialogHeader() {
-    return Container(
-      height: 30,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFFF6F6F6), Color(0xFFFEFEFE)],
-        ),
-        border: Border(
-          bottom: BorderSide(color: Color(0xFFE0E0E0), width: 0.5),
-        ),
-      ),
-      child: const Row(
-        children: [
-          Text(
-            'FLO FILE',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 15,
-              fontVariations: [FontVariation('wght', 900)],
-              color: Color(0xFF2A4858),
-              letterSpacing: -0.5,
-            ),
-          ),
-        ],
-      ),
-    );
+    return const FloChromeHeader();
   }
 
   Widget _buildPanelBody() {
@@ -1862,6 +1958,9 @@ class _StartupDialogState extends State<StartupDialog> {
                   isLoading: _loadingIptcFromFiles,
                   onValueChanged: _onIptcTemplateValueChanged,
                   onWireSelected: _onCaptionWireStyleChanged,
+                  visibleTemplates: _visibleIptcTemplates,
+                  selectedTemplateId: _selectedIptcTemplateId,
+                  onTemplateSelected: _onIptcTemplateSelected,
                   iptcApplyMode: _iptcApplyMode,
                   onIptcApplyModeChanged: (mode) {
                     setState(() => _iptcApplyMode = mode);
@@ -1892,20 +1991,12 @@ class _StartupDialogState extends State<StartupDialog> {
           child: Container(
             decoration: _panelDecoration(),
             clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildDialogHeader(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                    child: _buildLeftFormSections(),
-                  ),
-                ),
-              ],
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 16,
+              ),
+              child: _buildLeftFormSections(),
             ),
           ),
         ),

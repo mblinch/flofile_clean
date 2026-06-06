@@ -16,6 +16,8 @@ import '../widgets/matrix_caption_board.dart';
 import '../widgets/player_popup_caption_board.dart';
 
 import '../widgets/startup_dialog.dart';
+import '../widgets/flo_chrome_header.dart';
+import '../services/auth_service.dart';
 import '../widgets/keyboard_fire_dialog.dart';
 import '../widgets/burst_caption_confirm_dialog.dart';
 import '../widgets/app_styled_dialogs.dart';
@@ -4032,6 +4034,24 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     super.dispose();
   }
 
+  Widget _wrapPreSessionChrome(Widget child) {
+    final user = AuthService.instance.currentUser;
+    final signOutHint = user?.email?.trim().isNotEmpty == true
+        ? 'Signed in as ${user!.email}'
+        : 'Sign out';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FloChromeHeader(
+          showSignOut: AuthService.instance.isFirebaseReady,
+          signOutTooltip: signOutHint,
+        ),
+        Expanded(child: child),
+      ],
+    );
+  }
+
   Widget _buildPreSessionBody() {
     const padding = EdgeInsets.fromLTRB(16, 16, 16, 16);
     const loadingTitleStyle = TextStyle(
@@ -4054,7 +4074,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     );
 
     if (_isLoadingPlayers || _isLoadingImages) {
-      return Padding(
+      return _wrapPreSessionChrome(
+        Padding(
         padding: padding,
         child: Center(
           child: ConstrainedBox(
@@ -4099,10 +4120,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             ),
           ),
         ),
+      ),
       );
     }
 
-    return Padding(
+    return _wrapPreSessionChrome(
+      Padding(
       padding: padding,
       child: SizedBox.expand(
         child: StartupDialog(
@@ -4112,6 +4135,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           onConfigurationComplete: _handleStartupComplete,
         ),
       ),
+    ),
     );
   }
 

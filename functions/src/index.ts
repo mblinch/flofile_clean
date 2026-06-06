@@ -317,6 +317,14 @@ export const nightlyRosterSync = onSchedule(
  * Manual trigger: `firebase functions:shell` → `runRosterSyncNow({})` or call
  * from any authenticated admin client. Requires an authenticated caller.
  */
+const ADMIN_EMAILS = new Set(["projectflofile@gmail.com"]);
+
+function isAdminCaller(auth: { token?: { email?: string; admin?: boolean } }): boolean {
+  if (auth.token?.admin === true) return true;
+  const email = auth.token?.email?.trim().toLowerCase();
+  return !!email && ADMIN_EMAILS.has(email);
+}
+
 export const runRosterSyncNow = onCall(
   { memory: "512MiB", timeoutSeconds: 540 },
   async (request) => {
@@ -324,6 +332,12 @@ export const runRosterSyncNow = onCall(
       throw new HttpsError(
         "unauthenticated",
         "Sign in as an admin to run the roster sync manually.",
+      );
+    }
+    if (!isAdminCaller(request.auth)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only admin accounts may run manual roster sync.",
       );
     }
     const result = await runSync("manual");

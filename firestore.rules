@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Admin: custom claim (preferred) or configured owner email.
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email == 'projectflofile@gmail.com'
+      );
+    }
+
+    // Global app originals — verbs per sport + IPTC template catalog.
+    match /appDefaults/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Existing roster data (teams/players) — keep permissive for sync jobs;
+    // tighten separately if you add rules for sports/** paths.
+    match /sports/{sportId}/teams/{teamId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+      match /players/{playerId} {
+        allow read: if isSignedIn();
+        allow write: if false;
+      }
+    }
+
+    match /roster_sync/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+  }
+}
