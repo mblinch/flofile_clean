@@ -9,7 +9,10 @@ import 'flo_chrome_header.dart';
 
 /// Full-screen sign-in gate: Google → Firebase Auth.
 class SignInScreen extends StatefulWidget {
-  const SignInScreen({super.key});
+  const SignInScreen({super.key, this.onSkipSignIn});
+
+  /// Temporary dev bypass — continues without Firebase auth.
+  final Future<void> Function()? onSkipSignIn;
 
   @override
   State<SignInScreen> createState() => _SignInScreenState();
@@ -53,7 +56,7 @@ class _SignInScreenState extends State<SignInScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           FloChromeHeader(
-            showSignOut: AuthService.instance.isFirebaseReady,
+            showSignOut: AuthService.instance.isSignedIn,
             signOutTooltip: signOutHint,
           ),
           Expanded(
@@ -153,6 +156,31 @@ class _SignInScreenState extends State<SignInScreen> {
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: Color(0xFF4A7A96),
+                        ),
+                      ),
+                    ],
+                    if (widget.onSkipSignIn != null) ...[
+                      const SizedBox(height: 20),
+                      TextButton(
+                        onPressed: _busy
+                            ? null
+                            : () async {
+                                await widget.onSkipSignIn?.call();
+                              },
+                        style: TextButton.styleFrom(
+                          foregroundColor: AuthUiColors.subtitle,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                        ),
+                        child: const Text(
+                          'Skip sign in',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],

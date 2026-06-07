@@ -201,24 +201,19 @@ class _AdminScreenState extends State<AdminScreen> {
     _stashGameIdFromTemplate(wire, template);
   }
 
-  void _onCaptionSportChanged(String sport) {
-    final current = _captionDrafts[_captionWire];
-    if (current != null) _stashGameIdFromTemplate(_captionWire, current);
+  Future<void> _onCaptionSportChanged(String sport) async {
+    if (sport == _captionSport) return;
+    await _flushCaptionBuilderDrafts();
+    if (!mounted) return;
     setState(() {
       _captionSport = sport;
       _applyGameIdToCaptionDraft(_captionWire, sport);
-      _captionBuilderRevision++;
     });
   }
 
   void _onCaptionWireChanged(WireStyle wire) {
-    final current = _captionDrafts[_captionWire];
-    if (current != null) _stashGameIdFromTemplate(_captionWire, current);
-    setState(() {
-      _captionWire = wire;
-      _applyGameIdToCaptionDraft(wire, _captionSport);
-      _captionBuilderRevision++;
-    });
+    if (wire == _captionWire) return;
+    setState(() => _captionWire = wire);
   }
 
   Map<String, Map<String, String>> _gameIdDraftsForFirestore() {

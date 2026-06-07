@@ -305,12 +305,11 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(6),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: children,
-        ),
+      child: Wrap(
+        spacing: 0,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: children,
       ),
     );
   }

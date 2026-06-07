@@ -725,6 +725,14 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           'published by FloFile admins. Your FTP and caption library are not changed.',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
         ),
+        if (AuthService.instance.isSignedIn) ...[
+          const SizedBox(height: 8),
+          Text(
+            'While signed in, your personal settings (captions, verbs, FTP) '
+            'sync to your account automatically.',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          ),
+        ],
         const SizedBox(height: 10),
         ElevatedGreyButton(
           label: _appDefaultsBusy ? 'Restoring…' : 'Restore app originals',

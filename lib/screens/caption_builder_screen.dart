@@ -170,6 +170,9 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
   /// When true, rapid-sequence (burst) save prompt may appear. Default off; see Preferences / startup.
   bool _burstDetectionEnabled = false;
+
+  /// Paths (normalized) where the user already chose how to handle a burst save.
+  final Set<String> _burstDecisionResolvedPaths = {};
   bool _serialBylinesEnabled = true;
   bool _keywordModeEnabled = false;
   bool _keywordVerbsEnabled = true;
@@ -2002,6 +2005,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return _selectionIndexAfterBurstChain(targets);
   }
 
+  String _burstPathKey(String path) => p.normalize(path);
+
+  void _markBurstDecisionResolved(Iterable<String> paths) {
+    for (final path in paths) {
+      _burstDecisionResolvedPaths.add(_burstPathKey(path));
+    }
+  }
+
   String _captionPreviewFromValues(Map<String, String>? v) {
     if (v == null) return '';
     const keys = [
@@ -2041,7 +2052,10 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       _captureDateTimeByPath,
     );
 
-    if (_burstDetectionEnabled && chain.length > 1 && mounted) {
+    if (_burstDetectionEnabled &&
+        chain.length > 1 &&
+        !_burstDecisionResolvedPaths.contains(_burstPathKey(anchor)) &&
+        mounted) {
       dynamic captionState = _captionFieldsKey2.currentState;
       Map<String, String>? vals;
       if (captionState != null) {
@@ -2076,6 +2090,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         }
         await _saveIptcToMultipleImages(targets,
             preCapturedValues: frozenValues);
+        _markBurstDecisionResolved(targets);
         _clearPopupSelections();
         final after = _selectionIndexAfterBurstApply(chain, targets);
         return _IptcInternalSaveResult.saved(selectIndexAfterSave: after);
@@ -2084,6 +2099,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         if (!mounted) return _IptcInternalSaveResult.cancelled();
         await _saveIptcToMultipleImages([anchor],
             preCapturedValues: frozenValues);
+        _markBurstDecisionResolved([anchor]);
         _clearPopupSelections();
         return _IptcInternalSaveResult.saved();
       }
@@ -4044,7 +4060,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         FloChromeHeader(
-          showSignOut: AuthService.instance.isFirebaseReady,
+          showSignOut: AuthService.instance.isSignedIn,
           signOutTooltip: signOutHint,
         ),
         Expanded(child: child),
@@ -4516,36 +4532,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              Expanded(
-                  child: _sbBtn(
-                label: '‹ Save',
-                primary: true,
-                onTap: (currentIndex > 0)
-                    ? () {
-                        cs?.storeCurrentCaption();
-                        _saveIptcMetadata();
-                        setState(() => _thumbCenterRequestId++);
-                        _onImageSelected(currentIndex - 1);
-                      }
-                    : null,
-              )),
-              const SizedBox(width: 5),
-              Expanded(
-                  child: _sbBtn(
-                label: 'Save ›',
-                primary: true,
-                onTap: (currentIndex < imagePaths.length - 1)
-                    ? () {
-                        cs?.storeCurrentCaption();
-                        _saveIptcMetadata();
-                        setState(() => _thumbCenterRequestId++);
-                        _onImageSelected(currentIndex + 1);
-                      }
-                    : null,
-              )),
-            ]),
-            const SizedBox(height: 5),
             _sbBtn(
               label: '⇧ FTP',
               ftp: true,
@@ -4589,8 +4575,38 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 5),
+            Row(children: [
+              Expanded(
+                  child: _sbBtn(
+                label: '‹ Save',
+                primary: true,
+                onTap: (currentIndex > 0)
+                    ? () {
+                        cs?.storeCurrentCaption();
+                        _saveIptcMetadata();
+                        setState(() => _thumbCenterRequestId++);
+                        _onImageSelected(currentIndex - 1);
+                      }
+                    : null,
+              )),
+              const SizedBox(width: 5),
+              Expanded(
+                  child: _sbBtn(
+                label: 'Save ›',
+                primary: true,
+                onTap: (currentIndex < imagePaths.length - 1)
+                    ? () {
+                        cs?.storeCurrentCaption();
+                        _saveIptcMetadata();
+                        setState(() => _thumbCenterRequestId++);
+                        _onImageSelected(currentIndex + 1);
+                      }
+                    : null,
+              )),
+            ]),
             Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              padding: const EdgeInsets.only(top: 8, bottom: 8),
               child: Container(height: 1, color: const Color(0xFFF0EFEC)),
             ),
             _sbBtn(

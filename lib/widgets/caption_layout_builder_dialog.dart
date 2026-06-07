@@ -378,6 +378,30 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     });
   }
 
+  @override
+  void didUpdateWidget(covariant CaptionLayoutBuilderDialog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.adminMode) return;
+
+    final sportChanged = widget.initialSport != null &&
+        widget.initialSport != oldWidget.initialSport;
+    if (sportChanged || widget.gameIdDraftsSeed != oldWidget.gameIdDraftsSeed) {
+      unawaited(_applyAdminSportChange());
+    }
+  }
+
+  Future<void> _applyAdminSportChange() async {
+    _sessionSport = widget.initialSport ?? _sessionSport;
+    await _loadGameIdByWire();
+    if (!mounted) return;
+    final gid = _gameIdByWire[_selectedWire] ??
+        defaultGameIdentifierText(_sessionSport);
+    setState(() {
+      _template = _template.copyWith(gameIdentifierText: gid);
+    });
+    _syncBylineControllersFromTemplate();
+  }
+
   void _syncBylineControllersFromTemplate() {
     _syncingBylineCtrls = true;
     _bylinePrefixCtrl.text = _template.bylineOptions.prefix;
@@ -439,6 +463,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         gameIdentifierText: _gameIdentifierCtrl.text,
       );
     });
+    if (widget.adminMode) {
+      widget.onDraftChanged?.call(
+        _selectedWire,
+        _template.normalizePerOccurrenceLists(),
+      );
+    }
   }
 
   void _onCustomCreatorEdited() {

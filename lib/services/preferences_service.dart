@@ -1,11 +1,13 @@
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 import 'dart:convert';
 
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
 import 'app_defaults_firestore_service.dart';
 import 'iptc_template_apply_service.dart';
+import 'user_preferences_firestore_service.dart';
 
 class PreferencesService {
   static const String _keyCategoryOrder = 'category_order';
@@ -121,9 +123,19 @@ class PreferencesService {
   /// Per-wire, per-sport game identifier phrases (mirrors Firebase catalog).
   static const String _keyGameIdentifierByWireAndSportJson =
       'game_identifier_by_wire_and_sport_json';
+  static const String _keyUserPreferencesUpdatedAtMs =
+      'user_preferences_updated_at_ms';
+  static const String _keyUserPreferencesCloudUpdatedAtMs =
+      'user_preferences_cloud_updated_at_ms';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
+
+  /// Fires after cloud preferences are applied so open screens can reload.
+  final StreamController<void> cloudPreferencesAppliedController =
+      StreamController<void>.broadcast();
+
+  bool _suppressCloudSync = false;
 
   PreferencesService._();
 
@@ -164,6 +176,7 @@ class PreferencesService {
   Future<void> saveBurstDetectionEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyBurstDetectionEnabled, enabled);
+    _afterLocalPreferencesChanged();
   }
 
   Future<IptcApplyMode> getIptcApplyMode() async {
@@ -392,6 +405,7 @@ class PreferencesService {
         ' (key=' +
         key +
         ')');
+    _afterLocalPreferencesChanged();
   }
 
   // Current sport
@@ -408,6 +422,7 @@ class PreferencesService {
         await prefs.setString(_keyCaptionTemplateJson, updated.encode());
       }
     }
+    _afterLocalPreferencesChanged();
   }
 
   /// Local per-wire-per-sport game identifier map (wire name → sport → text).
@@ -443,12 +458,14 @@ class PreferencesService {
     final prefs = await _getPrefs();
     if (map.isEmpty) {
       await prefs.remove(_keyGameIdentifierByWireAndSportJson);
+      _afterLocalPreferencesChanged();
       return;
     }
     await prefs.setString(
       _keyGameIdentifierByWireAndSportJson,
       json.encode(map),
     );
+    _afterLocalPreferencesChanged();
   }
 
   Future<void> setGameIdentifierForWireAndSport(
@@ -563,9 +580,11 @@ class PreferencesService {
     final key = _getVerbOrderKey(sport);
     if (order.isEmpty) {
       await prefs.remove(key);
+      _afterLocalPreferencesChanged();
       return;
     }
     await prefs.setString(key, json.encode(order));
+    _afterLocalPreferencesChanged();
   }
 
   // Per-sport default (e.g. "Set as default for Baseball") — used when user has no saved prefs for that sport
@@ -641,6 +660,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final key = _getSportSpecificKey(sport);
     await prefs.setString(key, json.encode(verbs.toList()));
+    _afterLocalPreferencesChanged();
   }
 
   // Favorite Teams Preferences (sport-specific)
@@ -670,6 +690,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final key = _getFavoriteTeamsKey(sport);
     await prefs.setString(key, json.encode(teams.toList()));
+    _afterLocalPreferencesChanged();
   }
 
   // Helper for favorite teams key per sport
@@ -702,6 +723,7 @@ class PreferencesService {
       Map<String, Map<String, dynamic>> profiles) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyFtpProfiles, json.encode(profiles));
+    _afterLocalPreferencesChanged();
   }
 
   // Current FTP Profile
@@ -717,6 +739,7 @@ class PreferencesService {
     } else {
       await prefs.remove(_keyCurrentFtpProfile);
     }
+    _afterLocalPreferencesChanged();
   }
 
   // Firebar Position Preference
@@ -728,6 +751,7 @@ class PreferencesService {
   Future<void> savePlaceFirebarOnRight(bool placeOnRight) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyPlaceFirebarOnRight, placeOnRight);
+    _afterLocalPreferencesChanged();
   }
 
   // Last Saved Metadata
@@ -788,6 +812,7 @@ class PreferencesService {
     final existing = await getCustomVerbWordings(sport: sport);
     existing[verb] = wording;
     await prefs.setString(key, json.encode(existing));
+    _afterLocalPreferencesChanged();
   }
 
   Future<void> removeCustomVerbWording(String verb,
@@ -801,6 +826,7 @@ class PreferencesService {
     } else {
       await prefs.setString(key, json.encode(existing));
     }
+    _afterLocalPreferencesChanged();
   }
 
   // Serial Number Bylines Preference
@@ -880,6 +906,7 @@ class PreferencesService {
   Future<void> saveCaptionEntryMode(String mode) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyCaptionEntryMode, mode);
+    _afterLocalPreferencesChanged();
   }
 
   // Custom Verbs (user-created verbs)
@@ -914,6 +941,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final key = _getCustomVerbsKey(sport);
     await prefs.setString(key, json.encode(verbs));
+    _afterLocalPreferencesChanged();
   }
 
   Future<void> addCustomVerb(Map<String, dynamic> verb, {String sport = 'hockey'}) async {
@@ -961,6 +989,7 @@ class PreferencesService {
     final overrides = await getVerbOverrides(sport: sport);
     overrides[originalVerbPhrase] = override;
     await prefs.setString(key, json.encode(overrides));
+    _afterLocalPreferencesChanged();
   }
 
   Future<void> removeVerbOverride(String originalVerbPhrase, {String sport = 'hockey'}) async {
@@ -973,6 +1002,7 @@ class PreferencesService {
     } else {
       await prefs.setString(key, json.encode(overrides));
     }
+    _afterLocalPreferencesChanged();
   }
 
   // Deleted Verbs (for tracking deleted built-in verbs during reorganization)
@@ -1009,6 +1039,7 @@ class PreferencesService {
     } else {
       await prefs.setString(key, json.encode(deletedVerbs.toList()));
     }
+    _afterLocalPreferencesChanged();
   }
 
   Future<void> addDeletedVerb(String verbPhrase, {String sport = 'hockey'}) async {
@@ -1065,6 +1096,83 @@ class PreferencesService {
     } else {
       await prefs.setString(_keySyncAccountId, id.trim());
     }
+  }
+
+  Future<int> getUserPreferencesUpdatedAtMs() async {
+    final prefs = await _getPrefs();
+    return prefs.getInt(_keyUserPreferencesUpdatedAtMs) ?? 0;
+  }
+
+  Future<void> touchUserPreferencesUpdatedAt() async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(
+      _keyUserPreferencesUpdatedAtMs,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  Future<void> markCloudPreferencesSynced(int updatedAtMs) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(_keyUserPreferencesUpdatedAtMs, updatedAtMs);
+    await prefs.setInt(_keyUserPreferencesCloudUpdatedAtMs, updatedAtMs);
+  }
+
+  /// Applies a cloud bundle without triggering an immediate re-upload.
+  Future<void> applyCloudPreferences(
+    Map<String, dynamic> preferences,
+    int cloudUpdatedAtMs,
+  ) async {
+    _suppressCloudSync = true;
+    try {
+      await importPreferences(preferences);
+      await markCloudPreferencesSynced(cloudUpdatedAtMs);
+    } finally {
+      _suppressCloudSync = false;
+    }
+    cloudPreferencesAppliedController.add(null);
+  }
+
+  void _afterLocalPreferencesChanged() {
+    if (_suppressCloudSync) return;
+    unawaited(_afterLocalPreferencesChangedAsync());
+  }
+
+  Future<void> _afterLocalPreferencesChangedAsync() async {
+    if (_suppressCloudSync) return;
+    await touchUserPreferencesUpdatedAt();
+    UserPreferencesFirestoreService.scheduleUpload(this);
+  }
+
+  Future<Map<String, String>> _exportCaptionWireLabels() async {
+    final out = <String, String>{};
+    for (final wire in WireStyle.values) {
+      if (wire == WireStyle.custom) continue;
+      final label = await getCaptionWireLabel(wire);
+      if (label != null && label.trim().isNotEmpty) {
+        out[wire.name] = label.trim();
+      }
+    }
+    return out;
+  }
+
+  Future<Map<String, String>> _exportFavoriteCaptionStyleBySport() async {
+    const sports = ['baseball', 'hockey', 'basketball', 'soccer'];
+    final out = <String, String>{};
+    for (final sport in sports) {
+      final token = await getFavoriteCaptionStyleToken(sport: sport);
+      if (token != null && token.trim().isNotEmpty) {
+        out[sport] = token.trim();
+      }
+    }
+    return out;
+  }
+
+  /// Preferences bundle for cloud sync (excludes device-local account metadata).
+  Future<Map<String, dynamic>> exportSyncablePreferences() async {
+    final bundle = await exportAllPreferences();
+    bundle.remove('syncAccountId');
+    bundle.remove('syncServerUrl');
+    return bundle;
   }
 
   Future<String> getMlbInningExifTimezone() async {
@@ -1171,6 +1279,8 @@ class PreferencesService {
           await getGameIdentifierByWireAndSport(),
       'captionGameInfo': (await getCaptionGameInfo()).toJson(),
       'captionCreditSampleAgency': await getCaptionCreditSampleAgency(),
+      'captionWireLabels': await _exportCaptionWireLabels(),
+      'favoriteCaptionStyleBySport': await _exportFavoriteCaptionStyleBySport(),
     };
   }
 
@@ -1400,6 +1510,33 @@ class PreferencesService {
         await _saveCaptionStyleLibrary(list);
       }
     }
+    if (preferences.containsKey('captionWireLabels')) {
+      final raw = preferences['captionWireLabels'];
+      if (raw is Map) {
+        for (final wire in WireStyle.values) {
+          if (wire == WireStyle.custom) continue;
+          final label = raw[wire.name]?.toString();
+          await saveCaptionWireLabel(wire, label);
+        }
+      }
+    }
+    if (preferences.containsKey('favoriteCaptionStyleBySport')) {
+      final raw = preferences['favoriteCaptionStyleBySport'];
+      if (raw is Map) {
+        for (final entry in raw.entries) {
+          final sport = entry.key.toString();
+          final token = entry.value?.toString();
+          if (token == null || token.trim().isEmpty) {
+            await saveFavoriteCaptionStyleToken(null, sport: sport);
+          } else {
+            await saveFavoriteCaptionStyleToken(token.trim(), sport: sport);
+          }
+        }
+      }
+    }
+    if (!_suppressCloudSync) {
+      _afterLocalPreferencesChanged();
+    }
   }
 
   Future<List<String>> getCaptionLayoutOrder() async {
@@ -1418,6 +1555,7 @@ class PreferencesService {
   Future<void> saveCaptionLayoutOrder(List<String> order) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyCaptionLayoutOrder, json.encode(order));
+    _afterLocalPreferencesChanged();
   }
 
   /// Returns `getty` or `imagn`.
@@ -1433,6 +1571,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final v = flavor == 'imagn' ? 'imagn' : 'getty';
     await prefs.setString(_keyCaptionLayoutFlavor, v);
+    _afterLocalPreferencesChanged();
   }
 
   /// Full caption wire template (presets + custom). Migrates legacy order/flavor once if needed.
@@ -1482,6 +1621,7 @@ class PreferencesService {
     await prefs.setBool(_keyShowKeywordsField, template.showKeywordsField);
     await prefs.setBool(_keyShowPersonalityField, template.showPersonalityField);
     _notifyCaptionFieldVisibilityChanged();
+    _afterLocalPreferencesChanged();
   }
 
   static String? _captionTemplateWireDefaultKey(WireStyle wire) {
@@ -1521,6 +1661,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final normalized = template.copyWith(wireStyle: wire);
     await prefs.setString(key, normalized.encode());
+    _afterLocalPreferencesChanged();
   }
 
   Future<void> clearCaptionTemplateWireDefault(WireStyle wire) async {
@@ -1528,6 +1669,7 @@ class PreferencesService {
     if (key == null) return;
     final prefs = await _getPrefs();
     await prefs.remove(key);
+    _afterLocalPreferencesChanged();
   }
 
   static String? _captionWireLabelKey(WireStyle wire) {
@@ -1570,6 +1712,7 @@ class PreferencesService {
     } else {
       await prefs.setString(key, trimmed);
     }
+    _afterLocalPreferencesChanged();
   }
 
   /// One-time migration: if the user had saved a library entry called
@@ -1640,6 +1783,7 @@ class PreferencesService {
         'Could not write caption style library (preferences storage rejected the write).',
       );
     }
+    _afterLocalPreferencesChanged();
   }
 
   /// Appends a deep copy of [template] with a stable library [id] and [displayName].
@@ -1749,6 +1893,7 @@ class PreferencesService {
   Future<void> saveCaptionGameInfo(GameInfo info) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyCaptionGameInfoJson, info.encode());
+    _afterLocalPreferencesChanged();
   }
 
   Future<void> saveLastCaptionPreviewTeams({
@@ -1792,6 +1937,7 @@ class PreferencesService {
     } else {
       await prefs.setString(key, token.trim());
     }
+    _afterLocalPreferencesChanged();
   }
 
   /// One of `gettyImages`, `imagn`, `ap`.
@@ -1809,6 +1955,7 @@ class PreferencesService {
     final v =
         value == 'imagn' || value == 'ap' || value == 'gettyImages' ? value : 'gettyImages';
     await prefs.setString(_keyCaptionCreditSampleAgency, v);
+    _afterLocalPreferencesChanged();
   }
 
   // Clear all preferences

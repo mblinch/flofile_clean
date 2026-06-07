@@ -1,6 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
+import 'auth_service.dart';
+
 /// In-app admin checks for feature gates and UI.
 ///
 /// **Solo / internal use:** matching [adminEmails] is fine for beta features.
@@ -49,6 +51,7 @@ class AdminService {
   }
 
   static Future<bool> isCurrentUserAdmin() async {
+    if (AuthService.instance.signInSkipped) return false;
     if (Firebase.apps.isEmpty) return false;
     final user = FirebaseAuth.instance.currentUser;
     if (isAdminUser(user)) return true;
@@ -57,6 +60,7 @@ class AdminService {
 
   /// Sync version for gates that cannot await (email/uid only).
   static bool isCurrentUserAdminSync() {
+    if (AuthService.instance.signInSkipped) return false;
     if (Firebase.apps.isEmpty) return false;
     return isAdminUser(FirebaseAuth.instance.currentUser);
   }

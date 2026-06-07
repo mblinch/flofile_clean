@@ -4016,6 +4016,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       VerbSubOptions.legacyTagsSubMenu(canonVerb);
                   final isHomeRun = VerbSubOptions.legacyHomeRunTypeMenu(verb);
                   final showRbiMenu = isActive && subOpts.rbiEnabled;
+                  final showHomeRunMenu = isActive && isHomeRun;
                   final showBaseMenu =
                       isActive && VerbSubOptions.legacyBaseSubMenu(verb);
 
@@ -4211,7 +4212,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       ? _wrapVerbRowForReorder(ci: ci, vi: vi, child: verbRow)
                       : verbRow;
 
-                  if (!showRbiMenu && !showBaseMenu && !showTagsMenu) {
+                  if (!showRbiMenu &&
+                      !showHomeRunMenu &&
+                      !showBaseMenu &&
+                      !showTagsMenu) {
                     return wrappedVerbRow;
                   }
 

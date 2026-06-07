@@ -12,11 +12,11 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-In Keyboard Fire you can change the order of categories and verbs. Press and hold for about half a second, then drag. You will see a small floating copy of the row following your mouse or finger, and a blue line where it will land. Your new order is saved and comes back the next time you open the app.
+When you sign in, your caption styles, verb layouts, and FTP settings sync to your account and follow you to other computers. Skip sign in still works — everything stays local on that machine.
 
-Favorites are not reordered this way; only the regular category and verb lists.
+Caption preview spacing is more reliable (no doubled punctuation or missing spaces at segment joins). Home Run type options show again in Keyboard Fire. Burst captions are not re-prompted when you revisit an image you already decided on.
+
+Admin caption editing keeps your game identifier when switching sports. The geographical editor wraps instead of clipping. FTP controls sit above the Save buttons in the sidebar.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
-
-We also rewrote the instructions for this screen in simpler language.
 ''';

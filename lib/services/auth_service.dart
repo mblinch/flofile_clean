@@ -7,6 +7,7 @@ import '../config/google_sign_in_config.dart';
 import 'app_defaults_firestore_service.dart';
 import 'current_user_service.dart';
 import 'preferences_service.dart';
+import 'user_preferences_firestore_service.dart';
 
 /// Firebase Authentication via Google Sign-In.
 ///
@@ -18,6 +19,13 @@ class AuthService {
   static final AuthService instance = AuthService._();
 
   bool _initialized = false;
+  bool _signInSkipped = false;
+
+  /// True when the user chose "Skip sign in" — no Firebase session, no admin.
+  bool get signInSkipped => _signInSkipped;
+
+  /// True when Firebase has a signed-in user and sign-in was not skipped.
+  bool get isSignedIn => !signInSkipped && currentUser != null;
 
   bool get isFirebaseReady => Firebase.apps.isNotEmpty;
 
@@ -61,6 +69,7 @@ class AuthService {
 
   Future<void> _onUserChanged(User? user) async {
     if (user == null) return;
+    if (_signInSkipped) return;
     try {
       final prefs = await PreferencesService.getInstance();
       await prefs.setSyncAccountId(user.uid);
@@ -68,10 +77,21 @@ class AuthService {
       for (final sport in AppDefaultsFirestoreService.catalogSports) {
         await prefs.seedVerbsFromAppDefaultsIfEmpty(sport);
       }
+      final syncResult = await UserPreferencesFirestoreService.syncOnSignIn(prefs);
+      if (syncResult.action == UserPreferencesSyncAction.downloaded) {
+        debugPrint('[Auth] ${syncResult.message}');
+      } else if (syncResult.action == UserPreferencesSyncAction.failed) {
+        debugPrint('[Auth] Cloud settings sync failed: ${syncResult.error}');
+      }
     } catch (e, st) {
       print('[Auth] Failed to persist sync account id: $e');
       print(st);
     }
+  }
+
+  Future<void> skipSignIn() async {
+    _signInSkipped = true;
+    await _clearAuthSession();
   }
 
   Future<UserCredential> signInWithGoogle() async {
@@ -97,11 +117,17 @@ class AuthService {
 
     final credential = GoogleAuthProvider.credential(idToken: idToken);
     final result = await auth.signInWithCredential(credential);
+    _signInSkipped = false;
     await _onUserChanged(result.user);
     return result;
   }
 
   Future<void> signOut() async {
+    _signInSkipped = false;
+    await _clearAuthSession();
+  }
+
+  Future<void> _clearAuthSession() async {
     try {
       if (isGoogleSignInConfigured) {
         await GoogleSignIn.instance.signOut();

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import '../services/auth_service.dart';
 import '../theme/auth_ui_constants.dart';
 import 'flo_chrome_header.dart';
 import 'sign_in_screen.dart';
@@ -10,22 +11,30 @@ import 'sign_in_screen.dart';
 ///
 /// Firebase Auth persists sessions between launches. When Firebase is not
 /// initialized (e.g. unsupported platform), [child] is shown without sign-in.
-class AppAuthShell extends StatelessWidget {
+class AppAuthShell extends StatefulWidget {
   const AppAuthShell({super.key, required this.child});
 
   final Widget child;
 
   @override
+  State<AppAuthShell> createState() => _AppAuthShellState();
+}
+
+class _AppAuthShellState extends State<AppAuthShell> {
+  @override
   Widget build(BuildContext context) {
     if (Firebase.apps.isEmpty) {
-      return child;
+      return widget.child;
     }
+
+    final skipped = AuthService.instance.signInSkipped;
 
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
-            snapshot.data == null) {
+            snapshot.data == null &&
+            !skipped) {
           return const Scaffold(
             backgroundColor: AuthUiColors.scaffold,
             body: Column(
@@ -49,11 +58,16 @@ class AppAuthShell extends StatelessWidget {
           );
         }
 
-        if (snapshot.data == null) {
-          return const SignInScreen();
+        if (snapshot.data == null && !skipped) {
+          return SignInScreen(
+            onSkipSignIn: () async {
+              await AuthService.instance.skipSignIn();
+              if (mounted) setState(() {});
+            },
+          );
         }
 
-        return child;
+        return widget.child;
       },
     );
   }

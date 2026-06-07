@@ -383,6 +383,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   // Preferences service
   late PreferencesService _preferencesService;
+  StreamSubscription<void>? _cloudPreferencesSubscription;
   bool _preferencesLoaded = false;
   bool _captionFieldVisibilityListenerAttached = false;
 
@@ -2438,6 +2439,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _preferencesService.captionFieldVisibilityRevision
           .removeListener(_onCaptionFieldVisibilityRevision);
     }
+    _cloudPreferencesSubscription?.cancel();
     headlineController.dispose();
     keywordsController.dispose();
     _mlbClockUiRevision.dispose();
@@ -2451,6 +2453,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Future<void> _initializePreferences() async {
     _preferencesService = await PreferencesService.getInstance();
     await _loadPreferences();
+    await _cloudPreferencesSubscription?.cancel();
+    _cloudPreferencesSubscription =
+        _preferencesService.cloudPreferencesAppliedController.stream.listen((_) {
+      if (!mounted) return;
+      _loadPreferences();
+    });
   }
 
   Future<void> _loadPreferences() async {
