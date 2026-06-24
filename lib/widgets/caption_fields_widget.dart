@@ -340,6 +340,11 @@ class CaptionFieldsWidget extends StatefulWidget {
 }
 
 class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
+  static const TextStyle _captionFieldTextStyle = TextStyle(
+    fontSize: 13,
+    fontFamily: 'Inter',
+  );
+
   String _iptcSaveLabel() {
     final n = widget.bulkSaveCount;
     if (n != null && n > 1) return 'Save ($n)';
@@ -738,6 +743,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// current inning / prior-to-game state came from MLB play-by-play vs EXIF.
   String? _mlbInningIndicatorPath;
   bool _mlbInningFromClockEnabled = true;
+  String? _metadataBoundImagePath;
+  bool _captionUpdatePendingMetadata = false;
   final ValueNotifier<int> _mlbClockUiRevision = ValueNotifier(0);
   String? _selectedPeriod; // Track selected hockey period
   bool _showOvertimePeriods = false; // Track whether to show overtime periods
@@ -2402,6 +2409,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (widget.personalityOverride != null) {
       personalityController.text = widget.personalityOverride!;
     }
+    if (widget.metadata != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || widget.metadata == null) return;
+        _loadMetadata();
+      });
+    }
     _loadFtpProfiles();
   }
 
@@ -2744,6 +2757,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
     if (widget.currentImagePath != oldWidget.currentImagePath) {
       _mlbInningIndicatorPath = null;
+      _metadataBoundImagePath = null;
+      _captionUpdatePendingMetadata = false;
     }
     // If the selected image changed, always clear reset-lock immediately so
     // incoming metadata for the new image can be bound.
@@ -2774,14 +2789,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       // so inning/verb stay; player chips clear for the next frame.
       final bool firstMetadataBind =
           oldWidget.metadata == null && widget.metadata != null;
-      if (imageIdentityChanged || firstMetadataBind) {
+      final bool preserveActiveCaptionOnFirstBind =
+          firstMetadataBind && _hasActiveCaptionBuild;
+      if (imageIdentityChanged ||
+          (firstMetadataBind && !preserveActiveCaptionOnFirstBind)) {
         resetCaptionSelections();
-      } else if (metadataRefChanged) {
+      } else if (metadataRefChanged && !preserveActiveCaptionOnFirstBind) {
         _resetPlayerSelectionsForSameImageMetadata();
       }
 
       if (metadataRefChanged && widget.metadata != null) {
-        _loadMetadata();
+        _loadMetadata(
+          preserveActiveCaption: preserveActiveCaptionOnFirstBind,
+        );
       } else if (staleMapOnImageHop ||
           (imageIdentityChanged && widget.metadata == null) ||
           (metadataRefChanged && widget.metadata == null)) {
@@ -2813,7 +2833,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
   }
 
-  void _loadMetadata() {
+  bool get _hasActiveCaptionBuild =>
+      selectedHomePlayers.isNotEmpty || selectedAwayPlayers.isNotEmpty;
+
+  bool get _isMetadataBoundForCurrentImage {
+    final path = widget.currentImagePath;
+    return path == null || path.isEmpty || _metadataBoundImagePath == path;
+  }
+
+  void _loadMetadata({bool preserveActiveCaption = false}) {
     // If a reset has been performed, do not load metadata again.
     if (_hasBeenReset) return;
 
@@ -2873,13 +2901,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       _originalCaptionFromMetadata = extractedCaption;
       _originalPersonalityFromMetadata = personInImageText;
-      captionController.text = extractedCaption;
-      personalityController.text = personInImageText;
+      if (!preserveActiveCaption) {
+        captionController.text = extractedCaption;
+        personalityController.text = personInImageText;
+      }
       headlineController.text = extractedHeadline;
       keywordsController.text = extractedKeywords;
 
       // Only set personality from metadata if the user hasn't manually reset.
-      if (!_hasBeenReset) {
+      if (!_hasBeenReset && !preserveActiveCaption) {
         personalityController.text = personInImageText;
       }
 
@@ -2887,9 +2917,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       stadiumController.text = extractedStadium;
       cityController.text = extractedCity;
       provinceController.text = extractedProvince;
+      _metadataBoundImagePath = widget.currentImagePath;
 
       // Creator field is now handled by metadata widget only
     });
+
+    // If the user started captioning before exiftool finished for the first
+    // image, keep their player/verb choices and re-render now that location and
+    // IPTC fields are available.
+    if ((preserveActiveCaption || _captionUpdatePendingMetadata) &&
+        _hasActiveCaptionBuild) {
+      _captionUpdatePendingMetadata = false;
+      unawaited(_updateCaption());
+    }
 
     // Apply any pending pinned verb synchronously after metadata loads.
     // This runs after the setState above, so we are the last write to the
@@ -4239,8 +4279,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                   textAlignVertical:
                                                       TextAlignVertical.top,
                                                   onChanged: _onCaptionChanged,
-                                                  style: const TextStyle(
-                                                      fontSize: 13),
+                                                  style: _captionFieldTextStyle,
                                                   decoration: InputDecoration(
                                                     border: OutlineInputBorder(
                                                       borderRadius:
@@ -6246,7 +6285,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   children: [
                                     Row(
                                       mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
+                                          MainAxisAlignment.start,
                                       children: [
                                         // Left side: Grid/List buttons
                                         Row(
@@ -6489,174 +6528,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               ),
                                             ),
                                           ],
-                                        ),
-                                        // Right side: Sorting options (always take space, invisible in grid mode)
-                                        Opacity(
-                                          opacity: (_homeOnLeft
-                                                  ? _homePlayerView != 'list'
-                                                  : _awayPlayerView != 'list')
-                                              ? 0.0
-                                              : 1.0,
-                                          child: Row(
-                                            children: [
-                                              // Sort By label
-                                              Text(
-                                                'Sort By:',
-                                                style: TextStyle(
-                                                  fontSize: 9,
-                                                  color: Colors.grey.shade600,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              // Sort option button (cycles through lastname, firstname, number)
-                                              GestureDetector(
-                                                onTap: () {
-                                                  setState(() {
-                                                    // Cycle sort for BOTH teams in sync
-                                                    String current =
-                                                        _homePlayerSortBy;
-                                                    String next;
-                                                    if (current == 'number') {
-                                                      next = 'lastname';
-                                                    } else if (current ==
-                                                        'lastname') {
-                                                      next = 'firstname';
-                                                    } else {
-                                                      next = 'number';
-                                                    }
-
-                                                    _homePlayerSortBy = next;
-                                                    _awayPlayerSortBy = next;
-
-                                                    // Keep grid/list underlying options in sync as well
-                                                    String mappedOption;
-                                                    if (next == 'number') {
-                                                      mappedOption = 'number';
-                                                    } else if (next ==
-                                                        'lastname') {
-                                                      mappedOption = 'lastName';
-                                                    } else {
-                                                      mappedOption =
-                                                          'firstName';
-                                                    }
-                                                    _homeSortOption =
-                                                        mappedOption;
-                                                    _awaySortOption =
-                                                        mappedOption;
-                                                  });
-                                                },
-                                                child: Container(
-                                                  height: 22,
-                                                  width: 70,
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 6,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.grey.shade100,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      4,
-                                                    ),
-                                                    border: Border.all(
-                                                      color:
-                                                          Colors.grey.shade300,
-                                                    ),
-                                                  ),
-                                                  child: Center(
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        Text(
-                                                          _homeOnLeft
-                                                              ? (_homePlayerSortBy ==
-                                                                      'number'
-                                                                  ? 'Number'
-                                                                  : _homePlayerSortBy ==
-                                                                          'lastname'
-                                                                      ? 'Last Name'
-                                                                      : 'First Name')
-                                                              : (_awayPlayerSortBy ==
-                                                                      'number'
-                                                                  ? 'Number'
-                                                                  : _awayPlayerSortBy ==
-                                                                          'lastname'
-                                                                      ? 'Last Name'
-                                                                      : 'First Name'),
-                                                          style: TextStyle(
-                                                            fontSize: 9,
-                                                            color: Colors
-                                                                .grey.shade500,
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 4),
-                                              // Ascending/Descending toggle button
-                                              GestureDetector(
-                                                onTap: () {
-                                                  setState(() {
-                                                    // Toggle ascending/descending for BOTH teams in sync
-                                                    _homePlayerSortAscending =
-                                                        !_homePlayerSortAscending;
-                                                    _awayPlayerSortAscending =
-                                                        _homePlayerSortAscending;
-
-                                                    // Keep grid/list underlying options in sync as well
-                                                    _homeSortAscending =
-                                                        _homePlayerSortAscending;
-                                                    _awaySortAscending =
-                                                        _homePlayerSortAscending;
-                                                  });
-                                                },
-                                                child: Container(
-                                                  height: 22,
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                    horizontal: 6,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.grey.shade100,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      4,
-                                                    ),
-                                                    border: Border.all(
-                                                      color:
-                                                          Colors.grey.shade300,
-                                                    ),
-                                                  ),
-                                                  child: Center(
-                                                    child: Row(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      children: [
-                                                        Icon(
-                                                          (_homeOnLeft
-                                                                  ? _homePlayerSortAscending
-                                                                  : _awayPlayerSortAscending)
-                                                              ? Icons
-                                                                  .keyboard_arrow_up
-                                                              : Icons
-                                                                  .keyboard_arrow_down,
-                                                          size: 10,
-                                                          color: Colors
-                                                              .grey.shade500,
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
                                         ),
                                       ],
                                     ),
@@ -6949,16 +6820,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           const SizedBox(height: 2),
                           Text(
                             player.fullName.split(' ').skip(1).join(' '),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
+                            style: _captionFieldTextStyle.copyWith(
                               color: isSelected
                                   ? (isHomePlayer
                                       ? Colors.white
                                       : Colors.black87)
-                                  : Colors.black54,
+                                  : Colors.black87,
                             ),
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
@@ -7223,22 +7090,123 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (showHome)
-            Expanded(child: _buildRosterAddPlayerRow(true)),
-          if (showHome && showAway) const SizedBox(width: 6),
-          if (showAway) Expanded(child: _buildRosterAddPlayerRow(false)),
+          _buildRosterSortControlsRow(),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              if (showHome)
+                Expanded(child: _buildRosterAddPlayerRow(true)),
+              if (showHome && showAway) const SizedBox(width: 6),
+              if (showAway)
+                Expanded(child: _buildRosterAddPlayerRow(false)),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  /// Compact “Add player” control at the bottom of a team roster (uses existing custom-player dialog).
+  void _onRosterSortChipTap(String field) {
+    setState(() {
+      final current = _homePlayerSortBy;
+      final ascending = _homePlayerSortAscending;
+      final nextAscending =
+          current == field ? !ascending : true;
+
+      _homePlayerSortBy = field;
+      _awayPlayerSortBy = field;
+      _homePlayerSortAscending = nextAscending;
+      _awayPlayerSortAscending = nextAscending;
+
+      String mappedOption;
+      if (field == 'number') {
+        mappedOption = 'number';
+      } else if (field == 'lastname') {
+        mappedOption = 'lastName';
+      } else {
+        mappedOption = 'firstName';
+      }
+      _homeSortOption = mappedOption;
+      _awaySortOption = mappedOption;
+      _homeSortAscending = nextAscending;
+      _awaySortAscending = nextAscending;
+    });
+  }
+
+  Widget _buildRosterSortChip(String label, String field) {
+    final selected = _homePlayerSortBy == field;
+    return GestureDetector(
+      onTap: () => _onRosterSortChipTap(field),
+      child: Container(
+        height: 18,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          color: selected ? Colors.blue.shade50 : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(3),
+          border: Border.all(
+            color: selected ? Colors.blue.shade400 : Colors.grey.shade300,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? Colors.blue.shade800 : Colors.grey.shade600,
+              ),
+            ),
+            if (selected) ...[
+              const SizedBox(width: 1),
+              Icon(
+                _homePlayerSortAscending
+                    ? Icons.keyboard_arrow_up
+                    : Icons.keyboard_arrow_down,
+                size: 12,
+                color: Colors.blue.shade700,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRosterSortControlsRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          'Sort',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(width: 6),
+        _buildRosterSortChip('Last', 'lastname'),
+        const SizedBox(width: 4),
+        _buildRosterSortChip('First', 'firstname'),
+        const SizedBox(width: 4),
+        _buildRosterSortChip('#', 'number'),
+      ],
+    );
+  }
+
+  /// Compact “+” control at the bottom of a team roster (uses existing custom-player dialog).
   Widget _buildRosterAddPlayerRow(bool isHome) {
     final teamSelected =
         isHome ? selectedHomeTeam != null : selectedAwayTeam != null;
     if (!teamSelected) return const SizedBox.shrink();
+    final teamLabel = isHome
+        ? (_getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'Home')
+        : (_getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'Away');
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 2, 4, 2),
@@ -7251,34 +7219,24 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   _showPlayerEditDialog(isHome: isHome);
                 },
           borderRadius: BorderRadius.circular(3),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              border: Border.all(color: Colors.blue.shade200),
-              borderRadius: BorderRadius.circular(3),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.person_add_alt_1,
-                    size: 12, color: Colors.blue.shade700),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    'Add player (${isHome ? (_getTeamAbbreviation(selectedHomeTeam ?? '') ?? 'Home') : (_getTeamAbbreviation(selectedAwayTeam ?? '') ?? 'Away')})',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blue.shade800,
-                    ),
-                  ),
+          child: Tooltip(
+            message: 'Add player ($teamLabel)',
+            waitDuration: const Duration(milliseconds: 400),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                border: Border.all(color: Colors.blue.shade200),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.add,
+                  size: 14,
+                  color: Colors.blue.shade700,
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -7575,9 +7533,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final player = players[index];
         final isSelected = selectedPlayers.contains(player.displayName);
         final isMainPlayer = _isFirstSelectedPlayer(player.displayName);
-        final lastName = player.fullName.contains(' ')
-            ? player.fullName.split(' ').sublist(1).join(' ').trim()
-            : player.fullName;
+        final sortBy = isHome ? _homePlayerSortBy : _awayPlayerSortBy;
+        final nameLabel = _rosterNameLabelForPlayer(player, sortBy);
         return GestureDetector(
           onSecondaryTapDown: (details) {
             _showPlayerContextMenu(
@@ -7649,15 +7606,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                   const SizedBox(height: 1),
                   Text(
-                    lastName,
-                    style: TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w500,
+                    nameLabel,
+                    style: _captionFieldTextStyle.copyWith(
                       color: isMainPlayer
                           ? Colors.red.shade700
                           : isSelected
                               ? Colors.white
-                              : Colors.black87,
+                              : null,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -7975,7 +7930,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   horizontal: 0.5,
                   vertical: 0.5,
                 ),
-                height: 33,
+                height: 40,
                 decoration: BoxDecoration(
                   color: isSelected
                       ? (isHome ? Colors.grey.shade700 : Colors.white)
@@ -8007,17 +7962,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   : Colors.black87,
                             ),
                           ),
-                          const SizedBox(height: 0),
+                          const SizedBox(height: 1),
                           Text(
-                            player.fullName.split(' ').skip(1).join(' '),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.normal,
+                            _rosterNameLabelForPlayer(
+                              player,
+                              isHome ? _homePlayerSortBy : _awayPlayerSortBy,
+                            ),
+                            style: _captionFieldTextStyle.copyWith(
                               color: isSelected
                                   ? (isHome ? Colors.white : Colors.black87)
-                                  : Colors.black54,
+                                  : null,
                             ),
                             textAlign: TextAlign.center,
                             overflow: TextOverflow.ellipsis,
@@ -8098,7 +8052,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildBothTeamsListView() {
     // Get dynamic sizing based on screen dimensions
     final sizing = _getDynamicSizing();
-    final dynamicFontSize = sizing['fontSize']!;
     final dynamicVerticalPadding = sizing['verticalPadding']!;
     final rowHorizontalPadding = sizing['rowHorizontalPadding']!;
     final headerFontSizeGrid = sizing['headerFontSizeGrid']!;
@@ -8239,14 +8192,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         ),
                         decoration: BoxDecoration(
                           color: isSelected
-                              ? Colors.grey.shade700
-                              : Colors.grey.shade100,
+                              ? const Color(0xFFEAF3F8)
+                              : Colors.white,
                           border: Border(
                             bottom: BorderSide(
                               color: isSelected
-                                  ? Colors.grey.shade700
+                                  ? const Color(0xFF4A7A96)
                                   : Colors.grey.shade200,
-                              width: 0.5,
+                              width: isSelected ? 0.8 : 0.5,
                             ),
                           ),
                         ),
@@ -8274,15 +8227,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   player.displayName,
                                   _homeSortOption,
                                 ),
-                                style: TextStyle(
-                                  fontSize: dynamicFontSize,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : Colors.black87,
-                                ),
+                                style: _captionFieldTextStyle,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -8390,14 +8335,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           vertical: dynamicVerticalPadding,
                         ),
                         decoration: BoxDecoration(
-                          color:
-                              isSelected ? Colors.white : Colors.grey.shade100,
+                          color: isSelected
+                              ? const Color(0xFFEAF3F8)
+                              : Colors.white,
                           border: Border(
                             bottom: BorderSide(
                               color: isSelected
-                                  ? Colors.grey.shade400
+                                  ? const Color(0xFF4A7A96)
                                   : Colors.grey.shade200,
-                              width: 0.5,
+                              width: isSelected ? 0.8 : 0.5,
                             ),
                           ),
                         ),
@@ -8428,15 +8374,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   player.displayName,
                                   _awaySortOption,
                                 ),
-                                style: TextStyle(
-                                  fontSize: dynamicFontSize,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.normal,
-                                  color: isSelected
-                                      ? Colors.black87
-                                      : Colors.black87,
-                                ),
+                                style: _captionFieldTextStyle,
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -8583,15 +8521,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         player.displayName,
                         _homeSortOption,
                       ),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.normal,
+                      style: _captionFieldTextStyle.copyWith(
                         color: isSelected
                             ? (isHome
                                 ? Colors.blue.shade800
                                 : Colors.red.shade800)
-                            : Colors.black87,
+                            : null,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -8735,15 +8670,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         player.displayName,
                         _homeSortOption,
                       ),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight:
-                            isSelected ? FontWeight.w600 : FontWeight.normal,
+                      style: _captionFieldTextStyle.copyWith(
                         color: isSelected
                             ? (isHome
                                 ? Colors.blue.shade800
                                 : Colors.red.shade800)
-                            : Colors.black87,
+                            : null,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -16488,6 +16420,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return;
     }
 
+    // On first image navigation, exiftool metadata can arrive after the user
+    // selects a player/verb. Avoid rendering against empty location fields
+    // (", UNITED STATES", generic "Venue"); _loadMetadata reruns this once
+    // the current image's IPTC fields are bound.
+    if (_hasActiveCaptionBuild && !_isMetadataBoundForCurrentImage) {
+      _captionUpdatePendingMetadata = true;
+      return;
+    }
+
     // Get photo date from metadata, fallback to current date
     DateTime photoDate = DateTime.now();
     if (widget.metadata != null) {
@@ -23923,17 +23864,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   /// Fixed roster list/grid metrics (no window-based scaling).
   Map<String, double> _getDynamicSizing() {
     return {
-      'fontSize': 12.0,
-      'verticalPadding': 2.0,
+      'verticalPadding': 3.0,
       'rowHorizontalPadding': 6.0,
       'rowHorizontalPaddingWide': 8.0,
       'headerFontSizeGrid': 10.0,
       'headerIconSizeGrid': 12.0,
       'gridHeaderVerticalPadding': 4.0,
       'listHeaderIconSize': 14.0,
-      'listHeaderFontSize': 8.0,
+      'listHeaderFontSize': 10.0,
       'listHeaderVerticalPadding': 6.0,
-      'jerseyBadgeFont': 11.0,
+      'jerseyBadgeFont': 11.5,
       'jerseyNameGap': 8.0,
     };
   }
@@ -24062,6 +24002,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return nameParts.isNotEmpty ? nameParts.first : '';
   }
 
+  String _rosterNameLabelForPlayer(Player player, String sortBy) {
+    final parts = player.fullName.trim().split(RegExp(r'\s+'));
+    final first = parts.isNotEmpty ? parts.first : player.fullName;
+    final last =
+        parts.length >= 2 ? parts.sublist(1).join(' ').trim() : '';
+    switch (sortBy) {
+      case 'lastname':
+      case 'lastName':
+        return last.isNotEmpty ? '$last, $first' : first;
+      case 'firstname':
+      case 'firstName':
+        return last.isNotEmpty ? '$first $last' : first;
+      default:
+        return last.isNotEmpty ? '$first $last' : player.fullName;
+    }
+  }
+
   String _getFormattedPlayerName(String displayName, String sortOption) {
     final parts = displayName.split(' ');
     final jerseyNumber = parts.last.startsWith('#') ? parts.last : '';
@@ -24075,15 +24032,19 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$jerseyNumber $nameWithoutNumber';
       }
     } else if (sortOption == 'lastName' && nameParts.length >= 2) {
-      // Format as "Last Name, First Name #"
       final firstName = nameParts.first;
       final lastName = nameParts.last;
-
+      final namePart = '$lastName, $firstName';
       if (jerseyNumber.isNotEmpty) {
-        return '$lastName, $firstName $jerseyNumber';
-      } else {
-        return '$lastName, $firstName';
+        return '$jerseyNumber $namePart';
       }
+      return namePart;
+    } else if (sortOption == 'firstName' && nameParts.length >= 2) {
+      final namePart = nameParts.join(' ');
+      if (jerseyNumber.isNotEmpty) {
+        return '$jerseyNumber $namePart';
+      }
+      return namePart;
     }
     // For other sort options, return original format
     return displayName;
@@ -26829,7 +26790,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _buildBothTeamsList() {
     // Get dynamic sizing based on screen dimensions
     final sizing = _getDynamicSizing();
-    final dynamicFontSize = sizing['fontSize']!;
     final dynamicVerticalPadding = sizing['verticalPadding']!;
     final rowHorizontalPaddingWide = sizing['rowHorizontalPaddingWide']!;
     final listHeaderIconSize = sizing['listHeaderIconSize']!;
@@ -26960,12 +26920,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? Colors.blue.shade600
+                                ? const Color(0xFF2A4858)
                                 : Colors.white,
                             border: Border(
                               bottom: BorderSide(
                                 color: isSelected
-                                    ? Colors.blue.shade600
+                                    ? const Color(0xFF2A4858)
                                     : Colors.grey.shade200,
                                 width: 0.5,
                               ),
@@ -26991,27 +26951,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Text(
                                 '🔥H${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
+                                  fontFamily: 'Inter',
                                   fontSize: jerseyBadgeFont,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected
                                       ? Colors.white
-                                      : Colors.grey.shade600,
+                                      : Colors.black87,
                                 ),
                               ),
                               SizedBox(width: jerseyNameGap),
                               Expanded(
                                 child: Text(
-                                  _removeJerseyNumberFromName(
-                                    player.displayName,
+                                  _rosterNameLabelForPlayer(
+                                    player,
+                                    _homePlayerSortBy,
                                   ),
-                                  style: TextStyle(
-                                    fontSize: dynamicFontSize,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.black87,
+                                  style: _captionFieldTextStyle.copyWith(
+                                    color: isSelected ? Colors.white : null,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -27110,12 +27066,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? Colors.blue.shade600
-                                : Colors.grey.shade50,
+                                ? const Color(0xFF2A4858)
+                                : Colors.white,
                             border: Border(
                               bottom: BorderSide(
                                 color: isSelected
-                                    ? Colors.blue.shade600
+                                    ? const Color(0xFF2A4858)
                                     : Colors.grey.shade200,
                                 width: 0.5,
                               ),
@@ -27141,27 +27097,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               Text(
                                 '🔥V${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
+                                  fontFamily: 'Inter',
                                   fontSize: jerseyBadgeFont,
                                   fontWeight: FontWeight.bold,
                                   color: isSelected
                                       ? Colors.white
-                                      : Colors.grey.shade600,
+                                      : Colors.black87,
                                 ),
                               ),
                               SizedBox(width: jerseyNameGap),
                               Expanded(
                                 child: Text(
-                                  _removeJerseyNumberFromName(
-                                    player.displayName,
+                                  _rosterNameLabelForPlayer(
+                                    player,
+                                    _awayPlayerSortBy,
                                   ),
-                                  style: TextStyle(
-                                    fontSize: dynamicFontSize,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.black87,
+                                  style: _captionFieldTextStyle.copyWith(
+                                    color: isSelected ? Colors.white : null,
                                   ),
                                   overflow: TextOverflow.ellipsis,
                                 ),

@@ -124,6 +124,26 @@ class KeyboardFirePanel extends StatefulWidget {
 }
 
 class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
+  /// Must match [_buildCaptionField] — roster player names use this too.
+  static const TextStyle _captionFieldTextStyle = TextStyle(
+    fontSize: 11.5,
+    letterSpacing: 0,
+    height: 1.4,
+    fontFamily: 'Inter',
+  );
+
+  static const double _captionLineHeight = 11.5 * 1.4;
+
+  TextStyle _rosterPlayerTextStyle({
+    Color? color,
+    FontWeight? fontWeight,
+  }) {
+    return _captionFieldTextStyle.copyWith(
+      color: color ?? const Color(0xFF1A1A1A),
+      fontWeight: fontWeight,
+    );
+  }
+
   String _bulkSaveLabel() {
     final n = widget.bulkSaveCount;
     if (n != null && n > 1) return 'Save ($n)';
@@ -536,6 +556,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   /// When true, show players in a **number grid**: one row per decade (0–9, 10–19, …),
   /// ten columns per row. When false, list view with names.
   bool _useSquarePlayerView = false;
+  String _kbPlayerSortBy = 'number'; // 'number', 'lastname', 'firstname'
+  bool _kbPlayerSortAscending = true;
   bool _showHomeCoachingPanel = true;
   bool _showAwayCoachingPanel = true;
 
@@ -556,22 +578,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     return height.clamp(120.0, 640.0);
   }
 
-  static const double _kKbRosterRowHeightMin = 14.0;
-  static const double _kKbRosterRowHeightMax = 20.0;
+  static const double _kKbRosterRowHeightMin = 17.0;
+  static const double _kKbRosterRowHeightMax = 22.0;
 
   double _keyboardFireListRosterRowHeight(double listViewportHeight) {
     const verticalScrollPad = 2.0 + 3.0; // `fromLTRB(3, 2, 3, 3)` top + bottom
     final sane = _sanitizeKbRosterListViewport(listViewportHeight);
     final inner = (sane - verticalScrollPad).clamp(48.0, 4000.0);
     final computed = inner / _kListRosterVisibleRows;
-    return computed.clamp(_kKbRosterRowHeightMin, _kKbRosterRowHeightMax);
+    return computed.clamp(_kKbRosterRowHeightMin, _kKbRosterRowHeightMax)
+        .clamp(_captionLineHeight, _kKbRosterRowHeightMax);
   }
 
-  /// Jersey/name `fontSize` for list roster; tied to [_keyboardFireListRosterRowHeight].
+  /// Jersey/name `fontSize` for list roster — locked to caption field size.
   double _keyboardFireListRosterFontSize(double listViewportHeight) {
-    final rowH = _keyboardFireListRosterRowHeight(listViewportHeight);
-    // Slightly smaller cap than before so compact rows don’t keep oversized type.
-    return (rowH * 0.82).clamp(10.5, 12.5);
+    return _captionFieldTextStyle.fontSize!;
   }
 
   /// Shared roster text size used as the typography baseline for verbs/categories.
@@ -826,6 +847,131 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     _awayRosterView = List<Player>.from(widget.awayRoster);
   }
 
+  String _kbPlayerLastName(Player player) {
+    final name = player.fullName.trim();
+    if (name.isEmpty) return player.displayName;
+    final parts = name.split(RegExp(r'\s+'));
+    return parts.length >= 2 ? parts.last : name;
+  }
+
+  String _kbPlayerFirstName(Player player) {
+    final name = player.fullName.trim();
+    if (name.isEmpty) return player.displayName;
+    final parts = name.split(RegExp(r'\s+'));
+    return parts.isNotEmpty ? parts.first : name;
+  }
+
+  int _compareKbPlayers(Player a, Player b) {
+    int cmp;
+    switch (_kbPlayerSortBy) {
+      case 'lastname':
+        cmp = _kbPlayerLastName(a)
+            .toLowerCase()
+            .compareTo(_kbPlayerLastName(b).toLowerCase());
+        break;
+      case 'firstname':
+        cmp = _kbPlayerFirstName(a)
+            .toLowerCase()
+            .compareTo(_kbPlayerFirstName(b).toLowerCase());
+        break;
+      case 'number':
+      default:
+        final an = int.tryParse(a.jerseyNumber?.trim() ?? '') ?? 9999;
+        final bn = int.tryParse(b.jerseyNumber?.trim() ?? '') ?? 9999;
+        cmp = an.compareTo(bn);
+    }
+    if (cmp == 0) {
+      cmp = a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+    }
+    return _kbPlayerSortAscending ? cmp : -cmp;
+  }
+
+  List<Player> _sortedKbRoster(List<Player> roster) {
+    final sorted = List<Player>.from(roster);
+    sorted.sort(_compareKbPlayers);
+    return sorted;
+  }
+
+  void _onKbSortChipTap(String field) {
+    setState(() {
+      if (_kbPlayerSortBy == field) {
+        _kbPlayerSortAscending = !_kbPlayerSortAscending;
+      } else {
+        _kbPlayerSortBy = field;
+        _kbPlayerSortAscending = true;
+      }
+    });
+  }
+
+  Widget _buildKbSortChip(String label, String field) {
+    final selected = _kbPlayerSortBy == field;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _onKbSortChipTap(field),
+        borderRadius: BorderRadius.circular(3),
+        child: Container(
+          height: 18,
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          decoration: BoxDecoration(
+            color: selected ? Colors.grey.shade200 : Colors.transparent,
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(
+              color: selected ? Colors.grey.shade500 : Colors.grey.shade300,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  color: selected ? Colors.black87 : Colors.grey.shade600,
+                  height: 1.0,
+                ),
+              ),
+              if (selected) ...[
+                const SizedBox(width: 1),
+                Icon(
+                  _kbPlayerSortAscending
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  size: 12,
+                  color: Colors.grey.shade700,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKbPlayerSortControls() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Sort',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade600,
+            height: 1.0,
+          ),
+        ),
+        const SizedBox(width: 4),
+        _buildKbSortChip('Last', 'lastname'),
+        const SizedBox(width: 2),
+        _buildKbSortChip('First', 'firstname'),
+        const SizedBox(width: 2),
+        _buildKbSortChip('#', 'number'),
+      ],
+    );
+  }
+
   Future<void> _openAddPlayerFromKeyboardFire(bool isHome) async {
     final cs = widget.captionState;
     if (cs == null) return;
@@ -838,36 +984,25 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
-  /// Compact “+ Add player” above the roster; opens the same add-player dialog as classic mode.
+  /// Compact “+” above the roster; opens the same add-player dialog as classic mode.
   Widget _buildKbAddPlayerIconButton(bool isHome) {
     return Align(
       alignment: Alignment.centerLeft,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => _openAddPlayerFromKeyboardFire(isHome),
-          borderRadius: BorderRadius.circular(3),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(2, 5, 8, 5),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.add_rounded,
-                  size: 10,
-                  color: Colors.black87,
-                ),
-                const SizedBox(width: 3),
-                Text(
-                  'Add player',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.normal,
-                    color: Colors.black87,
-                    height: 1.0,
-                  ),
-                ),
-              ],
+      child: Tooltip(
+        message: 'Add player',
+        waitDuration: const Duration(milliseconds: 400),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => _openAddPlayerFromKeyboardFire(isHome),
+            borderRadius: BorderRadius.circular(3),
+            child: const Padding(
+              padding: EdgeInsets.fromLTRB(2, 5, 8, 5),
+              child: Icon(
+                Icons.add_rounded,
+                size: 14,
+                color: Colors.black87,
+              ),
             ),
           ),
         ),
@@ -1543,7 +1678,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           textAlignVertical: TextAlignVertical.top,
           cursorHeight: 12,
           cursorColor: Colors.black87,
-          style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
+          style: _captionFieldTextStyle,
           decoration: InputDecoration(
             isDense: true,
             hintText: 'Caption will appear here as you add players and a verb.',
@@ -1564,7 +1699,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         textAlignVertical: TextAlignVertical.top,
         cursorHeight: 12,
         cursorColor: Colors.black87,
-        style: const TextStyle(fontSize: 11.5, letterSpacing: 0, height: 1.4),
+        style: _captionFieldTextStyle,
         decoration: InputDecoration(
           isDense: true,
           hintText: 'Caption will appear here as you add players and a verb.',
@@ -2171,6 +2306,22 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
+  String _kbRosterNameLabel(Player player) {
+    final parts = player.fullName.trim().split(RegExp(r'\s+'));
+    if (parts.isEmpty) return player.fullName;
+    final first = parts.first;
+    final last =
+        parts.length >= 2 ? parts.sublist(1).join(' ').trim() : '';
+    switch (_kbPlayerSortBy) {
+      case 'lastname':
+        return last.isNotEmpty ? '$last, $first' : first;
+      case 'firstname':
+        return last.isNotEmpty ? '$first $last' : first;
+      default:
+        return last.isNotEmpty ? '$first $last' : player.fullName;
+    }
+  }
+
   List<Widget> _buildRosterRows(
     List<Player> roster,
     bool isHomeTeam, {
@@ -2183,18 +2334,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     if (roster.isEmpty) return [];
     final selectedNames = _getSelectedPlayerNames(isHomeTeam);
     final currentNumbers = _parseNumbers(barText ?? '');
-    final sorted = List<Player>.from(roster)
-      ..sort((a, b) {
-        final an = int.tryParse(a.jerseyNumber ?? '') ?? 999;
-        final bn = int.tryParse(b.jerseyNumber ?? '') ?? 999;
-        return an.compareTo(bn);
-      });
+    final sorted = _sortedKbRoster(roster);
 
     return sorted.map((p) {
       final num = p.jerseyNumber ?? '—';
       final raw = p.displayName;
-      final name = raw.replaceFirst(RegExp(r' #\d+$'), '').trim();
-      final displayName = name.isEmpty ? raw : name;
+      final displayName = _kbRosterNameLabel(p);
       final jersey = p.jerseyNumber ?? '';
       final isPicked = raw.isNotEmpty && selectedNames.contains(raw);
       final isCurrent = jersey.isNotEmpty &&
@@ -2206,7 +2351,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           jersey.startsWith(barQuery);
       final isNameMatch = barQuery.isNotEmpty &&
           !RegExp(r'^\d+$').hasMatch(barQuery) &&
-          displayName.toLowerCase().contains(barQuery);
+          (p.fullName.toLowerCase().contains(barQuery) ||
+              displayName.toLowerCase().contains(barQuery));
       final rosterKey = jersey.isNotEmpty ? '${isHomeTeam}_$jersey' : null;
       final isHovered = rosterKey != null && _hoveredRosterKey == rosterKey;
       final bgColor = isPicked
@@ -2254,27 +2400,22 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 width: 24,
                 child: Text(
                   num,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    height: 1.4,
-                    fontWeight: FontWeight.w100,
-                    letterSpacing: 0,
+                  style: _rosterPlayerTextStyle(
                     color: isPicked
                         ? const Color(0xFF0052CC)
                         : const Color(0xFF1A1A1A),
+                    fontWeight: isPicked ? FontWeight.w600 : null,
                   ),
                 ),
               ),
               Expanded(
                 child: Text(
                   displayName,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    height: 1.4,
-                    letterSpacing: 0,
-                    color:
-                        isPicked ? const Color(0xFF0052CC) : const Color(0xFF1A1A1A),
-                    fontWeight: FontWeight.w100,
+                  style: _rosterPlayerTextStyle(
+                    color: isPicked
+                        ? const Color(0xFF0052CC)
+                        : const Color(0xFF1A1A1A),
+                    fontWeight: isPicked ? FontWeight.w600 : null,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -2492,16 +2633,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           ? const Color(0xFF0052CC)
           : Colors.grey.shade500,
     );
-    final nameStyle = TextStyle(
-      fontSize: 11.5,
-      letterSpacing: 0,
-      height: 1.4,
+    final nameStyle = _rosterPlayerTextStyle(
       color: isPicked
           ? const Color(0xFF0052CC)
           : (name == 'data missing'
               ? Colors.grey.shade500
               : const Color(0xFF1A1A1A)),
-      fontWeight: isPicked ? FontWeight.w600 : FontWeight.w400,
+      fontWeight: isPicked ? FontWeight.w600 : null,
+    ).copyWith(
       fontStyle:
           name == 'data missing' ? FontStyle.italic : FontStyle.normal,
     );
@@ -2575,13 +2714,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     required bool isHomeTeam,
     required Set<String> selectedNames,
   }) {
-    const double gridCellHeight = 30;
-    final screenSize = MediaQuery.sizeOf(context);
-    // Keep grid labels a touch smaller at compact 1200x800-like windows.
-    final compactGridText =
-        screenSize.width <= 1220 && screenSize.height <= 840;
-    final jerseyFontSize = compactGridText ? 10.5 : 11.0;
-    final lastNameFontSize = compactGridText ? 7.0 : 8.0;
+    const double gridCellHeight = 38;
     if (player == null) {
       return SizedBox(
         height: gridCellHeight,
@@ -2596,9 +2729,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
     final jersey = player.jerseyNumber ?? '?';
     final isPicked = selectedNames.contains(player.displayName);
-    final lastName = player.fullName.contains(' ')
-        ? player.fullName.split(' ').sublist(1).join(' ').trim()
-        : player.fullName;
+    final nameLabel = _kbRosterNameLabel(player);
     return SizedBox(
       height: gridCellHeight,
       child: Tooltip(
@@ -2639,21 +2770,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               children: [
                 Text(
                   jersey,
-                  style: TextStyle(
-                    fontSize: jerseyFontSize,
+                  style: _rosterPlayerTextStyle(
+                    color: isPicked
+                        ? const Color(0xFF0052CC)
+                        : Colors.black87,
                     fontWeight: isPicked ? FontWeight.w600 : FontWeight.w500,
-                    letterSpacing: -0.2,
-                    color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
                   ),
                 ),
                 Text(
-                  lastName,
-                  style: TextStyle(
-                    fontSize: lastNameFontSize,
-                    fontWeight: FontWeight.w500,
-                    height: 1.0,
-                    letterSpacing: -0.2,
-                    color: isPicked ? const Color(0xFF0052CC) : Colors.black87,
+                  nameLabel,
+                  style: _rosterPlayerTextStyle(
+                    color: isPicked
+                        ? const Color(0xFF0052CC)
+                        : Colors.black87,
+                    fontWeight: isPicked ? FontWeight.w600 : null,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2732,7 +2862,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       );
     }
 
-    final buckets = byNum.keys.map((j) => j ~/ 10).toSet().toList()..sort();
+    final buckets = byNum.keys.map((j) => j ~/ 10).toSet().toList()
+      ..sort((a, b) => _kbPlayerSortAscending ? a.compareTo(b) : b.compareTo(a));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
@@ -2745,16 +2876,20 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               spacing: 1,
               runSpacing: 1,
               children: [
-                for (int d = 0; d < 10; d++)
-                  if (byNum[buckets[bi] * 10 + d] != null)
+                for (int i = 0; i < 10; i++) ...[
+                  if (byNum[buckets[bi] * 10 +
+                          (_kbPlayerSortAscending ? i : 9 - i)] !=
+                      null)
                     SizedBox(
                       width: 40,
                       child: _buildRosterSquareGridCell(
-                        player: byNum[buckets[bi] * 10 + d],
+                        player: byNum[buckets[bi] * 10 +
+                            (_kbPlayerSortAscending ? i : 9 - i)]!,
                         isHomeTeam: isHomeTeam,
                         selectedNames: selectedNames,
                       ),
                     ),
+                ],
               ],
             ),
             if (bi != buckets.length - 1)
@@ -2783,12 +2918,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             Wrap(
               spacing: 4,
               runSpacing: 4,
-              children: nonNumeric.map((player) {
+              children: _sortedKbRoster(nonNumeric).map((player) {
                 final jersey = player.jerseyNumber ?? '?';
                 final isPicked = selectedNames.contains(player.displayName);
-                final lastName = player.fullName.contains(' ')
-                    ? player.fullName.split(' ').sublist(1).join(' ').trim()
-                    : player.fullName;
+                final nameLabel = _kbRosterNameLabel(player);
                 return GestureDetector(
                   onTap: () {
                     final state = widget.captionState;
@@ -2823,26 +2956,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       children: [
                         Text(
                           jersey,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight:
-                                isPicked ? FontWeight.w600 : FontWeight.w500,
-                            letterSpacing: -0.2,
+                          style: _rosterPlayerTextStyle(
                             color: isPicked
                                 ? const Color(0xFF0052CC)
                                 : Colors.black87,
+                            fontWeight:
+                                isPicked ? FontWeight.w600 : FontWeight.w500,
                           ),
                         ),
                         Text(
-                          lastName,
-                          style: TextStyle(
-                            fontSize: 8,
-                            fontWeight: FontWeight.w500,
-                            height: 1.05,
-                            letterSpacing: -0.2,
+                          nameLabel,
+                          style: _rosterPlayerTextStyle(
                             color: isPicked
                                 ? const Color(0xFF0052CC)
                                 : Colors.black87,
+                            fontWeight: isPicked ? FontWeight.w600 : null,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -6171,7 +6299,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     alignment: Alignment.centerLeft,
                                     child: _buildPlayerViewModeToggle(),
                                   ),
-                                  const Spacer(),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.center,
+                                      child: _buildKbPlayerSortControls(),
+                                    ),
+                                  ),
                                   _buildKbAddPlayerIconButton(true),
                                 ],
                               ),
@@ -6353,7 +6488,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     alignment: Alignment.centerLeft,
                                     child: _buildPlayerViewModeToggle(),
                                   ),
-                                  const Spacer(),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.center,
+                                      child: _buildKbPlayerSortControls(),
+                                    ),
+                                  ),
                                   _buildKbAddPlayerIconButton(false),
                                 ],
                               ),

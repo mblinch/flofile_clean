@@ -91,7 +91,7 @@ class WireIptcSpecs {
     'Copyright',
     'Credit',
     'Source',
-    'Time and Date',
+    'Camera time',
     'City',
     'Location',
     'Province/State',
@@ -111,8 +111,11 @@ class WireIptcSpecs {
     final byLabel = {for (final f in fieldsFor(wire)) f.label: f};
     final out = <WireIptcFieldSpec>[];
     for (final panelLabel in iptcPanelFieldOrder) {
-      final storageKey =
-          panelLabel == 'Location' ? 'Stadium' : panelLabel;
+      final storageKey = panelLabel == 'Location'
+          ? 'Stadium'
+          : panelLabel == 'Camera time'
+              ? 'Time and Date'
+              : panelLabel;
       final wireSpec = byLabel[storageKey];
       if (wireSpec != null) {
         out.add(WireIptcFieldSpec(
@@ -143,7 +146,7 @@ class WireIptcSpecs {
       'Copyright': 'IPTC:CopyrightNotice',
       'Credit': 'IPTC:Credit',
       'Source': 'IPTC:Source',
-      'Time and Date': 'DateTimeOriginal',
+      'Camera time': 'DateTimeOriginal',
       'City': 'IPTC:City',
       'Location': 'IPTC:SubLocation',
       'Province/State': 'IPTC:ProvinceState',

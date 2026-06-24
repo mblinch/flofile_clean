@@ -159,13 +159,13 @@ class _StartupDialogState extends State<StartupDialog> {
 
   Future<void> _initializeAndLoadData() async {
     _preferencesService = await PreferencesService.getInstance();
+    await _loadIptcApplyOptions();
     await AppDefaultsFirestoreService.loadCacheFromDisk();
     await _loadIptcCatalog();
     await _loadIptcWireContext();
     await _loadPresetForWire(
       _wireStyleForSelectedTemplateId(_selectedIptcTemplateId),
     );
-    await _loadIptcApplyOptions();
     if (_sportChosen) {
       await _initializePreferences();
       await _loadTeams();
@@ -173,6 +173,7 @@ class _StartupDialogState extends State<StartupDialog> {
     // Folder may have been chosen while prefs were still loading; ensure IPTC
     // from files is not overwritten by the preset load above.
     if (_selectedImageFiles.isNotEmpty &&
+        _iptcApplyMode == IptcApplyMode.onImport &&
         (_iptcTemplateValues.isEmpty || _iptcKeysFoundInFiles.isEmpty)) {
       await _loadIptcFromFolderImages(_selectedImageFiles);
     }
@@ -355,9 +356,29 @@ class _StartupDialogState extends State<StartupDialog> {
       _iptcTemplateValues = {};
       _iptcKeysFoundInFiles.clear();
       _iptcTemplateLoadedBeforeFolder = false;
-      _iptcApplyMode = IptcApplyMode.onImport;
       _iptcTemplateRevision++;
     });
+    await _persistIptcTemplateValues();
+  }
+
+  Future<void> _onIptcApplyModeChanged(IptcApplyMode mode) async {
+    if (mode == _iptcApplyMode) return;
+    setState(() {
+      _iptcApplyMode = mode;
+      _iptcTemplateRevision++;
+    });
+    await _preferencesService.saveIptcApplyMode(mode);
+    if (mode == IptcApplyMode.onImport) {
+      if (_selectedImageFiles.isNotEmpty || selectedFolderPath != null) {
+        await _loadOriginalIptcValuesFromFiles();
+      } else {
+        setState(() {
+          _iptcTemplateValues = {};
+          _iptcKeysFoundInFiles.clear();
+          _iptcTemplateRevision++;
+        });
+      }
+    }
     await _persistIptcTemplateValues();
   }
 
@@ -387,7 +408,6 @@ class _StartupDialogState extends State<StartupDialog> {
             (key) => !IptcTemplateApplyService.isInAppGeneratedFieldKey(key),
           ));
         _iptcTemplateLoadedBeforeFolder = false;
-        _iptcApplyMode = IptcApplyMode.onImport;
         _iptcTemplateRevision++;
       });
       await _persistIptcTemplateValues();
@@ -441,7 +461,6 @@ class _StartupDialogState extends State<StartupDialog> {
           _iptcWireStyle,
         );
         _iptcKeysFoundInFiles.clear();
-        _iptcApplyMode = IptcApplyMode.onImport;
         _iptcTemplateRevision++;
         if (selectedFolderPath == null) {
           _iptcTemplateLoadedBeforeFolder = true;
@@ -829,6 +848,7 @@ class _StartupDialogState extends State<StartupDialog> {
 
   Future<void> _loadIptcFromFolderImages(List<String> imageFiles) async {
     if (imageFiles.isEmpty || !mounted) return;
+    if (_iptcApplyMode != IptcApplyMode.onImport) return;
     setState(() => _loadingIptcFromFiles = true);
     try {
       final folderIptc = await _collectIptcFromFolderSample(imageFiles);
@@ -877,8 +897,26 @@ class _StartupDialogState extends State<StartupDialog> {
       } else if (userChoseToKeep) {
         // User explicitly kept the template — don't let folder IPTC fill blank fields.
         merged = Map<String, String>.from(_iptcTemplateValues);
+      } else if (_iptcApplyMode == IptcApplyMode.onImport) {
+        // On import: show IPTC read from folder images.
+        merged = IptcTemplateApplyService.panelValuesFromImportedTemplate(
+          folderIptc,
+          _iptcWireStyle,
+        );
+        for (final spec in WireIptcSpecs.fieldsForPanel(_iptcWireStyle)) {
+          final key = spec.storageKey;
+          final fileValue =
+              IptcTemplateApplyService.lookupValue(folderIptc, key);
+          if (fileValue == null || fileValue.trim().isEmpty) continue;
+          if (IptcTemplateApplyService.isInAppGeneratedFieldKey(key)) {
+            foundInFiles.add(key);
+            merged.remove(key);
+          } else {
+            foundInFiles.add(key);
+          }
+        }
       } else {
-        // No prior template — fill empty fields from folder as usual.
+        // On save: fill empty template fields from folder as usual.
         merged = Map<String, String>.from(_iptcTemplateValues);
         _mergeIptcValues(
           merged,
@@ -1265,7 +1303,9 @@ class _StartupDialogState extends State<StartupDialog> {
           setState(() {
             isExtractingDate = false;
           });
-          await _loadIptcFromFolderImages(imageFiles);
+          if (_iptcApplyMode == IptcApplyMode.onImport) {
+            await _loadIptcFromFolderImages(imageFiles);
+          }
         } else {
           setState(() {
             _iptcTemplateValues = {};
@@ -1962,9 +2002,7 @@ class _StartupDialogState extends State<StartupDialog> {
                   selectedTemplateId: _selectedIptcTemplateId,
                   onTemplateSelected: _onIptcTemplateSelected,
                   iptcApplyMode: _iptcApplyMode,
-                  onIptcApplyModeChanged: (mode) {
-                    setState(() => _iptcApplyMode = mode);
-                  },
+                  onIptcApplyModeChanged: _onIptcApplyModeChanged,
                   onLoadTemplate: _loadExternalIptcTemplate,
                   onClearTemplate: _clearIptcTemplateValues,
                   onLoadOriginalValues: _loadOriginalIptcValuesFromFiles,

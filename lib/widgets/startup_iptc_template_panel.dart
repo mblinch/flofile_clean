@@ -73,6 +73,16 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     color: Colors.black87,
   );
 
+  static const TextStyle _fieldValueDisabledStyle = TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 10,
+    height: 1.25,
+    color: Color(0xFFB0B0B0),
+  );
+
+  static const Color _fieldDisabledFill = Color(0xFFF3F3F3);
+  static const Color _fieldDisabledBorder = Color(0xFFE0E0E0);
+
   static const String _captionLabel = 'Caption';
   static const String _keywordsLabel = 'Keywords';
   static const String _headlineLabel = 'Headline';
@@ -117,6 +127,15 @@ class StartupIptcTemplatePanel extends StatelessWidget {
   }
 
   String _fieldKey(String storageKey) => '$storageKey-$templateRevision';
+
+  bool get _fieldsInactive =>
+      !fieldsOnly && iptcApplyMode == IptcApplyMode.none;
+
+  Map<String, String> get _displayValues =>
+      _fieldsInactive ? const {} : values;
+
+  Set<String> get _displayFoundInFilesKeys =>
+      _fieldsInactive ? const {} : foundInFilesKeys;
 
   @override
   Widget build(BuildContext context) {
@@ -231,20 +250,21 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                       key: ValueKey(_fieldKey(captionSpec.storageKey)),
                       spec: captionSpec,
                       valueMaxLines: 2,
+                      enabled: !_fieldsInactive,
                       value: _displayValueForField(
                         label: captionSpec.label,
                         storedValue: IptcTemplateApplyService.lookupValue(
-                          values,
+                          _displayValues,
                           captionSpec.storageKey,
                         ),
                         showFoundInFiles: _isFoundInFiles(
                           captionSpec.storageKey,
-                          foundInFilesKeys,
+                          _displayFoundInFilesKeys,
                         ),
                       ),
                       showFoundInFiles: _isFoundInFiles(
                         captionSpec.storageKey,
-                        foundInFilesKeys,
+                        _displayFoundInFilesKeys,
                       ),
                       onValueChanged: onValueChanged,
                     ),
@@ -257,13 +277,14 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                     child: _EditableFieldRow(
                       key: ValueKey(_fieldKey(headlineSpec.storageKey)),
                       spec: headlineSpec,
+                      enabled: !_fieldsInactive,
                       value: IptcTemplateApplyService.lookupValue(
-                        values,
+                        _displayValues,
                         headlineSpec.storageKey,
                       ),
                       showFoundInFiles: _isFoundInFiles(
                         headlineSpec.storageKey,
-                        foundInFilesKeys,
+                        _displayFoundInFilesKeys,
                       ),
                       onValueChanged: onValueChanged,
                     ),
@@ -277,13 +298,14 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                       key: ValueKey(_fieldKey(keywordsSpec.storageKey)),
                       spec: keywordsSpec,
                       valueMaxLines: 2,
+                      enabled: !_fieldsInactive,
                       value: IptcTemplateApplyService.lookupValue(
-                        values,
+                        _displayValues,
                         keywordsSpec.storageKey,
                       ),
                       showFoundInFiles: _isFoundInFiles(
                         keywordsSpec.storageKey,
-                        foundInFilesKeys,
+                        _displayFoundInFilesKeys,
                       ),
                       onValueChanged: onValueChanged,
                     ),
@@ -298,13 +320,14 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                           _fieldKey(specialInstructionsSpec.storageKey)),
                       spec: specialInstructionsSpec,
                       valueMaxLines: 2,
+                      enabled: !_fieldsInactive,
                       value: IptcTemplateApplyService.lookupValue(
-                        values,
+                        _displayValues,
                         specialInstructionsSpec.storageKey,
                       ),
                       showFoundInFiles: _isFoundInFiles(
                         specialInstructionsSpec.storageKey,
-                        foundInFilesKeys,
+                        _displayFoundInFilesKeys,
                       ),
                       onValueChanged: onValueChanged,
                     ),
@@ -317,9 +340,10 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                     Expanded(
                       child: _FieldColumn(
                         specs: left,
-                        values: values,
-                        foundInFilesKeys: foundInFilesKeys,
+                        values: _displayValues,
+                        foundInFilesKeys: _displayFoundInFilesKeys,
                         templateRevision: templateRevision,
+                        fieldsEnabled: !_fieldsInactive,
                         onValueChanged: onValueChanged,
                       ),
                     ),
@@ -327,9 +351,10 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                     Expanded(
                       child: _FieldColumn(
                         specs: right,
-                        values: values,
-                        foundInFilesKeys: foundInFilesKeys,
+                        values: _displayValues,
+                        foundInFilesKeys: _displayFoundInFilesKeys,
                         templateRevision: templateRevision,
+                        fieldsEnabled: !_fieldsInactive,
                         onValueChanged: onValueChanged,
                       ),
                     ),
@@ -355,7 +380,8 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                               icon: Icons.upload_file_outlined,
                               isTealGradient: true,
                               fullWidth: true,
-                              onPressed: isLoadTemplateLoading ||
+                              onPressed: _fieldsInactive ||
+                                      isLoadTemplateLoading ||
                                       isLoadTemplateDisabled
                                   ? null
                                   : onLoadTemplate,
@@ -369,7 +395,8 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                               fontSize: 10,
                               icon: Icons.restore_page_outlined,
                               fullWidth: true,
-                              onPressed: isLoadTemplateLoading ||
+                              onPressed: _fieldsInactive ||
+                                      isLoadTemplateLoading ||
                                       isLoadTemplateDisabled ||
                                       isLoadOriginalValuesDisabled
                                   ? null
@@ -385,7 +412,8 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                               icon: Icons.clear_all,
                               isDanger: true,
                               fullWidth: true,
-                              onPressed: isLoadTemplateLoading ||
+                              onPressed: _fieldsInactive ||
+                                      isLoadTemplateLoading ||
                                       isLoadTemplateDisabled
                                   ? null
                                   : onClearTemplate,
@@ -623,6 +651,7 @@ class _FieldColumn extends StatelessWidget {
     required this.values,
     required this.foundInFilesKeys,
     required this.templateRevision,
+    this.fieldsEnabled = true,
     this.onValueChanged,
   });
 
@@ -630,6 +659,7 @@ class _FieldColumn extends StatelessWidget {
   final Map<String, String> values;
   final Set<String> foundInFilesKeys;
   final int templateRevision;
+  final bool fieldsEnabled;
   final void Function(String storageKey, String value)? onValueChanged;
 
   @override
@@ -645,6 +675,7 @@ class _FieldColumn extends StatelessWidget {
             child: _EditableFieldRow(
               key: ValueKey('${specs[i].storageKey}-$templateRevision'),
               spec: specs[i],
+              enabled: fieldsEnabled,
               value: StartupIptcTemplatePanel._displayValueForField(
                 label: specs[i].label,
                 storedValue: IptcTemplateApplyService.lookupValue(
@@ -676,6 +707,7 @@ class _EditableFieldRow extends StatefulWidget {
     this.value,
     this.showFoundInFiles = false,
     this.valueMaxLines = 1,
+    this.enabled = true,
     this.onValueChanged,
   });
 
@@ -683,6 +715,7 @@ class _EditableFieldRow extends StatefulWidget {
   final String? value;
   final bool showFoundInFiles;
   final int valueMaxLines;
+  final bool enabled;
   final void Function(String storageKey, String value)? onValueChanged;
 
   @override
@@ -745,12 +778,42 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
       !_focused &&
       IptcTemplateApplyService.isInAppGeneratedPlaceholder(_controller.text);
 
-  TextStyle get _valueStyle => _showingPlaceholder
-      ? StartupIptcTemplatePanel._fieldValueStyle.copyWith(
-          color: const Color(0xFFD32F2F),
-          fontStyle: FontStyle.italic,
-        )
-      : StartupIptcTemplatePanel._fieldValueStyle;
+  TextStyle get _valueStyle {
+    if (!widget.enabled) {
+      return StartupIptcTemplatePanel._fieldValueDisabledStyle;
+    }
+    if (_showingPlaceholder) {
+      return StartupIptcTemplatePanel._fieldValueStyle.copyWith(
+        color: const Color(0xFFD32F2F),
+        fontStyle: FontStyle.italic,
+      );
+    }
+    return StartupIptcTemplatePanel._fieldValueStyle;
+  }
+
+  BoxDecoration get _fieldDecoration => BoxDecoration(
+        color: widget.enabled
+            ? Colors.white
+            : StartupIptcTemplatePanel._fieldDisabledFill,
+        border: Border.all(
+          color: widget.enabled
+              ? (_focused
+                  ? const Color(0xFF4A7A96)
+                  : const Color(0xFFD0D0D0))
+              : StartupIptcTemplatePanel._fieldDisabledBorder,
+          width: widget.enabled && _focused ? 1.0 : 0.7,
+        ),
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: widget.enabled
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 1,
+                  offset: const Offset(0, 0.5),
+                ),
+              ]
+            : const [],
+      );
 
   bool get _isUrgency =>
       widget.spec.label == StartupIptcTemplatePanel._urgencyLabel;
@@ -766,21 +829,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
     return Container(
       height: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(
-          color: _focused ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0),
-          width: _focused ? 1.0 : 0.7,
-        ),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 1,
-            offset: const Offset(0, 0.5),
-          ),
-        ],
-      ),
+      decoration: _fieldDecoration,
       child: Row(
         crossAxisAlignment: widget.showFoundInFiles
             ? CrossAxisAlignment.start
@@ -791,6 +840,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
             child: _FieldLabel(
               label: widget.spec.label,
               showFoundInFiles: widget.showFoundInFiles,
+              enabled: widget.enabled,
             ),
           ),
           Expanded(
@@ -799,6 +849,8 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
               child: TextField(
                 controller: _controller,
                 focusNode: _focusNode,
+                enabled: widget.enabled,
+                readOnly: !widget.enabled,
                 maxLines: widget.valueMaxLines,
                 minLines: 1,
                 keyboardType:
@@ -811,6 +863,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
+                  disabledBorder: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
                   isCollapsed: true,
                 ),
@@ -830,25 +883,40 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
     final current = IptcTemplateApplyService.normalizeUrgencyValue(
       _controller.text,
     );
+    final showEmptyDisabled =
+        !widget.enabled && (widget.value == null || widget.value!.trim().isEmpty);
+
+    if (showEmptyDisabled) {
+      return Container(
+        height: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: _fieldDecoration,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: StartupIptcTemplatePanel._labelWidth,
+              child: _FieldLabel(
+                label: widget.spec.label,
+                showFoundInFiles: false,
+                enabled: false,
+              ),
+            ),
+            Expanded(
+              child: Text(
+                '',
+                style: StartupIptcTemplatePanel._fieldValueDisabledStyle,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       height: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(
-          color: _focused ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0),
-          width: _focused ? 1.0 : 0.7,
-        ),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 1,
-            offset: const Offset(0, 0.5),
-          ),
-        ],
-      ),
+      decoration: _fieldDecoration,
       child: Row(
         crossAxisAlignment: widget.showFoundInFiles
             ? CrossAxisAlignment.start
@@ -859,6 +927,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
             child: _FieldLabel(
               label: widget.spec.label,
               showFoundInFiles: widget.showFoundInFiles,
+              enabled: widget.enabled,
             ),
           ),
           Expanded(
@@ -869,21 +938,27 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
                     : '0',
                 isExpanded: true,
                 isDense: true,
-                style: StartupIptcTemplatePanel._fieldValueStyle,
+                style: widget.enabled
+                    ? StartupIptcTemplatePanel._fieldValueStyle
+                    : StartupIptcTemplatePanel._fieldValueDisabledStyle,
                 items: IptcTemplateApplyService.urgencyValues.map((level) {
                   return DropdownMenuItem<String>(
                     value: level,
                     child: Text(
                       IptcTemplateApplyService.urgencyMenuLabel(level),
-                      style: StartupIptcTemplatePanel._fieldValueStyle,
+                      style: widget.enabled
+                          ? StartupIptcTemplatePanel._fieldValueStyle
+                          : StartupIptcTemplatePanel._fieldValueDisabledStyle,
                     ),
                   );
                 }).toList(),
-                onChanged: (newValue) {
-                  if (newValue == null) return;
-                  setState(() => _controller.text = newValue);
-                  _notifyChanged(newValue);
-                },
+                onChanged: widget.enabled
+                    ? (newValue) {
+                        if (newValue == null) return;
+                        setState(() => _controller.text = newValue);
+                        _notifyChanged(newValue);
+                      }
+                    : null,
               ),
             ),
           ),
@@ -897,10 +972,12 @@ class _FieldLabel extends StatelessWidget {
   const _FieldLabel({
     required this.label,
     this.showFoundInFiles = false,
+    this.enabled = true,
   });
 
   final String label;
   final bool showFoundInFiles;
+  final bool enabled;
 
   static const TextStyle _labelStyle = TextStyle(
     fontFamily: 'Inter',
@@ -910,16 +987,25 @@ class _FieldLabel extends StatelessWidget {
     height: 1.15,
   );
 
+  static const TextStyle _labelDisabledStyle = TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 10,
+    fontVariations: [FontVariation('wght', 600)],
+    color: Color(0xFFB0B0B0),
+    height: 1.15,
+  );
+
   @override
   Widget build(BuildContext context) {
     final displayLabel = StartupIptcTemplatePanel._labelOnOneLine(label);
+    final labelStyle = enabled ? _labelStyle : _labelDisabledStyle;
 
     if (!showFoundInFiles) {
       return Text(
         displayLabel,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: _labelStyle,
+        style: labelStyle,
       );
     }
 
@@ -932,7 +1018,7 @@ class _FieldLabel extends StatelessWidget {
           displayLabel,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: _labelStyle,
+          style: labelStyle,
         ),
         const Text(
           'Found in files',

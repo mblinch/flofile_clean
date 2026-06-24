@@ -854,7 +854,7 @@ class CaptionTemplate {
         numberFormat: NumberFormatStyle.hash,
         captionTeamOrder: CaptionTeamOrder.teamAfter,
         includePlayerPosition: true,
-        americanEnglish: true,
+        americanEnglish: false,
         removeDiacritics: true,
         separator: ' - ',
         creditFormat: CreditFormat.photo_by,
