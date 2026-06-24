@@ -2,8 +2,12 @@
 # Sparkle release: build, zip, sign from Keychain only, copy to docs/FloFileBeta.zip, update appcast.
 # Usage: ./sparkle_release.sh [version]
 #
-# Signing: Keychain only (sign_update -p). Uses existing Sparkle key in macOS Keychain.
-# No .sparkle_private_key. Set SIGN_UPDATE to use DerivedData or another path if needed.
+# Apple signing: tool/macos_sign_and_notarize.sh (Developer ID + notarize + staple)
+# Sparkle signing: Keychain only (sign_update -p). Set SIGN_UPDATE to override path.
+# One-time notary setup:
+#   xcrun notarytool store-credentials "flofile-notarize" \
+#     --apple-id "you@example.com" --team-id "YOUR_TEAM_ID" \
+#     --password "app-specific-password"
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -74,14 +78,18 @@ if [ -d "$LIB_SRC" ]; then
   rsync -a "$LIB_SRC/" "$RES_DIR/exiftool_lib/"
 fi
 
-# 4) Zip (this exact zip is signed and copied to docs/)
+# 4) Developer ID sign + notarize (required for distribution outside App Store)
+echo "Signing and notarizing with Developer ID..."
+"$SCRIPT_DIR/tool/macos_sign_and_notarize.sh" "$APP_PATH"
+
+# 5) Zip (this exact zip is Sparkle-signed and copied to docs/)
 mkdir -p "$RELEASE_DIR"
 rm -f "$ZIP_PATH"
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
 ZIP_BYTES=$(stat -f%z "$ZIP_PATH" 2>/dev/null || stat -c%s "$ZIP_PATH" 2>/dev/null)
 echo "Zip: $ZIP_PATH ($ZIP_BYTES bytes)"
 
-# 5) Sign with Keychain only (sign_update -p on that exact zip)
+# 6) Sign with Keychain only (sign_update -p on that exact zip)
 if [ ! -x "$SIGN_UPDATE" ]; then
   echo "Error: sign_update not found at $SIGN_UPDATE. Set SIGN_UPDATE to your path (e.g. DerivedData)." >&2
   exit 1
@@ -94,11 +102,11 @@ if [ -z "$ED_SIGNATURE" ]; then
 fi
 echo "Signed for Sparkle."
 
-# 6) Copy that exact same signed zip to docs/FloFileBeta.zip
+# 7) Copy that exact same signed zip to docs/FloFileBeta.zip
 cp "$ZIP_PATH" "$DOCS_ZIP_PATH"
 echo "Copied zip to $DOCS_ZIP_PATH"
 
-# 7) Update appcast: insert new item after </language> with exact length and sparkle:edSignature
+# 8) Update appcast: insert new item after </language> with exact length and sparkle:edSignature
 PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
 NEW_ITEM_FILE="$RELEASE_DIR/appcast_item.xml"
 mkdir -p "$RELEASE_DIR"
