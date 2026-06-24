@@ -68,9 +68,8 @@ macos/build/
 *.mp4
 *.mov
 *.zip
-# Allow Sparkle release zips for GitHub Pages
+# Allow versioned Sparkle zips under docs/releases only (legacy)
 !docs/releases/**/*.zip
-!docs/FloFileBeta.zip
 *.dmg
 
 # Build artifacts - NEVER commit these
