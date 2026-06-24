@@ -1,0 +1,272 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss
+  xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  version="2.0">
+  <channel>
+    <title>Flofile Clean Updates</title>
+    <link>https://mblinch.github.io/flofile_clean/appcast.xml</link>
+    <description>Updates for Flofile Clean</description>
+    <language>en</language>
+    <item>
+      <title>Version 1.0.25</title>
+      <pubDate>Wed, 24 Jun 2026 16:15:39 +0000</pubDate>
+      <sparkle:version>126</sparkle:version>
+      <sparkle:shortVersionString>1.0.25</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/mblinch/flofile_clean/releases/download/v1.0.25/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="53832692" sparkle:edSignature="2J/MnpBEX4ENAaTLOJnLS64iYNNl3BquAeGRypWahutZmOtV7CcEVRMDddbbnjbWAZMHX704a4kdYaCaKMOsCQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.24</title>
+      <pubDate>Wed, 24 Jun 2026 15:21:03 +0000</pubDate>
+      <sparkle:version>125</sparkle:version>
+      <sparkle:shortVersionString>1.0.24</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39514399" sparkle:edSignature="P9DL82rkTfGWsE6xJ9+usMhcr47QLwSFtjQxx6wRy8LuWw/C/UajShSHKbVMrekEUYbe0C9T55sng9Qu90oLCQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.23</title>
+      <pubDate>Wed, 24 Jun 2026 15:11:21 +0000</pubDate>
+      <sparkle:version>124</sparkle:version>
+      <sparkle:shortVersionString>1.0.23</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39514420" sparkle:edSignature="ct2wZKYu6exp0WezpUsYLcZzKBBq99GaQ76+80+iIsF2Oma789+WtZi3FQSJaMcy+jMf/6EPhI3yprHQZqq7Dg==" />
+    </item>
+    <item>
+      <title>Version 1.0.22</title>
+      <pubDate>Wed, 24 Jun 2026 14:37:03 +0000</pubDate>
+      <sparkle:version>123</sparkle:version>
+      <sparkle:shortVersionString>1.0.22</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="47432018" sparkle:edSignature="69yC4Bh/3NN+UQ6LlrZMI1AebFrRSftc/w3UG013cMLSdRgoFbUudbb4TmriSiCu+wjUyfefnoCFJkT9muJdBQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.21</title>
+      <pubDate>Wed, 24 Jun 2026 13:52:27 +0000</pubDate>
+      <sparkle:version>122</sparkle:version>
+      <sparkle:shortVersionString>1.0.21</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="61320346" sparkle:edSignature="Dk0CydA2V+izXelbHlqk870s167SI2L+sdgi4hvaorhWRYQF9enjBO1xEbh+F+49vey5nD/g3vaa/woj4wyuDQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.20</title>
+      <pubDate>Sun, 07 Jun 2026 13:38:34 +0000</pubDate>
+      <sparkle:version>121</sparkle:version>
+      <sparkle:shortVersionString>1.0.20</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="61147027" sparkle:edSignature="MQJxGZnxEEM4nCAFpCZ/RMMRx6sHCCj67+4hIte84ZkHjgnUmnd/OKOqXkVP/lQzGhXvZDjKic/2EoAdNU9UBA==" />
+    </item>
+    <item>
+      <title>Version 1.0.19</title>
+      <pubDate>Sat, 30 May 2026 21:40:02 +0000</pubDate>
+      <sparkle:version>120</sparkle:version>
+      <sparkle:shortVersionString>1.0.19</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="58110434" sparkle:edSignature="GqNniDLEMGbxozOV+d2ybVmo3hv07bwK9Bsz8EJ1GMTtS2MXpkL+NJBq1PWn3Suczn7+Khs9YzU+Hf1HrcCICA==" />
+    </item>
+    <item>
+      <title>Version 1.0.18</title>
+      <pubDate>Fri, 29 May 2026 16:11:02 +0000</pubDate>
+      <sparkle:version>119</sparkle:version>
+      <sparkle:shortVersionString>1.0.18</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="58106543" sparkle:edSignature="UhbL8B8UUjeVeQhsnOI7rptqZO2f8zJL34AVxhePRz7qD02JjG4tU0bxqAI37t7VXvy4r3s0x5d/uKMvkfzUDQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.17</title>
+      <pubDate>Wed, 27 May 2026 13:51:40 +0000</pubDate>
+      <sparkle:version>118</sparkle:version>
+      <sparkle:shortVersionString>1.0.17</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="58080861" sparkle:edSignature="mo87Pvl4ARUsyH0+fhZYyYeEmBTZdT5M2ZVvVUkN7qaXJfcO/qX+y9xxEHupuidB9xkjnxgKzdjQDE7d+QC/BA==" />
+    </item>
+    <item>
+      <title>Version 1.0.17</title>
+      <pubDate>Tue, 26 May 2026 04:52:39 +0000</pubDate>
+      <sparkle:version>117</sparkle:version>
+      <sparkle:shortVersionString>1.0.17</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="58075739" sparkle:edSignature="A+xP9/XwOneH1fkiyg81I6n1/+y9moa91nrnPKSm6rflTDNXRAYk5RfgXi0jcaUzyjZ7aW4sR59ZeRlq36uvAw==" />
+    </item>
+    <item>
+      <title>Version 1.0.16</title>
+      <pubDate>Mon, 25 May 2026 23:10:32 +0000</pubDate>
+      <sparkle:version>116</sparkle:version>
+      <sparkle:shortVersionString>1.0.16</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="57811232" sparkle:edSignature="uFsXUswbVyEMNTeT0NjqIZ3MszeX5IdFX9i9gBu2szgXVH8ltWYVv3hFXYOA0uAcq7Bmvy1AwBIEXeOKfuuuAQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.15</title>
+      <pubDate>Mon, 25 May 2026 23:07:03 +0000</pubDate>
+      <sparkle:version>115</sparkle:version>
+      <sparkle:shortVersionString>1.0.15</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="57815383" sparkle:edSignature="cbTdChVjmxSuvXTBA6p1Y7HvaTIF0ZY3ECbmfnzncH7+FaI3y8Ry0oc06vQe36JAo8YIKGsIsByJ/nlLzHZIAw==" />
+    </item>
+    <item>
+      <title>Version 1.0.14</title>
+      <pubDate>Mon, 20 Apr 2026 22:58:04 +0000</pubDate>
+      <sparkle:version>114</sparkle:version>
+      <sparkle:shortVersionString>1.0.14</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39714743" sparkle:edSignature="ognD2AzrqXa04jPeogJwToAeSTf4DhrifKjKgAyBnbsJLWLny58Lreq/ToJwmPC0+l4svTPdJ2gkielDkjhBAg==" />
+    </item>
+    <item>
+      <title>Version 1.0.13</title>
+      <pubDate>Mon, 20 Apr 2026 13:45:27 +0000</pubDate>
+      <sparkle:version>113</sparkle:version>
+      <sparkle:shortVersionString>1.0.13</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39661857" sparkle:edSignature="bM9q9H30DQHJUZ81h7VGeU3gi79ct3Wl9175W34kVucZVaeJNYWM/raQXbPwU7th8d9CRCOywJmtemJwo4KGCA==" />
+    </item>
+    <item>
+      <title>Version 1.0.13</title>
+      <pubDate>Fri, 10 Apr 2026 19:27:45 +0000</pubDate>
+      <sparkle:version>113</sparkle:version>
+      <sparkle:shortVersionString>1.0.13</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39651310" sparkle:edSignature="ggmxDYXqskOvS0sWuDyW1r/eX6Ap0FDBBHAh8+d3vdmwDi260ZBNnE2aOuXwk2IgmjrwuKFLMgLdJWtA+ylSCQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.11</title>
+      <pubDate>Wed, 08 Apr 2026 17:24:17 +0000</pubDate>
+      <sparkle:version>111</sparkle:version>
+      <sparkle:shortVersionString>1.0.11</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39521250" sparkle:edSignature="j8rd6lST1rjj43oPI7tuhtlAkweDh6JsDHFIYlTfcaZT9QDcfN2PGAnOjvo/PNmSrlUPVaIxbFzE3eN2wMvrCQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.10</title>
+      <pubDate>Sun, 05 Apr 2026 01:26:39 +0000</pubDate>
+      <sparkle:version>110</sparkle:version>
+      <sparkle:shortVersionString>1.0.10</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39516225" sparkle:edSignature="vPM0Lw2DD0eivZAgdbCPpi6JFaX+TqPHiNIZuwEm3/ghN0wJiqjm6qg9ILS0QqLHH32/xfhggwZcZjO3eHP5Cw==" />
+    </item>
+    <item>
+      <title>Version 1.0.9</title>
+      <pubDate>Tue, 31 Mar 2026 20:33:00 +0000</pubDate>
+      <sparkle:version>109</sparkle:version>
+      <sparkle:shortVersionString>1.0.9</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/releases/v1.0.9/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39506599" sparkle:edSignature="pwGGfcsMVb3o71w/vK6wp9kkn6Mgtd4gW0iuRN8dihjb7zT/B8ApEy2armo4raTcnaSpvwteKLtlrI7JylT2CA==" />
+    </item>
+    <item>
+      <title>Version 1.0.8</title>
+      <pubDate>Tue, 31 Mar 2026 20:25:00 +0000</pubDate>
+      <sparkle:version>108</sparkle:version>
+      <sparkle:shortVersionString>1.0.8</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/releases/v1.0.8/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39506592" sparkle:edSignature="s06wODTo9KMPh0PyGWIr/tzTeseiz/htH86H1hQKbQPxJKO0tlt6ZZzn6BsKidEoeFKBgJAutMR6C9TPhQO5CA==" />
+    </item>
+    <item>
+      <title>Version 1.0.7</title>
+      <pubDate>Tue, 31 Mar 2026 20:06:00 +0000</pubDate>
+      <sparkle:version>107</sparkle:version>
+      <sparkle:shortVersionString>1.0.7</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/releases/v1.0.7/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39506597" sparkle:edSignature="P/e7JQmJr7tn5jHR5aBcxkR2zHMr1NwPIFGT4UmcQ4r+vc6ffAjd+L/MUBJ717eod6ETge07HyIx5lkcy5mZCQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.6</title>
+      <pubDate>Mon, 30 Mar 2026 20:41:14 +0000</pubDate>
+      <sparkle:version>106</sparkle:version>
+      <sparkle:shortVersionString>1.0.6</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39453080" sparkle:edSignature="X/xTpfVYHbEZcMIpnv5XmHbaFIR9ZnTDSc4poIYSRoRGCpTneF2dOH73fQ0QWzKnlCJaTKTCxcUI/haibMqdAA==" />
+    </item>
+    <item>
+      <title>Version 1.0.5</title>
+      <pubDate>Thu, 26 Mar 2026 22:30:16 +0000</pubDate>
+      <sparkle:version>105</sparkle:version>
+      <sparkle:shortVersionString>1.0.5</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39413459" sparkle:edSignature="h404+tBjOcMeywNOI7KDS8BB5d25AEOkPZwdyS0/EGmQNeUpHpeeYwq82sKXDhi1P9frxVyyVTieDhLuAHszCg==" />
+    </item>
+    <item>
+      <title>Version 1.0.5</title>
+      <pubDate>Fri, 13 Mar 2026 22:01:19 +0000</pubDate>
+      <sparkle:version>105</sparkle:version>
+      <sparkle:shortVersionString>1.0.5</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="39389262" sparkle:edSignature="MEqsLz18ZH4VS4u9beKcyUdvbxl2TjxP70+Zj9ynA1CO9/ig9L15ZmZTVX1b9nQgyZFNVFcVI4LL5rtIpHSUAQ==" />
+    </item>
+    <item>
+      <title>Version 1.0.4</title>
+      <pubDate>Thu, 12 Mar 2026 03:50:44 +0000</pubDate>
+      <sparkle:version>104</sparkle:version>
+      <sparkle:shortVersionString>1.0.4</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="38976084" sparkle:edSignature="Y+zfC4+7snqWg3zFm6peaszxj+1JKIfWsVi3YUHcPAIvjM+F7rWYbW4WXsDZI1/tz79oa0m0qSp0lJKysdUjAA==" />
+    </item>
+    <item>
+      <title>Version 1.0.3</title>
+      <pubDate>Mon, 09 Mar 2026 19:50:24 +0000</pubDate>
+      <sparkle:version>103</sparkle:version>
+      <sparkle:shortVersionString>1.0.3</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/releases/v1.0.3/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="38191832" sparkle:edSignature="FGEEQ/DUc/07cf2km8jXjz5BVRNArBJNRkycME2PDHDMIbDaQVkW3lmgP9gFotaYffIysarDgQB8Lg00K2zmDg==" />
+    </item>
+    <item>
+      <title>Version 1.0.2</title>
+      <pubDate>Mon, 09 Mar 2026 19:47:13 +0000</pubDate>
+      <sparkle:version>102</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <enclosure
+        url="https://mblinch.github.io/flofile_clean/releases/v1.0.2/FloFileBeta.zip"
+        type="application/octet-stream"
+        length="38191832" sparkle:edSignature="e0rgaD0BBJNr7iNfb9ApZeuMVEdVZMgHw6+9REzHzRq+rx3s8a+u6qDJ1/8jbJmgoyBv9NGI0xR3+H5dmKPyDA==" />
+    </item>
+  </channel>
+</rss>
