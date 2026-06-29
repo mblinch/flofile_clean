@@ -67,6 +67,9 @@ if codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_TMP" 2>/dev/null \
     && grep -q keychain-access-groups "$ENTITLEMENTS_TMP" 2>/dev/null \
     && ! grep -q 'AppIdentifierPrefix' "$ENTITLEMENTS_TMP" 2>/dev/null; then
   echo "Using entitlements from Flutter build (expanded keychain groups)."
+  # Strip get-task-allow — it's injected by Xcode/Flutter even for release builds
+  # but is forbidden in notarized Developer ID apps (causes "can't be opened").
+  /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$ENTITLEMENTS_TMP" 2>/dev/null || true
   SIGN_ENTITLEMENTS="$ENTITLEMENTS_TMP"
 else
   echo "Warning: built entitlements missing or unexpanded; falling back to $ENTITLEMENTS" >&2
