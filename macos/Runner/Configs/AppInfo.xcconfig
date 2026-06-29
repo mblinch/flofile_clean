@@ -4,6 +4,9 @@
 // future. If not, the values below would default to using the project name when this becomes a
 // 'flutter create' template.
 
+// Optional per-machine overrides (gitignored). Copy AppInfo-local.xcconfig.example.
+#include? "AppInfo-local.xcconfig"
+
 // The application's name. By default this is also the title of the Flutter window.
 PRODUCT_NAME = FloFile Beta
 

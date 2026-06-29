@@ -1,0 +1,4 @@
+// Copy to AppInfo-local.xcconfig (gitignored) and set your Apple Team ID.
+// Find it in Xcode → Runner → Signing & Capabilities, or Membership Details on developer.apple.com.
+//
+// DEVELOPMENT_TEAM = YOUR_TEAM_ID_HERE

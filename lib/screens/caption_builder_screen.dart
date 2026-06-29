@@ -5018,6 +5018,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     key: _thumbnailGridKey,
                     imagePaths: imagePaths,
                     currentIndex: currentIndex,
+                    scrollController: _thumbnailScrollController,
                     onImageSelected: _onImageSelected,
                     uploadedImages: _uploadedImages,
                     savedImages: _savedImages,

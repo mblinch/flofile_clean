@@ -59,16 +59,17 @@ Until a Team is selected, you may see: *"entitlements that require signing with 
 
 ## 5. Keychain (Google)
 
-`macos/Runner/DebugProfile.entitlements` and `Release.entitlements` include:
+`macos/Runner/DebugProfile.entitlements` and `Release.entitlements` include (app group **first**):
 
 ```xml
 <key>keychain-access-groups</key>
 <array>
+  <string>$(AppIdentifierPrefix)$(CFBundleIdentifier)</string>
   <string>$(AppIdentifierPrefix)com.google.GIDSignIn</string>
 </array>
 ```
 
-Without this, Google Sign-In can fail with a keychain `PlatformException`.
+Google Sign-In on macOS needs **both** groups; the app’s bundle group must be listed first. Without this, Google Sign-In can fail with a keychain `PlatformException`.
 
 ## 6. Run the app
 
@@ -124,5 +125,5 @@ firebase deploy --only firestore:rules
 | Issue | Fix |
 |--------|-----|
 | Google button disabled | Enable Google in Firebase; set `CLIENT_ID` in config + `Info.plist` |
-| Keychain error (Google) | Confirm keychain entitlement and matching bundle ID |
+| Keychain error (Google) | Select a Team in Xcode Signing & Capabilities; rebuild Debug. Entitlements need both `$(CFBundleIdentifier)` and `com.google.GIDSignIn` keychain groups. Delete stale `auth` in Keychain Access if needed. |
 | `invalid_client` (Google) | `GIDClientID` / URL scheme must match Firebase plist |

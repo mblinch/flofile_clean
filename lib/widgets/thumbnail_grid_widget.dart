@@ -97,6 +97,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
   int _lastComputedColumns = 4;
   int _lastReportedColumns = 4;
   int _lastCenterRequestId = 0;
+  int _lastCenteredIndex = -1;
   bool _hideFtpdImages = false;
   bool _hideSavedImages = false;
   List<String> _visiblePaths = [];
@@ -624,8 +625,13 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
   void _maybeCenterSelection(BuildContext context, {bool force = false}) {
     if (widget.scrollController == null) return;
-    if (!force && widget.centerRequestId == _lastCenterRequestId) return;
-    if (!force) _lastCenterRequestId = widget.centerRequestId;
+    final indexChanged = widget.currentIndex != _lastCenteredIndex;
+    final requestChanged = widget.centerRequestId != _lastCenterRequestId;
+    if (!force && !indexChanged && !requestChanged) return;
+    if (!force) {
+      _lastCenterRequestId = widget.centerRequestId;
+      _lastCenteredIndex = widget.currentIndex;
+    }
 
     final controller = widget.scrollController!;
     if (!controller.hasClients) return;
@@ -677,7 +683,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
       final middleRowOffset = (rowsInViewport ~/ 2).toDouble();
 
       // Position selected row in the middle row of the viewport
-      final selectedRowIndex = (widget.currentIndex ~/ columns).toDouble();
+      final selectedRowIndex = (visibleIndex ~/ columns).toDouble();
       targetOffset = (selectedRowIndex - middleRowOffset) * rowExtent +
           (gridPaddingVertical / 2);
     } else {
@@ -901,6 +907,17 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     final isCurrent = widget.imagePaths.indexOf(imagePath) ==
                         widget.currentIndex;
                     final isMultiSelected = _selectedImages.contains(imagePath);
+                    final accent = kFloTealLight;
+                    final borderColor = isCurrent
+                        ? accent
+                        : isMultiSelected
+                            ? Colors.blue.shade600
+                            : Colors.grey.shade400;
+                    final borderWidth = isCurrent
+                        ? 3.0
+                        : isMultiSelected
+                            ? 2.5
+                            : 0.5;
                     return MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
@@ -913,41 +930,34 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         },
                         child: Container(
                           decoration: BoxDecoration(
-                            color: isCurrent ? null : Colors.white,
-                            gradient: isCurrent
-                                ? LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Theme.of(context)
-                                          .colorScheme
-                                          .primary
-                                          .withValues(alpha: 0.07),
-                                      Colors.white,
-                                    ],
-                                    stops: const [0.0, 0.52],
-                                  )
-                                : null,
+                            color: isCurrent
+                                ? accent.withValues(alpha: 0.14)
+                                : Colors.white,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
-                              color: isMultiSelected
-                                  ? Colors.blue
-                                  : isCurrent
-                                      ? const Color(0xFF424242)
-                                      : Colors.grey.shade500,
-                              width: isMultiSelected
-                                  ? 2.0
-                                  : isCurrent
-                                      ? 1.0
-                                      : 0.5,
+                              color: borderColor,
+                              width: borderWidth,
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
-                                blurRadius: 2,
-                                offset: const Offset(0, 1),
-                              ),
-                            ],
+                            boxShadow: isCurrent
+                                ? [
+                                    BoxShadow(
+                                      color: accent.withValues(alpha: 0.42),
+                                      blurRadius: 10,
+                                      spreadRadius: 1,
+                                    ),
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.14),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.1),
+                                      blurRadius: 2,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
                           ),
                           child: Stack(
                             children: [
@@ -1077,10 +1087,14 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                     ),
                                     child: Text(
                                       p.basename(imagePath),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 9,
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.black87,
+                                        fontWeight: isCurrent
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: isCurrent
+                                            ? const Color(0xFF2A4858)
+                                            : Colors.black87,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,

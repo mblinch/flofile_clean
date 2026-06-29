@@ -166,6 +166,13 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   /// Which formula separator field (index in [customSeparators]) has focus.
   int? _focusedGapIndex;
+
+  /// Controllers for visible punctuation / separator fields in the preview row.
+  final Map<int, TextEditingController> _glueSnippetControllers = {};
+  bool _syncingGlueSnippetCtrls = false;
+
+  /// [segmentOrder] index of the inline glue field that currently has focus.
+  int? _focusedGlueSegmentIndex;
   int _captionSampleSeed = DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
   bool _prefsLoaded = false;
   String _lastSavedTemplateSnapshot = '';
@@ -505,6 +512,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _punctuationSnippetEditorOpen = false;
       _activeFormulaIndex = null;
       _focusedGapIndex = null;
+      _focusedGlueSegmentIndex = null;
     });
   }
 
@@ -542,6 +550,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       }
       _activeFormulaIndex = index;
       _focusedGapIndex = null;
+      _focusedGlueSegmentIndex = null;
       _locationEditorOpen = segment == CaptionSegment.location;
       _dateEditorOpen = segment == CaptionSegment.date;
       _captionPreviewSelected = segment == CaptionSegment.caption;
@@ -1521,6 +1530,114 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     _gapControllers.clear();
   }
 
+  void _disposeGlueSnippetControllers() {
+    for (final c in _glueSnippetControllers.values) {
+      c.dispose();
+    }
+    _glueSnippetControllers.clear();
+  }
+
+  bool _isGlueSegment(CaptionSegment seg) =>
+      seg == CaptionSegment.punctuation || seg == CaptionSegment.separator;
+
+  void _initGlueSnippetControllers(CaptionTemplate t) {
+    final order = t.segmentOrder;
+    final needed = <int>{};
+    for (var i = 0; i < order.length; i++) {
+      if (!_isGlueSegment(order[i])) continue;
+      needed.add(i);
+      final raw = order[i] == CaptionSegment.separator
+          ? CaptionFormulaRenderer.separatorSnippetFor(t, i)
+          : CaptionFormulaRenderer.punctuationSnippetFor(t, i);
+      final value = _normalizeSep(raw);
+      final existing = _glueSnippetControllers[i];
+      if (existing == null) {
+        final c = TextEditingController(text: value);
+        final index = i;
+        c.addListener(() => _onGlueSnippetEdited(index));
+        _glueSnippetControllers[i] = c;
+      } else if (existing.text != value) {
+        _syncingGlueSnippetCtrls = true;
+        existing.text = value;
+        existing.selection = TextSelection.collapsed(offset: value.length);
+        _syncingGlueSnippetCtrls = false;
+      }
+    }
+    for (final key in _glueSnippetControllers.keys.toList()) {
+      if (!needed.contains(key)) {
+        _glueSnippetControllers.remove(key)?.dispose();
+      }
+    }
+  }
+
+  void _onGlueSnippetEdited(int segmentIndex) {
+    if (_syncingGlueSnippetCtrls) return;
+    if (segmentIndex < 0 || segmentIndex >= _template.segmentOrder.length) {
+      return;
+    }
+    final seg = _template.segmentOrder[segmentIndex];
+    if (!_isGlueSegment(seg)) return;
+    final controller = _glueSnippetControllers[segmentIndex];
+    if (controller == null) return;
+    setState(() {
+      if (seg == CaptionSegment.separator) {
+        final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
+            _template.segmentOrder, segmentIndex, CaptionSegment.separator);
+        _template = _templateWithSeparatorAtOccurrence(
+            _template, occ, controller.text);
+      } else {
+        final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
+            _template.segmentOrder, segmentIndex, CaptionSegment.punctuation);
+        _template = _templateWithPunctuationAtOccurrence(
+            _template, occ, controller.text);
+      }
+    });
+  }
+
+  String _glueFieldTooltip(int segmentIndex) {
+    final order = _template.segmentOrder;
+    String? before;
+    String? after;
+    for (var j = segmentIndex - 1; j >= 0; j--) {
+      if (!_isGlueSegment(order[j])) {
+        before = _segmentDisplayLabel(order[j], j);
+        break;
+      }
+    }
+    for (var j = segmentIndex + 1; j < order.length; j++) {
+      if (!_isGlueSegment(order[j])) {
+        after = _segmentDisplayLabel(order[j], j);
+        break;
+      }
+    }
+    if (before != null && after != null) {
+      return 'Separator between $before and $after';
+    }
+    return order[segmentIndex] == CaptionSegment.separator
+        ? 'Separator'
+        : 'Punctuation';
+  }
+
+  void _onGlueSnippetFocusChanged(int segmentIndex, bool focused) {
+    setState(() {
+      if (focused) {
+        _focusedGlueSegmentIndex = segmentIndex;
+        _locationEditorOpen = false;
+        _dateEditorOpen = false;
+        _captionPreviewSelected = false;
+        _venuePreviewSelected = false;
+        _bylinePreviewSelected = false;
+        _customTextSnippetEditorOpen = false;
+        _separatorSnippetEditorOpen = false;
+        _punctuationSnippetEditorOpen = false;
+        _activeFormulaIndex = null;
+        _focusedGapIndex = null;
+      } else if (_focusedGlueSegmentIndex == segmentIndex) {
+        _focusedGlueSegmentIndex = null;
+      }
+    });
+  }
+
   static String _normalizeSep(String raw) {
     return RegExp(r'[,.]').hasMatch(raw)
         ? raw.replaceAll(RegExp(r'\s+'), '')
@@ -1542,6 +1659,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     // Apply normalized values back to the template so the preview is correct
     // immediately — even for old saved templates with bad punctuation spacing.
     _template = _template.copyWith(customSeparators: normalizedGaps);
+    _initGlueSnippetControllers(t);
   }
 
   /// Inserts [kind] into [segmentOrder] immediately after the snippet at
@@ -1602,15 +1720,17 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   /// Reorders [CaptionTemplate.segmentOrder] when the user drags one preview
   /// snippet onto another ("drop at target index" semantics, same as byline).
-  void _reorderPreviewSegment(int fromIndex, int toIndex) {
-    if (fromIndex == toIndex) return;
+  void _reorderPreviewSegment(int fromSegmentIndex, int toSegmentIndex) {
+    if (fromSegmentIndex == toSegmentIndex) return;
     setState(() {
       final order = List<CaptionSegment>.from(_template.segmentOrder);
-      if (fromIndex < 0 || fromIndex >= order.length) return;
-      if (toIndex < 0 || toIndex >= order.length) return;
+      if (fromSegmentIndex < 0 || fromSegmentIndex >= order.length) return;
+      if (toSegmentIndex < 0 || toSegmentIndex >= order.length) return;
+      if (_isGlueSegment(order[fromSegmentIndex])) return;
 
-      final moved = order.removeAt(fromIndex);
-      var insert = toIndex;
+      final moved = order.removeAt(fromSegmentIndex);
+      var insert = toSegmentIndex;
+      if (fromSegmentIndex < insert) insert--;
       if (insert < 0) insert = 0;
       if (insert > order.length) insert = order.length;
       order.insert(insert, moved);
@@ -1618,10 +1738,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       final oldActive = _activeFormulaIndex;
       if (oldActive != null) {
         int newActive;
-        if (oldActive == fromIndex) {
+        if (oldActive == fromSegmentIndex) {
           newActive = insert;
         } else {
-          final j = oldActive > fromIndex ? oldActive - 1 : oldActive;
+          final j =
+              oldActive > fromSegmentIndex ? oldActive - 1 : oldActive;
           newActive = j >= insert ? j + 1 : j;
         }
         _activeFormulaIndex =
@@ -2122,6 +2243,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       });
     }
     _disposeGapControllers();
+    _disposeGlueSnippetControllers();
     _bylinePrefixCtrl.removeListener(_onBylineTextEdited);
     _bylineBetweenCtrl.removeListener(_onBylineTextEdited);
     _bylineSuffixCtrl.removeListener(_onBylineTextEdited);
@@ -3515,6 +3637,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     }
     if (_separatorSnippetEditorOpen) return CaptionSegment.separator;
     if (_punctuationSnippetEditorOpen) return CaptionSegment.punctuation;
+    if (_focusedGlueSegmentIndex != null &&
+        _focusedGlueSegmentIndex! >= 0 &&
+        _focusedGlueSegmentIndex! < _template.segmentOrder.length) {
+      return _template.segmentOrder[_focusedGlueSegmentIndex!];
+    }
     if (_locationEditorOpen) return CaptionSegment.location;
     if (_dateEditorOpen) return CaptionSegment.date;
     if (_captionPreviewSelected) return CaptionSegment.caption;
@@ -3575,8 +3702,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     final active = _activePreviewSegment();
     final activeIndex = _activeFormulaIndex;
     final focusedGap = _focusedGapIndex;
-    final dimNonActive =
-        active != null || activeIndex != null || focusedGap != null;
+    final dimNonActive = active != null ||
+        activeIndex != null ||
+        focusedGap != null ||
+        _focusedGlueSegmentIndex != null;
 
     final venue = _previewGameInfo.venue.trim().isEmpty
         ? 'Venue'
@@ -3641,6 +3770,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     }
 
     _PreviewSegmentState stateFor(int i, CaptionSegment seg) {
+      if (_focusedGlueSegmentIndex != null) {
+        return _focusedGlueSegmentIndex == i && _isGlueSegment(seg)
+            ? _PreviewSegmentState.active
+            : _PreviewSegmentState.dim;
+      }
       if (focusedGap != null) return _PreviewSegmentState.dim;
       if (activeIndex != null) {
         return activeIndex == i
@@ -3656,21 +3790,31 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     if (order.isEmpty) return const [];
     final n = order.length;
 
-    // Build a list of only content segment indices. Separator/punctuation
-    // segments still render in the final caption, but the main layout editor no
-    // longer exposes them as editable chips; sub-editors own visible spacing.
-    final visibleIndices = <int>[];
+    final widgets = <Widget>[];
     for (var i = 0; i < n; i++) {
       final seg = order[i];
-      final isGlue =
-          seg == CaptionSegment.punctuation || seg == CaptionSegment.separator;
-      if (!isGlue) visibleIndices.add(i);
-    }
+      if (_isGlueSegment(seg)) {
+        final controller = _glueSnippetControllers[i];
+        if (controller == null) continue;
+        final glueActive = _focusedGlueSegmentIndex == i;
+        final glueDim = dimNonActive && !glueActive;
+        widgets.add(
+          Tooltip(
+            message: _glueFieldTooltip(i),
+            waitDuration: const Duration(milliseconds: 400),
+            child: Opacity(
+              opacity: glueDim ? 0.45 : 1.0,
+              child: _GapSeparatorField(
+                controller: controller,
+                active: glueActive,
+                onFocusChanged: (focused) => _onGlueSnippetFocusChanged(i, focused),
+              ),
+            ),
+          ),
+        );
+        continue;
+      }
 
-    final widgets = <Widget>[];
-    for (var vi = 0; vi < visibleIndices.length; vi++) {
-      final i = visibleIndices[vi];
-      final seg = order[i];
       final segState = stateFor(i, seg);
       final rawValue = valueAt(i, order);
 
@@ -3690,7 +3834,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       );
 
       final snippetRow = DragTarget<int>(
-        onWillAcceptWithDetails: (d) => d.data != i,
+        onWillAcceptWithDetails: (d) =>
+            d.data != i && !_isGlueSegment(order[d.data]),
         onAcceptWithDetails: (d) => _reorderPreviewSegment(d.data, i),
         builder: (context, candidate, _) {
           final hot = candidate.isNotEmpty;
@@ -3712,9 +3857,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     return widgets;
   }
 
-  Widget _previewSegmentDragHandle(int viewIndex) {
+  Widget _previewSegmentDragHandle(int segmentIndex) {
     return Draggable<int>(
-      data: viewIndex,
+      data: segmentIndex,
       feedback: Material(
         color: Colors.transparent,
         elevation: 4,
@@ -5073,6 +5218,20 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                                   ],
                                                                 ),
                                                               ),
+                                                              if (_template
+                                                                  .segmentOrder
+                                                                  .any(_isGlueSegment)) ...[
+                                                                const SizedBox(
+                                                                    height: 6),
+                                                                Padding(
+                                                                  padding: const EdgeInsets
+                                                                      .symmetric(
+                                                                      horizontal:
+                                                                          2),
+                                                                  child:
+                                                                      _spaceLegend(),
+                                                                ),
+                                                              ],
                                                             ],
                                                           ),
                                                         ),
@@ -5251,9 +5410,15 @@ enum _PreviewGapState { normal, active, dim }
 /// an [OutlineInputBorder] plus isDense renders at an awkward height that
 /// clashes with the 28px chip row).
 class _GapSeparatorField extends StatefulWidget {
-  const _GapSeparatorField({required this.controller});
+  const _GapSeparatorField({
+    required this.controller,
+    this.onFocusChanged,
+    this.active = false,
+  });
 
   final TextEditingController controller;
+  final ValueChanged<bool>? onFocusChanged;
+  final bool active;
 
   @override
   State<_GapSeparatorField> createState() => _GapSeparatorFieldState();
@@ -5271,6 +5436,7 @@ class _GapSeparatorFieldState extends State<_GapSeparatorField> {
 
   void _onFocusNodeChanged() {
     final focused = _focus.hasFocus;
+    widget.onFocusChanged?.call(focused);
     // Normalize on blur so pre-existing or hand-typed bad spacing is fixed.
     if (_wasFocused && !focused) {
       final raw = widget.controller.text;
@@ -5296,15 +5462,16 @@ class _GapSeparatorFieldState extends State<_GapSeparatorField> {
   @override
   Widget build(BuildContext context) {
     final focused = _focus.hasFocus;
+    final highlighted = focused || widget.active;
     return Container(
-      width: 56,
+      width: 64,
       height: 34,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: highlighted ? const Color(0xFFF0F4FF) : Colors.white,
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
-          color: focused ? _captionLayoutBlue : Colors.grey.shade300,
-          width: focused ? 1.5 : 1,
+          color: highlighted ? _captionLayoutBlue : Colors.grey.shade300,
+          width: highlighted ? 1.5 : 1,
         ),
       ),
       child: Center(

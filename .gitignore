@@ -56,6 +56,7 @@ android/app/build/
 android/build/
 macos/Flutter/ephemeral/
 macos/build/
+macos/Runner/Configs/AppInfo-local.xcconfig
 .vscode/
 
 # Large media files

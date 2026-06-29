@@ -32,14 +32,24 @@ class _SignInScreenState extends State<SignInScreen> {
       await action();
     } on GoogleSignInException catch (e) {
       if (e.code == GoogleSignInExceptionCode.canceled) return;
-      setState(() => _error = e.description ?? e.toString());
+      setState(() => _error = _friendlyAuthError(e.description ?? e.toString()));
     } on FirebaseAuthException catch (e) {
       setState(() => _error = e.message ?? e.code);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = _friendlyAuthError(e.toString()));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  static String _friendlyAuthError(String message) {
+    if (!message.toLowerCase().contains('keychain')) return message;
+    return 'Google Sign-In could not access the macOS Keychain.\n\n'
+        '• Open macos/Runner.xcworkspace in Xcode\n'
+        '• Runner target → Signing & Capabilities → select your Team\n'
+        '• Rebuild with flutter run -d macos (Debug)\n\n'
+        'If it still fails, open Keychain Access, delete any old "auth" '
+        'entry for FloFile, then try again.';
   }
 
   @override
