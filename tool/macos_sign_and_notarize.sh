@@ -58,6 +58,21 @@ if [ ! -f "$ENTITLEMENTS" ]; then
   exit 1
 fi
 
+# Xcode expands $(AppIdentifierPrefix) during the Flutter build; codesign does not.
+# Capture the built app's entitlements before re-signing so keychain groups stay valid.
+ENTITLEMENTS_TMP="$(mktemp -t flofile_entitlements).plist"
+NOTARY_ZIP=""
+trap 'rm -f "$ENTITLEMENTS_TMP" ${NOTARY_ZIP:+"$NOTARY_ZIP"}' EXIT
+if codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_TMP" 2>/dev/null \
+    && grep -q keychain-access-groups "$ENTITLEMENTS_TMP" 2>/dev/null \
+    && ! grep -q 'AppIdentifierPrefix' "$ENTITLEMENTS_TMP" 2>/dev/null; then
+  echo "Using entitlements from Flutter build (expanded keychain groups)."
+  SIGN_ENTITLEMENTS="$ENTITLEMENTS_TMP"
+else
+  echo "Warning: built entitlements missing or unexpanded; falling back to $ENTITLEMENTS" >&2
+  SIGN_ENTITLEMENTS="$ENTITLEMENTS"
+fi
+
 echo "Re-signing nested binaries..."
 # Deepest paths first so bundle signatures stay valid.
 while IFS= read -r -d '' item; do
@@ -74,7 +89,7 @@ done < <(find "$APP_PATH/Contents/Frameworks" -maxdepth 1 -name "*.framework" -p
 
 echo "Signing app bundle..."
 codesign --force --options runtime --timestamp \
-  --entitlements "$ENTITLEMENTS" \
+  --entitlements "$SIGN_ENTITLEMENTS" \
   --sign "$IDENTITY" \
   "$APP_PATH"
 
@@ -88,7 +103,6 @@ if [ "${SKIP_NOTARIZE:-0}" = "1" ]; then
 fi
 
 NOTARY_ZIP="$(mktemp -t flofile_notarize).zip"
-trap 'rm -f "$NOTARY_ZIP"' EXIT
 
 echo "Zipping for notarization..."
 ditto -c -k --keepParent "$APP_PATH" "$NOTARY_ZIP"
