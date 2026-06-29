@@ -893,27 +893,37 @@ class CaptionFormulaRenderer {
         if (part.isEmpty) continue;
         joined = joined.isEmpty ? part : _joinWithoutDuplicateOverlap(joined, part);
       }
-      return _cleanDuplicatePunctuation(joined);
-    }
-
-    final gaps = effectiveSegmentGaps(template);
-    for (var i = 0; i < n; i++) {
-      final s = order[i];
-      if (customSegmentPlaceholderIndex == null &&
-          s == CaptionSegment.customText &&
-          valueAt(i).trim().isEmpty) {
-        continue;
-      }
-      final part = valueAt(i);
-      if (part.isNotEmpty) {
-        joined = joined.isEmpty ? part : _joinWithoutDuplicateOverlap(joined, part);
-      }
-      if (i < n - 1 && i < gaps.length) {
-        final gap = gaps[i];
-        if (gap.isNotEmpty) {
-          joined = joined.isEmpty ? gap : _joinWithoutDuplicateOverlap(joined, gap);
+    } else {
+      final gaps = effectiveSegmentGaps(template);
+      for (var i = 0; i < n; i++) {
+        final s = order[i];
+        if (customSegmentPlaceholderIndex == null &&
+            s == CaptionSegment.customText &&
+            valueAt(i).trim().isEmpty) {
+          continue;
+        }
+        final part = valueAt(i);
+        if (part.isNotEmpty) {
+          joined = joined.isEmpty ? part : _joinWithoutDuplicateOverlap(joined, part);
+        }
+        if (i < n - 1 && i < gaps.length) {
+          final gap = gaps[i];
+          if (gap.isNotEmpty) {
+            joined = joined.isEmpty ? gap : _joinWithoutDuplicateOverlap(joined, gap);
+          }
         }
       }
+    }
+
+    // Prepend/append the whole-layout prefix and suffix. These are always
+    // visible as editable text boxes in the layout builder so nothing is hidden.
+    final prefix = template.layoutPrefix;
+    final suffix = template.layoutSuffix;
+    if (prefix.isNotEmpty) {
+      joined = joined.isEmpty ? prefix : _joinWithoutDuplicateOverlap(prefix, joined);
+    }
+    if (suffix.isNotEmpty) {
+      joined = joined.isEmpty ? suffix : _joinWithoutDuplicateOverlap(joined, suffix);
     }
     return _cleanDuplicatePunctuation(joined);
   }

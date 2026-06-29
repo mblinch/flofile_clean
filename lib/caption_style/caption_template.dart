@@ -660,6 +660,8 @@ class CaptionTemplate {
     this.venueSuffix = '',
     this.locationOptionsByOccurrence,
     this.dateFormulasByOccurrence,
+    this.layoutPrefix = '',
+    this.layoutSuffix = '',
   });
 
   final String id;
@@ -722,6 +724,12 @@ class CaptionTemplate {
   final String captionSuffix;
   final String gameIdentifierPrefix;
   final String gameIdentifierSuffix;
+
+  /// Text prepended/appended to the entire rendered caption output (outside all
+  /// segment blocks). Editable as the leftmost/rightmost text boxes in the
+  /// caption layout builder so there is never hidden punctuation at the edges.
+  final String layoutPrefix;
+  final String layoutSuffix;
 
   /// Text between consecutive [segmentOrder] entries. When set, length must be
   /// [segmentOrder.length - 1]. When null or wrong length, rendering falls
@@ -1063,6 +1071,8 @@ class CaptionTemplate {
     String? venueSuffix,
     Object? locationOptionsByOccurrence = _unset,
     Object? dateFormulasByOccurrence = _unset,
+    String? layoutPrefix,
+    String? layoutSuffix,
   }) =>
       CaptionTemplate(
         id: id ?? this.id,
@@ -1108,6 +1118,8 @@ class CaptionTemplate {
         dateFormulasByOccurrence: identical(dateFormulasByOccurrence, _unset)
             ? this.dateFormulasByOccurrence
             : dateFormulasByOccurrence as List<DateFormula>?,
+        layoutPrefix: layoutPrefix ?? this.layoutPrefix,
+        layoutSuffix: layoutSuffix ?? this.layoutSuffix,
       );
 
   /// Ensures [locationOptionsByOccurrence] / [dateFormulasByOccurrence] have one
@@ -1257,6 +1269,8 @@ class CaptionTemplate {
         if (punctuationSnippets != null) 'punctuationSnippets': punctuationSnippets,
         if (venuePrefix.isNotEmpty) 'venuePrefix': venuePrefix,
         if (venueSuffix.isNotEmpty) 'venueSuffix': venueSuffix,
+        if (layoutPrefix.isNotEmpty) 'layoutPrefix': layoutPrefix,
+        if (layoutSuffix.isNotEmpty) 'layoutSuffix': layoutSuffix,
         if (locationOptionsByOccurrence != null)
           'locationOptionsByOccurrence': locationOptionsByOccurrence!
               .map((e) => e.toJson())
@@ -1346,6 +1360,8 @@ class CaptionTemplate {
           .toList(),
       venuePrefix: json['venuePrefix'] as String? ?? '',
       venueSuffix: json['venueSuffix'] as String? ?? '',
+      layoutPrefix: json['layoutPrefix'] as String? ?? '',
+      layoutSuffix: json['layoutSuffix'] as String? ?? '',
       locationOptionsByOccurrence:
           (json['locationOptionsByOccurrence'] as List<dynamic>?)
               ?.map((e) => LocationLineOptions.fromJson(

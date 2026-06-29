@@ -931,7 +931,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: isCurrent
-                                ? accent.withValues(alpha: 0.14)
+                                ? const Color(0xFFF5F5F5)
                                 : Colors.white,
                             borderRadius: BorderRadius.circular(6),
                             border: Border.all(
@@ -941,12 +941,12 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             boxShadow: isCurrent
                                 ? [
                                     BoxShadow(
-                                      color: accent.withValues(alpha: 0.42),
-                                      blurRadius: 10,
-                                      spreadRadius: 1,
+                                      color: accent.withValues(alpha: 0.25),
+                                      blurRadius: 8,
+                                      spreadRadius: 0,
                                     ),
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.14),
+                                      color: Colors.black.withValues(alpha: 0.10),
                                       blurRadius: 4,
                                       offset: const Offset(0, 2),
                                     ),

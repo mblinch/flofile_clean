@@ -203,6 +203,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   static const String _menuTokCustom = 'wire:custom';
 
   final List<TextEditingController> _gapControllers = [];
+  final TextEditingController _layoutPrefixCtrl = TextEditingController();
+  final TextEditingController _layoutSuffixCtrl = TextEditingController();
   final TextEditingController _bylinePrefixCtrl = TextEditingController();
   final TextEditingController _bylineBetweenCtrl = TextEditingController();
   final TextEditingController _bylineSuffixCtrl = TextEditingController();
@@ -233,6 +235,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   @override
   void initState() {
     super.initState();
+    _layoutPrefixCtrl.addListener(_onLayoutPrefixEdited);
+    _layoutSuffixCtrl.addListener(_onLayoutSuffixEdited);
     _bylinePrefixCtrl.addListener(_onBylineTextEdited);
     _bylineBetweenCtrl.addListener(_onBylineTextEdited);
     _bylineSuffixCtrl.addListener(_onBylineTextEdited);
@@ -1659,7 +1663,24 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     // Apply normalized values back to the template so the preview is correct
     // immediately — even for old saved templates with bad punctuation spacing.
     _template = _template.copyWith(customSeparators: normalizedGaps);
+    // Sync layout prefix/suffix controllers.
+    _layoutPrefixCtrl.text = t.layoutPrefix;
+    _layoutSuffixCtrl.text = t.layoutSuffix;
     _initGlueSnippetControllers(t);
+  }
+
+  void _onLayoutPrefixEdited() {
+    setState(() {
+      _template = _template.copyWith(layoutPrefix: _layoutPrefixCtrl.text);
+    });
+    _scheduleAutosave();
+  }
+
+  void _onLayoutSuffixEdited() {
+    setState(() {
+      _template = _template.copyWith(layoutSuffix: _layoutSuffixCtrl.text);
+    });
+    _scheduleAutosave();
   }
 
   /// Inserts [kind] into [segmentOrder] immediately after the snippet at
@@ -2244,6 +2265,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     }
     _disposeGapControllers();
     _disposeGlueSnippetControllers();
+    _layoutPrefixCtrl.removeListener(_onLayoutPrefixEdited);
+    _layoutSuffixCtrl.removeListener(_onLayoutSuffixEdited);
+    _layoutPrefixCtrl.dispose();
+    _layoutSuffixCtrl.dispose();
     _bylinePrefixCtrl.removeListener(_onBylineTextEdited);
     _bylineBetweenCtrl.removeListener(_onBylineTextEdited);
     _bylineSuffixCtrl.removeListener(_onBylineTextEdited);
@@ -3791,6 +3816,21 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     final n = order.length;
 
     final widgets = <Widget>[];
+
+    // Always show an editable text box at the very start of the layout so any
+    // leading punctuation (e.g. a stray dash) is visible and removable.
+    widgets.add(
+      Tooltip(
+        message: 'Text before the first block',
+        waitDuration: const Duration(milliseconds: 400),
+        child: _GapSeparatorField(
+          controller: _layoutPrefixCtrl,
+          active: false,
+          onFocusChanged: (_) {},
+        ),
+      ),
+    );
+
     for (var i = 0; i < n; i++) {
       final seg = order[i];
       if (_isGlueSegment(seg)) {
@@ -3854,6 +3894,20 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       );
       widgets.add(snippetRow);
     }
+
+    // Always show an editable text box at the very end of the layout.
+    widgets.add(
+      Tooltip(
+        message: 'Text after the last block',
+        waitDuration: const Duration(milliseconds: 400),
+        child: _GapSeparatorField(
+          controller: _layoutSuffixCtrl,
+          active: false,
+          onFocusChanged: (_) {},
+        ),
+      ),
+    );
+
     return widgets;
   }
 
