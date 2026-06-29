@@ -59,20 +59,25 @@ if [ ! -f "$ENTITLEMENTS" ]; then
 fi
 
 # Xcode expands $(AppIdentifierPrefix) during the Flutter build; codesign does not.
-# Capture the built app's entitlements before re-signing so keychain groups stay valid.
+# Capture the built app's entitlements before re-signing so release signing preserves
+# Xcode-expanded identifiers, then strip debug/provisioning-sensitive entitlements.
 ENTITLEMENTS_TMP="$(mktemp -t flofile_entitlements).plist"
 NOTARY_ZIP=""
 trap 'rm -f "$ENTITLEMENTS_TMP" ${NOTARY_ZIP:+"$NOTARY_ZIP"}' EXIT
 if codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_TMP" 2>/dev/null \
-    && grep -q keychain-access-groups "$ENTITLEMENTS_TMP" 2>/dev/null \
     && ! grep -q 'AppIdentifierPrefix' "$ENTITLEMENTS_TMP" 2>/dev/null; then
-  echo "Using entitlements from Flutter build (expanded keychain groups)."
-  # Strip entitlements that are invalid or blocked for Developer ID apps on macOS 26+:
-  # - get-task-allow: debug-only, forbidden in notarized apps (causes "can't be opened").
-  # - keychain-access-groups: requires a provisioning profile on macOS 26+; without one
-  #   launchd refuses to spawn the app (POSIX error 163). Remove until we have a profile.
+  echo "Using entitlements from Flutter build (expanded identifiers)."
+  # Strip get-task-allow: debug-only entitlement, forbidden in notarized release apps.
   /usr/libexec/PlistBuddy -c "Delete :com.apple.security.get-task-allow" "$ENTITLEMENTS_TMP" 2>/dev/null || true
+  # Strip keychain-access-groups entirely: on macOS 26+, this entitlement requires a
+  # provisioning profile even for Developer ID apps. GTMAppAuth is patched to use the
+  # legacy file-based (login) keychain on macOS, so Google Sign-In works without it.
   /usr/libexec/PlistBuddy -c "Delete :keychain-access-groups" "$ENTITLEMENTS_TMP" 2>/dev/null || true
+  # Strip provisioning-bound identifiers. Xcode automatic signing injects these when
+  # DEVELOPMENT_TEAM is set, but on macOS 26+ a Developer ID app that carries them
+  # without an embedded provisioning profile is refused by launchd (POSIX error 163).
+  /usr/libexec/PlistBuddy -c "Delete :com.apple.application-identifier" "$ENTITLEMENTS_TMP" 2>/dev/null || true
+  /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.team-identifier" "$ENTITLEMENTS_TMP" 2>/dev/null || true
   SIGN_ENTITLEMENTS="$ENTITLEMENTS_TMP"
 else
   echo "Warning: built entitlements missing or unexpanded; falling back to $ENTITLEMENTS" >&2

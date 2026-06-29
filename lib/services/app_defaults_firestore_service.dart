@@ -83,6 +83,7 @@ class AppDefaultsCatalog {
     this.iptcTemplates = const [],
     this.captionTemplateWireDefaults = const {},
     this.gameIdentifierByWireAndSport = const {},
+    this.captionStyleLibrary = const [],
   });
 
   final int schemaVersion;
@@ -94,6 +95,11 @@ class AppDefaultsCatalog {
   final Map<String, Map<String, dynamic>> captionTemplateWireDefaults;
   /// Per-wire, per-sport game identifier phrase (wire name → sport → text).
   final Map<String, Map<String, String>> gameIdentifierByWireAndSport;
+  /// Shared caption style library entries pushed by admin, stored as raw JSON
+  /// maps so this class avoids a circular dependency with PreferencesService.
+  /// Applied on first launch for new users; existing customisations are never
+  /// overwritten.
+  final List<Map<String, dynamic>> captionStyleLibrary;
 
   Map<String, dynamic>? sportVerbSettings(String sport) {
     final key = sport.toLowerCase().trim();
@@ -195,6 +201,13 @@ class AppDefaultsFirestoreService {
   ) async {
     await loadCacheFromDisk();
     return _memoryCache?.sportVerbSettings(sport);
+  }
+
+  /// Returns the admin-published caption style library from cache as raw JSON
+  /// maps (to avoid a circular dependency with PreferencesService), or [].
+  static Future<List<Map<String, dynamic>>> getCachedCaptionStyleLibrary() async {
+    await loadCacheFromDisk();
+    return _memoryCache?.captionStyleLibrary ?? const [];
   }
 
   static Future<List<IptcTemplateCatalogEntry>> getVisibleIptcTemplates({
@@ -393,6 +406,26 @@ class AppDefaultsFirestoreService {
     await publishCaptionWireDefaults(existing, gameIdentifierByWireAndSport: gameIds);
   }
 
+  /// Admin: push the caption style library so all users receive it on startup.
+  /// Accepts raw JSON maps (call [CaptionStyleLibraryEntry.toJson()] at the
+  /// call site) so this service has no dependency on PreferencesService.
+  /// Existing users only receive it if their local library is empty.
+  static Future<void> publishCaptionStyleLibrary(
+    List<Map<String, dynamic>> libraryJson,
+  ) async {
+    await _assertCanPublish();
+    await _doc.set(
+      {
+        'schemaVersion': currentSchemaVersion,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': FirebaseAuth.instance.currentUser?.uid,
+        'captionStyleLibrary': libraryJson,
+      },
+      SetOptions(merge: true),
+    );
+    await fetchAndCacheAppDefaults(forceNetwork: true);
+  }
+
   /// Admin: publish the full game-identifier map.
   static Future<void> publishGameIdentifierByWireAndSport(
     Map<String, Map<String, String>> map,
@@ -542,6 +575,15 @@ class AppDefaultsFirestoreService {
       });
     }
     final gameIds = _parseGameIdentifierMap(data['gameIdentifierByWireAndSport']);
+    final styleLib = <Map<String, dynamic>>[];
+    final styleLibRaw = data['captionStyleLibrary'];
+    if (styleLibRaw is List) {
+      for (final item in styleLibRaw) {
+        if (item is Map) {
+          styleLib.add(Map<String, dynamic>.from(item));
+        }
+      }
+    }
     DateTime? updatedAt;
     final ts = data['updatedAt'];
     if (ts is Timestamp) {
@@ -556,6 +598,7 @@ class AppDefaultsFirestoreService {
       iptcTemplates: iptc,
       captionTemplateWireDefaults: captionDefaults,
       gameIdentifierByWireAndSport: gameIds,
+      captionStyleLibrary: styleLib,
     );
   }
 
@@ -571,6 +614,8 @@ class AppDefaultsFirestoreService {
       'captionTemplateWireDefaults': catalog.captionTemplateWireDefaults,
       'gameIdentifierByWireAndSport':
           _gameIdentifierMapToFirestore(catalog.gameIdentifierByWireAndSport),
+      if (catalog.captionStyleLibrary.isNotEmpty)
+        'captionStyleLibrary': catalog.captionStyleLibrary,
     };
   }
 

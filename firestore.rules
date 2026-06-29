@@ -14,9 +14,11 @@ service cloud.firestore {
       );
     }
 
-    // Global app originals — verbs per sport + IPTC template catalog.
+    // Global app originals — verbs, IPTC catalog, caption style defaults.
+    // Readable by anyone (no auth needed) so defaults load without sign-in.
+    // Only the admin account may write.
     match /appDefaults/{docId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin();
     }
 

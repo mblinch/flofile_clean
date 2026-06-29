@@ -2108,6 +2108,24 @@ class PreferencesService {
     await importPreferences({'verbSettingsBySport': {sport: slice}});
   }
 
+  /// Seeds the local caption style library from app defaults when the user has
+  /// never saved any custom styles. Local customisations are always preserved.
+  Future<void> seedCaptionStyleLibraryFromAppDefaultsIfEmpty() async {
+    final existing = await getCaptionStyleLibrary();
+    if (existing.isNotEmpty) return;
+    final rawMaps =
+        await AppDefaultsFirestoreService.getCachedCaptionStyleLibrary();
+    if (rawMaps.isEmpty) return;
+    final entries = <CaptionStyleLibraryEntry>[];
+    for (final map in rawMaps) {
+      try {
+        entries.add(CaptionStyleLibraryEntry.fromJson(map));
+      } catch (_) {}
+    }
+    if (entries.isEmpty) return;
+    await _saveCaptionStyleLibrary(entries);
+  }
+
   /// Fetches latest app originals from Firebase and applies verbs + caption structures.
   Future<void> restoreAppOriginals() async {
     await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(

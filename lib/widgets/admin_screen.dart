@@ -345,6 +345,53 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  Future<void> _publishCaptionStyleLibrary() async {
+    final prefs = await PreferencesService.getInstance();
+    final library = await prefs.getCaptionStyleLibrary();
+    if (library.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No saved caption styles to publish.'),
+        ),
+      );
+      return;
+    }
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: 'Publish caption style library?',
+      message:
+          'Pushes ${library.length} saved style(s) to Firebase as the default '
+          'starter library for new users. Existing users who have never saved '
+          'a custom style will also receive these on next launch.',
+      confirmLabel: 'Publish',
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await AppDefaultsFirestoreService.publishCaptionStyleLibrary(
+        library.map((e) => e.toJson()).toList(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Published ${library.length} caption style(s).'),
+          backgroundColor: kFloTealLight,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Publish failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   List<String> _categoryOrder(Map<String, dynamic> bundle, String sport) {
     final raw = bundle['categoryOrder'];
     if (raw is List && raw.isNotEmpty) {
@@ -918,6 +965,13 @@ class _AdminScreenState extends State<AdminScreen> {
               fontSize: 11,
               icon: Icons.cloud_upload_outlined,
               onPressed: _busy ? null : () => _publishCaptions(allWires: true),
+            ),
+            const SizedBox(width: 8),
+            ElevatedGreyButton(
+              label: 'Publish style library',
+              fontSize: 11,
+              icon: Icons.style_outlined,
+              onPressed: _busy ? null : _publishCaptionStyleLibrary,
             ),
           ],
         ],

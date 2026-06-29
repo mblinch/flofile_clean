@@ -65,6 +65,12 @@ fi
 touch "macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json" 2>/dev/null || true
 
 # 2) Build
+# Apply the GTMAppAuth keychain patch first so Google Sign-In works on macOS 26
+# Developer ID builds (file-based login keychain, no provisioning profile needed).
+# Must run BEFORE flutter build since the Swift packages compile during the build.
+if [ -f "$SCRIPT_DIR/tool/patch_gtm_keychain.sh" ]; then
+  "$SCRIPT_DIR/tool/patch_gtm_keychain.sh" || true
+fi
 echo "Building macOS app..."
 flutter build macos --release --build-name="$SHORT_VERSION" --build-number="$SPARKLE_VERSION"
 

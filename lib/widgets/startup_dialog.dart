@@ -160,7 +160,11 @@ class _StartupDialogState extends State<StartupDialog> {
   Future<void> _initializeAndLoadData() async {
     _preferencesService = await PreferencesService.getInstance();
     await _loadIptcApplyOptions();
-    await AppDefaultsFirestoreService.loadCacheFromDisk();
+    // Fetch fresh app defaults from Firestore (no auth needed — public reads).
+    // Falls back to disk cache if offline. This ensures caption style defaults
+    // and verb seeds reach users who have never signed in.
+    await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
+    await _preferencesService.seedCaptionStyleLibraryFromAppDefaultsIfEmpty();
     await _loadIptcCatalog();
     await _loadIptcWireContext();
     await _loadPresetForWire(

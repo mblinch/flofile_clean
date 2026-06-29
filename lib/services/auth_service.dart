@@ -77,6 +77,7 @@ class AuthService {
       for (final sport in AppDefaultsFirestoreService.catalogSports) {
         await prefs.seedVerbsFromAppDefaultsIfEmpty(sport);
       }
+      await prefs.seedCaptionStyleLibraryFromAppDefaultsIfEmpty();
       final syncResult = await UserPreferencesFirestoreService.syncOnSignIn(prefs);
       if (syncResult.action == UserPreferencesSyncAction.downloaded) {
         debugPrint('[Auth] ${syncResult.message}');
