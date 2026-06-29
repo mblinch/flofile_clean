@@ -313,10 +313,36 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       ),
       actions: [
         if (AuthService.instance.isFirebaseReady &&
-            AuthService.instance.currentUser != null)
+            AuthService.instance.currentUser != null) ...[
+          Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.account_circle,
+                    color: Colors.white70, size: 14),
+                const SizedBox(width: 4),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 220),
+                  child: Text(
+                    AuthService.instance.currentUser?.email ??
+                        AuthService.instance.currentUser?.displayName ??
+                        'Account',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           FloHeaderSignOutButton(
             tooltip: 'Signed in as ${AuthService.instance.currentUser?.email ?? AuthService.instance.currentUser?.displayName ?? 'Account'}',
           ),
+        ],
         IconButton(
           onPressed: () async {
             await showDialog(
