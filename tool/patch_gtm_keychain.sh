@@ -169,19 +169,17 @@ old_save = """- (BOOL)saveAuthState:(OIDAuthState *)authState {
   return error == nil;
 }"""
 new_save = """- (BOOL)saveAuthState:(OIDAuthState *)authState {
+#if TARGET_OS_OSX
+  // FloFile patch: on macOS Developer ID builds the signed-in user is persisted by
+  // Firebase Auth. Skip GTMAppAuth's own keychain write entirely so we don't create a
+  // second login-keychain item (and a second macOS access prompt). OAuth already succeeded.
+  return YES;
+#else
   GTMAuthSession *authorization = [[GTMAuthSession alloc] initWithAuthState:authState];
   NSError *error;
   [_keychainStore saveAuthSession:authorization error:&error];
-#if TARGET_OS_OSX
-  // FloFile patch: Developer ID builds on macOS 26+ cannot persist Google tokens to
-  // the keychain without a provisioning profile. OAuth succeeded; treat keychain
-  // save failure as non-fatal and let Firebase Auth persist the session instead.
-  if (error) {
-    NSLog(@"FloFile: ignoring Google keychain save failure on macOS: %@", error);
-    return YES;
-  }
-#endif
   return error == nil;
+#endif
 }"""
 
 old_migration = """- (void)performDataProtectedMigrationIfNeeded {
@@ -216,7 +214,7 @@ if "FloFile patch: Developer ID apps" not in store_text:
     changed = True
 
 gid_text = gid_signin_path.read_text()
-if "FloFile patch: Developer ID builds on macOS 26+" not in gid_text:
+if "FloFile patch: on macOS Developer ID builds the signed-in user is persisted by" not in gid_text:
     if old_save not in gid_text:
         raise SystemExit("Could not find GIDSignIn saveAuthState to patch")
     gid_text = gid_text.replace(old_save, new_save, 1)
