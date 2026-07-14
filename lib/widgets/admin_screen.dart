@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dropdown_flutter/custom_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +12,9 @@ import '../flo_layout_constants.dart';
 import '../theme/auth_ui_constants.dart';
 import '../services/admin_service.dart';
 import '../services/app_defaults_firestore_service.dart';
+import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
+import '../services/roster_compare_service.dart';
 import '../caption_style/verb_sub_options.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
@@ -18,13 +22,22 @@ import 'verb_edit_plural_field.dart';
 import 'verb_edit_sub_options_section.dart';
 import 'caption_layout_builder_dialog.dart';
 
-enum _AdminSection { verbs, captionStructures }
+enum _AdminSection { verbs, captionStructures, rosterCompare }
 
 /// Admin console for editing app originals (verbs + caption structures).
 class AdminScreen extends StatefulWidget {
-  const AdminScreen({super.key});
+  const AdminScreen({
+    super.key,
+    this.openRosterCompare = false,
+  });
 
-  static Future<void> open(BuildContext context) async {
+  /// When true, opens on the Tank01 vs Firebase roster compare tab.
+  final bool openRosterCompare;
+
+  static Future<void> open(
+    BuildContext context, {
+    bool openRosterCompare = false,
+  }) async {
     final isAdmin = await AdminService.isCurrentUserAdmin();
     if (!context.mounted) return;
     if (!isAdmin) {
@@ -37,7 +50,7 @@ class AdminScreen extends StatefulWidget {
       context: context,
       barrierDismissible: true,
       barrierColor: Colors.black.withValues(alpha: 0.45),
-      builder: (_) => const AdminScreen(),
+      builder: (_) => AdminScreen(openRosterCompare: openRosterCompare),
     );
   }
 
@@ -51,7 +64,7 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _loading = true;
   bool _busy = false;
   String? _error;
-  _AdminSection _section = _AdminSection.verbs;
+  late _AdminSection _section;
 
   AppDefaultsCatalog? _catalog;
   final Map<String, Map<String, dynamic>> _verbBundles = {};
@@ -64,6 +77,14 @@ class _AdminScreenState extends State<AdminScreen> {
   int _captionBuilderRevision = 0;
   Future<void> Function()? _flushCaptionBuilder;
 
+  List<String> _mlbTeamNames = const [];
+  String? _compareTeamA;
+  String? _compareTeamB;
+  bool _compareLoadingTeams = false;
+  bool _compareRunning = false;
+  String? _compareError;
+  List<RosterCompareReport> _compareReports = const [];
+
   static const _sports = AppDefaultsFirestoreService.catalogSports;
   static const _dialogWidth = 920.0;
   static const _dialogHeight = 780.0;
@@ -73,6 +94,9 @@ class _AdminScreenState extends State<AdminScreen> {
   @override
   void initState() {
     super.initState();
+    _section = widget.openRosterCompare
+        ? _AdminSection.rosterCompare
+        : _AdminSection.verbs;
     _bootstrap();
   }
 
@@ -108,10 +132,74 @@ class _AdminScreenState extends State<AdminScreen> {
       }
       _applyGameIdToCaptionDraft(_captionWire, _captionSport);
       _captionBuilderRevision++;
+      if (_mlbTeamNames.isEmpty) {
+        unawaited(_loadMlbTeamsForCompare());
+      }
     } catch (e) {
       _error = e.toString();
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMlbTeamsForCompare() async {
+    if (!mounted) return;
+    setState(() {
+      _compareLoadingTeams = true;
+      _compareError = null;
+    });
+    try {
+      final teams = await MlbApiService().fetchAllTeams();
+      final names = teams.map((t) => t.name).toList()..sort();
+      if (!mounted) return;
+      setState(() {
+        _mlbTeamNames = names;
+        _compareTeamA ??= names.contains('Toronto Blue Jays')
+            ? 'Toronto Blue Jays'
+            : (names.isNotEmpty ? names.first : null);
+        _compareTeamB ??= names.contains('New York Yankees')
+            ? 'New York Yankees'
+            : (names.length > 1 ? names[1] : (names.isNotEmpty ? names.first : null));
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _compareError = 'Failed to load MLB teams: $e');
+    } finally {
+      if (mounted) setState(() => _compareLoadingTeams = false);
+    }
+  }
+
+  Future<void> _runRosterCompare() async {
+    final teams = <String>{
+      if (_compareTeamA != null && _compareTeamA!.trim().isNotEmpty)
+        _compareTeamA!.trim(),
+      if (_compareTeamB != null &&
+          _compareTeamB!.trim().isNotEmpty &&
+          _compareTeamB != _compareTeamA)
+        _compareTeamB!.trim(),
+    }.toList();
+    if (teams.isEmpty) {
+      setState(() => _compareError = 'Pick at least one team.');
+      return;
+    }
+    setState(() {
+      _compareRunning = true;
+      _compareError = null;
+      _compareReports = const [];
+    });
+    try {
+      final service = RosterCompareService();
+      final reports = <RosterCompareReport>[];
+      for (final team in teams) {
+        reports.add(await service.compareTeam(team));
+      }
+      if (!mounted) return;
+      setState(() => _compareReports = reports);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _compareError = e.toString());
+    } finally {
+      if (mounted) setState(() => _compareRunning = false);
     }
   }
 
@@ -681,9 +769,8 @@ class _AdminScreenState extends State<AdminScreen> {
       width: 160,
       child: DropdownFlutter<String>(
         hintText: 'Sport',
-        items: _sports.map((s) => s[0].toUpperCase() + s.substring(1)).toList(),
-        initialItem:
-            _captionSport[0].toUpperCase() + _captionSport.substring(1),
+        items: _sports.map((s) => SportVerbCategories.displayLabel(s)).toList(),
+        initialItem: SportVerbCategories.displayLabel(_captionSport),
         closedHeaderPadding:
             const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         expandedHeaderPadding:
@@ -695,7 +782,11 @@ class _AdminScreenState extends State<AdminScreen> {
             ? null
             : (label) {
                 if (label == null) return;
-                _onCaptionSportChanged(label.toLowerCase());
+                final sport = _sports.firstWhere(
+                  (s) => SportVerbCategories.displayLabel(s) == label,
+                  orElse: () => label.toLowerCase(),
+                );
+                _onCaptionSportChanged(sport);
               },
       ),
     );
@@ -706,15 +797,19 @@ class _AdminScreenState extends State<AdminScreen> {
       width: 160,
       child: DropdownFlutter<String>(
         hintText: 'Sport',
-        items: _sports.map((s) => s[0].toUpperCase() + s.substring(1)).toList(),
-        initialItem: _verbSport[0].toUpperCase() + _verbSport.substring(1),
+        items: _sports.map((s) => SportVerbCategories.displayLabel(s)).toList(),
+        initialItem: SportVerbCategories.displayLabel(_verbSport),
         closedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         expandedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         listItemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: _dropdownDecoration,
         onChanged: (label) {
           if (label == null) return;
-          onChanged(label.toLowerCase());
+          final sport = _sports.firstWhere(
+            (s) => SportVerbCategories.displayLabel(s) == label,
+            orElse: () => label.toLowerCase(),
+          );
+          onChanged(sport);
         },
       ),
     );
@@ -925,6 +1020,9 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildFooter() {
+    if (_section == _AdminSection.rosterCompare) {
+      return const SizedBox.shrink();
+    }
     final isVerbs = _section == _AdminSection.verbs;
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
@@ -1110,6 +1208,15 @@ class _AdminScreenState extends State<AdminScreen> {
                                       _AdminSection.captionStructures,
                                       'Caption Structures',
                                     ),
+                                    Divider(
+                                      height: 1,
+                                      thickness: 1,
+                                      color: Colors.grey.shade300,
+                                    ),
+                                    _sidebarTile(
+                                      _AdminSection.rosterCompare,
+                                      'Roster Compare',
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1120,15 +1227,22 @@ class _AdminScreenState extends State<AdminScreen> {
                                             _contentPadding),
                                         child: _buildVerbsContent(),
                                       )
-                                    : Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          _contentPadding,
-                                          _contentPadding,
-                                          _contentPadding,
-                                          0,
-                                        ),
-                                        child: _buildCaptionContent(),
-                                      ),
+                                    : _section ==
+                                            _AdminSection.captionStructures
+                                        ? Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              _contentPadding,
+                                              _contentPadding,
+                                              _contentPadding,
+                                              0,
+                                            ),
+                                            child: _buildCaptionContent(),
+                                          )
+                                        : SingleChildScrollView(
+                                            padding: const EdgeInsets.all(
+                                                _contentPadding),
+                                            child: _buildRosterCompareContent(),
+                                          ),
                               ),
                             ],
                           ),
@@ -1137,6 +1251,242 @@ class _AdminScreenState extends State<AdminScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRosterCompareContent() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Compare MLB rosters: Tank01 vs Firebase vs MLB Stats',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF333333),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Use this after Go Time while captioning. Tank01 is the RapidAPI roster; '
+          'Firebase is your cached sports/.../players data; MLB Stats is the live official API.',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 11,
+            color: Colors.grey.shade700,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (_compareLoadingTeams)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(color: kFloTealLight),
+          )
+        else ...[
+          Row(
+            children: [
+              Expanded(child: _compareTeamDropdown(isA: true)),
+              const SizedBox(width: 10),
+              Expanded(child: _compareTeamDropdown(isA: false)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              ElevatedGreyButton(
+                label: _compareRunning ? 'Comparing…' : 'Compare rosters',
+                fontSize: 11,
+                icon: Icons.compare_arrows,
+                isTealGradient: true,
+                onPressed: _compareRunning || _mlbTeamNames.isEmpty
+                    ? null
+                    : _runRosterCompare,
+              ),
+              const SizedBox(width: 8),
+              ElevatedGreyButton(
+                label: 'Reload teams',
+                fontSize: 11,
+                icon: Icons.refresh,
+                onPressed:
+                    _compareRunning ? null : _loadMlbTeamsForCompare,
+              ),
+            ],
+          ),
+        ],
+        if (_compareError != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            _compareError!,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11,
+              color: Colors.red,
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        ..._compareReports.map(_buildCompareReportCard),
+      ],
+    );
+  }
+
+  Widget _compareTeamDropdown({required bool isA}) {
+    final value = isA ? _compareTeamA : _compareTeamB;
+    final hint = isA ? 'Team A' : 'Team B (optional)';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          hint,
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        DropdownFlutter<String>(
+          hintText: 'Select team',
+          initialItem:
+              value != null && _mlbTeamNames.contains(value) ? value : null,
+          items: _mlbTeamNames,
+          closedHeaderPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          expandedHeaderPadding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          listItemPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: _dropdownDecoration,
+          onChanged: (v) {
+            setState(() {
+              if (isA) {
+                _compareTeamA = v;
+              } else {
+                _compareTeamB = v;
+              }
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompareReportCard(RosterCompareReport report) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            report.teamName,
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _sourceLine(report.tank01),
+          _sourceLine(report.firestore),
+          _sourceLine(report.mlbStats),
+          const SizedBox(height: 8),
+          _diffBlock(
+            'Only in Tank01 (not MLB Stats)',
+            report.onlyInTank01VsMlb.map((p) => p.label).toList(),
+          ),
+          _diffBlock(
+            'Only in MLB Stats (not Tank01)',
+            report.onlyInMlbVsTank01.map((p) => p.label).toList(),
+          ),
+          _diffBlock(
+            'Only in Tank01 (not Firebase)',
+            report.onlyInTank01VsFirebase.map((p) => p.label).toList(),
+          ),
+          _diffBlock(
+            'Only in Firebase (not Tank01)',
+            report.onlyInFirebaseVsTank01.map((p) => p.label).toList(),
+          ),
+          _diffBlock('Jersey mismatches (Tank01 vs MLB)', report.jerseyMismatches),
+        ],
+      ),
+    );
+  }
+
+  Widget _sourceLine(RosterCompareSourceResult s) {
+    final color = s.ok ? const Color(0xFF1B5E20) : const Color(0xFFB71C1C);
+    final text = s.ok
+        ? '${s.source}: ${s.players.length} players'
+        : '${s.source}: failed — ${s.error}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _diffBlock(String title, List<String> items) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$title (${items.length})',
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF333333),
+            ),
+          ),
+          if (items.isEmpty)
+            Text(
+              '  none',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 10,
+                color: Colors.grey.shade600,
+              ),
+            )
+          else
+            ...items.take(40).map(
+                  (line) => Text(
+                    '  • $line',
+                    style: const TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 10,
+                      color: Color(0xFF444444),
+                    ),
+                  ),
+                ),
+          if (items.length > 40)
+            Text(
+              '  …and ${items.length - 40} more',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 10,
+                color: Colors.grey.shade600,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1434,9 +1784,11 @@ class AdminBadgeButton extends StatelessWidget {
   const AdminBadgeButton({
     super.key,
     required this.child,
+    this.openRosterCompare = false,
   });
 
   final Widget child;
+  final bool openRosterCompare;
 
   @override
   Widget build(BuildContext context) {
@@ -1446,7 +1798,10 @@ class AdminBadgeButton extends StatelessWidget {
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => AdminScreen.open(context),
+        onTap: () => AdminScreen.open(
+          context,
+          openRosterCompare: openRosterCompare,
+        ),
         child: child,
       ),
     );

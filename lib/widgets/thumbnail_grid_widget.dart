@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:extended_image/extended_image.dart';
 import '../utils/exiftool_helper.dart';
 import '../flo_layout_constants.dart';
+import '../utils/image_file_operations.dart';
 import 'app_styled_dialogs.dart';
 import 'caption_fields_widget.dart' show CustomButton;
 import 'thumbnail_popup_dialog.dart';
@@ -1585,16 +1586,11 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
     for (final imagePath in selectedPaths) {
       try {
-        final file = File(imagePath);
-        if (await file.exists()) {
-          await file.delete();
-          deletedCount++;
-
-          // Notify parent widget that image was deleted
-          widget.onImageDeleted?.call(imagePath);
-        }
+        await deleteImageFromDisk(imagePath);
+        deletedCount++;
+        widget.onImageDeleted?.call(imagePath);
       } catch (e) {
-        print('Error deleting file: $e');
+        print('Error deleting file $imagePath: $e');
       }
     }
 
@@ -1890,35 +1886,35 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
 
   void _deleteImage(String imagePath) async {
     try {
-      final file = File(imagePath);
-      if (await file.exists()) {
-        await file.delete();
+      await deleteImageFromDisk(imagePath);
 
-        // Show success message
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Deleted: ${p.basename(imagePath)}'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-
-        // Notify parent widget that image was deleted
-        widget.onImageDeleted?.call(imagePath);
-        print('Successfully deleted: $imagePath');
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('File not found'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Deleted: ${p.basename(imagePath)}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
       }
+
+      widget.onImageDeleted?.call(imagePath);
+      print('Successfully deleted: $imagePath');
+    } on FileSystemException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.message == 'File not found'
+                  ? 'File not found'
+                  : 'Error deleting file: ${e.message}',
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      print('Error deleting file: $e');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1943,6 +1939,9 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           onImageSelected: (index) {
             widget.onImageSelected(index);
             Navigator.of(context).pop();
+          },
+          onRequestDelete: (imagePath) {
+            _showDeleteDialog(context, imagePath, Offset.zero);
           },
           onEditMetadata: widget.onEditMetadata,
           savedImages: widget.savedImages,

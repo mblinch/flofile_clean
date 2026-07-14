@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/flutter-hot-reload.sh",
+        "timeout": 15
+      }
+    ],
+    "afterTabFileEdit": [
+      {
+        "command": ".cursor/hooks/flutter-hot-reload.sh",
+        "timeout": 15
+      }
+    ]
+  }
+}

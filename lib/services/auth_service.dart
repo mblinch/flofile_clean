@@ -51,10 +51,14 @@ class AuthService {
     final clientId = googleOAuthClientId;
     if (clientId != null) {
       await GoogleSignIn.instance.initialize(clientId: clientId);
-      try {
-        await GoogleSignIn.instance.attemptLightweightAuthentication();
-      } catch (e) {
-        debugPrint('[Auth] lightweight Google restore: $e');
+      // On macOS, Firebase Auth persists the signed-in user. Google Sign-In's
+      // keychain restore only triggers an extra macOS login-keychain prompt.
+      if (defaultTargetPlatform != TargetPlatform.macOS) {
+        try {
+          await GoogleSignIn.instance.attemptLightweightAuthentication();
+        } catch (e) {
+          debugPrint('[Auth] lightweight Google restore: $e');
+        }
       }
     } else {
       print(

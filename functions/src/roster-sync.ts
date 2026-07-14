@@ -280,14 +280,27 @@ function parseEspnAthlete(map: any): Player {
   };
 }
 
-async function fetchEspnNbaRoster(
+async function fetchEspnBasketballRoster(
+  leaguePath: string,
   teamId: string,
 ): Promise<{ players: Player[]; headCoach: string | null }> {
-  const path = `/apis/site/v2/sports/basketball/nba/teams/${teamId}/roster`;
+  const path = `/apis/site/v2/sports/${leaguePath}/teams/${teamId}/roster`;
   const data = await fetchJson<any>(`https://${ESPN}${path}`);
   const players = extractEspnAthletes(data).map(parseEspnAthlete);
   const headCoach = parseEspnRosterCoach(data.coach);
   return { players, headCoach };
+}
+
+async function fetchEspnNbaRoster(
+  teamId: string,
+): Promise<{ players: Player[]; headCoach: string | null }> {
+  return fetchEspnBasketballRoster("basketball/nba", teamId);
+}
+
+async function fetchEspnWnbaRoster(
+  teamId: string,
+): Promise<{ players: Player[]; headCoach: string | null }> {
+  return fetchEspnBasketballRoster("basketball/wnba", teamId);
 }
 
 async function fetchEspnMlsRoster(teamId: string): Promise<Player[]> {
@@ -345,6 +358,8 @@ export async function fetchTeamDisplayName(
     }
     case "basketball":
       return fetchEspnTeamDisplayNameById("basketball/nba", teamId);
+    case "wnba":
+      return fetchEspnTeamDisplayNameById("basketball/wnba", teamId);
     case "hockey":
       return fetchEspnNhlTeamDisplayNameByTri(teamId);
     case "soccer":
@@ -376,6 +391,10 @@ export async function fetchRoster(
     }
     case "basketball": {
       const r = await fetchEspnNbaRoster(teamId);
+      return { players: r.players, headCoach: r.headCoach, ...noMlbStaff };
+    }
+    case "wnba": {
+      const r = await fetchEspnWnbaRoster(teamId);
       return { players: r.players, headCoach: r.headCoach, ...noMlbStaff };
     }
     case "soccer":
@@ -565,7 +584,7 @@ export async function fetchMlbAllTeamJobs(): Promise<SyncJob[]> {
 
 async function fetchEspnLeagueTeamJobs(
   leaguePath: string,
-  sportId: "basketball" | "soccer",
+  sportId: "basketball" | "wnba" | "soccer",
 ): Promise<SyncJob[]> {
   const data = await fetchJson<any>(
     `https://${ESPN}/apis/site/v2/sports/${leaguePath}/teams?limit=100`,
@@ -591,13 +610,14 @@ async function fetchNhlAllTriCodeJobs(): Promise<SyncJob[]> {
 }
 
 export async function fetchAllSportsJobs(): Promise<SyncJob[]> {
-  const [mlb, nba, nhl, mls] = await Promise.all([
+  const [mlb, nba, wnba, nhl, mls] = await Promise.all([
     fetchMlbAllTeamJobs(),
     fetchEspnLeagueTeamJobs("basketball/nba", "basketball"),
+    fetchEspnLeagueTeamJobs("basketball/wnba", "wnba"),
     fetchNhlAllTriCodeJobs(),
     fetchEspnLeagueTeamJobs("soccer/usa.1", "soccer"),
   ]);
-  return [...mlb, ...nba, ...nhl, ...mls];
+  return [...mlb, ...nba, ...wnba, ...nhl, ...mls];
 }
 
 export async function syncJobs(

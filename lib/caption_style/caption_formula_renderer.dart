@@ -510,6 +510,7 @@ class CaptionFormulaRenderer {
       case 'hockey':
         return 'in the third period';
       case 'basketball':
+      case 'wnba':
         return 'in the fourth quarter';
       case 'soccer':
         return 'in the second half';
@@ -526,6 +527,7 @@ class CaptionFormulaRenderer {
       case 'hockey':
         return 'scores a goal against the {opp} $phrase';
       case 'basketball':
+      case 'wnba':
         return 'dunks against the {opp} $phrase';
       case 'soccer':
         return 'scores a goal against the {opp} $phrase';
@@ -681,6 +683,7 @@ class CaptionFormulaRenderer {
       case 'hockey':
         return ['scores a goal against the {opp} $phrase'];
       case 'basketball':
+      case 'wnba':
         return ['dunks against the {opp} $phrase'];
       case 'soccer':
         return ['scores a goal against the {opp} $phrase'];

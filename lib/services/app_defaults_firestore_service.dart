@@ -141,6 +141,7 @@ class AppDefaultsFirestoreService {
     'baseball',
     'hockey',
     'basketball',
+    'wnba',
     'soccer',
   ];
 

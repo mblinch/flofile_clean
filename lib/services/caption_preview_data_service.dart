@@ -55,6 +55,7 @@ class CaptionPreviewDataService {
       case 'hockey':
         return _hockeyPlayers;
       case 'basketball':
+      case 'wnba':
         return _basketballPlayers;
       case 'soccer':
         return _soccerPlayers;
@@ -70,6 +71,7 @@ class CaptionPreviewDataService {
       case 'hockey':
         return 'scores a goal against the {opp} $phrase';
       case 'basketball':
+      case 'wnba':
         return 'dunks against the {opp} $phrase';
       case 'soccer':
         return 'scores a goal against the {opp} $phrase';

@@ -8,6 +8,7 @@ import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
+import '../services/admin_service.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/preferences_service.dart';
 import 'flo_chrome_header.dart';
@@ -119,6 +120,7 @@ class _StartupDialogState extends State<StartupDialog> {
   bool _awayCoachLoading = false;
   String _homeCoachName = '';
   String _awayCoachName = '';
+  bool _useTank01MlbRosters = false;
 
   bool get _folderChosen => selectedFolderPath != null;
 
@@ -160,6 +162,10 @@ class _StartupDialogState extends State<StartupDialog> {
   Future<void> _initializeAndLoadData() async {
     _preferencesService = await PreferencesService.getInstance();
     await _loadIptcApplyOptions();
+    final useTank01 = await _preferencesService.getUseTank01MlbRosters();
+    if (mounted) {
+      setState(() => _useTank01MlbRosters = useTank01);
+    }
     // Fetch fresh app defaults from Firestore (no auth needed — public reads).
     // Falls back to disk cache if offline. This ensures caption style defaults
     // and verb seeds reach users who have never signed in.
@@ -1152,6 +1158,24 @@ class _StartupDialogState extends State<StartupDialog> {
             'Utah Jazz',
             'Washington Wizards'
           ];
+        } else if (sport == 'wnba') {
+          availableTeams = [
+            'Atlanta Dream',
+            'Chicago Sky',
+            'Connecticut Sun',
+            'Dallas Wings',
+            'Golden State Valkyries',
+            'Indiana Fever',
+            'Las Vegas Aces',
+            'Los Angeles Sparks',
+            'Minnesota Lynx',
+            'New York Liberty',
+            'Phoenix Mercury',
+            'Portland Fire',
+            'Seattle Storm',
+            'Toronto Tempo',
+            'Washington Mystics',
+          ];
         } else if (sport == 'soccer') {
           availableTeams = [
             'Atlanta United FC',
@@ -1862,6 +1886,9 @@ class _StartupDialogState extends State<StartupDialog> {
   }
 
   Widget _buildSportSection() {
+    final isAdmin = AdminService.isCurrentUserAdminSync();
+    final isBaseball =
+        (widget.sport ?? '').toLowerCase().trim() == 'baseball';
     return _sectionCard(
       label: 'SPORT',
       children: [
@@ -1870,6 +1897,37 @@ class _StartupDialogState extends State<StartupDialog> {
           selectedSport: widget.sport,
           onSportSelected: _onSportSelected,
         ),
+        if (isAdmin) ...[
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              AppCompactCheckbox(
+                value: _useTank01MlbRosters,
+                onChanged: (v) async {
+                  final prefs = await PreferencesService.getInstance();
+                  await prefs.saveUseTank01MlbRosters(v);
+                  if (!mounted) return;
+                  setState(() => _useTank01MlbRosters = v);
+                },
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  isBaseball
+                      ? 'Use Tank01 MLB rosters (skip Firebase)'
+                      : 'Use Tank01 MLB rosters (baseball only; skip Firebase)',
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 10,
+                    fontVariations: const [FontVariation('wght', 600)],
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

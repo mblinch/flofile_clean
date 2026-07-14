@@ -64,6 +64,8 @@ class PreferencesService {
   static const String _keyHasLaunchedBefore = 'has_launched_before';
   /// When true, saving may prompt to apply captions across rapid (≤1s) sequences.
   static const String _keyBurstDetectionEnabled = 'burst_detection_enabled';
+  /// Admin-only: load MLB rosters from Tank01 RapidAPI instead of Firestore/MLB.
+  static const String _keyUseTank01MlbRosters = 'use_tank01_mlb_rosters';
   /// `none` | `on_import` | `on_save` — when startup IPTC template is applied.
   static const String _keyIptcApplyMode = 'iptc_apply_mode';
   static const String _keyApplyIptcOnImport = 'apply_iptc_on_import';
@@ -176,6 +178,17 @@ class PreferencesService {
   Future<void> saveBurstDetectionEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyBurstDetectionEnabled, enabled);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<bool> getUseTank01MlbRosters() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyUseTank01MlbRosters) ?? false;
+  }
+
+  Future<void> saveUseTank01MlbRosters(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyUseTank01MlbRosters, enabled);
     _afterLocalPreferencesChanged();
   }
 
@@ -1156,7 +1169,7 @@ class PreferencesService {
   }
 
   Future<Map<String, String>> _exportFavoriteCaptionStyleBySport() async {
-    const sports = ['baseball', 'hockey', 'basketball', 'soccer'];
+    const sports = ['baseball', 'hockey', 'basketball', 'wnba', 'soccer'];
     final out = <String, String>{};
     for (final sport in sports) {
       final token = await getFavoriteCaptionStyleToken(sport: sport);
@@ -1207,7 +1220,7 @@ class PreferencesService {
 
   /// Exports all preferences as JSON, including per-sport verb settings so they can be saved and passed on.
   Future<Map<String, dynamic>> exportAllPreferences() async {
-    const sports = ['baseball', 'hockey', 'basketball', 'soccer'];
+    const sports = ['baseball', 'hockey', 'basketball', 'wnba', 'soccer'];
     final verbSettingsBySport = <String, Map<String, dynamic>>{};
     for (final sport in sports) {
       verbSettingsBySport[sport] = {

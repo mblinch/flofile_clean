@@ -566,10 +566,13 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 width: 220,
                 child: DropdownFlutter<String>(
                   hintText: 'Select sport',
-                  items: const ['None', 'Baseball', 'Hockey', 'Basketball', 'Soccer'],
+                  items: const ['None', 'Baseball', 'Hockey', 'Basketball', 'WNBA', 'Soccer'],
                   initialItem: _sportForDefault.isEmpty
                       ? 'None'
-                      : _sportForDefault[0].toUpperCase() + _sportForDefault.substring(1),
+                      : (_sportForDefault == 'wnba'
+                          ? 'WNBA'
+                          : _sportForDefault[0].toUpperCase() +
+                              _sportForDefault.substring(1)),
                   closedHeaderPadding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   expandedHeaderPadding:
@@ -611,6 +614,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                       'Baseball': 'baseball',
                       'Hockey': 'hockey',
                       'Basketball': 'basketball',
+                      'WNBA': 'wnba',
                       'Soccer': 'soccer',
                     };
                     final v = map[label] ?? '';
@@ -761,8 +765,10 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             width: 220,
             child: DropdownFlutter<String>(
               hintText: 'Sport',
-              items: const ['Baseball', 'Hockey', 'Basketball', 'Soccer'],
-              initialItem: _publishSport[0].toUpperCase() + _publishSport.substring(1),
+              items: const ['Baseball', 'Hockey', 'Basketball', 'WNBA', 'Soccer'],
+              initialItem: _publishSport == 'wnba'
+                  ? 'WNBA'
+                  : _publishSport[0].toUpperCase() + _publishSport.substring(1),
               closedHeaderPadding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               expandedHeaderPadding:
@@ -786,6 +792,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   'Baseball': 'baseball',
                   'Hockey': 'hockey',
                   'Basketball': 'basketball',
+                  'WNBA': 'wnba',
                   'Soccer': 'soccer',
                 };
                 setState(() => _publishSport = map[label] ?? 'baseball');

@@ -308,41 +308,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
         ),
       ),
       title: Padding(
-        padding: const EdgeInsets.only(left: 20, right: 6),
+        padding: const EdgeInsets.only(left: 12, right: 4),
         child: _buildFileInfoTitle(),
       ),
       actions: [
+        const FloHeaderRestartButton(),
         if (AuthService.instance.isFirebaseReady &&
-            AuthService.instance.currentUser != null) ...[
-          Padding(
-            padding: const EdgeInsets.only(right: 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.account_circle,
-                    color: Colors.white70, size: 14),
-                const SizedBox(width: 4),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 220),
-                  child: Text(
-                    AuthService.instance.currentUser?.email ??
-                        AuthService.instance.currentUser?.displayName ??
-                        'Account',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          FloHeaderSignOutButton(
-            tooltip: 'Signed in as ${AuthService.instance.currentUser?.email ?? AuthService.instance.currentUser?.displayName ?? 'Account'}',
-          ),
-        ],
+            AuthService.instance.currentUser != null)
+          const FloHeaderSignedInAs(),
         IconButton(
           onPressed: () async {
             await showDialog(
@@ -408,7 +381,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
     final fileName = path.split('/').last;
 
-    // Format date/time from EXIF
+    // Format date/time from EXIF (Mon D, YYYY + HH:mm:ss)
     String dateTime = '';
     if (exif != null && exif['DateTimeOriginal'] != null) {
       final raw = exif['DateTimeOriginal'].toString();
@@ -428,15 +401,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           final monthName = (monthIdx >= 1 && monthIdx <= 12)
               ? months[monthIdx - 1]
               : dateParts[1];
-          final hour24 = int.tryParse(timeParts[0]) ?? 0;
-          final minute = timeParts[1];
-          final second = timeParts[2];
-          final ampm = hour24 >= 12 ? 'PM' : 'AM';
-          final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
-          // Append sub-second if available
-          final subSec = exif?['SubSecTimeOriginal']?.toString() ?? '';
-          final ms = subSec.isNotEmpty ? '.$subSec' : '';
-          dateTime = '$monthName $day, $year at $hour12:$minute:$second${ms} $ampm';
+          final hour = timeParts[0].padLeft(2, '0');
+          final minute = timeParts[1].padLeft(2, '0');
+          final second = timeParts[2].padLeft(2, '0');
+          dateTime = '$monthName $day, $year $hour:$minute:$second';
         } else {
           dateTime = raw;
         }
@@ -498,13 +466,13 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
 
     const sep = TextSpan(
       text: '    |    ',
-      style: TextStyle(color: Colors.white38, fontSize: 14, fontWeight: FontWeight.w200),
+      style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w400),
     );
 
     const sepStrong = sep;
 
     const TextStyle _bold = TextStyle(
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: FontWeight.w600,
       color: Colors.white70,
       height: 1.0,
@@ -536,7 +504,11 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
         ),
       ],
       if (focalStr.isNotEmpty) ...[sep, TextSpan(text: focalStr, style: _regular)],
-      if (isoStr.isNotEmpty) ...[sep, TextSpan(text: isoStr, style: _regular)],
+      if (isoStr.isNotEmpty) ...[
+        sep,
+        TextSpan(text: isoStr, style: _regular),
+        sep,
+      ],
     ];
 
     return Row(
@@ -546,23 +518,23 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       children: [
         // Counter badge on the far left
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(3),
           ),
           child: Text(
-            '${idx + 1} / $total',
+            '${idx + 1}/$total',
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               color: Colors.white,
               height: 1.0,
-              letterSpacing: 0.3,
+              letterSpacing: 0.2,
             ),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         // Remaining file info
         Flexible(
           child: RichText(

@@ -1,16 +1,22 @@
 import 'mlb_api_service.dart'; // TeamInfo, Player
 import 'nhl_api_service.dart';
 import 'nba_api_service.dart';
+import 'wnba_api_service.dart';
 import 'mls_api_service.dart';
+import 'preferences_service.dart';
 import 'roster_firestore_service.dart';
+import 'tank01_mlb_api_service.dart';
 
 /// Routes team and roster requests by sport.
-/// Baseball = MLB API, Hockey = NHL API, Basketball = ESPN NBA, Soccer = ESPN MLS (usa.1).
+/// Baseball = MLB API (or Tank01 when admin toggle is on), Hockey = NHL API,
+/// Basketball = ESPN NBA, WNBA = ESPN WNBA, Soccer = ESPN MLS (usa.1).
 class ApiManager {
   final MlbApiService _mlbService = MlbApiService();
   final NhlApiService _nhlService = NhlApiService();
   final NbaApiService _nbaService = NbaApiService();
+  final WnbaApiService _wnbaService = WnbaApiService();
   final MlsApiService _mlsService = MlsApiService();
+  final Tank01MlbApiService _tank01MlbService = Tank01MlbApiService();
 
   String _currentSport = 'baseball';
 
@@ -27,14 +33,26 @@ class ApiManager {
     print('API Manager: Switched to $_currentSport mode using ${_apiDisplayName()}');
   }
 
-  String _apiDisplayName() {
+  Future<bool> _useTank01MlbRosters() async {
+    if (_currentSport != 'baseball') return false;
+    try {
+      final prefs = await PreferencesService.getInstance();
+      return await prefs.getUseTank01MlbRosters();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String _apiDisplayName({bool tank01Mlb = false}) {
     switch (_currentSport) {
       case 'baseball':
-        return 'MLB API';
+        return tank01Mlb ? 'Tank01 MLB (RapidAPI)' : 'MLB API';
       case 'hockey':
         return 'NHL API';
       case 'basketball':
         return 'ESPN NBA API';
+      case 'wnba':
+        return 'ESPN WNBA API';
       case 'soccer':
         return 'MLS (ESPN)';
       default:
@@ -53,6 +71,8 @@ class ApiManager {
           return await _nhlService.fetchAllTeams();
         case 'basketball':
           return await _nbaService.fetchAllTeams();
+        case 'wnba':
+          return await _wnbaService.fetchAllTeams();
         case 'soccer':
           return await _mlsService.fetchAllTeams();
         default:
@@ -71,6 +91,16 @@ class ApiManager {
     try {
       switch (_currentSport) {
         case 'baseball':
+          final useTank01 = await _useTank01MlbRosters();
+          if (useTank01) {
+            print(
+                'API Manager: Fetching baseball roster for "$teamName" from Tank01 (skipping Firestore)');
+            final roster =
+                await _tank01MlbService.fetchRosterByTeamName(teamName);
+            print(
+                'API Manager: Loaded ${roster.length} players from Tank01 for "$teamName"');
+            return roster;
+          }
           final team = await _mlbService.findTeamByName(teamName);
           if (team == null) throw Exception('MLB team not found: "$teamName"');
           final cached =
@@ -135,6 +165,26 @@ class ApiManager {
             headCoach: nbaRoster.headCoach,
           );
           return nbaRoster.players;
+        case 'wnba':
+          final wnbaTeam = await _wnbaService.findTeamByName(teamName);
+          if (wnbaTeam == null) {
+            throw Exception('WNBA team not found: "$teamName"');
+          }
+          final wnbaCached = await _readRosterFromFirestoreIfAvailable(
+            'wnba',
+            wnbaTeam.id,
+          );
+          if (wnbaCached != null) return wnbaCached;
+          final wnbaRoster =
+              await _wnbaService.fetchRosterWithHeadCoachByTeamId(wnbaTeam.id);
+          await _maybeSyncRosterToFirestore(
+            'wnba',
+            wnbaTeam.id,
+            wnbaRoster.players,
+            teamDisplayName: teamName,
+            headCoach: wnbaRoster.headCoach,
+          );
+          return wnbaRoster.players;
         case 'soccer':
           final mlsTeam = await _mlsService.findTeamByName(teamName);
           if (mlsTeam == null) {
@@ -261,6 +311,8 @@ class ApiManager {
           return await _nhlService.findTeamByName(teamName);
         case 'basketball':
           return await _nbaService.findTeamByName(teamName);
+        case 'wnba':
+          return await _wnbaService.findTeamByName(teamName);
         case 'soccer':
           return await _mlsService.findTeamByName(teamName);
         default:
@@ -290,6 +342,13 @@ class ApiManager {
       case 'basketball':
         return {
           'headCoach': await _nbaService.fetchHeadCoachByTeamName(teamName),
+          'pitchingCoach': null,
+          'firstBaseCoach': null,
+          'thirdBaseCoach': null,
+        };
+      case 'wnba':
+        return {
+          'headCoach': await _wnbaService.fetchHeadCoachByTeamName(teamName),
           'pitchingCoach': null,
           'firstBaseCoach': null,
           'thirdBaseCoach': null,

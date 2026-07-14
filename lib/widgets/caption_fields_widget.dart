@@ -796,6 +796,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'Favorites',
         ];
       case 'basketball':
+      case 'wnba':
         return [
           'Offense',
           'Defense',
@@ -5605,6 +5606,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   Widget _buildInlineInningBar() {
     final sport = _currentSport.toLowerCase();
+    final isBasketball = SportVerbCategories.usesBasketballRules(sport);
     String label;
     int count;
     switch (sport) {
@@ -5613,6 +5615,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         count = 3;
         break;
       case 'basketball':
+      case 'wnba':
         label = 'Quarter';
         count = 4;
         break;
@@ -5660,7 +5663,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   _inningPill('Extra', count + 1),
                 if (sport == 'hockey')
                   _inningPill('OT', count + 1),
-                if (sport == 'basketball')
+                if (isBasketball)
                   _inningPill('OT', count + 1),
                 if (sport == 'soccer')
                   _inningPill('ET', count + 1),
@@ -16701,8 +16704,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         } else if (_isPriorToGame) {
           inningPart = ' prior to the game';
         }
-      } else if (widget.sport?.toLowerCase() == 'basketball') {
-        // Basketball mode: use quarters
+      } else if (SportVerbCategories.usesBasketballRules(
+          widget.sport?.toLowerCase() ?? '')) {
+        // Basketball/WNBA mode: use quarters
         if (_selectedPeriod != null) {
           inningPart = _getBasketballQuarterText(_selectedPeriod!);
         } else if (_isPriorToGame) {
@@ -16873,8 +16877,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'NOTE TO USER: User expressly acknowledges and agrees that, by downloading '
         'and/or using this Photograph, user is consenting to the terms and conditions '
         'of the Getty Images License Agreement.';
-    final isGetty =
-        byline.toLowerCase().contains('getty images') && sport == 'basketball';
+    final isGetty = byline.toLowerCase().contains('getty images') &&
+        SportVerbCategories.usesBasketballRules(sport);
     final disclaimerPart = isGetty ? ' $_gettyDisclaimer' : '';
 
     final captionBody = (

@@ -8,6 +8,7 @@ import 'dart:math' as math;
 import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
+import '../utils/image_file_operations.dart';
 import '../flo_layout_constants.dart';
 
 // Public interface for the picture preview widget state
@@ -1233,47 +1234,44 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
   // Delete image
   void _deleteImage(String imagePath) async {
     try {
-      final file = File(imagePath);
-      if (await file.exists()) {
-        await file.delete();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Deleted: ${p.basename(imagePath)}'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
+      await deleteImageFromDisk(imagePath);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Deleted: ${p.basename(imagePath)}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+
+      widget.onImageDeleted?.call(imagePath);
+
+      final currentIndex = widget.currentIndex;
+      final totalImages = widget.imagePaths.length;
+
+      if (totalImages > 1) {
+        if (currentIndex < totalImages - 1) {
+          widget.onImageSelected(currentIndex + 1);
+        } else if (currentIndex > 0) {
+          widget.onImageSelected(currentIndex - 1);
+        }
+      }
+
+      print('Successfully deleted: $imagePath');
+    } on FileSystemException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.message == 'File not found'
+                  ? 'File not found'
+                  : 'Error deleting file: ${e.message}',
             ),
-          );
-        }
-
-        // Notify parent about deletion to update thumbnail grid
-        widget.onImageDeleted?.call(imagePath);
-
-        // Navigate to next image after deletion
-        final currentIndex = widget.currentIndex;
-        final totalImages = widget.imagePaths.length;
-
-        if (totalImages > 1) {
-          if (currentIndex < totalImages - 1) {
-            // Go to next image
-            widget.onImageSelected(currentIndex + 1);
-          } else if (currentIndex > 0) {
-            // Go to previous image if we're at the end
-            widget.onImageSelected(currentIndex - 1);
-          }
-        }
-
-        print('Successfully deleted: $imagePath');
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('File not found'),
-              backgroundColor: Colors.red,
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {

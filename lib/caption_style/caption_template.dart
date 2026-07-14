@@ -345,6 +345,7 @@ const Set<String> kKnownGameIdentifierDefaults = {
   'in their MLB game',
   'in their NHL game',
   'in their NBA game',
+  'in their WNBA game',
   'in their MLS match',
 };
 
@@ -360,6 +361,8 @@ String defaultGameIdentifierText(String? sport) {
     case 'basketball':
     case 'nba':
       return 'in their NBA game';
+    case 'wnba':
+      return 'in their WNBA game';
     case 'soccer':
     case 'mls':
       return 'in their MLS match';

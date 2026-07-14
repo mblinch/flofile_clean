@@ -8,7 +8,7 @@
 #
 # Fix:
 # 1) GTMAppAuth uses the login keychain (not Data Protection Keychain).
-# 2) GIDSignIn treats keychain save failure as non-fatal on macOS (Firebase Auth
+# 2) GIDSignIn skips GTMAppAuth keychain read/write on macOS (Firebase Auth
 #    persists the signed-in user separately).
 # 3) Skip macOS data-protection keychain migration in GIDAuthStateMigration.
 # 4) FirebaseAuth uses the file-based login keychain on macOS instead of the Data
@@ -182,6 +182,21 @@ new_save = """- (BOOL)saveAuthState:(OIDAuthState *)authState {
 #endif
 }"""
 
+old_load = """- (OIDAuthState *)loadAuthState {
+  GTMAuthSession *authorization = [_keychainStore retrieveAuthSessionWithError:nil];
+  return authorization.authState;
+}"""
+new_load = """- (OIDAuthState *)loadAuthState {
+#if TARGET_OS_OSX
+  // FloFile patch: Firebase Auth persists the session on macOS. Never read Google
+  // tokens from the login keychain (avoids the separate "auth" keychain prompt).
+  return nil;
+#else
+  GTMAuthSession *authorization = [_keychainStore retrieveAuthSessionWithError:nil];
+  return authorization.authState;
+#endif
+}"""
+
 old_migration = """- (void)performDataProtectedMigrationIfNeeded {
   // See if we've performed the migration check previously.
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];"""
@@ -218,6 +233,12 @@ if "FloFile patch: on macOS Developer ID builds the signed-in user is persisted 
     if old_save not in gid_text:
         raise SystemExit("Could not find GIDSignIn saveAuthState to patch")
     gid_text = gid_text.replace(old_save, new_save, 1)
+    gid_signin_path.write_text(gid_text)
+    changed = True
+if "FloFile patch: Firebase Auth persists the session on macOS. Never read Google" not in gid_text:
+    if old_load not in gid_text:
+        raise SystemExit("Could not find GIDSignIn loadAuthState to patch")
+    gid_text = gid_text.replace(old_load, new_load, 1)
     gid_signin_path.write_text(gid_text)
     changed = True
 

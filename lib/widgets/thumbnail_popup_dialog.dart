@@ -9,6 +9,7 @@ class ThumbnailPopupDialog extends StatefulWidget {
   final List<String> imagePaths;
   final int currentIndex;
   final Function(int) onImageSelected;
+  final void Function(String imagePath)? onRequestDelete;
   final VoidCallback? onEditMetadata;
 
   /// Images that have had IPTC saved successfully in this session (or restored from prefs).
@@ -27,6 +28,7 @@ class ThumbnailPopupDialog extends StatefulWidget {
     required this.imagePaths,
     required this.currentIndex,
     required this.onImageSelected,
+    this.onRequestDelete,
     this.onEditMetadata,
     this.savedImages = const {},
     required this.uploadedImages,
@@ -275,9 +277,9 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
         // Note: This would need to be implemented in the parent widget
         Navigator.of(context).pop();
       } else if (value == 'delete') {
-        // Delete image
-        // Note: This would need to be implemented in the parent widget
+        final imagePath = widget.imagePaths[index];
         Navigator.of(context).pop();
+        widget.onRequestDelete?.call(imagePath);
       }
     });
   }

@@ -220,14 +220,33 @@ class SportVerbCategories {
     'baseball': 'Single',
     'hockey': 'Skates',
     'basketball': 'Shoots',
+    'wnba': 'Shoots',
     'soccer': 'Dribbles',
   };
+
+  /// Basketball and WNBA share quarter-based timing and the same verb lists.
+  static bool usesBasketballRules(String sport) {
+    final s = sport.toLowerCase().trim();
+    return s == 'basketball' || s == 'wnba';
+  }
+
+  static String displayLabel(String sport) {
+    switch (sport.toLowerCase().trim()) {
+      case 'wnba':
+        return 'WNBA';
+      default:
+        final s = sport.trim();
+        if (s.isEmpty) return s;
+        return s[0].toUpperCase() + s.substring(1);
+    }
+  }
 
   static Map<String, List<String>> forSport(String sport) {
     switch (sport.toLowerCase().trim()) {
       case 'hockey':
         return hockey;
       case 'basketball':
+      case 'wnba':
         return basketball;
       case 'soccer':
         return soccer;

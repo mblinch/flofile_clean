@@ -39,6 +39,12 @@ class SportSelectionDialog extends StatelessWidget {
             compact: true,
           ),
           _buildSportCard(
+            'WNBA',
+            Icons.sports_basketball,
+            const Color(0xFF7B1FA2),
+            compact: true,
+          ),
+          _buildSportCard(
             'Soccer',
             Icons.sports_soccer,
             const Color(0xFF1B5E20),
@@ -102,6 +108,11 @@ class SportSelectionDialog extends StatelessWidget {
               'Basketball',
               Icons.sports_basketball,
               const Color(0xFFFF6F00),
+            ),
+            _buildSportCard(
+              'WNBA',
+              Icons.sports_basketball,
+              const Color(0xFF7B1FA2),
             ),
             _buildSportCard(
               'Soccer',

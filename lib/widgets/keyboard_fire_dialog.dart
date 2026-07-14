@@ -11,8 +11,11 @@ import '../utils/default_verb_keywords.dart';
 import '../utils/home_run_type_ui.dart';
 import 'verb_keyword_quick_bar.dart';
 import '../caption_style/verb_sub_options.dart';
+import '../caption_style/sport_verb_categories.dart';
 import '../flo_layout_constants.dart';
+import '../services/admin_service.dart';
 import '../utils/baseball_tags_popup_rows.dart';
+import 'admin_screen.dart';
 import 'app_compact_checkbox.dart';
 import 'caption_layout_builder_dialog.dart';
 
@@ -2983,6 +2986,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               }).toList(),
             ),
           ],
+          if (AdminService.isCurrentUserAdminSync())
+            _buildAdminRosterCompareAfterPlayers(),
           _buildRosterCoachScrollSuffix(isHomeTeam),
         ],
       ),
@@ -3484,13 +3489,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   padding: const EdgeInsets.fromLTRB(3, 2, 3, 3),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: _buildRosterRows(
-                      roster,
-                      isHomeTeam,
-                      barText: barText,
-                      listFontSize: listFont,
-                      listRowHeight: listRowH,
-                    ),
+                    children: [
+                      ..._buildRosterRows(
+                        roster,
+                        isHomeTeam,
+                        barText: barText,
+                        listFontSize: listFont,
+                        listRowHeight: listRowH,
+                      ),
+                      if (AdminService.isCurrentUserAdminSync())
+                        _buildAdminRosterCompareAfterPlayers(),
+                    ],
                   ),
                 ),
               );
@@ -3502,6 +3511,24 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           child: _buildRosterCoachScrollSuffix(isHomeTeam),
         ),
       ],
+    );
+  }
+
+  Widget _buildAdminRosterCompareAfterPlayers() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(3, 8, 3, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: ElevatedGreyButton(
+          label: 'Compare rosters',
+          fontSize: 10,
+          icon: Icons.compare_arrows,
+          onPressed: () => AdminScreen.open(
+            context,
+            openRosterCompare: true,
+          ),
+        ),
+      ),
     );
   }
 
@@ -5609,7 +5636,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         return 'hockey';
       }
     })();
-    final isBasketball = sport == 'basketball';
+    final isBasketball = SportVerbCategories.usesBasketballRules(sport);
     final isBaseball = sport == 'baseball';
     final isSoccer = sport == 'soccer';
     final periodLabels = isBasketball
