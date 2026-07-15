@@ -46,8 +46,8 @@ RELEASE_DIR="build/release"
 ZIP_PATH="$RELEASE_DIR/$ZIP_NAME"
 APPCAST_PATH="docs/appcast.xml"
 PAGES_BASE="https://mblinch.github.io/flofile_clean"
-# Single zip URL for GitHub Pages (zip lives at docs/FloFileBeta.zip)
-PAGES_ZIP_URL="${PAGES_BASE}/FloFileBeta.zip"
+# Zip is hosted on GitHub Releases (docs/*.zip is gitignored; Pages can't serve the 50MB+ zip).
+PAGES_ZIP_URL="https://github.com/mblinch/flofile_clean/releases/download/v${SHORT_VERSION}/FloFileBeta.zip"
 DOCS_ZIP_PATH="docs/FloFileBeta.zip"
 
 # sign_update: DerivedData if found, else tools/bin; override with SIGN_UPDATE
@@ -134,7 +134,22 @@ if [ -f "$APPCAST_PATH" ]; then
   echo "Updated $APPCAST_PATH"
 fi
 
+# 9) Upload zip to GitHub Releases (appcast points here; Pages can't host the zip).
+if command -v gh >/dev/null 2>&1; then
+  if gh release view "v${SHORT_VERSION}" >/dev/null 2>&1; then
+    echo "Release v${SHORT_VERSION} already exists; uploading zip asset..."
+    gh release upload "v${SHORT_VERSION}" "$DOCS_ZIP_PATH" --clobber
+  else
+    echo "Creating GitHub release v${SHORT_VERSION}..."
+    gh release create "v${SHORT_VERSION}" "$DOCS_ZIP_PATH" \
+      --title "FloFile Beta ${SHORT_VERSION}" \
+      --notes "Release ${SHORT_VERSION} (build ${SPARKLE_VERSION})."
+  fi
+else
+  echo "Warning: gh not found. Create release manually and upload $DOCS_ZIP_PATH."
+fi
+
 echo ""
-echo "Next: review, then commit and push docs/appcast.xml and docs/FloFileBeta.zip"
-echo "  git add docs/appcast.xml docs/FloFileBeta.zip && git commit -m 'Release ${SHORT_VERSION}' && git push origin main"
+echo "Next: commit and push docs/appcast.xml (and pubspec.yaml)"
+echo "  git add docs/appcast.xml pubspec.yaml && git commit -m 'Release ${SHORT_VERSION}' && git push origin main"
 echo "Done."
