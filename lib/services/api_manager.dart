@@ -1,3 +1,4 @@
+import '../config/tank01_config.dart';
 import 'mlb_api_service.dart'; // TeamInfo, Player
 import 'nhl_api_service.dart';
 import 'nba_api_service.dart';
@@ -5,18 +6,17 @@ import 'wnba_api_service.dart';
 import 'mls_api_service.dart';
 import 'preferences_service.dart';
 import 'roster_firestore_service.dart';
-import 'tank01_mlb_api_service.dart';
+import 'tank01_api_service.dart';
 
 /// Routes team and roster requests by sport.
-/// Baseball = MLB API (or Tank01 when admin toggle is on), Hockey = NHL API,
-/// Basketball = ESPN NBA, WNBA = ESPN WNBA, Soccer = ESPN MLS (usa.1).
+/// With admin Tank01 toggle: baseball / basketball / hockey / wnba use Tank01
+/// RapidAPI (skip Firestore). Soccer has no Tank01 product and always uses ESPN MLS.
 class ApiManager {
   final MlbApiService _mlbService = MlbApiService();
   final NhlApiService _nhlService = NhlApiService();
   final NbaApiService _nbaService = NbaApiService();
   final WnbaApiService _wnbaService = WnbaApiService();
   final MlsApiService _mlsService = MlsApiService();
-  final Tank01MlbApiService _tank01MlbService = Tank01MlbApiService();
 
   String _currentSport = 'baseball';
 
@@ -33,26 +33,29 @@ class ApiManager {
     print('API Manager: Switched to $_currentSport mode using ${_apiDisplayName()}');
   }
 
-  Future<bool> _useTank01MlbRosters() async {
-    if (_currentSport != 'baseball') return false;
+  Future<bool> _useTank01Rosters() async {
+    if (!tank01SupportsSport(_currentSport)) return false;
     try {
       final prefs = await PreferencesService.getInstance();
-      return await prefs.getUseTank01MlbRosters();
+      return await prefs.getUseTank01Rosters();
     } catch (_) {
       return false;
     }
   }
 
-  String _apiDisplayName({bool tank01Mlb = false}) {
+  Tank01ApiService _tank01ForCurrentSport() =>
+      Tank01ApiService.forSport(_currentSport);
+
+  String _apiDisplayName({bool tank01 = false}) {
     switch (_currentSport) {
       case 'baseball':
-        return tank01Mlb ? 'Tank01 MLB (RapidAPI)' : 'MLB API';
+        return tank01 ? 'Tank01 MLB (RapidAPI)' : 'MLB API';
       case 'hockey':
-        return 'NHL API';
+        return tank01 ? 'Tank01 NHL (RapidAPI)' : 'NHL API';
       case 'basketball':
-        return 'ESPN NBA API';
+        return tank01 ? 'Tank01 NBA (RapidAPI)' : 'ESPN NBA API';
       case 'wnba':
-        return 'ESPN WNBA API';
+        return tank01 ? 'Tank01 WNBA (RapidAPI)' : 'ESPN WNBA API';
       case 'soccer':
         return 'MLS (ESPN)';
       default:
@@ -86,21 +89,22 @@ class ApiManager {
 
   /// Fetches the roster for [teamName] in the current sport.
   Future<List<Player>> fetchTeamRoster(String teamName) async {
+    final useTank01 = await _useTank01Rosters();
     print(
-        'API Manager: Fetching $_currentSport roster for "$teamName" from ${_apiDisplayName()}');
+        'API Manager: Fetching $_currentSport roster for "$teamName" from ${_apiDisplayName(tank01: useTank01)}');
     try {
+      if (useTank01) {
+        print(
+            'API Manager: Fetching $_currentSport roster for "$teamName" from Tank01 (skipping Firestore)');
+        final roster =
+            await _tank01ForCurrentSport().fetchRosterByTeamName(teamName);
+        print(
+            'API Manager: Loaded ${roster.length} players from Tank01 for "$teamName"');
+        return roster;
+      }
+
       switch (_currentSport) {
         case 'baseball':
-          final useTank01 = await _useTank01MlbRosters();
-          if (useTank01) {
-            print(
-                'API Manager: Fetching baseball roster for "$teamName" from Tank01 (skipping Firestore)');
-            final roster =
-                await _tank01MlbService.fetchRosterByTeamName(teamName);
-            print(
-                'API Manager: Loaded ${roster.length} players from Tank01 for "$teamName"');
-            return roster;
-          }
           final team = await _mlbService.findTeamByName(teamName);
           if (team == null) throw Exception('MLB team not found: "$teamName"');
           final cached =

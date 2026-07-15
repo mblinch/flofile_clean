@@ -96,6 +96,9 @@ class KeyboardFirePanel extends StatefulWidget {
   /// Optional widget injected to the right of the teams/verbs row.
   final Widget? trailingSidebar;
 
+  /// When true (sidebar Keyword mode), always show the Keywords box.
+  final bool keywordModeEnabled;
+
   const KeyboardFirePanel({
     super.key,
     required this.homeRoster,
@@ -120,6 +123,7 @@ class KeyboardFirePanel extends StatefulWidget {
     this.ftpDisabled = false,
     this.currentFtpProfile,
     this.trailingSidebar,
+    this.keywordModeEnabled = false,
   });
 
   @override
@@ -1016,6 +1020,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   @override
   void initState() {
     super.initState();
+    if (widget.keywordModeEnabled) {
+      _showKeywordsField = true;
+    }
     _syncRostersFromWidget();
     _refreshCoachLabel(isHome: true);
     _refreshCoachLabel(isHome: false);
@@ -1055,10 +1062,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     if (p == null || !mounted) return;
     setState(() {
       _showHeadlineField = p.captionFieldHeadlineVisibleSync;
-      _showKeywordsField = p.captionFieldKeywordsVisibleSync;
+      // Keyword mode from the parent wins over prefs when it is on.
+      _showKeywordsField =
+          widget.keywordModeEnabled || p.captionFieldKeywordsVisibleSync;
       _showPersonalityField = p.captionFieldPersonalityVisibleSync;
     });
   }
+
+  bool get _keywordsBoxVisible =>
+      widget.keywordModeEnabled || _showKeywordsField;
 
   // ── Keyword shortcut helpers ──────────────────────────────────────────────
 
@@ -1080,8 +1092,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   void _showKeywordShortcutContextMenu(int index, Offset position) async {
     final result = await showAppContextMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-          position.dx, position.dy, position.dx + 1, position.dy + 1),
+      position: appContextMenuPosition(context, position),
       color: Colors.grey.shade50,
       elevation: 3,
       items: [
@@ -1155,6 +1166,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
     if (oldWidget.awayTeamName != widget.awayTeamName) {
       _refreshCoachLabel(isHome: false);
+    }
+    if (widget.keywordModeEnabled && !oldWidget.keywordModeEnabled) {
+      setState(() => _showKeywordsField = true);
+      PreferencesService.getInstance().then((p) {
+        if (!mounted) return;
+        p.saveShowKeywordsField(true);
+      });
+    } else if (!widget.keywordModeEnabled && oldWidget.keywordModeEnabled) {
+      setState(() => _showKeywordsField = false);
     }
     // When image changes (next/previous), deselect verb and show "(last used)" beside it; reset firebar
     if (oldWidget.currentIndex != widget.currentIndex) {
@@ -1976,8 +1996,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   /// Caption with optional Personality/Headline/Keywords stacked vertically.
   Widget _buildKeyboardFireCaptionStrip() {
+    final showKeywords = _keywordsBoxVisible;
     final hasSecondary =
-        _showHeadlineField || _showKeywordsField || _showPersonalityField;
+        _showHeadlineField || showKeywords || _showPersonalityField;
 
     Widget _captionStyleBtn() => GestureDetector(
       onTap: () => CaptionLayoutBuilderDialog.show(context),
@@ -2011,7 +2032,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     if (_showHeadlineField) {
       cards.add(_buildKbLabeledBox('Headline', _buildHeadlineFieldKb()));
     }
-    if (_showKeywordsField) {
+    if (showKeywords) {
       cards.add(_buildKbLabeledBox('Keywords', _buildKeywordsFieldKb()));
     }
 
@@ -3322,19 +3343,28 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
   }
 
-  Future<void> _persistShowKeywordsFieldFromToggles() async {
-    final shouldShow =
-        _applyVerbKeywordsEnabledKb || _applyPlayerNamesToKeywordsEnabledKb;
-    if (_showKeywordsField == shouldShow) return;
-    setState(() => _showKeywordsField = shouldShow);
-    try {
-      await _prefsService?.saveShowKeywordsField(shouldShow);
-    } catch (_) {}
-  }
-
   /// Called externally (e.g. from sidebar) to sync internal keyword state.
-  Future<void> setKeywordVerbsEnabled(bool enabled) => _setApplyVerbKeywordsKb(enabled);
-  Future<void> setKeywordNamesEnabled(bool enabled) => _setApplyPlayerNamesToKeywordsKb(enabled);
+  Future<void> setKeywordVerbsEnabled(bool enabled) =>
+      _setApplyVerbKeywordsKb(enabled);
+  Future<void> setKeywordNamesEnabled(bool enabled) =>
+      _setApplyPlayerNamesToKeywordsKb(enabled);
+
+  /// Force Keywords box visibility (Keyword mode master toggle / startup sync).
+  Future<void> setKeywordsFieldVisible(bool show) async {
+    if (_showKeywordsField != show) {
+      setState(() => _showKeywordsField = show);
+    }
+    try {
+      final p = _prefsService ?? await PreferencesService.getInstance();
+      _prefsService ??= p;
+      await p.saveShowKeywordsField(show);
+    } catch (_) {}
+    if (show) {
+      try {
+        (widget.captionState as dynamic).reapplyVerbKeywordsIfEnabled();
+      } catch (_) {}
+    }
+  }
 
   /// Clears home/away player search bars after save.
   void clearPlayerSearchBars() {
@@ -3346,7 +3376,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   }
 
   Future<void> _setApplyVerbKeywordsKb(bool enabled) async {
-    if (_applyVerbKeywordsEnabledKb == enabled) return;
+    if (_applyVerbKeywordsEnabledKb == enabled) {
+      if (enabled) {
+        try {
+          (widget.captionState as dynamic).reapplyVerbKeywordsIfEnabled();
+        } catch (_) {}
+      }
+      return;
+    }
     setState(() => _applyVerbKeywordsEnabledKb = enabled);
     try {
       await (widget.captionState as dynamic)
@@ -3356,7 +3393,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         await _prefsService?.saveApplyVerbKeywords(enabled);
       } catch (_) {}
     }
-    await _persistShowKeywordsFieldFromToggles();
   }
 
   Future<void> _setApplyPlayerNamesToKeywordsKb(bool enabled) async {
@@ -3370,7 +3406,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         await _prefsService?.saveApplyPlayerNamesToKeywords(enabled);
       } catch (_) {}
     }
-    await _persistShowKeywordsFieldFromToggles();
   }
 
   /// Same compact [CustomCheckBox] styling as caption layout date source.
@@ -4165,7 +4200,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       ? (state as dynamic)
                           .getVerbSubOptionsFromKeyboardFire(verb)
                       as VerbSubOptions
-                      : VerbSubOptions.defaultsFor(verb);
+                      : VerbSubOptions.defaultsFor(verb, sport: kbSport);
                   final showTagsMenu = isActive &&
                       kbSport == 'baseball' &&
                       VerbSubOptions.legacyTagsSubMenu(canonVerb);
@@ -4897,12 +4932,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
     showAppContextMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx + 1,
-        position.dy + 1,
-      ),
+      position: appContextMenuPosition(context, position),
       items: menuItems,
     ).then((value) async {
       if (value == 'pin' && catNum != null && verbNum != null) {
@@ -5157,12 +5187,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             ? (TapDownDetails details) {
                 showAppContextMenu<String>(
                   context: context,
-                  position: RelativeRect.fromLTRB(
-                    details.globalPosition.dx,
-                    details.globalPosition.dy,
-                    details.globalPosition.dx + 1,
-                    details.globalPosition.dy + 1,
-                  ),
+                  position: appContextMenuPosition(
+                      context, details.globalPosition),
                   items: [
                     const PopupMenuItem<String>(
                       value: 'ftp_settings',
@@ -6244,7 +6270,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: 124,
+          // Extra height when Keywords (and/or Personality) sit beside Caption.
+          height: _keywordsBoxVisible ||
+                  _showPersonalityField ||
+                  _showHeadlineField
+              ? 168
+              : 124,
           child: _buildKeyboardFireCaptionStrip(),
         ),
         if (!widget.showDialogActions) _buildPeriodPicker(),

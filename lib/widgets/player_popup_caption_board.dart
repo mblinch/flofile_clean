@@ -2598,12 +2598,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
     showAppContextMenu<String>(
       context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx,
-        position.dy,
-        position.dx + 1,
-        position.dy + 1,
-      ),
+      position: appContextMenuPosition(context, position),
       items: [
         PopupMenuItem<String>(
           value: 'toggle_favorite',
@@ -2708,7 +2703,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         targetCategory ?? verb.category ?? _verbCategories.keys.first;
     final keywordsController = TextEditingController(
         text: effectiveVerb.keywords.join(', '));
-    bool showKeywordsEditor = effectiveVerb.keywords.isNotEmpty;
 
     // Get random players for example captions
     final homePlayers = widget.homeRoster ?? _getMockHomePlayers();
@@ -2734,24 +2728,20 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     String buildExampleCaption(String verbPhrase, int playerCount) {
       final player1Name = homePlayer1?.fullName ?? 'Player One';
       final player2Name = homePlayer2?.fullName ?? 'Player Two';
-      final opponentName = awayPlayer?.fullName ?? 'Opponent';
       final againstText = omitAgainst ? '' : ' against';
 
+      String subjects(int count) => count == 1
+          ? '$player1Name #${homePlayer1?.jerseyNumber ?? '00'} of the $homeTeamName'
+          : '$player1Name #${homePlayer1?.jerseyNumber ?? '00'} and $player2Name #${homePlayer2?.jerseyNumber ?? '00'} of the $homeTeamName';
+
       if (removePlayerFromExample) {
-        // Remove opposing player, just show "against the [team]"
-        if (playerCount == 1) {
-          return '$player1Name #${homePlayer1?.jerseyNumber ?? '00'} of the $homeTeamName $verbPhrase$againstText the $awayTeamName';
-        } else {
-          return '$player1Name #${homePlayer1?.jerseyNumber ?? '00'} and $player2Name #${homePlayer2?.jerseyNumber ?? '00'} of the $homeTeamName $verbPhrase$againstText the $awayTeamName';
-        }
-      } else {
-        // Show full caption with opposing player
-        if (playerCount == 1) {
-          return '$player1Name #${homePlayer1?.jerseyNumber ?? '00'} of the $homeTeamName $verbPhrase$againstText $opponentName #${awayPlayer?.jerseyNumber ?? '00'} of the $awayTeamName';
-        } else {
-          return '$player1Name #${homePlayer1?.jerseyNumber ?? '00'} and $player2Name #${homePlayer2?.jerseyNumber ?? '00'} of the $homeTeamName $verbPhrase$againstText $opponentName #${awayPlayer?.jerseyNumber ?? '00'} of the $awayTeamName';
-        }
+        // No opposing player — show team fallback (matches live captions).
+        return '${subjects(playerCount)}$verbPhrase$againstText the $awayTeamName';
       }
+      if (awayPlayer == null) {
+        return '${subjects(playerCount)}$verbPhrase$againstText [no opposing player selected]';
+      }
+      return '${subjects(playerCount)}$verbPhrase$againstText ${awayPlayer.fullName} #${awayPlayer.jerseyNumber} of the $awayTeamName';
     }
 
     showDialog(
@@ -2846,6 +2836,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                         const SizedBox(height: 6),
                         AppDialogExamplePreview(
                           title: 'Example (2+ players)',
+                          enabled: usePluralPhrase,
                           text: buildExampleCaption(
                             usePluralPhrase
                                 ? pluralController.text
@@ -2854,64 +2845,19 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: showKeywordsEditor
-                                  ? TextField(
-                                      controller: keywordsController,
-                                      style: kAppDialogFieldTextStyle,
-                                      maxLines: 2,
-                                      onChanged: (_) => setDialogState(() {}),
-                                      decoration: appDialogFieldDecoration(
-                                        hintText:
-                                            'e.g., pitch, pitcher, pitching (comma-separated)',
-                                      ),
-                                    )
-                                  : InputDecorator(
-                                      decoration: appDialogFieldDecoration(),
-                                      child: Text(
-                                        keywordsController.text.trim().isEmpty
-                                            ? '—'
-                                            : keywordsController.text,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontFamily: 'Inter',
-                                          fontSize: 11,
-                                          color: keywordsController.text
-                                                  .trim()
-                                                  .isEmpty
-                                              ? Colors.grey.shade400
-                                              : Colors.grey.shade800,
-                                        ),
-                                      ),
-                                    ),
+                        AppDialogLabeledField(
+                          label: 'Keywords',
+                          bottomGap: 0,
+                          child: TextField(
+                            controller: keywordsController,
+                            style: kAppDialogFieldTextStyle,
+                            maxLines: 2,
+                            onChanged: (_) => setDialogState(() {}),
+                            decoration: appDialogFieldDecoration(
+                              hintText:
+                                  'e.g., pitch, pitcher, pitching (comma-separated)',
                             ),
-                            Tooltip(
-                              message: showKeywordsEditor
-                                  ? 'Hide keywords editor'
-                                  : 'Show keywords editor',
-                              child: IconButton(
-                                visualDensity: VisualDensity.compact,
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(
-                                    minWidth: 32, minHeight: 32),
-                                icon: Icon(
-                                  showKeywordsEditor
-                                      ? Icons.expand_less
-                                      : Icons.expand_more,
-                                  size: 20,
-                                  color: Colors.grey.shade700,
-                                ),
-                                onPressed: () => setDialogState(
-                                  () => showKeywordsEditor =
-                                      !showKeywordsEditor,
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                         const SizedBox(height: 10),
                         DropdownButtonFormField<String>(
@@ -4124,7 +4070,7 @@ class VerbOption {
     this.pluralPhrase,
     this.usePluralPhrase = true,
     List<String>? keywords,
-    this.wantsOpponent = false,
+    this.wantsOpponent = true,
     this.omitAgainst = false,
     this.isCustom = false,
     this.category,
@@ -4189,7 +4135,7 @@ class VerbOption {
       pluralPhrase: json['pluralPhrase'] as String?,
       usePluralPhrase: json['usePluralPhrase'] as bool? ?? true,
       keywords: verbKeywordsFromJson(json['keywords']),
-      wantsOpponent: json['wantsOpponent'] as bool? ?? false,
+      wantsOpponent: json['wantsOpponent'] as bool? ?? true,
       omitAgainst: json['omitAgainst'] as bool? ?? false,
       isCustom: json['isCustom'] as bool? ?? true,
       category: json['category'] as String?,

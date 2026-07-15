@@ -189,3 +189,15 @@ String mergeVerbKeywordFieldText(String current, List<String> toAppend) {
   }
   return merged.join(', ');
 }
+
+/// Removes keywords from comma-separated [current] (case-insensitive match).
+String removeVerbKeywordFieldText(String current, List<String> toRemove) {
+  if (toRemove.isEmpty) return current;
+  final removeLower =
+      toRemove.map((e) => e.trim().toLowerCase()).where((s) => s.isNotEmpty).toSet();
+  if (removeLower.isEmpty) return current;
+  final kept = parseVerbKeywordsField(current)
+      .where((k) => !removeLower.contains(k.toLowerCase()))
+      .toList();
+  return kept.join(', ');
+}

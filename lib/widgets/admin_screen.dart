@@ -11,8 +11,9 @@ import '../caption_style/wire_iptc_specs.dart';
 import '../flo_layout_constants.dart';
 import '../theme/auth_ui_constants.dart';
 import '../services/admin_service.dart';
+import '../services/api_manager.dart';
 import '../services/app_defaults_firestore_service.dart';
-import '../services/mlb_api_service.dart';
+import '../config/tank01_config.dart';
 import '../services/preferences_service.dart';
 import '../services/roster_compare_service.dart';
 import '../caption_style/verb_sub_options.dart';
@@ -77,7 +78,8 @@ class _AdminScreenState extends State<AdminScreen> {
   int _captionBuilderRevision = 0;
   Future<void> Function()? _flushCaptionBuilder;
 
-  List<String> _mlbTeamNames = const [];
+  List<String> _compareTeamNames = const [];
+  String _compareSport = 'baseball';
   String? _compareTeamA;
   String? _compareTeamB;
   bool _compareLoadingTeams = false;
@@ -132,8 +134,9 @@ class _AdminScreenState extends State<AdminScreen> {
       }
       _applyGameIdToCaptionDraft(_captionWire, _captionSport);
       _captionBuilderRevision++;
-      if (_mlbTeamNames.isEmpty) {
-        unawaited(_loadMlbTeamsForCompare());
+      _compareSport = await _prefs!.getCurrentSport();
+      if (_compareTeamNames.isEmpty) {
+        unawaited(_loadTeamsForCompare());
       }
     } catch (e) {
       _error = e.toString();
@@ -142,28 +145,29 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _loadMlbTeamsForCompare() async {
+  Future<void> _loadTeamsForCompare() async {
     if (!mounted) return;
     setState(() {
       _compareLoadingTeams = true;
       _compareError = null;
+      _compareTeamA = null;
+      _compareTeamB = null;
+      _compareReports = const [];
     });
     try {
-      final teams = await MlbApiService().fetchAllTeams();
+      final api = ApiManager()..setSport(_compareSport);
+      final teams = await api.fetchTeams();
       final names = teams.map((t) => t.name).toList()..sort();
       if (!mounted) return;
       setState(() {
-        _mlbTeamNames = names;
-        _compareTeamA ??= names.contains('Toronto Blue Jays')
-            ? 'Toronto Blue Jays'
-            : (names.isNotEmpty ? names.first : null);
-        _compareTeamB ??= names.contains('New York Yankees')
-            ? 'New York Yankees'
-            : (names.length > 1 ? names[1] : (names.isNotEmpty ? names.first : null));
+        _compareTeamNames = names;
+        _compareTeamA = names.isNotEmpty ? names.first : null;
+        _compareTeamB =
+            names.length > 1 ? names[1] : (names.isNotEmpty ? names.first : null);
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _compareError = 'Failed to load MLB teams: $e');
+      setState(() => _compareError = 'Failed to load $_compareSport teams: $e');
     } finally {
       if (mounted) setState(() => _compareLoadingTeams = false);
     }
@@ -182,6 +186,11 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() => _compareError = 'Pick at least one team.');
       return;
     }
+    if (!tank01SupportsSport(_compareSport)) {
+      setState(() => _compareError =
+          'Tank01 compare is not available for $_compareSport (no Tank01 product).');
+      return;
+    }
     setState(() {
       _compareRunning = true;
       _compareError = null;
@@ -191,7 +200,7 @@ class _AdminScreenState extends State<AdminScreen> {
       final service = RosterCompareService();
       final reports = <RosterCompareReport>[];
       for (final team in teams) {
-        reports.add(await service.compareTeam(team));
+        reports.add(await service.compareTeam(team, sportId: _compareSport));
       }
       if (!mounted) return;
       setState(() => _compareReports = reports);
@@ -220,6 +229,7 @@ class _AdminScreenState extends State<AdminScreen> {
       'verbOrder': <String, dynamic>{},
       'customVerbs': <Map<String, dynamic>>[],
       'verbOverrides': <String, dynamic>{},
+      'verbWordingDefaults': <String, dynamic>{},
       'customVerbWordings': <String, dynamic>{},
       'favoriteTeams': <String>[],
     };
@@ -241,6 +251,7 @@ class _AdminScreenState extends State<AdminScreen> {
       'verbOrder': await _prefs.getVerbOrder(sport: sport),
       'customVerbs': await _prefs.getCustomVerbs(sport: sport),
       'verbOverrides': await _prefs.getVerbOverrides(sport: sport),
+      'verbWordingDefaults': await _prefs.getVerbWordingDefaults(sport: sport),
       'customVerbWordings': await _prefs.getCustomVerbWordings(sport: sport),
       'favoriteTeams': (await _prefs.getFavoriteTeams(sport: sport)).toList(),
     };
@@ -551,7 +562,9 @@ class _AdminScreenState extends State<AdminScreen> {
           subOptions: VerbSubOptions.fromJson(
             meta?['subOptions'],
             verbLabel: label,
+            sport: _verbSport,
           ),
+          sport: _verbSport,
         ),
       );
     }
@@ -571,19 +584,27 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _editVerb(_AdminVerbRow row) async {
     final bundle = Map<String, dynamic>.from(_activeVerbBundle);
     final categories = _categoryOrder(bundle, _verbSport);
-    final result = await showDialog<_AdminVerbRow>(
+    final wordingDefaults = Map<String, dynamic>.from(
+      (bundle['verbWordingDefaults'] as Map?) ?? {},
+    );
+    final result = await showDialog<_AdminVerbEditResult>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.45),
-      builder: (ctx) => _VerbEditDialog(initial: row, categories: categories),
+      builder: (ctx) => _VerbEditDialog(
+        initial: row,
+        categories: categories,
+        alreadyRecordedAsDefault: wordingDefaults.containsKey(row.key),
+        sport: _verbSport,
+      ),
     );
     if (result == null) return;
 
-    if (result.isCustom) {
+    if (result.row.isCustom) {
       final list = ((bundle['customVerbs'] as List?) ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .toList();
       final idx = list.indexWhere((e) => e['label']?.toString() == row.key);
-      final map = result.toCustomVerbMap();
+      final map = result.row.toCustomVerbMap();
       if (idx >= 0) {
         list[idx] = map;
       } else {
@@ -594,16 +615,36 @@ class _AdminScreenState extends State<AdminScreen> {
       final overrides = Map<String, dynamic>.from(
         (bundle['verbOverrides'] as Map?) ?? {},
       );
-      overrides[row.key] = result.toOverrideMap();
+      overrides[row.key] = result.row.toOverrideMap();
       bundle['verbOverrides'] = overrides;
     }
+    if (result.recordAsDefault) {
+      wordingDefaults[result.row.key] = result.row.isCustom
+          ? result.row.toCustomVerbMap()
+          : result.row.toOverrideMap();
+      bundle['verbWordingDefaults'] = wordingDefaults;
+    }
     setState(() => _setActiveVerbBundle(bundle));
+    if (result.recordAsDefault && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Recorded "${result.row.label}" as a default for $_verbSport. '
+            'Publish to push it to Firebase.',
+            style: const TextStyle(fontSize: 11),
+          ),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: kFloTealLight,
+        ),
+      );
+    }
   }
 
   Future<void> _addVerb() async {
     final bundle = Map<String, dynamic>.from(_activeVerbBundle);
     final categories = _categoryOrder(bundle, _verbSport);
-    final result = await showDialog<_AdminVerbRow>(
+    final result = await showDialog<_AdminVerbEditResult>(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (ctx) => _VerbEditDialog(
@@ -618,18 +659,41 @@ class _AdminScreenState extends State<AdminScreen> {
             (c) => c != 'Favorites',
             orElse: () => categories.first,
           ),
+          sport: _verbSport,
         ),
         categories: categories,
         isNew: true,
+        sport: _verbSport,
       ),
     );
-    if (result == null || result.label.trim().isEmpty) return;
+    if (result == null || result.row.label.trim().isEmpty) return;
     final list = ((bundle['customVerbs'] as List?) ?? [])
         .map((e) => Map<String, dynamic>.from(e as Map))
         .toList();
-    list.add(result.toCustomVerbMap());
+    list.add(result.row.toCustomVerbMap());
     bundle['customVerbs'] = list;
+    if (result.recordAsDefault) {
+      final wordingDefaults = Map<String, dynamic>.from(
+        (bundle['verbWordingDefaults'] as Map?) ?? {},
+      );
+      wordingDefaults[result.row.key] = result.row.toCustomVerbMap();
+      bundle['verbWordingDefaults'] = wordingDefaults;
+    }
     setState(() => _setActiveVerbBundle(bundle));
+    if (result.recordAsDefault && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Recorded "${result.row.label}" as a default for $_verbSport. '
+            'Publish to push it to Firebase.',
+            style: const TextStyle(fontSize: 11),
+          ),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: kFloTealLight,
+        ),
+      );
+    }
   }
 
   void _deleteVerb(_AdminVerbRow row) {
@@ -864,6 +928,32 @@ class _AdminScreenState extends State<AdminScreen> {
                         ),
                       ),
                     ],
+                    if (_verbHasRecordedDefault(v.key)) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFF8E1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFFFFB300),
+                            width: 0.5,
+                          ),
+                        ),
+                        child: const Text(
+                          'Default',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF8A6D00),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 2),
@@ -873,6 +963,18 @@ class _AdminScreenState extends State<AdminScreen> {
                 ),
               ],
             ),
+          ),
+          _iconAction(
+            icon: _verbHasRecordedDefault(v.key)
+                ? Icons.star
+                : Icons.star_border,
+            tooltip: _verbHasRecordedDefault(v.key)
+                ? 'Already a recorded default — click to update from current wording'
+                : 'Set as default for app originals',
+            iconColor: _verbHasRecordedDefault(v.key)
+                ? const Color(0xFFFFB300)
+                : null,
+            onPressed: _busy ? null : () => _recordVerbAsDefault(v),
           ),
           _iconAction(
             icon: Icons.edit_outlined,
@@ -889,10 +991,59 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  bool _verbHasRecordedDefault(String key) {
+    final defaults = _activeVerbBundle['verbWordingDefaults'];
+    if (defaults is! Map) return false;
+    return defaults.containsKey(key);
+  }
+
+  void _recordVerbAsDefault(_AdminVerbRow row) {
+    final bundle = Map<String, dynamic>.from(_activeVerbBundle);
+    final wordingDefaults = Map<String, dynamic>.from(
+      (bundle['verbWordingDefaults'] as Map?) ?? {},
+    );
+    final map =
+        row.isCustom ? row.toCustomVerbMap() : row.toOverrideMap();
+    wordingDefaults[row.key] = map;
+    bundle['verbWordingDefaults'] = wordingDefaults;
+    if (row.isCustom) {
+      final list = ((bundle['customVerbs'] as List?) ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      final idx = list.indexWhere((e) => e['label']?.toString() == row.key);
+      if (idx >= 0) {
+        list[idx] = map;
+      } else {
+        list.add(map);
+      }
+      bundle['customVerbs'] = list;
+    } else {
+      final overrides = Map<String, dynamic>.from(
+        (bundle['verbOverrides'] as Map?) ?? {},
+      );
+      overrides[row.key] = map;
+      bundle['verbOverrides'] = overrides;
+    }
+    setState(() => _setActiveVerbBundle(bundle));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Recorded "${row.label}" as a default for $_verbSport. '
+          'Publish to push it to Firebase.',
+          style: const TextStyle(fontSize: 11),
+        ),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: kFloTealLight,
+      ),
+    );
+  }
+
   Widget _iconAction({
     required IconData icon,
     required String tooltip,
     required VoidCallback? onPressed,
+    Color? iconColor,
   }) {
     return Tooltip(
       message: tooltip,
@@ -903,7 +1054,11 @@ class _AdminScreenState extends State<AdminScreen> {
           borderRadius: BorderRadius.circular(4),
           child: Padding(
             padding: const EdgeInsets.all(4),
-            child: Icon(icon, size: 16, color: Colors.grey.shade600),
+            child: Icon(
+              icon,
+              size: 16,
+              color: iconColor ?? Colors.grey.shade600,
+            ),
           ),
         ),
       ),
@@ -929,7 +1084,8 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
         const SizedBox(height: 6),
         const Text(
-          'Edit the verb catalog published to Firebase. Users receive these on restore and first sign-in.',
+          'Edit the verb catalog published to Firebase. Users receive these on restore and first sign-in. '
+          'Use Set as Default on a verb to record its wording as the Reset baseline before you publish.',
           style: _bodyStyle,
         ),
         const SizedBox(height: 16),
@@ -1259,9 +1415,9 @@ class _AdminScreenState extends State<AdminScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Compare MLB rosters: Tank01 vs Firebase vs MLB Stats',
-          style: TextStyle(
+        Text(
+          'Compare $_compareSport rosters: Tank01 vs Firebase vs live API',
+          style: const TextStyle(
             fontFamily: 'Inter',
             fontSize: 14,
             fontWeight: FontWeight.w700,
@@ -1271,7 +1427,7 @@ class _AdminScreenState extends State<AdminScreen> {
         const SizedBox(height: 6),
         Text(
           'Use this after Go Time while captioning. Tank01 is the RapidAPI roster; '
-          'Firebase is your cached sports/.../players data; MLB Stats is the live official API.',
+          'Firebase is your cached sports/.../players data; live API is MLB Stats / NHL / ESPN depending on sport.',
           style: TextStyle(
             fontFamily: 'Inter',
             fontSize: 11,
@@ -1301,7 +1457,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 fontSize: 11,
                 icon: Icons.compare_arrows,
                 isTealGradient: true,
-                onPressed: _compareRunning || _mlbTeamNames.isEmpty
+                onPressed: _compareRunning || _compareTeamNames.isEmpty
                     ? null
                     : _runRosterCompare,
               ),
@@ -1311,7 +1467,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 fontSize: 11,
                 icon: Icons.refresh,
                 onPressed:
-                    _compareRunning ? null : _loadMlbTeamsForCompare,
+                    _compareRunning ? null : _loadTeamsForCompare,
               ),
             ],
           ),
@@ -1352,8 +1508,8 @@ class _AdminScreenState extends State<AdminScreen> {
         DropdownFlutter<String>(
           hintText: 'Select team',
           initialItem:
-              value != null && _mlbTeamNames.contains(value) ? value : null,
-          items: _mlbTeamNames,
+              value != null && _compareTeamNames.contains(value) ? value : null,
+          items: _compareTeamNames,
           closedHeaderPadding:
               const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           expandedHeaderPadding:
@@ -1402,12 +1558,12 @@ class _AdminScreenState extends State<AdminScreen> {
           _sourceLine(report.mlbStats),
           const SizedBox(height: 8),
           _diffBlock(
-            'Only in Tank01 (not MLB Stats)',
-            report.onlyInTank01VsMlb.map((p) => p.label).toList(),
+            'Only in Tank01 (not ${report.liveApi.source})',
+            report.onlyInTank01VsLive.map((p) => p.label).toList(),
           ),
           _diffBlock(
-            'Only in MLB Stats (not Tank01)',
-            report.onlyInMlbVsTank01.map((p) => p.label).toList(),
+            'Only in ${report.liveApi.source} (not Tank01)',
+            report.onlyInLiveVsTank01.map((p) => p.label).toList(),
           ),
           _diffBlock(
             'Only in Tank01 (not Firebase)',
@@ -1417,7 +1573,10 @@ class _AdminScreenState extends State<AdminScreen> {
             'Only in Firebase (not Tank01)',
             report.onlyInFirebaseVsTank01.map((p) => p.label).toList(),
           ),
-          _diffBlock('Jersey mismatches (Tank01 vs MLB)', report.jerseyMismatches),
+          _diffBlock(
+            'Jersey mismatches (Tank01 vs ${report.liveApi.source})',
+            report.jerseyMismatches,
+          ),
         ],
       ),
     );
@@ -1492,6 +1651,16 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 }
 
+class _AdminVerbEditResult {
+  const _AdminVerbEditResult({
+    required this.row,
+    this.recordAsDefault = false,
+  });
+
+  final _AdminVerbRow row;
+  final bool recordAsDefault;
+}
+
 class _AdminVerbRow {
   const _AdminVerbRow({
     required this.key,
@@ -1501,10 +1670,11 @@ class _AdminVerbRow {
     required this.pluralPhrase,
     this.usePluralPhrase = true,
     required this.category,
-    this.wantsOpponent = false,
+    this.wantsOpponent = true,
     this.omitAgainst = false,
     this.keywords = '',
     this.subOptions = const VerbSubOptions(),
+    this.sport = 'baseball',
   });
 
   final String key;
@@ -1518,6 +1688,7 @@ class _AdminVerbRow {
   final bool omitAgainst;
   final String keywords;
   final VerbSubOptions subOptions;
+  final String sport;
 
   Map<String, dynamic> toOverrideMap() => {
         'label': label,
@@ -1534,7 +1705,7 @@ class _AdminVerbRow {
               .map((e) => e.trim())
               .where((e) => e.isNotEmpty)
               .toList(),
-        if (subOptions.differsFromDefaults(label))
+        if (subOptions.differsFromDefaults(label, sport: sport))
           'subOptions': subOptions.toJson(),
       };
 
@@ -1549,11 +1720,15 @@ class _VerbEditDialog extends StatefulWidget {
     required this.initial,
     required this.categories,
     this.isNew = false,
+    this.alreadyRecordedAsDefault = false,
+    this.sport = 'baseball',
   });
 
   final _AdminVerbRow initial;
   final List<String> categories;
   final bool isNew;
+  final bool alreadyRecordedAsDefault;
+  final String sport;
 
   @override
   State<_VerbEditDialog> createState() => _VerbEditDialogState();
@@ -1593,6 +1768,30 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
     super.dispose();
   }
 
+  _AdminVerbRow _buildRow() => _AdminVerbRow(
+        key: widget.isNew ? _label.text.trim() : widget.initial.key,
+        isCustom: widget.isNew || widget.initial.isCustom,
+        label: _label.text.trim(),
+        verbPhrase: _phrase.text.trim(),
+        pluralPhrase: _plural.text.trim(),
+        usePluralPhrase: _usePluralPhrase,
+        category: _category,
+        wantsOpponent: _wantsOpponent,
+        omitAgainst: _omitAgainst,
+        keywords: _keywords.text.trim(),
+        subOptions: _subOptions,
+        sport: widget.sport,
+      );
+
+  void _popResult({required bool recordAsDefault}) {
+    final row = _buildRow();
+    if (row.label.isEmpty || row.verbPhrase.isEmpty) return;
+    Navigator.pop(
+      context,
+      _AdminVerbEditResult(row: row, recordAsDefault: recordAsDefault),
+    );
+  }
+
   Widget _captionFlagRow({
     required bool value,
     required String label,
@@ -1629,12 +1828,12 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
           surfaceTintColor: Colors.transparent,
           elevation: 8,
           shadowColor: Colors.black.withValues(alpha: 0.18),
-          titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
-          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-          title: Text(
-            widget.isNew ? 'Add verb' : 'Edit verb',
-            style: kAppDialogTitleStyle,
+          clipBehavior: Clip.antiAlias,
+          titlePadding: EdgeInsets.zero,
+          contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+          title: AppDialogTealTitleBar(
+            title: widget.isNew ? 'Add verb' : 'Edit verb',
           ),
           content: SizedBox(
             width: kVerbEditDialogWidth - 48,
@@ -1732,45 +1931,57 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                VerbEditSubOptionsSection(
+                if (VerbSubOptions.showEditorPanel(
+                  sport: widget.sport,
                   verbLabel: _label.text.trim().isEmpty
                       ? widget.initial.label
                       : _label.text.trim(),
                   value: _subOptions,
-                  onChanged: (v) => setState(() => _subOptions = v),
-                ),
+                ))
+                  VerbEditSubOptionsSection(
+                    sport: widget.sport,
+                    verbLabel: _label.text.trim().isEmpty
+                        ? widget.initial.label
+                        : _label.text.trim(),
+                    value: _subOptions,
+                    onChanged: (v) => setState(() => _subOptions = v),
+                  ),
               ],
             ),
           ),
+          actionsAlignment: MainAxisAlignment.end,
           actions: [
-            ElevatedGreyButton(
-              label: 'Cancel',
-              fontSize: 11,
-              onPressed: () => Navigator.pop(context),
-            ),
-            const SizedBox(width: 8),
-            ElevatedGreyButton(
-              label: 'Save',
-              fontSize: 11,
-              isPrimary: true,
-              onPressed: () {
-                Navigator.pop(
-                  context,
-                  _AdminVerbRow(
-                    key: widget.isNew ? _label.text.trim() : widget.initial.key,
-                    isCustom: widget.isNew || widget.initial.isCustom,
-                    label: _label.text.trim(),
-                    verbPhrase: _phrase.text.trim(),
-                    pluralPhrase: _plural.text.trim(),
-                    usePluralPhrase: _usePluralPhrase,
-                    category: _category,
-                    wantsOpponent: _wantsOpponent,
-                    omitAgainst: _omitAgainst,
-                    keywords: _keywords.text.trim(),
-                    subOptions: _subOptions,
+            SizedBox(
+              width: kVerbEditDialogWidth - 48,
+              child: Row(
+                children: [
+                  Tooltip(
+                    message: widget.alreadyRecordedAsDefault
+                        ? 'Update the recorded Reset baseline for this verb in the app originals'
+                        : 'Record this wording as the Reset baseline in app originals (then Publish)',
+                    child: ElevatedGreyButton(
+                      label: widget.alreadyRecordedAsDefault
+                          ? 'Update Default · Admin'
+                          : 'Set as Default · Admin',
+                      fontSize: 11,
+                      onPressed: () => _popResult(recordAsDefault: true),
+                    ),
                   ),
-                );
-              },
+                  const Spacer(),
+                  ElevatedGreyButton(
+                    label: 'Cancel',
+                    fontSize: 11,
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedGreyButton(
+                    label: 'Save',
+                    fontSize: 11,
+                    isPrimary: true,
+                    onPressed: () => _popResult(recordAsDefault: false),
+                  ),
+                ],
+              ),
             ),
           ],
         ),

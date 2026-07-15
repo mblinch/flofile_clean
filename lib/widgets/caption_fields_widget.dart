@@ -31,10 +31,10 @@ import '../caption_style/position_labels.dart';
 import '../caption_style/region_abbrev.dart';
 import 'app_compact_checkbox.dart';
 import '../caption_style/verb_sub_options.dart';
-import 'verb_edit_plural_field.dart';
-import 'verb_edit_sub_options_section.dart';
+import 'full_verb_edit_dialog.dart';
 import 'ftp_settings_panel.dart';
 import '../flo_layout_constants.dart';
+import '../services/admin_service.dart';
 
 // TextEditingController that can render inline highlights accurately inside the
 // TextField by overriding buildTextSpan. This keeps caret/selection perfectly
@@ -401,6 +401,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Map<String, String> _customVerbWordings = {}; // Custom wordings for verbs
   Map<String, Map<String, dynamic>> _verbOverrides =
       {}; // Verb phrase overrides from editor
+  /// Reset baselines for Edit Verb (per sport), set via "Set as Default".
+  Map<String, Map<String, dynamic>> _verbWordingDefaults = {};
   List<Map<String, dynamic>> _customVerbRecords = [];
   Set<String> _deletedVerbs = {}; // Verbs hidden from the list
 
@@ -586,6 +588,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       return VerbSubOptions.fromJson(
         _verbOverrides[label]!['subOptions'],
         verbLabel: label,
+        sport: _currentSport,
       );
     }
     for (final entry in _verbOverrides.entries) {
@@ -594,6 +597,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return VerbSubOptions.fromJson(
           o['subOptions'],
           verbLabel: o['label']?.toString() ?? entry.key,
+          sport: _currentSport,
         );
       }
     }
@@ -603,40 +607,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return VerbSubOptions.fromJson(
           c['subOptions'],
           verbLabel: label,
+          sport: _currentSport,
         );
       }
     }
 
-    return VerbSubOptions.defaultsFor(label);
+    return VerbSubOptions.defaultsFor(label, sport: _currentSport);
   }
 
   /// Keyboard Fire: sub-options for a verb row label.
   VerbSubOptions getVerbSubOptionsFromKeyboardFire(String verb) =>
       _verbSubOptionsFor(verb);
-
-  Widget _verbEditFlagCard({
-    required bool value,
-    required String label,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: appDialogCardDecoration(radius: 6),
-      child: Row(
-        children: [
-          AppCompactCheckbox(
-            value: value,
-            accentColor: kFloTealLight,
-            onChanged: onChanged,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(label, style: kAppDialogFieldTextStyle),
-          ),
-        ],
-      ),
-    );
-  }
 
   String _rbiShortcutExample() {
     // Map selected verb to its firebar shortcut letters
@@ -768,83 +749,75 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // TODO: Set to true to show firebar in future
   static const bool _showFirebar = false;
 
-  // Verb categories order (for drag and drop) - will be updated based on sport
+  // Verb categories order (for drag and drop) - Favorites always first
   List<String> _categoryOrder = [
+    'Favorites',
     'Offense',
     'Defense',
     'Pitching',
     'Running',
     'Reactions',
     'Non Game-Action',
-    'Favorites',
   ];
 
   /// Saved verb order from prefs (Keyboard Fire only; main caption grid uses default order).
   Map<String, List<String>> _verbOrderSnapshot = {};
 
-  // Get category order based on current sport
+  // Get category order based on current sport (Favorites always first).
   List<String> get categoryOrder {
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
     switch (sport) {
       case 'hockey':
         return [
+          'Favorites',
           'Offense',
           'Defense',
           'Goalie',
           'Non Game-Action',
           'Reactions',
-          'Favorites',
         ];
       case 'basketball':
       case 'wnba':
         return [
+          'Favorites',
           'Offense',
           'Defense',
           'Reactions',
           'Non Game-Action',
-          'Favorites',
         ];
       case 'soccer':
         return [
+          'Favorites',
           'Offense',
           'Defense',
           'Goalkeeper',
           'Set Pieces',
           'Non Game-Action',
           'Reactions',
-          'Favorites',
         ];
       case 'baseball':
       default:
         return [
+          'Favorites',
           'Offense',
           'Defense',
           'Pitching',
           'Running',
           'Reactions',
           'Non Game-Action',
-          'Favorites',
         ];
     }
+  }
+
+  /// Ensure Favorites stays at index 0 in [_categoryOrder].
+  void _pinFavoritesFirstInCategoryOrder() {
+    _categoryOrder.remove('Favorites');
+    _categoryOrder.insert(0, 'Favorites');
   }
 
   /// Deep copy of static verb maps for [sport] (no user ordering).
   Map<String, List<String>> _staticVerbMapForSport(String sport) =>
       SportVerbCategories.copyForSport(sport);
-
-  /// Merges [saved] order onto [defaults]: keeps saved order for known verbs, appends new defaults at end.
-  List<String> _mergeVerbOrderList(List<String> defaults, List<String>? saved) {
-    if (saved == null || saved.isEmpty) return List<String>.from(defaults);
-    final defSet = defaults.toSet();
-    final out = <String>[];
-    for (final v in saved) {
-      if (defSet.contains(v) && !out.contains(v)) out.add(v);
-    }
-    for (final v in defaults) {
-      if (!out.contains(v)) out.add(v);
-    }
-    return out;
-  }
 
   // Get verb categories based on current sport, filtering out deleted verbs
   Map<String, List<String>> get verbCategories {
@@ -859,19 +832,59 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
-  /// Same as [verbCategories] but merges [_verbOrderSnapshot] for Keyboard Fire display only.
+  /// Verb lists for Keyboard Fire + Edit Verb: saved order and cross-category moves.
   Map<String, List<String>> get _verbCategoriesForKeyboardFire {
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
     final Map<String, List<String>> base = _staticVerbMapForSport(sport);
-    final Map<String, List<String>> lists;
+    final allKnown = <String>{};
+    for (final verbs in base.values) {
+      for (final v in verbs) {
+        if (v.isNotEmpty) allKnown.add(v);
+      }
+    }
+
+    Map<String, List<String>> lists;
     if (_verbOrderSnapshot.isEmpty) {
       lists = base.map((k, v) => MapEntry(k, List<String>.from(v)));
     } else {
+      // First snapshot listing wins — supports moving a verb to another category.
+      final verbHome = <String, String>{};
+      for (final e in _verbOrderSnapshot.entries) {
+        if (e.key == 'Favorites') continue;
+        for (final v in e.value) {
+          if (v.isNotEmpty && allKnown.contains(v) && !verbHome.containsKey(v)) {
+            verbHome[v] = e.key;
+          }
+        }
+      }
+
       lists = {};
-      for (final e in base.entries) {
-        lists[e.key] = _mergeVerbOrderList(e.value, _verbOrderSnapshot[e.key]);
+      for (final cat in base.keys) {
+        final saved = _verbOrderSnapshot[cat];
+        final out = <String>[];
+        if (saved != null) {
+          for (final v in saved) {
+            if (!allKnown.contains(v) || out.contains(v)) continue;
+            if (verbHome[v] == cat) out.add(v);
+          }
+        }
+        for (final v in base[cat]!) {
+          if (v.isEmpty || out.contains(v)) continue;
+          final home = verbHome[v];
+          if (home != null && home != cat) continue;
+          out.add(v);
+        }
+        for (final e in verbHome.entries) {
+          if (e.value == cat &&
+              allKnown.contains(e.key) &&
+              !out.contains(e.key)) {
+            out.add(e.key);
+          }
+        }
+        lists[cat] = out;
       }
     }
+
     if (_deletedVerbs.isEmpty) return lists;
     return lists.map(
       (cat, verbs) => MapEntry(
@@ -2031,9 +2044,16 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return VerbCaptionWording.defaultWording(verb);
   }
 
-  // Helper method to get the true default wording (without checking custom wordings)
-  String _getTrueDefaultVerbWording(String verb) =>
-      VerbCaptionWording.defaultWording(verb);
+  // Helper method to get the true default wording (without checking custom wordings
+  // or active overrides). Prefer a user/sport "Set as Default" baseline when present.
+  String _getTrueDefaultVerbWording(String verb) {
+    final saved = _verbWordingDefaults[verb];
+    if (saved != null) {
+      final vp = (saved['verbPhrase'] as String?)?.trim();
+      if (vp != null && vp.isNotEmpty) return vp;
+    }
+    return VerbCaptionWording.defaultWording(verb);
+  }
 
   // Helper method to prefill the edit dialog with what the verb writes
   String _getDefaultVerbWordingForEdit(String verb) {
@@ -2096,6 +2116,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         await _preferencesService.getCustomVerbWordings(sport: _currentSport);
     _verbOverrides =
         await _preferencesService.getVerbOverrides(sport: _currentSport);
+    _verbWordingDefaults = await _preferencesService.getVerbWordingDefaults(
+        sport: _currentSport);
     print('DEBUG: Loaded custom verb wordings: $_customVerbWordings');
 
     final currentWording = _getDefaultVerbWordingForEdit(verb);
@@ -2421,12 +2443,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   void _onCaptionFieldVisibilityRevision() {
     if (!mounted) return;
+    final wasShowingKeywords = _showKeywordsField;
     setState(() {
       _showHeadlineField = _preferencesService.captionFieldHeadlineVisibleSync;
       _showKeywordsField = _preferencesService.captionFieldKeywordsVisibleSync;
       _showPersonalityField =
           _preferencesService.captionFieldPersonalityVisibleSync;
     });
+    // Field just became visible with keywording on — apply presets for the
+    // current verb immediately (don't wait for another selection).
+    if (!wasShowingKeywords && _showKeywordsField) {
+      _reapplyVerbKeywordsIfEnabled();
+    }
   }
 
   void _syncKeyboardFireCaptionNotifier() {
@@ -2488,6 +2516,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         await _preferencesService.getCategoryOrder(sport: _currentSport);
     _categoryOrder =
         savedCategoryOrder.isNotEmpty ? savedCategoryOrder : categoryOrder;
+    _pinFavoritesFirstInCategoryOrder();
 
     // Load favorite verbs for current sport
     _favoriteVerbs =
@@ -2497,9 +2526,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _customVerbWordings =
         await _preferencesService.getCustomVerbWordings(sport: _currentSport);
 
+    await _preferencesService.ensureWantsOpponentDefaultOn(
+        sport: _currentSport);
+    await _preferencesService.ensurePostGameVerbWordingAligned(
+        sport: _currentSport);
+
     // Load verb overrides (from verb editor)
     _verbOverrides =
         await _preferencesService.getVerbOverrides(sport: _currentSport);
+
+    _verbWordingDefaults = await _preferencesService.getVerbWordingDefaults(
+        sport: _currentSport);
 
     _customVerbRecords = (await _preferencesService.getCustomVerbs(
             sport: _currentSport))
@@ -3984,15 +4021,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         )
         .displayName;
     if (name.isEmpty) return;
-    final set = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
-    set.add(name);
-
-    // Optionally affect first star tracking
-    if (affectFirstStar) {
-      if (_firstTeamSelected == null) {
-        _firstTeamSelected = isHomeTeam;
-      }
-      _firstPlayerSelected ??= _removeJerseyNumberFromName(name);
+    if (!_tryAddPlayerSelection(
+      isHome: isHomeTeam,
+      displayName: name,
+      affectFirstStar: affectFirstStar,
+    )) {
+      return;
     }
 
     // Red star is determined by caption text order
@@ -6748,6 +6782,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           Expanded(
             child: GestureDetector(
               onTap: () {
+                if (!isSelected && !_mayAddSubjectPlayerToTeam(isHome)) {
+                  _notifySingularPlayerLimit();
+                  return;
+                }
                 setState(() {
                   if (isSelected) {
                     if (isHome) {
@@ -6756,20 +6794,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       selectedAwayPlayers.remove(player.displayName);
                     }
                   } else {
-                    // Track which team was selected first; set first player if not set
-                    if (_firstTeamSelected == null) {
-                      _firstTeamSelected = isHome;
-                      _firstPlayerSelected = _removeJerseyNumberFromName(
-                        player.displayName,
-                      );
+                    if (!_tryAddPlayerSelection(
+                      isHome: isHome,
+                      displayName: player.displayName,
+                      notifyIfBlocked: false,
+                    )) {
+                      return;
                     }
-                    if (isHome) {
-                      selectedHomePlayers.add(player.displayName);
-                    } else {
-                      selectedAwayPlayers.add(player.displayName);
-                    }
-
-                    // Switch to custom verb mode when a player is selected
                     _isPlayerSearchMode = false;
                   }
                 });
@@ -7547,6 +7578,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             );
           },
           onTap: () {
+            if (!isSelected && !_mayAddSubjectPlayerToTeam(isHome)) {
+              _notifySingularPlayerLimit();
+              return;
+            }
             setState(() {
               if (isSelected) {
                 if (isHome) {
@@ -7555,15 +7590,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   selectedAwayPlayers.remove(player.displayName);
                 }
               } else {
-                if (_firstTeamSelected == null) {
-                  _firstTeamSelected = isHome;
-                  _firstPlayerSelected =
-                      _removeJerseyNumberFromName(player.displayName);
-                }
-                if (isHome) {
-                  selectedHomePlayers.add(player.displayName);
-                } else {
-                  selectedAwayPlayers.add(player.displayName);
+                if (!_tryAddPlayerSelection(
+                  isHome: isHome,
+                  displayName: player.displayName,
+                  notifyIfBlocked: false,
+                )) {
+                  return;
                 }
                 _isPlayerSearchMode = false;
               }
@@ -8168,20 +8200,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         );
                       },
                       onTap: () {
+                        if (!isSelected && !_mayAddSubjectPlayerToTeam(true)) {
+                          _notifySingularPlayerLimit();
+                          return;
+                        }
                         setState(() {
                           if (isSelected) {
                             selectedHomePlayers.remove(player.displayName);
                           } else {
-                            // Track which team was selected first
-                            if (_firstTeamSelected == null) {
-                              _firstTeamSelected = true;
-                              _firstPlayerSelected =
-                                  _removeJerseyNumberFromName(
-                                player.displayName,
-                              );
+                            if (!_tryAddPlayerSelection(
+                              isHome: true,
+                              displayName: player.displayName,
+                              notifyIfBlocked: false,
+                            )) {
+                              return;
                             }
-                            selectedHomePlayers.add(player.displayName);
-                            // Switch to custom verb mode when a player is selected
                             _isPlayerSearchMode = false;
                           }
                         });
@@ -8312,20 +8345,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         );
                       },
                       onTap: () {
+                        if (!isSelected && !_mayAddSubjectPlayerToTeam(false)) {
+                          _notifySingularPlayerLimit();
+                          return;
+                        }
                         setState(() {
                           if (isSelected) {
                             selectedAwayPlayers.remove(player.displayName);
                           } else {
-                            // Track which team was selected first
-                            if (_firstTeamSelected == null) {
-                              _firstTeamSelected = false;
-                              _firstPlayerSelected =
-                                  _removeJerseyNumberFromName(
-                                player.displayName,
-                              );
+                            if (!_tryAddPlayerSelection(
+                              isHome: false,
+                              displayName: player.displayName,
+                              notifyIfBlocked: false,
+                            )) {
+                              return;
                             }
-                            selectedAwayPlayers.add(player.displayName);
-                            // Switch to custom verb mode when a player is selected
                             _isPlayerSearchMode = false;
                           }
                         });
@@ -9258,18 +9292,22 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// Verb chips for one category column (used by draggable grid and [_buildCategoryContent]).
   List<Widget> _verbChildrenForCategoryName(String categoryName) {
+    final verbs = categoryName == 'Favorites'
+        ? _favoriteVerbs.toList()
+        : (_verbCategoriesForKeyboardFire[categoryName] ??
+            verbCategories[categoryName] ??
+            []);
     if (categoryName == 'Favorites') {
       return [
-        ..._favoriteVerbs.toList().asMap().entries.map(
+        ...verbs.asMap().entries.map(
               (e) => _buildVerbOption(e.value, verbNumber: e.key + 1),
             ),
         ...List.generate(
-          (10 - _favoriteVerbs.length).clamp(0, 10),
+          (10 - verbs.length).clamp(0, 10),
           (index) => _buildVerbOption(''),
         ),
       ];
     }
-    final verbs = verbCategories[categoryName] ?? [];
     return verbs
         .asMap()
         .entries
@@ -9278,9 +9316,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildDraggableCategories() {
-    // Split categories into two rows of 3 columns each
-    List<String> firstRow = _categoryOrder.take(3).toList();
-    List<String> secondRow = _categoryOrder.skip(3).toList();
+    // Favorites first (via effectiveCategoryOrder), then remaining categories.
+    final order = effectiveCategoryOrder;
+    final firstRow = order.take(3).toList();
+    final secondRow = order.skip(3).toList();
 
     final column = Column(
       children: [
@@ -9288,7 +9327,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: firstRow.map((categoryName) {
-            final index = _categoryOrder.indexOf(categoryName);
+            final index = order.indexOf(categoryName);
             return Expanded(
               key: ValueKey('cat_${categoryName}_$index'),
               child: _buildDraggableCategoryCard(categoryName),
@@ -9296,11 +9335,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }).toList(),
         ),
         const SizedBox(height: 2),
-        // Second row: 3 columns
+        // Second row: remaining columns
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: secondRow.map((categoryName) {
-            final index = _categoryOrder.indexOf(categoryName);
+            final index = order.indexOf(categoryName);
             return Expanded(
               key: ValueKey('cat_${categoryName}_$index'),
               child: _buildDraggableCategoryCard(categoryName),
@@ -9324,11 +9363,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildDraggableCategoryCard(String categoryName) {
-    final categoryNumber = _categoryOrder.indexOf(categoryName) + 1;
+    final order = effectiveCategoryOrder;
+    final categoryNumber = order.indexOf(categoryName) + 1;
     final displayTitle =
         categoryName == 'Favorites' ? 'Favorites' : categoryName;
     return DragTarget<String>(
       onAccept: (draggedCategory) {
+        if (draggedCategory == 'Favorites' || categoryName == 'Favorites') {
+          return;
+        }
         setState(() {
           final draggedIndex = _categoryOrder.indexOf(draggedCategory);
           final targetIndex = _categoryOrder.indexOf(categoryName);
@@ -9339,6 +9382,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             // Swap the categories
             _categoryOrder[draggedIndex] = categoryName;
             _categoryOrder[targetIndex] = draggedCategory;
+            _pinFavoritesFirstInCategoryOrder();
 
             // Save the new category order immediately for current sport
             _preferencesService.saveCategoryOrder(_categoryOrder,
@@ -9357,7 +9401,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  LongPressDraggable<String>(
+                  categoryName == 'Favorites'
+                      ? _categorySectionTitle(
+                          displayTitle,
+                          categoryNumber,
+                          favoritesStyle: true,
+                          showReorderHint: false,
+                        )
+                      : LongPressDraggable<String>(
                     data: categoryName,
                     delay: const Duration(milliseconds: 400),
                     hapticFeedbackOnStart: false,
@@ -9368,7 +9419,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: _categorySectionTitle(
                           displayTitle,
                           categoryNumber,
-                          favoritesStyle: categoryName == 'Favorites',
+                          favoritesStyle: false,
                           showReorderHint: true,
                         ),
                       ),
@@ -9378,14 +9429,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       child: _categorySectionTitle(
                         displayTitle,
                         categoryNumber,
-                        favoritesStyle: categoryName == 'Favorites',
+                        favoritesStyle: false,
                         showReorderHint: true,
                       ),
                     ),
                     child: _categorySectionTitle(
                       displayTitle,
                       categoryNumber,
-                      favoritesStyle: categoryName == 'Favorites',
+                      favoritesStyle: false,
                       showReorderHint: true,
                     ),
                   ),
@@ -9400,7 +9451,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Widget _buildCategoryContent(String categoryName) {
-    final categoryNumber = _categoryOrder.indexOf(categoryName) + 1;
+    final categoryNumber = effectiveCategoryOrder.indexOf(categoryName) + 1;
     final displayTitle =
         categoryName == 'Favorites' ? 'Favorites' : categoryName;
     return Column(
@@ -9773,6 +9824,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _rbiCount = null;
       }
     });
+    _syncGrandSlamKeywordWithSelection();
     _updateCaption().then((_) {
       if (mounted) _keyboardFireCaptionNotifier.value = captionController.text;
     });
@@ -9783,6 +9835,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     setState(() {
       _selectedHittingAction = action;
     });
+    _syncCelebrationKeywordsWithSelection();
     _updateCaption().then((_) {
       if (mounted) _keyboardFireCaptionNotifier.value = captionController.text;
     });
@@ -9893,10 +9946,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         vp = (c != null && c.trim().isNotEmpty)
             ? c.trim()
             : _getTrueDefaultVerbWording(canonicalKey);
+      } else if ((verb == 'Post Game Win' || verb == 'Post Game Loss') &&
+          vp == verb.toLowerCase()) {
+        // Old fallback stored the label lowercased; captions use celebrate(s)/react(s).
+        vp = VerbCaptionWording.defaultWording(verb);
       }
       var plural = (o['pluralPhrase'] as String?)?.trim();
       if (plural == null || plural.isEmpty) {
         plural = VerbCaptionWording.defaultPluralWording(canonicalKey, vp);
+      } else if ((verb == 'Post Game Win' || verb == 'Post Game Loss') &&
+          (plural == verb.toLowerCase() || plural == 'post game win' ||
+              plural == 'post game loss')) {
+        plural = VerbCaptionWording.defaultPluralWording(verb, vp);
       }
       var kw = verbKeywordsFromJson(o['keywords']);
       if (kw.isEmpty) kw = defaultKeywordsForVerbLabel(label);
@@ -9907,11 +9968,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'usePluralPhrase': o['usePluralPhrase'] as bool? ?? true,
         'keywords': kw,
         'omitAgainst': o['omitAgainst'] as bool? ?? false,
-        'wantsOpponent': o['wantsOpponent'] as bool? ?? false,
+        'wantsOpponent': o['wantsOpponent'] as bool? ??
+            _defaultWantsOpponentForVerb(verb),
         'category': o['category'] as String? ?? _findVerbCategory(verb),
         'subOptions': VerbSubOptions.fromJson(
           o['subOptions'],
           verbLabel: label,
+          sport: _currentSport,
         ),
       };
     }
@@ -9933,21 +9996,58 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'usePluralPhrase': c['usePluralPhrase'] as bool? ?? true,
           'keywords': verbKeywordsFromJson(c['keywords']),
           'omitAgainst': c['omitAgainst'] as bool? ?? false,
-          'wantsOpponent': c['wantsOpponent'] as bool? ?? false,
+          'wantsOpponent': c['wantsOpponent'] as bool? ??
+              _defaultWantsOpponentForVerb(verb),
           'category': c['category'] as String? ?? _findVerbCategory(verb),
           'subOptions': VerbSubOptions.fromJson(
             c['subOptions'],
             verbLabel: label,
+            sport: _currentSport,
           ),
         };
       }
     }
 
     final category = _findVerbCategory(verb);
+    final wordingDefault = _verbWordingDefaults[verb];
+    if (wordingDefault != null) {
+      final label = wordingDefault['label'] as String? ?? verb;
+      var vp = (wordingDefault['verbPhrase'] as String?)?.trim() ?? '';
+      if (vp.isEmpty) {
+        final c = _customVerbWordings[verb];
+        vp = (c != null && c.trim().isNotEmpty)
+            ? c.trim()
+            : VerbCaptionWording.defaultWording(verb);
+      }
+      var plural = (wordingDefault['pluralPhrase'] as String?)?.trim();
+      if (plural == null || plural.isEmpty) {
+        plural = VerbCaptionWording.defaultPluralWording(verb, vp);
+      }
+      var kw = verbKeywordsFromJson(wordingDefault['keywords']);
+      if (kw.isEmpty) kw = defaultKeywordsForVerbLabel(label);
+      return {
+        'label': label,
+        'verbPhrase': vp,
+        'pluralPhrase': plural,
+        'usePluralPhrase': wordingDefault['usePluralPhrase'] as bool? ?? true,
+        'keywords': kw,
+        'omitAgainst': wordingDefault['omitAgainst'] as bool? ?? false,
+        'wantsOpponent': wordingDefault['wantsOpponent'] as bool? ??
+            _defaultWantsOpponentForVerb(verb),
+        'category': wordingDefault['category'] as String? ??
+            category ??
+            (verbCategories.isNotEmpty ? verbCategories.keys.first : null),
+        'subOptions': VerbSubOptions.fromJson(
+          wordingDefault['subOptions'],
+          verbLabel: label,
+          sport: _currentSport,
+        ),
+      };
+    }
     final vp = (_customVerbWordings[verb] != null &&
             _customVerbWordings[verb]!.trim().isNotEmpty)
         ? _customVerbWordings[verb]!.trim()
-        : _getTrueDefaultVerbWording(verb);
+        : VerbCaptionWording.defaultWording(verb);
     return {
       'label': verb,
       'verbPhrase': vp,
@@ -9955,18 +10055,32 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'usePluralPhrase': true,
       'keywords': defaultKeywordsForVerbLabel(verb),
       'omitAgainst': false,
-      'wantsOpponent': false,
+      'wantsOpponent': _defaultWantsOpponentForVerb(verb),
       'category': category ??
           (verbCategories.isNotEmpty ? verbCategories.keys.first : null),
-      'subOptions': VerbSubOptions.defaultsFor(verb),
+      'subOptions': VerbSubOptions.defaultsFor(verb, sport: _currentSport),
     };
   }
 
   String? _findVerbCategory(String verb) {
-    final list = keyboardFireVerbList;
-    for (final cat in list) {
-      final verbs = (cat['verbs'] as List<dynamic>?)?.cast<String>() ?? [];
-      if (verbs.contains(verb)) return cat['name'] as String?;
+    // Prefer remapped Keyboard Fire / Edit Verb lists (cross-category moves).
+    for (final entry in _verbCategoriesForKeyboardFire.entries) {
+      if (entry.value.contains(verb)) return entry.key;
+    }
+    // Favorites is a pin list, not a real category — prefer the sport category.
+    for (final entry in verbCategories.entries) {
+      if (entry.value.contains(verb)) return entry.key;
+    }
+    for (final cat in keyboardFireVerbList) {
+      final name = cat['name'] as String?;
+      if (name == null || name == 'Favorites') continue;
+      final canonical =
+          (cat['verbsCanonical'] as List<dynamic>?)?.cast<String>() ??
+              const <String>[];
+      if (canonical.contains(verb)) return name;
+      final display =
+          (cat['verbs'] as List<dynamic>?)?.cast<String>() ?? const <String>[];
+      if (display.contains(verb)) return name;
     }
     return null;
   }
@@ -9983,391 +10097,237 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         await _preferencesService.getVerbOverrides(sport: _currentSport);
   }
 
+  Map<String, dynamic> _buildVerbEditorOverrideMap({
+    required String overrideKey,
+    required String newLabel,
+    required String newSingular,
+    required String pluralText,
+    required bool usePluralPhrase,
+    required List<String> keywords,
+    required bool wantsOpponent,
+    required bool omitAgainst,
+    required String selectedCategory,
+    required VerbSubOptions subOptions,
+  }) {
+    return {
+      'label': newLabel,
+      'verbPhrase': newSingular,
+      'pluralPhrase': usePluralPhrase
+          ? (pluralText.isNotEmpty
+              ? pluralText
+              : VerbCaptionWording.defaultPluralWording(
+                  overrideKey, newSingular))
+          : null,
+      'usePluralPhrase': usePluralPhrase,
+      'keywords': keywords,
+      'wantsOpponent': wantsOpponent,
+      'omitAgainst': omitAgainst,
+      'isCustom': false,
+      'category': selectedCategory,
+      if (subOptions.differsFromDefaults(newLabel, sport: _currentSport))
+        'subOptions': subOptions.toJson(),
+    };
+  }
+
+  /// Factory (hardcoded) baseline for [verb] — used when no "Set as Default" exists.
+  Map<String, dynamic> _factoryVerbEditorBaseline(String verb) {
+    final vp = VerbCaptionWording.defaultWording(verb);
+    final category = _findVerbCategory(verb);
+    final sub = VerbSubOptions.defaultsFor(verb, sport: _currentSport);
+    return {
+      'label': verb,
+      'verbPhrase': vp,
+      'pluralPhrase': VerbCaptionWording.defaultPluralWording(verb, vp),
+      'usePluralPhrase': true,
+      'keywords': defaultKeywordsForVerbLabel(verb),
+      'wantsOpponent': _defaultWantsOpponentForVerb(verb),
+      'omitAgainst': false,
+      'isCustom': false,
+      'category': category ??
+          (verbCategories.isNotEmpty ? verbCategories.keys.first : ''),
+      if (sub.differsFromDefaults(verb, sport: _currentSport))
+        'subOptions': sub.toJson(),
+    };
+  }
+
+  Future<void> _persistVerbEditorOverride({
+    required String overrideKey,
+    required Map<String, dynamic> override,
+    required String singularPhrase,
+    bool alsoSetAsDefault = false,
+  }) async {
+    await _preferencesService.saveVerbOverride(overrideKey, override,
+        sport: _currentSport);
+    await _preferencesService.saveCustomVerbWording(
+        overrideKey, singularPhrase,
+        sport: _currentSport);
+    if (alsoSetAsDefault) {
+      await _preferencesService.saveVerbWordingDefault(
+          overrideKey, Map<String, dynamic>.from(override),
+          sport: _currentSport);
+    }
+    _verbOverrides =
+        await _preferencesService.getVerbOverrides(sport: _currentSport);
+    _verbWordingDefaults = await _preferencesService.getVerbWordingDefaults(
+        sport: _currentSport);
+    _customVerbRecords =
+        (await _preferencesService.getCustomVerbs(sport: _currentSport))
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+    _customVerbWordings = await _preferencesService.getCustomVerbWordings(
+        sport: _currentSport);
+    if (mounted) setState(() {});
+    widget.onVerbOverridesChanged?.call();
+  }
+
+  Future<void> _resetVerbEditorToDefault(String overrideKey) async {
+    final baseline = _verbWordingDefaults[overrideKey] != null
+        ? Map<String, dynamic>.from(_verbWordingDefaults[overrideKey]!)
+        : _factoryVerbEditorBaseline(overrideKey);
+    final singular =
+        (baseline['verbPhrase'] as String?)?.trim().isNotEmpty == true
+            ? (baseline['verbPhrase'] as String).trim()
+            : VerbCaptionWording.defaultWording(overrideKey);
+
+    final isFactory = _verbWordingDefaults[overrideKey] == null;
+    if (isFactory) {
+      await _preferencesService.removeVerbOverride(overrideKey,
+          sport: _currentSport);
+      await _preferencesService.removeCustomVerbWording(overrideKey,
+          sport: _currentSport);
+    } else {
+      await _preferencesService.saveVerbOverride(overrideKey, baseline,
+          sport: _currentSport);
+      await _preferencesService.saveCustomVerbWording(overrideKey, singular,
+          sport: _currentSport);
+    }
+    _verbOverrides =
+        await _preferencesService.getVerbOverrides(sport: _currentSport);
+    _customVerbWordings = await _preferencesService.getCustomVerbWordings(
+        sport: _currentSport);
+    _customVerbRecords =
+        (await _preferencesService.getCustomVerbs(sport: _currentSport))
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+    if (mounted) setState(() {});
+    widget.onVerbOverridesChanged?.call();
+  }
+
   /// Full verb editor dialog (Display Name, Singular/Plural phrase, Category, Omit against) — same as classic.
   Future<void> _showFullVerbEditorDialog(String verb) async {
+    await _preferencesService.ensureWantsOpponentDefaultOn(
+        sport: _currentSport);
+    await _preferencesService.ensurePostGameVerbWordingAligned(
+        sport: _currentSport);
     _customVerbWordings =
         await _preferencesService.getCustomVerbWordings(sport: _currentSport);
     _verbOverrides =
         await _preferencesService.getVerbOverrides(sport: _currentSport);
+    _verbWordingDefaults = await _preferencesService.getVerbWordingDefaults(
+        sport: _currentSport);
     if (!mounted) return;
-    final initial = _getVerbEditorInitialData(verb);
-    final labelController =
-        TextEditingController(text: initial['label'] as String? ?? verb);
-    final singularController =
-        TextEditingController(text: initial['verbPhrase'] as String? ?? verb);
-    final pluralController = TextEditingController(
-        text: initial['pluralPhrase'] as String? ??
-            initial['verbPhrase'] as String? ??
-            verb);
-    bool omitAgainst = initial['omitAgainst'] as bool? ?? false;
-    bool wantsOpponent = initial['wantsOpponent'] as bool? ?? false;
-    bool usePluralPhrase = initial['usePluralPhrase'] as bool? ?? true;
-    final rawKw = initial['keywords'];
-    final List<String> keywordsList = rawKw is List
-        ? rawKw
-            .map((e) => e.toString().trim())
-            .where((s) => s.isNotEmpty)
-            .toList()
-        : <String>[];
-    final keywordsController =
-        TextEditingController(text: keywordsList.join(', '));
-    bool showKeywordsEditor = keywordsList.isNotEmpty;
-    String selectedCategory = initial['category'] as String? ??
-        ((_categoryOrder.isNotEmpty) ? _categoryOrder.first : '');
-    var subOptions = initial['subOptions'] as VerbSubOptions? ??
-        VerbSubOptions.defaultsFor(verb);
 
-    final categories = _categoryOrder
-        .where((c) => c == 'Favorites' || verbCategories.containsKey(c))
+    final categories = effectiveCategoryOrder
+        .where((c) => c != 'Favorites' && verbCategories.containsKey(c))
         .toList();
     if (categories.isEmpty) return;
-    if (!categories.contains(selectedCategory))
-      selectedCategory = categories.first;
+
+    final verbsByCategory = <String, List<String>>{
+      for (final cat in categories)
+        cat: List<String>.from(
+          (_verbCategoriesForKeyboardFire[cat] ?? verbCategories[cat] ?? const <String>[])
+              .where((v) => v.trim().isNotEmpty),
+        ),
+    };
 
     final homeTeamName = selectedHomeTeam ?? 'Home Team';
     final awayTeamName = selectedAwayTeam ?? 'Away Team';
     final homePlayer1 = _homeRoster.isNotEmpty ? _homeRoster.first : null;
     final homePlayer2 = _homeRoster.length > 1 ? _homeRoster[1] : null;
-    final awayPlayer = _awayRoster.isNotEmpty ? _awayRoster.first : null;
+    final awayRosterSample =
+        _awayRoster.isNotEmpty ? _awayRoster.first : null;
 
     if (!mounted) return;
-    showDialog(
+    await showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            String buildExampleCaption(String verbPhrase, int playerCount) {
-              final p1Name = homePlayer1?.fullName ?? 'Player One';
-              final p2Name = homePlayer2?.fullName ?? 'Player Two';
-              final oppName = awayPlayer?.fullName ?? 'Opponent';
-              final againstText = omitAgainst ? '' : ' against';
-              if (playerCount == 1) {
-                return '${p1Name} #${homePlayer1?.jerseyNumber ?? '00'} of the $homeTeamName $verbPhrase$againstText $oppName #${awayPlayer?.jerseyNumber ?? '00'} of the $awayTeamName';
-              } else {
-                return '${p1Name} #${homePlayer1?.jerseyNumber ?? '00'} and ${p2Name} #${homePlayer2?.jerseyNumber ?? '00'} of the $homeTeamName $verbPhrase$againstText $oppName #${awayPlayer?.jerseyNumber ?? '00'} of the $awayTeamName';
-              }
+        return FullVerbEditDialog(
+          initialVerb: verb,
+          sport: _currentSport,
+          categories: categories,
+          verbsByCategory: verbsByCategory,
+          favoriteVerbs: Set<String>.from(_favoriteVerbs),
+          loadInitialData: _getVerbEditorInitialData,
+          hasSavedDefault: (v) => _verbWordingDefaults.containsKey(v),
+          isAdmin: AdminService.isCurrentUserAdminSync(),
+          homeTeamName: homeTeamName,
+          awayTeamName: awayTeamName,
+          homePlayer1Name: homePlayer1?.fullName,
+          homePlayer1Jersey: homePlayer1?.jerseyNumber,
+          homePlayer2Name: homePlayer2?.fullName,
+          homePlayer2Jersey: homePlayer2?.jerseyNumber,
+          awaySampleName: awayRosterSample?.fullName,
+          awaySampleJersey: awayRosterSample?.jerseyNumber,
+          selectedAwayPlayerLabel: selectedAwayPlayers.isNotEmpty
+              ? selectedAwayPlayers.first
+              : null,
+          onCategoryOrderChanged: (order) async {
+            await applyCategoryOrderFromEditor(order);
+          },
+          onVerbOrderChanged: (map) async {
+            await applyVerbOrderFromEditor(map);
+          },
+          onFavoriteChanged: (v, isFavorite) async {
+            if (isFavorite) {
+              _favoriteVerbs.add(v);
+            } else {
+              _favoriteVerbs.remove(v);
             }
-
-            final maxH = MediaQuery.sizeOf(context).height * 0.88;
-            return Center(
-              child: SizedBox(
-                width: kVerbEditDialogWidth,
-                child: AlertDialog(
-                  shape: kAppDialogShape,
-                  backgroundColor: Colors.white,
-                  surfaceTintColor: Colors.transparent,
-                  elevation: 8,
-                  shadowColor: Colors.black.withValues(alpha: 0.18),
-                  titlePadding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
-                  contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-                  actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                  title: const Text('Edit Verb', style: kAppDialogTitleStyle),
-                  content: SizedBox(
-                    width: kVerbEditDialogWidth - 48,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(maxHeight: maxH),
-                      child: SingleChildScrollView(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        flex: 2,
-                                        child: AppDialogLabeledTextField(
-                                          label: 'Display name',
-                                          controller: labelController,
-                                          hintText: 'e.g., Skates',
-                                          bottomGap: 0,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: AppDialogLabeledDropdown<String>(
-                                          label: 'Category',
-                                          value: selectedCategory,
-                                          items: categories
-                                              .map((cat) => DropdownMenuItem(
-                                                  value: cat,
-                                                  child: Text(cat)))
-                                              .toList(),
-                                          onChanged: (value) {
-                                            if (value != null) {
-                                              setDialogState(() =>
-                                                  selectedCategory = value);
-                                            }
-                                          },
-                                          bottomGap: 0,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: AppDialogLabeledTextField(
-                                          label: 'Singular phrase (1 player)',
-                                          controller: singularController,
-                                          hintText:
-                                              'e.g., skates, battles, shoots',
-                                          onChanged: (_) =>
-                                              setDialogState(() {}),
-                                          bottomGap: 0,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: VerbEditPluralPhraseField(
-                                          pluralController: pluralController,
-                                          usePluralPhrase: usePluralPhrase,
-                                          onUsePluralChanged: (v) =>
-                                              setDialogState(
-                                                  () => usePluralPhrase = v),
-                                          onPluralChanged: (_) =>
-                                              setDialogState(() {}),
-                                          bottomGap: 0,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: AppDialogExamplePreview(
-                                          title: 'Example (1 player)',
-                                          text: buildExampleCaption(
-                                            singularController.text
-                                                    .trim()
-                                                    .isEmpty
-                                                ? verb
-                                                : singularController.text,
-                                            1,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: AppDialogExamplePreview(
-                                          title: 'Example (2+ players)',
-                                          text: buildExampleCaption(
-                                            !usePluralPhrase
-                                                ? (singularController.text
-                                                        .trim()
-                                                        .isEmpty
-                                                    ? verb
-                                                    : singularController.text)
-                                                : (pluralController.text
-                                                        .trim()
-                                                        .isEmpty
-                                                    ? (singularController.text
-                                                            .trim()
-                                                            .isEmpty
-                                                        ? verb
-                                                        : singularController
-                                                            .text)
-                                                    : pluralController.text),
-                                            2,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  AppDialogLabeledField(
-                                    label: 'Keywords',
-                                    bottomGap: 8,
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          child: showKeywordsEditor
-                                              ? TextField(
-                                                  controller:
-                                                      keywordsController,
-                                                  style:
-                                                      kAppDialogFieldTextStyle,
-                                                  maxLines: 2,
-                                                  onChanged: (_) =>
-                                                      setDialogState(() {}),
-                                                  decoration:
-                                                      appDialogFieldDecoration(
-                                                    hintText: 'comma-separated',
-                                                  ),
-                                                )
-                                              : Container(
-                                                  width: double.infinity,
-                                                  padding:
-                                                      const EdgeInsets.all(10),
-                                                  decoration:
-                                                      appDialogCardDecoration(),
-                                                  child: Text(
-                                                    keywordsController.text
-                                                            .trim()
-                                                            .isEmpty
-                                                        ? '—'
-                                                        : keywordsController
-                                                            .text,
-                                                    maxLines: 2,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: TextStyle(
-                                                      fontFamily: 'Inter',
-                                                      fontSize: 11,
-                                                      color: keywordsController
-                                                              .text
-                                                              .trim()
-                                                              .isEmpty
-                                                          ? const Color(
-                                                              0xFFB0B0B0)
-                                                          : const Color(
-                                                              0xFF444444),
-                                                    ),
-                                                  ),
-                                                ),
-                                        ),
-                                        Tooltip(
-                                          message: showKeywordsEditor
-                                              ? 'Hide keywords editor'
-                                              : 'Show keywords editor',
-                                          child: IconButton(
-                                            visualDensity:
-                                                VisualDensity.compact,
-                                            padding: EdgeInsets.zero,
-                                            constraints: const BoxConstraints(
-                                                minWidth: 32, minHeight: 32),
-                                            icon: Icon(
-                                              showKeywordsEditor
-                                                  ? Icons.expand_less
-                                                  : Icons.expand_more,
-                                              size: 20,
-                                              color: Colors.grey.shade700,
-                                            ),
-                                            onPressed: () => setDialogState(
-                                              () => showKeywordsEditor =
-                                                  !showKeywordsEditor,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _verbEditFlagCard(
-                                          value: omitAgainst,
-                                          label: 'Omit "against"',
-                                          onChanged: (v) => setDialogState(
-                                              () => omitAgainst = v),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: _verbEditFlagCard(
-                                          value: wantsOpponent,
-                                          label: 'Include opponent',
-                                          onChanged: (v) => setDialogState(
-                                              () => wantsOpponent = v),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            VerbEditSubOptionsSection(
-                              verbLabel: labelController.text.trim().isEmpty
-                                  ? verb
-                                  : labelController.text.trim(),
-                              value: subOptions,
-                              onChanged: (v) =>
-                                  setDialogState(() => subOptions = v),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  actionsAlignment: MainAxisAlignment.end,
-                  actionsOverflowAlignment: OverflowBarAlignment.end,
-                  actions: [
-                    ElevatedGreyButton(
-                      label: 'Cancel',
-                      fontSize: 11,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedGreyButton(
-                      label: 'Save',
-                      fontSize: 11,
-                      isPrimary: true,
-                      onPressed: () async {
-                              final newLabel = labelController.text.trim();
-                              final newSingular =
-                                  singularController.text.trim();
-                              if (newLabel.isEmpty || newSingular.isEmpty)
-                                return;
-                              final overrideKey = verb;
-                              final pluralText = pluralController.text.trim();
-                              final override = {
-                                'label': newLabel,
-                                'verbPhrase': newSingular,
-                                'pluralPhrase': usePluralPhrase
-                                    ? (pluralText.isNotEmpty
-                                        ? pluralText
-                                        : VerbCaptionWording
-                                            .defaultPluralWording(
-                                            overrideKey, newSingular))
-                                    : null,
-                                'usePluralPhrase': usePluralPhrase,
-                                'keywords': parseVerbKeywordsField(
-                                    keywordsController.text),
-                                'wantsOpponent': wantsOpponent,
-                                'omitAgainst': omitAgainst,
-                                'isCustom': false,
-                                'category': selectedCategory,
-                                if (subOptions.differsFromDefaults(newLabel))
-                                  'subOptions': subOptions.toJson(),
-                              };
-                              await _preferencesService.saveVerbOverride(
-                                  overrideKey, override,
-                                  sport: _currentSport);
-                              await _preferencesService.saveCustomVerbWording(
-                                  overrideKey, newSingular,
-                                  sport: _currentSport);
-                              _verbOverrides = await _preferencesService
-                                  .getVerbOverrides(sport: _currentSport);
-                              _customVerbRecords =
-                                  (await _preferencesService.getCustomVerbs(
-                                          sport: _currentSport))
-                                      .map((e) => Map<String, dynamic>.from(e))
-                                      .toList();
-                              _customVerbWordings = await _preferencesService
-                                  .getCustomVerbWordings(sport: _currentSport);
-                              if (mounted) setState(() {});
-                              widget.onVerbOverridesChanged?.call();
-                              if (context.mounted) Navigator.of(context).pop();
-                            },
-                          ),
-                  ],
-                ),
-              ),
+            await _preferencesService.saveFavoriteVerbs(
+              _favoriteVerbs,
+              sport: _currentSport,
+            );
+            if (mounted) setState(() {});
+          },
+          onReset: (v) async {
+            await _resetVerbEditorToDefault(v);
+          },
+          onSave: ({
+            required String overrideKey,
+            required String newLabel,
+            required String newSingular,
+            required String pluralText,
+            required bool usePluralPhrase,
+            required List<String> keywords,
+            required bool wantsOpponent,
+            required bool omitAgainst,
+            required String selectedCategory,
+            required VerbSubOptions subOptions,
+            required bool asDefault,
+          }) async {
+            final override = _buildVerbEditorOverrideMap(
+              overrideKey: overrideKey,
+              newLabel: newLabel,
+              newSingular: newSingular,
+              pluralText: pluralText,
+              usePluralPhrase: usePluralPhrase,
+              keywords: keywords,
+              wantsOpponent: wantsOpponent,
+              omitAgainst: omitAgainst,
+              selectedCategory: selectedCategory,
+              subOptions: subOptions,
+            );
+            await _persistVerbEditorOverride(
+              overrideKey: overrideKey,
+              override: override,
+              singularPhrase: newSingular,
+              alsoSetAsDefault: asDefault,
+            );
+            // Keep list membership in sync when Category dropdown changes.
+            await moveVerbToCategoryForKeyboardFire(
+              overrideKey,
+              selectedCategory,
             );
           },
         );
@@ -10451,35 +10411,34 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// The effective category order for the current sport: filters out categories that don't
   /// exist in [verbCategories] (e.g. 'Running' doesn't exist for basketball/hockey), ensures
-  /// 'Favorites' is always included, and falls back to the sport default if empty.
+  /// 'Favorites' is always first, and falls back to the sport default if empty.
   /// This is the single source of truth used by [keyboardFireVerbList] and all category-index lookups.
   List<String> get effectiveCategoryOrder {
-    final order = _categoryOrder
-        .where((cat) => cat == 'Favorites' || verbCategories.containsKey(cat))
+    final withoutFav = _categoryOrder
+        .where((cat) => cat != 'Favorites' && verbCategories.containsKey(cat))
         .toList();
-    List<String> effective = order.isNotEmpty
-        ? List<String>.from(order)
-        : List<String>.from(categoryOrder);
-    if (!effective.contains('Favorites')) {
-      effective = [...effective, 'Favorites'];
-    }
-    // Users with an older saved order: insert new baseball "Pitching" after Defense.
-    if ((widget.sport?.toLowerCase() ?? 'baseball') == 'baseball' &&
-        verbCategories.containsKey('Pitching') &&
-        !effective.contains('Pitching')) {
-      final di = effective.indexOf('Defense');
-      if (di >= 0) {
-        effective.insert(di + 1, 'Pitching');
-      } else {
-        final fi = effective.indexOf('Favorites');
-        if (fi >= 0) {
-          effective.insert(fi, 'Pitching');
-        } else {
-          effective.add('Pitching');
-        }
+    final effective = withoutFav.isNotEmpty
+        ? List<String>.from(withoutFav)
+        : categoryOrder
+            .where((c) => c != 'Favorites' && verbCategories.containsKey(c))
+            .toList();
+
+    void appendIfMissing(String cat) {
+      if (cat != 'Favorites' &&
+          verbCategories.containsKey(cat) &&
+          !effective.contains(cat)) {
+        effective.add(cat);
       }
     }
-    return effective;
+
+    for (final cat in categoryOrder) {
+      appendIfMissing(cat);
+    }
+    for (final cat in verbCategories.keys) {
+      appendIfMissing(cat);
+    }
+
+    return ['Favorites', ...effective];
   }
 
   /// Verb list for keyboard fire dialog: category number, name, and ordered verb strings.
@@ -10549,14 +10508,112 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     if (fromIndex == toIndex) return;
     final fromCat = effective[fromIndex];
     final toCat = effective[toIndex];
+    // Favorites is always pinned at the top — ignore drags that involve it.
+    if (fromCat == 'Favorites' || toCat == 'Favorites') return;
     final realFrom = _categoryOrder.indexOf(fromCat);
     final realTo = _categoryOrder.indexOf(toCat);
     if (realFrom == -1 || realTo == -1) return;
     setState(() {
       _categoryOrder.removeAt(realFrom);
       _categoryOrder.insert(realTo, fromCat);
+      _pinFavoritesFirstInCategoryOrder();
     });
     _preferencesService.saveCategoryOrder(_categoryOrder, sport: _currentSport);
+  }
+
+  /// Persist full category order from Edit Verb (Favorites excluded from [orderWithoutFavorites]).
+  Future<void> applyCategoryOrderFromEditor(
+      List<String> orderWithoutFavorites) async {
+    final cleaned = orderWithoutFavorites
+        .where((c) => c != 'Favorites' && verbCategories.containsKey(c))
+        .toList();
+    setState(() {
+      _categoryOrder = ['Favorites', ...cleaned];
+    });
+    await _preferencesService.saveCategoryOrder(_categoryOrder,
+        sport: _currentSport);
+  }
+
+  /// Persist full verb lists from Edit Verb (supports cross-category moves).
+  Future<void> applyVerbOrderFromEditor(
+      Map<String, List<String>> verbsByCategory) async {
+    final newFullMap = <String, List<String>>{};
+    for (final e in verbsByCategory.entries) {
+      if (e.key == 'Favorites') continue;
+      newFullMap[e.key] = List<String>.from(
+        e.value.where((v) => v.trim().isNotEmpty),
+      );
+    }
+    // Keep any categories not shown in the editor.
+    for (final e in _verbCategoriesForKeyboardFire.entries) {
+      newFullMap.putIfAbsent(e.key, () => List<String>.from(e.value));
+    }
+    await _preferencesService.saveVerbOrder(
+      newFullMap,
+      sport: _currentSport,
+    );
+    if (mounted) {
+      setState(() {
+        _verbOrderSnapshot = newFullMap;
+      });
+    }
+  }
+
+  /// Move [verb] from its current category into [toCategory] (Edit Verb / KF).
+  Future<void> moveVerbToCategoryForKeyboardFire(
+    String verb,
+    String toCategory, {
+    int? toIndex,
+  }) async {
+    if (verb.isEmpty || toCategory.isEmpty || toCategory == 'Favorites') return;
+    final lists = _verbCategoriesForKeyboardFire;
+    if (!lists.containsKey(toCategory)) return;
+
+    String? fromCategory;
+    for (final e in lists.entries) {
+      if (e.value.contains(verb)) {
+        fromCategory = e.key;
+        break;
+      }
+    }
+    if (fromCategory == null || fromCategory == toCategory) {
+      // Same category — optional reinsert at index.
+      if (fromCategory == toCategory && toIndex != null) {
+        final list = List<String>.from(lists[toCategory]!);
+        final i = list.indexOf(verb);
+        if (i < 0) return;
+        list.removeAt(i);
+        final insertAt = toIndex.clamp(0, list.length);
+        list.insert(insertAt, verb);
+        final newFullMap = <String, List<String>>{
+          for (final e in lists.entries)
+            e.key: e.key == toCategory ? list : List<String>.from(e.value),
+        };
+        await _preferencesService.saveVerbOrder(newFullMap,
+            sport: _currentSport);
+        if (mounted) setState(() => _verbOrderSnapshot = newFullMap);
+      }
+      return;
+    }
+
+    final fromList = List<String>.from(lists[fromCategory]!);
+    final toList = List<String>.from(lists[toCategory]!);
+    fromList.remove(verb);
+    final insertAt = (toIndex ?? toList.length).clamp(0, toList.length);
+    if (!toList.contains(verb)) {
+      toList.insert(insertAt, verb);
+    }
+    final newFullMap = <String, List<String>>{
+      for (final e in lists.entries)
+        if (e.key == fromCategory)
+          e.key: fromList
+        else if (e.key == toCategory)
+          e.key: toList
+        else
+          e.key: List<String>.from(e.value),
+    };
+    await _preferencesService.saveVerbOrder(newFullMap, sport: _currentSport);
+    if (mounted) setState(() => _verbOrderSnapshot = newFullMap);
   }
 
   void copyCaption() => _copyMetadataFromCaptionWidget();
@@ -10609,18 +10666,46 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   bool get applyVerbKeywordsEnabled => _applyVerbKeywordsEnabled;
 
   Future<void> setApplyVerbKeywordsEnabled(bool enabled) async {
-    if (_applyVerbKeywordsEnabled == enabled) return;
+    // Verb keywording only — never show/hide the Keywords box.
+    // Box visibility is owned by Keyword mode / setKeywordsFieldVisible.
+    if (_applyVerbKeywordsEnabled == enabled) {
+      if (enabled) _reapplyVerbKeywordsIfEnabled();
+      return;
+    }
     setState(() => _applyVerbKeywordsEnabled = enabled);
     await _preferencesService.saveApplyVerbKeywords(enabled);
+    if (enabled) {
+      _reapplyVerbKeywordsIfEnabled();
+    }
   }
 
   bool get applyPlayerNamesToKeywordsEnabled =>
       _applyPlayerNamesToKeywordsEnabled;
 
   Future<void> setApplyPlayerNamesToKeywordsEnabled(bool enabled) async {
-    if (_applyPlayerNamesToKeywordsEnabled == enabled) return;
+    // Name keywording only — never show/hide the Keywords box.
+    if (_applyPlayerNamesToKeywordsEnabled == enabled) {
+      if (enabled || _applyVerbKeywordsEnabled) {
+        _reapplyVerbKeywordsIfEnabled();
+      }
+      return;
+    }
     setState(() => _applyPlayerNamesToKeywordsEnabled = enabled);
     await _preferencesService.saveApplyPlayerNamesToKeywords(enabled);
+    if (enabled || _applyVerbKeywordsEnabled) {
+      _reapplyVerbKeywordsIfEnabled();
+    }
+  }
+
+  /// Force Keywords box visibility (Keyword mode master toggle).
+  Future<void> setKeywordsFieldVisible(bool show) async {
+    if (_showKeywordsField != show) {
+      setState(() => _showKeywordsField = show);
+    }
+    await _preferencesService.saveShowKeywordsField(show);
+    if (show) {
+      _reapplyVerbKeywordsIfEnabled();
+    }
   }
 
   /// Exposes the caption controller so the KeyboardFirePanel can show an editable caption field.
@@ -11307,6 +11392,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             }
           }
         });
+        _syncGrandSlamKeywordWithSelection();
         _updateCaption();
       },
       child: Container(
@@ -11521,6 +11607,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             });
                                                             setDialogState(
                                                                 () {});
+                                                            _syncGrandSlamKeywordWithSelection();
                                                             _updateCaption();
                                                           },
                                                           child: Container(
@@ -11599,6 +11686,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                             });
                                                             setDialogState(
                                                                 () {});
+                                                            _syncGrandSlamKeywordWithSelection();
                                                             _updateCaption();
                                                           },
                                                           child: Container(
@@ -11960,6 +12048,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             _selectedActionVerb = verbName;
           });
           setDialogState(() {});
+          _syncCelebrationKeywordsWithSelection();
           _updateCaption();
         },
         child: Container(
@@ -13131,8 +13220,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 break;
             }
           }
-          _updateCaption();
         });
+        _syncGrandSlamKeywordWithSelection();
+        _updateCaption();
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -16416,6 +16506,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   Future<void> _updateCaption() async {
+    _enforceSingularSubjectPlayerLimit();
+
     // Safety check: if either team is not selected, don't try to generate captions
     if (selectedHomeTeam == null || selectedAwayTeam == null) {
       captionController.clear();
@@ -20730,6 +20822,127 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return false; // Default: include "against"
   }
 
+  /// Celebration verbs / Cele flow may select multiple teammates even when the
+  /// underlying hit verb is singular-only.
+  bool _isCelebrationMultiPlayerExempt() {
+    final raw = (_selectedActionVerb ?? _selectedVerb)?.trim() ?? '';
+    if (raw.isNotEmpty) {
+      final verb = _resolveCanonicalVerbKey(raw);
+      if (VerbSubOptions.isCelebrationVerb(verb) || verb == 'Celebration') {
+        return true;
+      }
+    }
+    if (_isHittingCelebrationSelected()) return true;
+    if (_isCelebratingWithTeammates ||
+        _isCelebratingScoring ||
+        _isSoloCelebration) {
+      return true;
+    }
+    if ((_selectedCelebrationType ?? '').trim().isNotEmpty) return true;
+    if (_cameFromCelebration) return true;
+    return false;
+  }
+
+  bool _verbUsesPluralPhrase(String verbLabel) {
+    if (verbLabel.trim().isEmpty) return true;
+    final data = _getVerbEditorInitialData(verbLabel);
+    return data['usePluralPhrase'] as bool? ?? true;
+  }
+
+  /// Singular-only verbs: one subject player on the action team.
+  /// Opposing-team picks (for against…) stay allowed. Celebration is exempt.
+  bool _currentVerbAllowsMultipleSubjectPlayers() {
+    if (_isCelebrationMultiPlayerExempt()) return true;
+    final raw = (_selectedActionVerb ?? _selectedVerb)?.trim() ?? '';
+    if (raw.isEmpty) return true;
+    return _verbUsesPluralPhrase(_resolveCanonicalVerbKey(raw));
+  }
+
+  bool _mayAddSubjectPlayerToTeam(bool isHome) {
+    if (_currentVerbAllowsMultipleSubjectPlayers()) return true;
+    final set = isHome ? selectedHomePlayers : selectedAwayPlayers;
+    if (set.isEmpty) return true;
+    // Opposing team may still pick players for "against …".
+    if (_firstTeamSelected != null && _firstTeamSelected != isHome) {
+      return true;
+    }
+    return false;
+  }
+
+  void _notifySingularPlayerLimit() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Singular verb — only one teammate can be selected '
+          '(celebration allows multiple).',
+          style: TextStyle(fontSize: 11),
+        ),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  /// Adds [displayName] to the team roster selection when allowed.
+  bool _tryAddPlayerSelection({
+    required bool isHome,
+    required String displayName,
+    bool affectFirstStar = true,
+    bool notifyIfBlocked = true,
+  }) {
+    final set = isHome ? selectedHomePlayers : selectedAwayPlayers;
+    if (set.contains(displayName)) return true;
+    if (!_mayAddSubjectPlayerToTeam(isHome)) {
+      if (notifyIfBlocked) _notifySingularPlayerLimit();
+      return false;
+    }
+    if (affectFirstStar && _firstTeamSelected == null) {
+      _firstTeamSelected = isHome;
+      _firstPlayerSelected ??= _removeJerseyNumberFromName(displayName);
+    }
+    set.add(displayName);
+    return true;
+  }
+
+  /// Drop extra same-team subjects when the current verb is singular-only.
+  void _enforceSingularSubjectPlayerLimit() {
+    if (_currentVerbAllowsMultipleSubjectPlayers()) return;
+
+    void trim(Set<String> set) {
+      if (set.length <= 1) return;
+      String? keep;
+      final preferred = _firstPlayerSelected;
+      if (preferred != null) {
+        for (final n in set) {
+          if (_removeJerseyNumberFromName(n) == preferred) {
+            keep = n;
+            break;
+          }
+        }
+      }
+      keep ??= set.first;
+      set
+        ..clear()
+        ..add(keep);
+    }
+
+    if (_firstTeamSelected == true) {
+      trim(selectedHomePlayers);
+    } else if (_firstTeamSelected == false) {
+      trim(selectedAwayPlayers);
+    } else {
+      if (selectedHomePlayers.length > 1) trim(selectedHomePlayers);
+      if (selectedAwayPlayers.length > 1) trim(selectedAwayPlayers);
+    }
+  }
+
+  /// Factory default for "Include opponent" — Post Game captions have never
+  /// appended an opponent unless the user explicitly opts in.
+  bool _defaultWantsOpponentForVerb(String verbLabel) {
+    return verbLabel != 'Post Game Win' && verbLabel != 'Post Game Loss';
+  }
+
   /// Verbs where Keyboard Fire "Cele" uses hit-style RBI / home-run celebration captions.
   static const Set<String> _kbCelebrationHitVerbs = {
     'Single',
@@ -21627,21 +21840,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }
         }
       case 'Post Game Win':
-        final activePlayerCountWin =
-            selectedHomePlayers.length + selectedAwayPlayers.length;
-        if (activePlayerCountWin > 1) {
-          return 'celebrate';
-        } else {
-          return 'celebrates';
-        }
+        // Captions use celebrate(s) with no opponent; honor Edit Verb phrase overrides.
+        if (hasResolvedVerbPhrase) return resolvedVerbPhrase!;
+        return activePlayerCount > 1 ? 'celebrate' : 'celebrates';
       case 'Post Game Loss':
-        final activePlayerCountLoss =
-            selectedHomePlayers.length + selectedAwayPlayers.length;
-        if (activePlayerCountLoss > 1) {
-          return 'react';
-        } else {
-          return 'reacts';
-        }
+        if (hasResolvedVerbPhrase) return resolvedVerbPhrase!;
+        return activePlayerCount > 1 ? 'react' : 'reacts';
       case 'Stretches':
         if (activePlayerCount >= 2) {
           return 'stretch prior to playing the ${_getOpposingTeamName()}';
@@ -22064,8 +22268,11 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         originalVerb == 'Home Run' || originalVerb == 'Grand Slam';
     final hitSubOpts = _verbSubOptionsFor(originalVerb);
     if (!homeRunStyleRunsNotRbi && _rbiCount != null && _rbiCount! > 0) {
-      final rbiText = hitSubOpts.rbiCountLabel(_rbiCount!);
-      hitPhrase = 'hits a $rbiText $baseAction';
+      hitPhrase = hitSubOpts.hitClauseWithRbi(
+        leadIn: 'hits a',
+        hitNoun: baseAction,
+        count: _rbiCount!,
+      );
     } else {
       hitPhrase = 'hits a $baseAction';
     }
@@ -22080,8 +22287,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           if (!homeRunStyleRunsNotRbi &&
               _rbiCount != null &&
               _rbiCount! > 0) {
-            final rbiText = hitSubOpts.rbiCountLabel(_rbiCount!);
-            return '$celebrationType a $rbiText $baseAction$affixes';
+            return hitSubOpts.hitClauseWithRbi(
+              leadIn: '$celebrationType a',
+              hitNoun: baseAction,
+              count: _rbiCount!,
+            ) +
+                affixes;
           } else {
             return '$celebrationType a $baseAction$affixes';
           }
@@ -22687,6 +22898,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       ? null
                                       : hrType;
                             });
+                            _syncGrandSlamKeywordWithSelection();
                             _updateCaption();
                           },
                           child: Container(
@@ -23545,27 +23757,52 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   String _buildHomeRunPhrase() {
     // If a custom wording for Home Run exists, prefer it for generic case
     final String? customHr = _customVerbWordings['Home Run'];
-    if (_selectedHomeRunType == null) return customHr?.trim() ?? 'home run';
+    final baseNoun =
+        (customHr != null && customHr.trim().isNotEmpty)
+            ? customHr.trim()
+            : 'home run';
+    if (_selectedHomeRunType == null) return baseNoun;
+
+    int count;
+    switch (_selectedHomeRunType!) {
+      case 'Solo':
+        count = 1;
+        break;
+      case 'Two-Run':
+        count = 2;
+        break;
+      case 'Three-Run':
+        count = 3;
+        break;
+      case 'Grand Slam':
+        count = 4;
+        break;
+      default:
+        return baseNoun;
+    }
+
+    final opts = _verbSubOptionsFor('Home Run');
+    if (opts.rbiEnabled) {
+      if (count >= 4) {
+        return opts.resolvedGrandSlamPhrase(hitNoun: baseNoun);
+      }
+      if (opts.rbiStyle == RbiCaptionStyle.runDash && count == 1) {
+        return 'solo $baseNoun';
+      }
+      return '${opts.rbiCountLabel(count)} $baseNoun';
+    }
 
     switch (_selectedHomeRunType!) {
       case 'Solo':
-        return customHr != null && customHr.isNotEmpty
-            ? 'solo ${customHr.trim()}'
-            : 'solo home run';
+        return 'solo $baseNoun';
       case 'Two-Run':
-        return customHr != null && customHr.isNotEmpty
-            ? 'two-run ${customHr.trim()}'
-            : 'two-run home run';
+        return 'two-run $baseNoun';
       case 'Three-Run':
-        return customHr != null && customHr.isNotEmpty
-            ? 'three-run ${customHr.trim()}'
-            : 'three-run home run';
+        return 'three-run $baseNoun';
       case 'Grand Slam':
-        return customHr != null && customHr.isNotEmpty
-            ? 'grand slam ${customHr.trim()}'
-            : 'grand slam';
+        return opts.resolvedGrandSlamPhrase(hitNoun: baseNoun);
       default:
-        return customHr?.trim() ?? 'home run';
+        return baseNoun;
     }
   }
 
@@ -24585,13 +24822,33 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   List<String> _keywordStringsForVerbLabel(String verb) {
     final initial = _getVerbEditorInitialData(verb);
     final rawKw = initial['keywords'];
+    List<String> kws = const [];
     if (rawKw is List) {
-      return rawKw
+      kws = rawKw
           .map((e) => e.toString().trim())
           .where((s) => s.isNotEmpty)
           .toList();
     }
-    return const [];
+    // "grand slam" is only applied when Grand Slam is the selected HR type.
+    if (verb == 'Home Run' || verb == 'Grand Slam') {
+      final isGrandSlam = _selectedHomeRunType == 'Grand Slam' ||
+          verb == 'Grand Slam';
+      kws = kws
+          .where((k) {
+            final lower = k.toLowerCase();
+            final isGsKw = lower == 'grand slam' || lower == 'grandslam';
+            return isGrandSlam || !isGsKw;
+          })
+          .toList();
+      if (isGrandSlam &&
+          !kws.any((k) {
+            final lower = k.toLowerCase();
+            return lower == 'grand slam' || lower == 'grandslam';
+          })) {
+        kws = [...kws, 'grand slam'];
+      }
+    }
+    return kws;
   }
 
   /// Display names from the current selection, jersey suffix stripped and
@@ -24612,20 +24869,105 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return [...home, ...away];
   }
 
+  /// Auto keyword writes only when keywording is enabled and the Keywords field is visible.
+  bool get _canAutoWriteKeywords =>
+      _showKeywordsField &&
+      (_applyVerbKeywordsEnabled || _applyPlayerNamesToKeywordsEnabled);
+
   void _mergeVerbKeywordsIntoFieldIfEnabled(String verb) {
-    if (!_applyVerbKeywordsEnabled) return;
-    final verbKws = _keywordStringsForVerbLabel(verb);
-    final playerKws = (_applyPlayerNamesToKeywordsEnabled && _showKeywordsField)
-        ? _keywordStringsForSelectedPlayers()
-        : const <String>[];
-    if (verbKws.isEmpty && playerKws.isEmpty) return;
+    // Never mutate Keywords when the field is hidden or both apply toggles are off.
+    if (!_showKeywordsField) return;
+    final applyVerb = _applyVerbKeywordsEnabled;
+    final applyPlayers = _applyPlayerNamesToKeywordsEnabled;
+    if (!applyVerb && !applyPlayers) return;
+
+    final verbKws =
+        applyVerb ? _keywordStringsForVerbLabel(verb) : const <String>[];
+    final playerKws =
+        applyPlayers ? _keywordStringsForSelectedPlayers() : const <String>[];
     var text = keywordsController.text;
+    // Drop prior auto "grand slam" when Home Run is active but GS isn't selected.
+    if (applyVerb && (verb == 'Home Run' || verb == 'Grand Slam')) {
+      final isGrandSlam =
+          _selectedHomeRunType == 'Grand Slam' || verb == 'Grand Slam';
+      if (!isGrandSlam) {
+        text =
+            removeVerbKeywordFieldText(text, const ['grand slam', 'grandslam']);
+      }
+    }
     if (verbKws.isNotEmpty) {
       text = mergeVerbKeywordFieldText(text, verbKws);
     }
     if (playerKws.isNotEmpty) {
       text = mergeVerbKeywordFieldText(text, playerKws);
     }
+    if (applyVerb) {
+      if (_isCelebrationKeywordContextActive()) {
+        text = mergeVerbKeywordFieldText(text, _celebrationAutoKeywords);
+      } else {
+        text = removeVerbKeywordFieldText(text, _celebrationAutoKeywords);
+      }
+    }
+    if (verbKws.isEmpty &&
+        playerKws.isEmpty &&
+        text == keywordsController.text) {
+      return;
+    }
+    keywordsController.text = text;
+    keywordsController.selection =
+        TextSelection.collapsed(offset: keywordsController.text.length);
+  }
+
+  /// Keywords added whenever a celebration action/verb is selected.
+  static const List<String> _celebrationAutoKeywords = [
+    'celebrate',
+    'celebration',
+    'jubilation',
+    'jubo',
+  ];
+
+  bool _isCelebrationKeywordContextActive() {
+    if (_isHittingCelebrationSelected()) return true;
+    if (_isCelebratingWithTeammates ||
+        _isCelebratingScoring ||
+        _isSoloCelebration) {
+      return true;
+    }
+    if ((_selectedCelebrationType ?? '').trim().isNotEmpty) return true;
+    final verb = _selectedVerb ?? _selectedActionVerb;
+    if (verb == null || verb.isEmpty) return false;
+    return VerbSubOptions.isCelebrationVerb(verb) || verb == 'Celebration';
+  }
+
+  /// Keep celebration keywords in sync with Cele / celebration-verb selection.
+  void _syncCelebrationKeywordsWithSelection() {
+    if (!_showKeywordsField || !_applyVerbKeywordsEnabled) return;
+    var text = keywordsController.text;
+    if (_isCelebrationKeywordContextActive()) {
+      text = mergeVerbKeywordFieldText(text, _celebrationAutoKeywords);
+    } else {
+      text = removeVerbKeywordFieldText(text, _celebrationAutoKeywords);
+    }
+    if (text == keywordsController.text) return;
+    keywordsController.text = text;
+    keywordsController.selection =
+        TextSelection.collapsed(offset: keywordsController.text.length);
+  }
+
+  /// Keep "grand slam" in Keywords in sync with the selected Home Run type.
+  void _syncGrandSlamKeywordWithSelection() {
+    if (!_showKeywordsField || !_applyVerbKeywordsEnabled) return;
+    final verb = _selectedVerb;
+    if (verb != 'Home Run' && verb != 'Grand Slam') return;
+    final isGrandSlam =
+        _selectedHomeRunType == 'Grand Slam' || verb == 'Grand Slam';
+    var text = keywordsController.text;
+    if (isGrandSlam) {
+      text = mergeVerbKeywordFieldText(text, const ['grand slam']);
+    } else {
+      text = removeVerbKeywordFieldText(text, const ['grand slam', 'grandslam']);
+    }
+    if (text == keywordsController.text) return;
     keywordsController.text = text;
     keywordsController.selection =
         TextSelection.collapsed(offset: keywordsController.text.length);
@@ -24633,10 +24975,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
   /// After the user adds/changes players, refresh Keywords if a verb is active.
   void _reapplyVerbKeywordsIfEnabled() {
+    if (!_canAutoWriteKeywords) return;
     final verb = _selectedVerb;
     if (verb == null || verb.isEmpty) return;
     _mergeVerbKeywordsIntoFieldIfEnabled(verb);
   }
+
+  /// Public entry for Keyboard Fire / sidebar when keyword toggles change.
+  void reapplyVerbKeywordsIfEnabled() => _reapplyVerbKeywordsIfEnabled();
 
   Widget _buildNavigationButtons() {
     return Row(
@@ -26001,7 +26347,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   spacing: 2,
                   runSpacing: 2,
                   children: _verbSubOptionsFor(_selectedVerb ?? '')
-                      .celebrationTypeList()
+                      .celebrationTypeList(sport: _currentSport)
                       .map((label) => _buildCelebrationChip(label, label))
                       .toList(),
                 ),
@@ -26329,6 +26675,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             }
           }
         });
+        _syncCelebrationKeywordsWithSelection();
         _updateCaption();
       },
       child: Container(
@@ -26898,18 +27245,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                       return GestureDetector(
                         onTap: () {
+                          if (!isSelected && !_mayAddSubjectPlayerToTeam(true)) {
+                            _notifySingularPlayerLimit();
+                            return;
+                          }
                           setState(() {
                             if (isSelected) {
                               selectedHomePlayers.remove(player.displayName);
                             } else {
-                              if (_firstTeamSelected == null) {
-                                _firstTeamSelected = true;
-                                _firstPlayerSelected =
-                                    _removeJerseyNumberFromName(
-                                  player.displayName,
-                                );
+                              if (!_tryAddPlayerSelection(
+                                isHome: true,
+                                displayName: player.displayName,
+                                notifyIfBlocked: false,
+                              )) {
+                                return;
                               }
-                              selectedHomePlayers.add(player.displayName);
                               _isPlayerSearchMode = false;
                             }
                           });
@@ -27044,18 +27394,21 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
                       return GestureDetector(
                         onTap: () {
+                          if (!isSelected && !_mayAddSubjectPlayerToTeam(false)) {
+                            _notifySingularPlayerLimit();
+                            return;
+                          }
                           setState(() {
                             if (isSelected) {
                               selectedAwayPlayers.remove(player.displayName);
                             } else {
-                              if (_firstTeamSelected == null) {
-                                _firstTeamSelected = false;
-                                _firstPlayerSelected =
-                                    _removeJerseyNumberFromName(
-                                  player.displayName,
-                                );
+                              if (!_tryAddPlayerSelection(
+                                isHome: false,
+                                displayName: player.displayName,
+                                notifyIfBlocked: false,
+                              )) {
+                                return;
                               }
-                              selectedAwayPlayers.add(player.displayName);
                               _isPlayerSearchMode = false;
                             }
                           });

@@ -1677,7 +1677,113 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     _keywordVerbsEnabled = await preferencesService.getApplyVerbKeywords();
     _keywordNamesEnabled =
         await preferencesService.getApplyPlayerNamesToKeywords();
+    // Keyword mode ↔ Keywords box visibility (not verb/name apply toggles).
+    _keywordModeEnabled = preferencesService.captionFieldKeywordsVisibleSync;
     if (mounted) setState(() {});
+    if (_keywordModeEnabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _ensureKeywordModeAppliedToPanels();
+      });
+    }
+  }
+
+  /// Retry until Keyboard Fire / caption panels exist, then sync Keywords visibility.
+  Future<void> _ensureKeywordModeAppliedToPanels({int attempt = 0}) async {
+    if (!mounted || !_keywordModeEnabled) return;
+    final hasPanel = _kbPanelKey.currentState != null ||
+        _captionFieldsKey2.currentState != null;
+    await _applyKeywordModeToPanels(enabled: true, forceVerbsOn: false);
+    if (!hasPanel && attempt < 15) {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      if (!mounted) return;
+      await _ensureKeywordModeAppliedToPanels(attempt: attempt + 1);
+    }
+  }
+
+  /// Push Keyword mode into Keyboard Fire + caption fields (show/hide box).
+  ///
+  /// [forceVerbsOn] is true when the user flips Keyword mode on in the sidebar.
+  Future<void> _applyKeywordModeToPanels({
+    required bool enabled,
+    bool forceVerbsOn = true,
+  }) async {
+    if (enabled) {
+      if (forceVerbsOn) {
+        _keywordVerbsEnabled = true;
+      }
+      if (mounted) setState(() {});
+      // Show the Keywords box first — do not rely on verb-toggle side effects.
+      try {
+        await (_kbPanelKey.currentState as dynamic)
+            ?.setKeywordsFieldVisible(true);
+      } catch (_) {}
+      try {
+        await (_captionFieldsKey2.currentState as dynamic)
+            ?.setKeywordsFieldVisible(true);
+      } catch (_) {}
+      try {
+        final prefs = await PreferencesService.getInstance();
+        await prefs.saveShowKeywordsField(true);
+      } catch (_) {}
+      try {
+        await (_kbPanelKey.currentState as dynamic)
+            ?.setKeywordVerbsEnabled(_keywordVerbsEnabled);
+      } catch (_) {}
+      try {
+        await (_captionFieldsKey2.currentState as dynamic)
+            ?.setApplyVerbKeywordsEnabled(_keywordVerbsEnabled);
+      } catch (_) {}
+      try {
+        await (_kbPanelKey.currentState as dynamic)
+            ?.setKeywordNamesEnabled(_keywordNamesEnabled);
+      } catch (_) {}
+      try {
+        await (_captionFieldsKey2.currentState as dynamic)
+            ?.setApplyPlayerNamesToKeywordsEnabled(_keywordNamesEnabled);
+      } catch (_) {}
+    } else {
+      if (mounted) {
+        setState(() {
+          _keywordVerbsEnabled = false;
+          _keywordNamesEnabled = false;
+        });
+      }
+      try {
+        await (_kbPanelKey.currentState as dynamic)
+            ?.setKeywordVerbsEnabled(false);
+      } catch (_) {}
+      try {
+        await (_kbPanelKey.currentState as dynamic)
+            ?.setKeywordNamesEnabled(false);
+      } catch (_) {}
+      try {
+        await (_captionFieldsKey2.currentState as dynamic)
+            ?.setApplyVerbKeywordsEnabled(false);
+      } catch (_) {}
+      try {
+        await (_captionFieldsKey2.currentState as dynamic)
+            ?.setApplyPlayerNamesToKeywordsEnabled(false);
+      } catch (_) {}
+      try {
+        await (_kbPanelKey.currentState as dynamic)
+            ?.setKeywordsFieldVisible(false);
+      } catch (_) {}
+      try {
+        await (_captionFieldsKey2.currentState as dynamic)
+            ?.setKeywordsFieldVisible(false);
+      } catch (_) {}
+      try {
+        final prefs = await PreferencesService.getInstance();
+        await prefs.saveShowKeywordsField(false);
+      } catch (_) {}
+    }
+  }
+
+  /// Master Keyword mode: shows the Keywords box and turns on Keyword verbs.
+  Future<void> _setKeywordModeEnabled(bool enabled) async {
+    setState(() => _keywordModeEnabled = enabled);
+    await _applyKeywordModeToPanels(enabled: enabled, forceVerbsOn: enabled);
   }
 
   // Load metadata from the current image
@@ -4228,7 +4334,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               _serialBylinesEnabled = serial;
               _keywordVerbsEnabled = kwVerbs;
               _keywordNamesEnabled = kwNames;
+              _keywordModeEnabled =
+                  preferencesService.captionFieldKeywordsVisibleSync;
             });
+            if (_keywordModeEnabled) {
+              _ensureKeywordModeAppliedToPanels();
+            }
           }
         },
         onBurstDetectionChanged: (enabled) {
@@ -4441,6 +4552,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             awayTeamName: selectedAwayTeam,
             captionState: cs,
             showDialogActions: false,
+            keywordModeEnabled: _keywordModeEnabled,
             currentIndex: imagePaths.isNotEmpty ? currentIndex : null,
             totalImages: imagePaths.length,
             trailingSidebar: _buildRightSidebar(),
@@ -4657,7 +4769,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
             _sbToggleRow(
               label: 'Keyword mode',
               value: _keywordModeEnabled,
-              onChanged: (v) => setState(() => _keywordModeEnabled = v),
+              onChanged: (v) => _setKeywordModeEnabled(v),
             ),
             if (_keywordModeEnabled) ...[
               const SizedBox(height: 6),

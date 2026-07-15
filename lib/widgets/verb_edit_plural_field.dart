@@ -4,7 +4,7 @@ import '../flo_layout_constants.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 
-/// Plural phrase row with "Use plural" toggle — shared by verb editors.
+/// Plural phrase field — checkbox beside the title, fields align with Singular.
 class VerbEditPluralPhraseField extends StatelessWidget {
   const VerbEditPluralPhraseField({
     super.key,
@@ -26,39 +26,27 @@ class VerbEditPluralPhraseField extends StatelessWidget {
     return AppDialogLabeledField(
       label: 'Plural phrase (2+ players)',
       bottomGap: bottomGap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              const Text(
-                'Use plural',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 10,
-                  color: Color(0xFF888888),
-                ),
-              ),
-              const SizedBox(width: 4),
-              AppCompactCheckbox(
-                value: usePluralPhrase,
-                accentColor: kFloTealLight,
-                onChanged: onUsePluralChanged,
-              ),
-            ],
+      labelLeading: AppCompactCheckbox(
+        value: usePluralPhrase,
+        accentColor: kFloTealLight,
+        onChanged: onUsePluralChanged,
+        minTapTargetSize: 14,
+      ),
+      child: AppDialogControlShell(
+        enabled: usePluralPhrase,
+        child: TextField(
+          controller: pluralController,
+          enabled: usePluralPhrase,
+          style: kAppDialogFieldTextStyle.copyWith(
+            color: usePluralPhrase
+                ? kAppDialogFieldTextStyle.color
+                : const Color(0xFFB0B0B0),
           ),
-          const SizedBox(height: 4),
-          TextField(
-            controller: pluralController,
-            enabled: usePluralPhrase,
-            style: kAppDialogFieldTextStyle,
-            onChanged: onPluralChanged,
-            decoration: appDialogFieldDecoration(
-              hintText: 'e.g., hit a single, skate, celebrate',
-            ),
+          onChanged: onPluralChanged,
+          decoration: appDialogBareFieldDecoration(
+            hintText: 'e.g., hit a single, skate, celebrate',
           ),
-        ],
+        ),
       ),
     );
   }

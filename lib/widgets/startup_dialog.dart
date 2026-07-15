@@ -2,8 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../utils/native_file_picker.dart';
 import 'dart:io';
+import 'dart:convert';
 import '../services/api_manager.dart';
-import 'dart:convert'; // Added for jsonDecode
 import '../utils/exiftool_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'app_compact_checkbox.dart';
@@ -11,6 +11,7 @@ import 'app_styled_dialogs.dart';
 import '../services/admin_service.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/preferences_service.dart';
+import '../config/tank01_config.dart';
 import 'flo_chrome_header.dart';
 import '../caption_style/caption_template.dart';
 import 'startup_caption_layout_preview.dart';
@@ -1887,8 +1888,8 @@ class _StartupDialogState extends State<StartupDialog> {
 
   Widget _buildSportSection() {
     final isAdmin = AdminService.isCurrentUserAdminSync();
-    final isBaseball =
-        (widget.sport ?? '').toLowerCase().trim() == 'baseball';
+    final sportKey = (widget.sport ?? '').toLowerCase().trim();
+    final tank01Supported = tank01SupportsSport(sportKey);
     return _sectionCard(
       label: 'SPORT',
       children: [
@@ -1904,24 +1905,28 @@ class _StartupDialogState extends State<StartupDialog> {
             children: [
               AppCompactCheckbox(
                 value: _useTank01MlbRosters,
-                onChanged: (v) async {
-                  final prefs = await PreferencesService.getInstance();
-                  await prefs.saveUseTank01MlbRosters(v);
-                  if (!mounted) return;
-                  setState(() => _useTank01MlbRosters = v);
-                },
+                onChanged: tank01Supported
+                    ? (v) async {
+                        final prefs = await PreferencesService.getInstance();
+                        await prefs.saveUseTank01Rosters(v);
+                        if (!mounted) return;
+                        setState(() => _useTank01MlbRosters = v);
+                      }
+                    : null,
               ),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  isBaseball
-                      ? 'Use Tank01 MLB rosters (skip Firebase)'
-                      : 'Use Tank01 MLB rosters (baseball only; skip Firebase)',
+                  tank01Supported
+                      ? 'Use Tank01 rosters (skip Firebase) — MLB/NBA/NHL/WNBA'
+                      : 'Tank01 rosters unavailable for soccer (MLS stays ESPN)',
                   style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 10,
                     fontVariations: const [FontVariation('wght', 600)],
-                    color: Colors.grey.shade800,
+                    color: tank01Supported
+                        ? Colors.grey.shade800
+                        : Colors.grey.shade500,
                   ),
                 ),
               ),

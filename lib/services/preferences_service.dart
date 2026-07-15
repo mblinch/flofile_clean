@@ -43,6 +43,8 @@ class PreferencesService {
   static const String _keyCaptionEntryMode = 'caption_entry_mode';
   static const String _keyCustomVerbs = 'custom_verbs';
   static const String _keyVerbOverrides = 'verb_overrides'; // For editing built-in verbs
+  /// Per-verb reset baselines (phrases / flags / subOptions), like caption wire defaults.
+  static const String _keyVerbWordingDefaults = 'verb_wording_defaults';
   static const String _keyDeletedVerbs = 'deleted_verbs'; // For tracking deleted built-in verbs
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
   static const String _keySyncServerUrl = 'sync_server_url';
@@ -64,7 +66,8 @@ class PreferencesService {
   static const String _keyHasLaunchedBefore = 'has_launched_before';
   /// When true, saving may prompt to apply captions across rapid (≤1s) sequences.
   static const String _keyBurstDetectionEnabled = 'burst_detection_enabled';
-  /// Admin-only: load MLB rosters from Tank01 RapidAPI instead of Firestore/MLB.
+  /// Admin-only: load rosters from Tank01 RapidAPI instead of Firestore/live APIs
+  /// for sports Tank01 supports (baseball, basketball, hockey, wnba). Soccer stays ESPN.
   static const String _keyUseTank01MlbRosters = 'use_tank01_mlb_rosters';
   /// `none` | `on_import` | `on_save` — when startup IPTC template is applied.
   static const String _keyIptcApplyMode = 'iptc_apply_mode';
@@ -186,11 +189,17 @@ class PreferencesService {
     return prefs.getBool(_keyUseTank01MlbRosters) ?? false;
   }
 
+  /// Alias — Tank01 now covers MLB/NBA/NHL/WNBA (same stored flag).
+  Future<bool> getUseTank01Rosters() => getUseTank01MlbRosters();
+
   Future<void> saveUseTank01MlbRosters(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyUseTank01MlbRosters, enabled);
     _afterLocalPreferencesChanged();
   }
+
+  Future<void> saveUseTank01Rosters(bool enabled) =>
+      saveUseTank01MlbRosters(enabled);
 
   Future<IptcApplyMode> getIptcApplyMode() async {
     final prefs = await _getPrefs();
@@ -1018,6 +1027,206 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
+  // Verb wording defaults (reset baselines for Edit Verb — mirror of caption wire defaults)
+  String _getVerbWordingDefaultsKey(String sport) {
+    return '${_keyVerbWordingDefaults}_${sport.toLowerCase()}';
+  }
+
+  Future<Map<String, Map<String, dynamic>>> getVerbWordingDefaults({
+    String sport = 'hockey',
+  }) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbWordingDefaultsKey(sport);
+    final jsonString = prefs.getString(key);
+    if (jsonString != null) {
+      try {
+        final Map<String, dynamic> decoded = json.decode(jsonString);
+        return decoded.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
+      } catch (e) {
+        print('Error parsing verb wording defaults for $sport: $e');
+      }
+    }
+    final sportDefault = await getSportDefault(sport);
+    if (sportDefault != null && sportDefault['verbWordingDefaults'] != null) {
+      try {
+        final m = sportDefault['verbWordingDefaults'] as Map<String, dynamic>;
+        return m.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
+      } catch (_) {}
+    }
+    return {};
+  }
+
+  Future<Map<String, dynamic>?> getVerbWordingDefault(
+    String originalVerbKey, {
+    String sport = 'hockey',
+  }) async {
+    final all = await getVerbWordingDefaults(sport: sport);
+    final direct = all[originalVerbKey];
+    if (direct != null) return Map<String, dynamic>.from(direct);
+    return null;
+  }
+
+  Future<void> saveVerbWordingDefault(
+    String originalVerbKey,
+    Map<String, dynamic> override, {
+    String sport = 'hockey',
+  }) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbWordingDefaultsKey(sport);
+    final defaults = await getVerbWordingDefaults(sport: sport);
+    defaults[originalVerbKey] = override;
+    await prefs.setString(key, json.encode(defaults));
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<void> removeVerbWordingDefault(
+    String originalVerbKey, {
+    String sport = 'hockey',
+  }) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbWordingDefaultsKey(sport);
+    final defaults = await getVerbWordingDefaults(sport: sport);
+    defaults.remove(originalVerbKey);
+    if (defaults.isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, json.encode(defaults));
+    }
+    _afterLocalPreferencesChanged();
+  }
+
+  static const String _keyWantsOpponentDefaultOn =
+      'wants_opponent_default_on_v2';
+
+  /// One-time per sport: set [wantsOpponent] true on all saved verb maps so
+  /// Edit Verb starts with "Include opponent" checked.
+  Future<void> ensureWantsOpponentDefaultOn({String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final flagKey =
+        '${_keyWantsOpponentDefaultOn}_${sport.toLowerCase()}';
+    if (prefs.getBool(flagKey) == true) return;
+
+    bool flipMap(Map<String, dynamic> m) {
+      if (m['wantsOpponent'] == true) return false;
+      m['wantsOpponent'] = true;
+      return true;
+    }
+
+    bool overridesTouched = false;
+    final overrides = await getVerbOverrides(sport: sport);
+    for (final entry in overrides.entries) {
+      if (flipMap(entry.value)) overridesTouched = true;
+    }
+    if (overridesTouched) {
+      await prefs.setString(
+          _getVerbOverridesKey(sport), json.encode(overrides));
+    }
+
+    bool defaultsTouched = false;
+    final wordingDefaults = await getVerbWordingDefaults(sport: sport);
+    for (final entry in wordingDefaults.entries) {
+      if (flipMap(entry.value)) defaultsTouched = true;
+    }
+    if (defaultsTouched) {
+      await prefs.setString(
+          _getVerbWordingDefaultsKey(sport), json.encode(wordingDefaults));
+    }
+
+    final customVerbs = await getCustomVerbs(sport: sport);
+    var customTouched = false;
+    for (final verb in customVerbs) {
+      if (flipMap(verb)) customTouched = true;
+    }
+    if (customTouched) {
+      await saveCustomVerbs(customVerbs, sport: sport);
+    }
+
+    await prefs.setBool(flagKey, true);
+    if (overridesTouched || defaultsTouched || customTouched) {
+      _afterLocalPreferencesChanged();
+    }
+
+    await ensurePostGameVerbWordingAligned(sport: sport);
+  }
+
+  static const String _keyPostGameVerbWordingAligned =
+      'post_game_verb_wording_aligned_v1';
+
+  /// One-time: Post Game Win/Loss captions use celebrate(s)/react(s) with no
+  /// opponent — fix editor defaults that fell back to "post game win".
+  Future<void> ensurePostGameVerbWordingAligned({
+    String sport = 'hockey',
+  }) async {
+    final prefs = await _getPrefs();
+    final flagKey =
+        '${_keyPostGameVerbWordingAligned}_${sport.toLowerCase()}';
+    if (prefs.getBool(flagKey) == true) return;
+
+    const targets = <String, String>{
+      'Post Game Win': 'celebrates',
+      'Post Game Loss': 'reacts',
+    };
+    const plurals = <String, String>{
+      'Post Game Win': 'celebrate',
+      'Post Game Loss': 'react',
+    };
+
+    bool fixMap(String key, Map<String, dynamic> m) {
+      var changed = false;
+      final label = (m['label'] as String?)?.trim() ?? key;
+      final canonical = targets.containsKey(label) ? label : key;
+      final singular = targets[canonical];
+      if (singular == null) return false;
+
+      final phrase = (m['verbPhrase'] as String?)?.trim() ?? '';
+      final lowerLabel = canonical.toLowerCase();
+      if (phrase.isEmpty ||
+          phrase == lowerLabel ||
+          phrase == canonical) {
+        m['verbPhrase'] = singular;
+        changed = true;
+      }
+      final plural = (m['pluralPhrase'] as String?)?.trim() ?? '';
+      if (plural.isEmpty ||
+          plural == lowerLabel ||
+          plural == phrase ||
+          plural == canonical) {
+        m['pluralPhrase'] = plurals[canonical];
+        changed = true;
+      }
+      if (m['wantsOpponent'] != false) {
+        m['wantsOpponent'] = false;
+        changed = true;
+      }
+      return changed;
+    }
+
+    var touched = false;
+    final overrides = await getVerbOverrides(sport: sport);
+    for (final entry in overrides.entries) {
+      if (fixMap(entry.key, entry.value)) touched = true;
+    }
+    if (touched) {
+      await prefs.setString(
+          _getVerbOverridesKey(sport), json.encode(overrides));
+    }
+
+    var defaultsTouched = false;
+    final wordingDefaults = await getVerbWordingDefaults(sport: sport);
+    for (final entry in wordingDefaults.entries) {
+      if (fixMap(entry.key, entry.value)) defaultsTouched = true;
+    }
+    if (defaultsTouched) {
+      await prefs.setString(
+          _getVerbWordingDefaultsKey(sport), json.encode(wordingDefaults));
+    }
+
+    await prefs.setBool(flagKey, true);
+    if (touched || defaultsTouched) {
+      _afterLocalPreferencesChanged();
+    }
+  }
+
   // Deleted Verbs (for tracking deleted built-in verbs during reorganization)
   String _getDeletedVerbsKey(String sport) {
     return '${_keyDeletedVerbs}_${sport.toLowerCase()}';
@@ -1076,6 +1285,7 @@ class PreferencesService {
       'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
       'customVerbWordings': await getCustomVerbWordings(sport: sport),
       'verbOverrides': await getVerbOverrides(sport: sport),
+      'verbWordingDefaults': await getVerbWordingDefaults(sport: sport),
       'customVerbs': await getCustomVerbs(sport: sport),
       'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
     };
@@ -1230,6 +1440,7 @@ class PreferencesService {
         'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
         'customVerbWordings': await getCustomVerbWordings(sport: sport),
         'verbOverrides': await getVerbOverrides(sport: sport),
+        'verbWordingDefaults': await getVerbWordingDefaults(sport: sport),
         'customVerbs': await getCustomVerbs(sport: sport),
         'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
       };
@@ -1350,6 +1561,20 @@ class PreferencesService {
           final overrides = data['verbOverrides'] as Map<String, dynamic>;
           for (final o in overrides.entries) {
             await saveVerbOverride(o.key, Map<String, dynamic>.from(o.value as Map<String, dynamic>), sport: sport);
+          }
+        }
+        if (data.containsKey('verbWordingDefaults')) {
+          final existing = await getVerbWordingDefaults(sport: sport);
+          for (final k in existing.keys) {
+            await removeVerbWordingDefault(k, sport: sport);
+          }
+          final defaults = data['verbWordingDefaults'] as Map<String, dynamic>;
+          for (final o in defaults.entries) {
+            await saveVerbWordingDefault(
+              o.key,
+              Map<String, dynamic>.from(o.value as Map<String, dynamic>),
+              sport: sport,
+            );
           }
         }
         if (data.containsKey('customVerbs')) {
@@ -2104,6 +2329,7 @@ class PreferencesService {
         'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
         'customVerbWordings': await getCustomVerbWordings(sport: sport),
         'verbOverrides': await getVerbOverrides(sport: sport),
+        'verbWordingDefaults': await getVerbWordingDefaults(sport: sport),
         'customVerbs': await getCustomVerbs(sport: sport),
         'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
       };

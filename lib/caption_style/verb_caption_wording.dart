@@ -171,6 +171,10 @@ class VerbCaptionWording {
         return 'walks out';
       case 'Dejection':
         return 'reacts with dejection';
+      case 'Post Game Win':
+        return 'celebrates';
+      case 'Post Game Loss':
+        return 'reacts';
       default:
         return verb.toLowerCase();
     }
@@ -208,6 +212,8 @@ class VerbCaptionWording {
       'Saves': 'make a save',
       'Celebrates': 'celebrate',
       'Celebrates a Goal': 'celebrate a goal',
+      'Post Game Win': 'celebrate',
+      'Post Game Loss': 'react',
       'Goes to the Net': 'go to the net',
       'Drives': 'drive',
       'Dribbles': 'dribble',

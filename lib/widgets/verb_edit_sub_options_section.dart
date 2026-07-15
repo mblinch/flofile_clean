@@ -5,19 +5,25 @@ import '../flo_layout_constants.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 
-/// RBI + celebration options for the verb editor (app + admin).
+/// RBI + celebration modifiers for the verb editor (app + admin).
+///
+/// RBI is baseball-only. Celebration is cross-sport. Returns [SizedBox.shrink]
+/// when neither block applies to the current verb/sport.
+/// Caption previews live in the main editor's variant menu.
 class VerbEditSubOptionsSection extends StatefulWidget {
   const VerbEditSubOptionsSection({
     super.key,
     required this.verbLabel,
     required this.value,
     required this.onChanged,
+    this.sport,
     this.showBorder = true,
   });
 
   final String verbLabel;
   final VerbSubOptions value;
   final ValueChanged<VerbSubOptions> onChanged;
+  final String? sport;
   final bool showBorder;
 
   @override
@@ -26,14 +32,12 @@ class VerbEditSubOptionsSection extends StatefulWidget {
 }
 
 class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
-  late final TextEditingController _rbiWord;
   late final TextEditingController _celebrationPhrase;
   late final TextEditingController _celebrationTypes;
 
   @override
   void initState() {
     super.initState();
-    _rbiWord = TextEditingController(text: widget.value.rbiWord);
     _celebrationPhrase =
         TextEditingController(text: widget.value.celebrationPhrase);
     _celebrationTypes =
@@ -43,10 +47,6 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
   @override
   void didUpdateWidget(VerbEditSubOptionsSection oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.value.rbiWord != widget.value.rbiWord &&
-        _rbiWord.text != widget.value.rbiWord) {
-      _rbiWord.text = widget.value.rbiWord;
-    }
     if (oldWidget.value.celebrationPhrase != widget.value.celebrationPhrase &&
         _celebrationPhrase.text != widget.value.celebrationPhrase) {
       _celebrationPhrase.text = widget.value.celebrationPhrase;
@@ -59,7 +59,6 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
 
   @override
   void dispose() {
-    _rbiWord.dispose();
     _celebrationPhrase.dispose();
     _celebrationTypes.dispose();
     super.dispose();
@@ -71,113 +70,177 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
 
   @override
   Widget build(BuildContext context) {
-    final defaults = VerbSubOptions.defaultsFor(widget.verbLabel);
-    final showCelebrationTypes = defaults.celebrationEnabled &&
-        const {
-          'Celebration',
-          'Celebrates',
-          'Celebrates With',
-          'Celebrates Against',
-          'Celebrates a Goal',
-        }.contains(widget.verbLabel);
+    final showRbi = VerbSubOptions.showRbiEditor(
+      sport: widget.sport,
+      verbLabel: widget.verbLabel,
+      value: widget.value,
+    );
+    final showCelebration = VerbSubOptions.showCelebrationEditor(
+      verbLabel: widget.verbLabel,
+      value: widget.value,
+    );
+    if (!showRbi && !showCelebration) {
+      return const SizedBox.shrink();
+    }
+
+    final defaults =
+        VerbSubOptions.defaultsFor(widget.verbLabel, sport: widget.sport);
+    final showCelebrationTypes = showCelebration &&
+        VerbSubOptions.isCelebrationVerb(widget.verbLabel);
+    final isHit = VerbSubOptions.isHitVerb(widget.verbLabel);
+    final chipsHint =
+        VerbSubOptions.defaultCelebrationTypesForSport(widget.sport);
+
+    final blurb = showRbi && showCelebration
+        ? 'Optional RBI and celebration wording for this verb.'
+        : showRbi
+            ? 'Optional RBI counts for this verb (baseball).'
+            : 'Optional celebration wording for this verb.';
+
+    final rbiBlock = showRbi
+        ? _optionBlock(
+            label: 'RBI',
+            enabled: widget.value.rbiEnabled,
+            defaultOn: defaults.rbiEnabled,
+            onEnabledChanged: (v) => _patch((o) => o.copyWith(rbiEnabled: v)),
+            children: [
+              AppDialogLabeledDropdown<RbiCaptionStyle>(
+                label: 'RBI style',
+                value: widget.value.rbiStyle,
+                items: RbiCaptionStyle.values
+                    .map(
+                      (s) => DropdownMenuItem<RbiCaptionStyle>(
+                        value: s,
+                        child: Text(s.menuLabel),
+                      ),
+                    )
+                    .toList(),
+                onChanged: widget.value.rbiEnabled
+                    ? (v) {
+                        if (v != null) {
+                          _patch((o) => o.copyWith(rbiStyle: v));
+                        }
+                      }
+                    : null,
+                bottomGap: 0,
+              ),
+            ],
+          )
+        : null;
+
+    final celebrationBlock = showCelebration
+        ? _optionBlock(
+            label: 'Celebration',
+            enabled: widget.value.celebrationEnabled,
+            defaultOn: defaults.celebrationEnabled,
+            onEnabledChanged: (v) =>
+                _patch((o) => o.copyWith(celebrationEnabled: v)),
+            children: [
+              AppDialogLabeledTextField(
+                label: 'Celebration verb',
+                controller: _celebrationPhrase,
+                hintText: 'e.g., celebrates',
+                enabled: widget.value.celebrationEnabled,
+                bottomGap: showCelebrationTypes ? 8 : 0,
+                onChanged: (_) => _patch(
+                  (o) =>
+                      o.copyWith(celebrationPhrase: _celebrationPhrase.text),
+                ),
+              ),
+              if (showCelebrationTypes)
+                AppDialogLabeledTextField(
+                  label: 'Celebration chips (comma-separated)',
+                  controller: _celebrationTypes,
+                  hintText: chipsHint,
+                  maxLines: 2,
+                  enabled: widget.value.celebrationEnabled,
+                  bottomGap: 0,
+                  onChanged: (_) => _patch(
+                    (o) =>
+                        o.copyWith(celebrationTypes: _celebrationTypes.text),
+                  ),
+                )
+              else if (!isHit) ...[
+                const SizedBox(height: 4),
+                Text(
+                  VerbSubOptions.isBaseballSport(widget.sport)
+                      ? 'Used for the Cele button on hitting verbs (Keyboard Fire).'
+                      : 'Used when this verb triggers a celebration caption.',
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 9,
+                    color: Color(0xFF999999),
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ],
+          )
+        : null;
+
+    final Widget blocks;
+    if (rbiBlock != null && celebrationBlock != null && !widget.showBorder) {
+      blocks = Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: rbiBlock),
+          const SizedBox(width: 12),
+          Expanded(child: celebrationBlock),
+        ],
+      );
+    } else if (rbiBlock != null && celebrationBlock != null) {
+      blocks = Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          rbiBlock,
+          const Divider(height: 12, color: Color(0xFFE8E8E8)),
+          celebrationBlock,
+        ],
+      );
+    } else {
+      blocks = rbiBlock ?? celebrationBlock!;
+    }
 
     final body = Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Options', style: kAppDialogFieldLabelStyle),
+        const Text('Modifiers', style: kAppDialogFieldLabelStyle),
         const SizedBox(height: 4),
-        const Text(
-          'RBI counts and celebration wording for this verb.',
-          style: TextStyle(
+        Text(
+          blurb,
+          style: const TextStyle(
             fontFamily: 'Inter',
             fontSize: 10,
             color: Color(0xFF888888),
             height: 1.35,
           ),
         ),
-        const SizedBox(height: 12),
-        _optionBlock(
-          label: 'RBI',
-          enabled: widget.value.rbiEnabled,
-          defaultOn: defaults.rbiEnabled,
-          onEnabledChanged: (v) => _patch((o) => o.copyWith(rbiEnabled: v)),
-          children: [
-            AppDialogLabeledTextField(
-              label: 'RBI label in caption',
-              controller: _rbiWord,
-              hintText: 'e.g., RBI',
-              enabled: widget.value.rbiEnabled,
-              bottomGap: 0,
-              onChanged: (_) =>
-                  _patch((o) => o.copyWith(rbiWord: _rbiWord.text)),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Example: hits a ${_rbiWord.text.trim().isEmpty ? 'RBI' : _rbiWord.text.trim()} single, '
-              'two-${_rbiWord.text.trim().isEmpty ? 'RBI' : _rbiWord.text.trim()}',
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 9,
-                color: Color(0xFF999999),
-                height: 1.3,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        _optionBlock(
-          label: 'Celebration',
-          enabled: widget.value.celebrationEnabled,
-          defaultOn: defaults.celebrationEnabled,
-          onEnabledChanged: (v) =>
-              _patch((o) => o.copyWith(celebrationEnabled: v)),
-          children: [
-            AppDialogLabeledTextField(
-              label: 'Celebration verb',
-              controller: _celebrationPhrase,
-              hintText: 'e.g., celebrates',
-              enabled: widget.value.celebrationEnabled,
-              bottomGap: showCelebrationTypes ? 8 : 0,
-              onChanged: (_) => _patch(
-                (o) => o.copyWith(celebrationPhrase: _celebrationPhrase.text),
-              ),
-            ),
-            if (showCelebrationTypes)
-              AppDialogLabeledTextField(
-                label: 'Celebration chips (comma-separated)',
-                controller: _celebrationTypes,
-                hintText: VerbSubOptions.defaultCelebrationTypes,
-                maxLines: 2,
-                enabled: widget.value.celebrationEnabled,
-                bottomGap: 0,
-                onChanged: (_) => _patch(
-                  (o) => o.copyWith(celebrationTypes: _celebrationTypes.text),
-                ),
-              ),
-            if (!showCelebrationTypes) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Used for the Cele button on hitting verbs (Keyboard Fire).',
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 9,
-                  color: Color(0xFF999999),
-                  height: 1.3,
-                ),
-              ),
-            ],
-          ],
-        ),
+        const SizedBox(height: 6),
+        blocks,
       ],
     );
 
     if (!widget.showBorder) return body;
 
-    return Container(
-      width: kVerbEditDialogSubOptionsWidth,
-      padding: const EdgeInsets.all(14),
-      decoration: appDialogCardDecoration(),
-      child: body,
+    return Material(
+      color: Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: const BorderSide(color: Color(0xFFE4E4E4)),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minWidth: kVerbEditDialogSubOptionsWidth,
+          maxWidth: kVerbEditDialogSubOptionsWidth,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: body,
+        ),
+      ),
     );
   }
 
@@ -188,46 +251,63 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
     required ValueChanged<bool> onEnabledChanged,
     required List<Widget> children,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: appDialogCardDecoration(radius: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              AppCompactCheckbox(
-                value: enabled,
-                accentColor: kFloTealLight,
-                onChanged: onEnabledChanged,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: kAppDialogFieldTextStyle.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 11,
-                ),
-              ),
-              if (enabled != defaultOn) ...[
-                const SizedBox(width: 4),
-                const Text(
-                  '*',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 10,
-                    color: kFloTealDark,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ],
+    final header = Row(
+      children: [
+        AppCompactCheckbox(
+          value: enabled,
+          accentColor: kFloTealLight,
+          onChanged: onEnabledChanged,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: kAppDialogFieldTextStyle.copyWith(
+            fontWeight: FontWeight.w600,
+            fontSize: 11,
           ),
-          if (enabled) ...[
-            const SizedBox(height: 10),
-            ...children,
-          ],
+        ),
+        if (enabled != defaultOn) ...[
+          const SizedBox(width: 4),
+          const Text(
+            '*',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 10,
+              color: kFloTealDark,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
+      ],
+    );
+
+    return DecoratedBox(
+      decoration: enabled
+          ? BoxDecoration(
+              color: const Color(0xFFF9FAFB),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFE4E4E4)),
+            )
+          : const BoxDecoration(),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: enabled ? 8 : 0,
+          vertical: enabled ? 8 : 2,
+        ),
+        child: enabled
+            ? Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  header,
+                  const SizedBox(height: 8),
+                  ...children,
+                ],
+              )
+            : SizedBox(
+                height: 28,
+                child: Align(alignment: Alignment.centerLeft, child: header),
+              ),
       ),
     );
   }

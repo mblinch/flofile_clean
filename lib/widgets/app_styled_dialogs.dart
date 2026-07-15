@@ -7,11 +7,14 @@ import '../flo_layout_constants.dart';
 /// Matches [KeyboardFirePanel] FTP / burst primary actions (`keyboard_fire_dialog.dart`).
 const Color kAppDialogPrimaryBlue = Color(0xFF0052CC);
 
-/// Full verb editor (in-app + admin) — wide enough for two columns, minimal scroll.
-const double kVerbEditDialogWidth = 960.0;
+/// Full verb editor (in-app + admin) — browser + editor.
+const double kVerbEditDialogWidth = 1100.0;
 
-/// Right column width for caption sub-options in the verb editor.
-const double kVerbEditDialogSubOptionsWidth = 300.0;
+/// Left rail: category + verb browser.
+const double kVerbEditDialogBrowserWidth = 200.0;
+
+/// Fixed width when [VerbEditSubOptionsSection] is shown as a side card (admin).
+const double kVerbEditDialogSubOptionsWidth = 280.0;
 
 const TextStyle kAppDialogTitleStyle = TextStyle(
   fontFamily: 'Inter',
@@ -21,9 +24,56 @@ const TextStyle kAppDialogTitleStyle = TextStyle(
   height: 1.35,
 );
 
+/// White title text for [AppDialogTealTitleBar] / chrome-style dialog headers.
+const TextStyle kAppDialogTealTitleStyle = TextStyle(
+  fontFamily: 'Inter',
+  fontSize: 13,
+  fontWeight: FontWeight.w600,
+  color: Colors.white,
+  letterSpacing: -0.2,
+  height: 1.2,
+);
+
+/// Teal gradient header matching the main app chrome / Admin originals dialog.
+///
+/// Use with [AlertDialog.titlePadding] = [EdgeInsets.zero] so the bar is flush.
+class AppDialogTealTitleBar extends StatelessWidget {
+  const AppDialogTealTitleBar({
+    super.key,
+    required this.title,
+    this.trailing,
+  });
+
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: kFloTealGradientHorizontal,
+        border: Border(
+          bottom: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(title, style: kAppDialogTealTitleStyle),
+          ),
+          if (trailing != null) trailing!,
+        ],
+      ),
+    );
+  }
+}
+
 const TextStyle kAppDialogFieldTextStyle = TextStyle(
   fontFamily: 'Inter',
   fontSize: 11,
+  color: Color(0xFF333333),
 );
 
 const TextStyle kAppDialogLabelTextStyle = TextStyle(
@@ -68,6 +118,12 @@ ShapeBorder get kAppDialogShape => const RoundedRectangleBorder(
       borderRadius: BorderRadius.zero,
     );
 
+/// Shared control height so text fields and dropdowns line up in verb editors.
+const double kAppDialogControlHeight = 34.0;
+
+/// Shared label-row height so Dual-column fields stay vertically aligned.
+const double kAppDialogLabelRowHeight = 16.0;
+
 /// Outlined input — label sits above via [AppDialogLabeledField], not in the border.
 InputDecoration appDialogFieldDecoration({String? hintText}) => InputDecoration(
       hintText: hintText,
@@ -79,7 +135,7 @@ InputDecoration appDialogFieldDecoration({String? hintText}) => InputDecoration(
       filled: true,
       fillColor: Colors.white,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(6),
         borderSide: const BorderSide(color: Color(0xFFD8D8D8)),
@@ -98,18 +154,87 @@ InputDecoration appDialogFieldDecoration({String? hintText}) => InputDecoration(
       ),
     );
 
+/// Borderless input for use inside [AppDialogControlShell].
+InputDecoration appDialogBareFieldDecoration({String? hintText}) =>
+    InputDecoration(
+      hintText: hintText,
+      hintStyle: const TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 11,
+        color: Color(0xFFB0B0B0),
+      ),
+      isDense: true,
+      border: InputBorder.none,
+      enabledBorder: InputBorder.none,
+      focusedBorder: InputBorder.none,
+      disabledBorder: InputBorder.none,
+      contentPadding: EdgeInsets.zero,
+      filled: false,
+    );
+
+/// Shared outer chrome so text fields and dropdowns share one height.
+BoxDecoration appDialogControlBoxDecoration({bool enabled = true}) =>
+    BoxDecoration(
+      color: enabled ? Colors.white : const Color(0xFFF5F5F5),
+      borderRadius: BorderRadius.circular(6),
+      border: Border.all(
+        color: enabled ? const Color(0xFFD8D8D8) : Colors.grey.shade300,
+      ),
+    );
+
+/// Fixed-height shell used by dialog text fields and dropdowns.
+class AppDialogControlShell extends StatelessWidget {
+  const AppDialogControlShell({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.enabled = true,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final box = Container(
+      height: kAppDialogControlHeight,
+      width: double.infinity,
+      decoration: appDialogControlBoxDecoration(enabled: enabled),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.centerLeft,
+      child: child,
+    );
+    if (onTap == null) return box;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(6),
+        child: box,
+      ),
+    );
+  }
+}
+
 /// Label stacked above a form control.
 class AppDialogLabeledField extends StatelessWidget {
   const AppDialogLabeledField({
     super.key,
     required this.label,
     required this.child,
+    this.labelLeading,
+    this.labelTrailing,
     this.spacing = 5,
     this.bottomGap = 12,
   });
 
   final String label;
   final Widget child;
+  /// Optional control before the label (e.g. plural checkbox).
+  final Widget? labelLeading;
+  /// Optional control beside the label (e.g. actions on the right).
+  final Widget? labelTrailing;
   final double spacing;
   final double bottomGap;
 
@@ -120,7 +245,27 @@ class AppDialogLabeledField extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(label, style: kAppDialogFieldLabelStyle),
+          SizedBox(
+            height: kAppDialogLabelRowHeight,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (labelLeading != null) ...[
+                  labelLeading!,
+                  const SizedBox(width: 6),
+                ],
+                Expanded(
+                  child: Text(
+                    label,
+                    style: kAppDialogFieldLabelStyle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (labelTrailing != null) labelTrailing!,
+              ],
+            ),
+          ),
           SizedBox(height: spacing),
           child,
         ],
@@ -153,18 +298,27 @@ class AppDialogLabeledTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final field = TextField(
+      controller: controller,
+      enabled: enabled,
+      autofocus: autofocus,
+      maxLines: maxLines,
+      style: kAppDialogFieldTextStyle.copyWith(
+        color: enabled
+            ? kAppDialogFieldTextStyle.color
+            : const Color(0xFFB0B0B0),
+      ),
+      onChanged: onChanged,
+      decoration: maxLines == 1
+          ? appDialogBareFieldDecoration(hintText: hintText)
+          : appDialogFieldDecoration(hintText: hintText),
+    );
     return AppDialogLabeledField(
       label: label,
       bottomGap: bottomGap,
-      child: TextField(
-        controller: controller,
-        enabled: enabled,
-        autofocus: autofocus,
-        maxLines: maxLines,
-        style: kAppDialogFieldTextStyle,
-        onChanged: onChanged,
-        decoration: appDialogFieldDecoration(hintText: hintText),
-      ),
+      child: maxLines == 1
+          ? AppDialogControlShell(enabled: enabled, child: field)
+          : field,
     );
   }
 }
@@ -185,19 +339,102 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
   final ValueChanged<T?>? onChanged;
   final double bottomGap;
 
+  static const double _menuItemHeight = 30.0;
+
+  Widget _selectedChild() {
+    for (final item in items) {
+      if (item.value == value) return item.child;
+    }
+    if (items.isNotEmpty) return items.first.child;
+    return const SizedBox.shrink();
+  }
+
+  Future<void> _openMenu(BuildContext context) async {
+    if (onChanged == null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final size = box.size;
+    final selected = await showMenu<T>(
+      context: context,
+      color: Colors.white,
+      elevation: 4,
+      shadowColor: Colors.black.withValues(alpha: 0.18),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      constraints: BoxConstraints(
+        minWidth: size.width,
+        maxWidth: size.width,
+        maxHeight: 280,
+      ),
+      position: RelativeRect.fromLTRB(
+        origin.dx,
+        origin.dy + size.height + 2,
+        origin.dx + size.width,
+        origin.dy,
+      ),
+      items: [
+        for (final item in items)
+          PopupMenuItem<T>(
+            value: item.value,
+            enabled: item.enabled,
+            height: _menuItemHeight,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: DefaultTextStyle(
+                    style: kAppDialogFieldTextStyle,
+                    child: item.child,
+                  ),
+                ),
+                if (item.value == value)
+                  const Icon(
+                    Icons.check,
+                    size: 16,
+                    color: Color(0xFF333333),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+    if (selected != null) onChanged!(selected);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final enabled = onChanged != null;
     return AppDialogLabeledField(
       label: label,
       bottomGap: bottomGap,
-      child: DropdownButtonFormField<T>(
-        value: value,
-        items: items,
-        onChanged: onChanged,
-        isExpanded: true,
-        style: kAppDialogFieldTextStyle,
-        decoration: appDialogFieldDecoration(),
-        dropdownColor: Colors.white,
+      child: Builder(
+        builder: (buttonContext) {
+          return AppDialogControlShell(
+            enabled: enabled,
+            onTap: enabled ? () => _openMenu(buttonContext) : null,
+            child: Row(
+              children: [
+                Expanded(
+                  child: DefaultTextStyle(
+                    style: kAppDialogFieldTextStyle.copyWith(
+                      color: enabled
+                          ? kAppDialogFieldTextStyle.color
+                          : const Color(0xFFB0B0B0),
+                    ),
+                    child: _selectedChild(),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 18,
+                  color: enabled
+                      ? const Color(0xFF666666)
+                      : const Color(0xFFB0B0B0),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -209,30 +446,55 @@ class AppDialogExamplePreview extends StatelessWidget {
     super.key,
     required this.title,
     required this.text,
+    this.enabled = true,
+    this.compact = false,
   });
 
   final String title;
   final String text;
+  final bool enabled;
+
+  /// Smaller card for narrow panels (e.g. Modifiers column).
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    final titleStyle = kAppDialogFieldLabelStyle.copyWith(
+      fontSize: compact ? 9 : kAppDialogFieldLabelStyle.fontSize,
+      color: enabled ? kAppDialogFieldLabelStyle.color : const Color(0xFFB0B0B0),
+    );
+    final textStyle = TextStyle(
+      fontFamily: 'Inter',
+      fontSize: compact ? 10 : 11,
+      color: enabled ? const Color(0xFF444444) : const Color(0xFFB0B0B0),
+      height: 1.35,
+    );
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: appDialogCardDecoration(),
+      constraints: BoxConstraints(
+        minHeight: compact
+            ? 0
+            : (enabled ? 130 : 88),
+      ),
+      padding: EdgeInsets.all(compact ? 8 : 12),
+      decoration: BoxDecoration(
+        color: enabled ? Colors.white : const Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: enabled ? const Color(0xFFE4E4E4) : const Color(0xFFE0E0E0),
+        ),
+        boxShadow: enabled && !compact ? kAppDialogCardShadow : const [],
+      ),
+      alignment: Alignment.topLeft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(title, style: kAppDialogFieldLabelStyle),
-          const SizedBox(height: 6),
+          Text(title, style: titleStyle),
+          SizedBox(height: compact ? 4 : 6),
           Text(
             text,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 11,
-              color: Color(0xFF444444),
-              height: 1.4,
-            ),
+            style: textStyle,
             softWrap: true,
           ),
         ],
@@ -332,6 +594,25 @@ const TextStyle kAppContextMenuTextStyle = TextStyle(
   color: Colors.black87,
 );
 
+/// Builds a [RelativeRect] so [showAppContextMenu] anchors near [globalPosition].
+///
+/// Do **not** pass `fromLTRB(dx, dy, dx+1, dy+1)` — those “right/bottom” values are
+/// insets from the overlay edges; using dx there pulls the menu far left.
+RelativeRect appContextMenuPosition(
+  BuildContext context,
+  Offset globalPosition,
+) {
+  final overlay =
+      Overlay.of(context).context.findRenderObject() as RenderBox;
+  final size = overlay.size;
+  return RelativeRect.fromLTRB(
+    globalPosition.dx,
+    globalPosition.dy,
+    size.width - globalPosition.dx,
+    size.height - globalPosition.dy,
+  );
+}
+
 Future<T?> showAppContextMenu<T>({
   required BuildContext context,
   required RelativeRect position,
@@ -351,7 +632,6 @@ Future<T?> showAppContextMenu<T>({
     ),
   );
 }
-
 class _AppContextMenuRoute<T> extends PopupRoute<T> {
   _AppContextMenuRoute({
     required this.position,
