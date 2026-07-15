@@ -14,7 +14,7 @@
       <sparkle:version>134</sparkle:version>
       <sparkle:shortVersionString>1.0.33</sparkle:shortVersionString>
       <enclosure
-        url="https://mblinch.github.io/flofile_clean/FloFileBeta.zip"
+        url="https://github.com/mblinch/flofile_clean/releases/download/v1.0.33/FloFileBeta.zip"
         type="application/octet-stream"
         length="54047377" sparkle:edSignature="z94tXmS+0xGLZfMPC5eCvhM90aEW3OfdOtFfgAiYb1S+0FLz1gf0bC1GlCgurqfWwjClS58FsxgGR9Zbl7BnDA==" />
     </item>
