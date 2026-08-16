@@ -9,7 +9,8 @@ import '../utils/exiftool_helper.dart';
 import 'dart:async';
 import 'package:path/path.dart' as p;
 import '../utils/image_file_operations.dart';
-import '../flo_layout_constants.dart';
+import '../theme/app_tokens.dart';
+import 'card_container.dart';
 
 // Public interface for the picture preview widget state
 abstract class PicturePreviewWidgetState {
@@ -160,6 +161,8 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
         '-Make',
         '-ImageWidth',
         '-ImageHeight',
+        '-ExifImageWidth',
+        '-ExifImageHeight',
         '-ShutterSpeed',
         '-DateTimeOriginal',
         '-SubSecTimeOriginal',
@@ -625,152 +628,146 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
     }
 
     final currentImagePath = widget.imagePaths[widget.currentIndex];
-    final imageCount = widget.imagePaths.length;
 
-    return Container(
-      margin: const EdgeInsets.only(left: 3, right: 3, top: 8, bottom: 10),
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
-        borderRadius: BorderRadius.circular(7),
-        color: widget.backgroundColor ?? Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          const double _imageVerticalPadding = 6;
-          final double _mainImageHeight =
-              constraints.maxHeight - (_imageVerticalPadding * 2);
-          final double dpr = MediaQuery.devicePixelRatioOf(context);
-          final int colorManagedMaxPx = (math.max(
-                    constraints.maxWidth,
-                    _mainImageHeight,
-                  ) *
-                  dpr)
-              .round()
-              .clamp(1200, 8192);
-          return Column(
-            children: [
-              // Main image area with padding so image doesn't touch outline
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: SizedBox(
-                  height: _mainImageHeight,
-                  child: Stack(
-                    children: [
-                      // Main image with right-click and double-click support
-                      GestureDetector(
-                        onSecondaryTapDown: (details) {
-                          unawaited(_showContextMenu(context, currentImagePath,
-                              details.globalPosition));
-                        },
-                        onDoubleTap: widget.onEditMetadata != null
-                            ? () => widget.onEditMetadata!()
-                            : null,
-                        child: ColorManagedFilePreview(
-                          path: currentImagePath,
-                          maxPixelDimension: colorManagedMaxPx,
-                          fit: BoxFit.contain,
-                          alignment: Alignment.center,
-                          width: double.infinity,
-                          height: double.infinity,
-                          filterQuality: FilterQuality.high,
-                        ),
-                      ),
+    return Padding(
+      padding: const EdgeInsets.only(left: 3, right: 3, top: 8, bottom: 10),
+      child: CardContainer(
+        background: AppTokens.photoCanvas,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTokens.radiusCard - 1),
+          child: LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) {
+              const double imageVerticalPadding = 6;
+              final double mainImageHeight =
+                  constraints.maxHeight - (imageVerticalPadding * 2);
+              final double dpr = MediaQuery.devicePixelRatioOf(context);
+              final int colorManagedMaxPx = (math.max(
+                        constraints.maxWidth,
+                        mainImageHeight,
+                      ) *
+                      dpr)
+                  .round()
+                  .clamp(1200, 8192);
+              return Column(
+                children: [
+                  // Main image area with padding so image doesn't touch outline
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: SizedBox(
+                      height: mainImageHeight,
+                      child: Stack(
+                        children: [
+                          // Main image with right-click and double-click support
+                          GestureDetector(
+                            onSecondaryTapDown: (details) {
+                              unawaited(_showContextMenu(context,
+                                  currentImagePath, details.globalPosition));
+                            },
+                            onDoubleTap: widget.onEditMetadata != null
+                                ? () => widget.onEditMetadata!()
+                                : null,
+                            child: ColorManagedFilePreview(
+                              path: currentImagePath,
+                              maxPixelDimension: colorManagedMaxPx,
+                              fit: BoxFit.contain,
+                              alignment: Alignment.center,
+                              width: double.infinity,
+                              height: double.infinity,
+                              filterQuality: FilterQuality.high,
+                            ),
+                          ),
 
-                      // Zoom button
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Material(
-                          color: Colors.black.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(20),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(20),
-                            onTap: () =>
-                                _showHighResZoom(context, currentImagePath),
-                            child: Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(20),
+                          // Zoom button
+                          Positioned(
+                            top: 8,
+                            right: 8,
+                            child: Material(
+                              color: Colors.black54,
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () =>
+                                    _showHighResZoom(context, currentImagePath),
+                                child: const SizedBox(
+                                  width: 32,
+                                  height: 32,
+                                  child: Icon(
+                                    Icons.zoom_in,
+                                    color: Colors.white,
+                                    size: 16,
+                                  ),
+                                ),
                               ),
-                              child: const Icon(Icons.zoom_in,
-                                  color: Colors.white, size: 16),
                             ),
                           ),
-                        ),
-                      ),
 
-                      // FTP Upload Status Overlay
-                      if ((widget.uploadProgress
-                                      ?.containsKey(currentImagePath) ==
-                                  true &&
-                              widget.uploadProgress![currentImagePath]! <
-                                  1.0) ||
-                          widget.queuedUploads?.contains(currentImagePath) ==
-                              true)
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.8),
-                              borderRadius: BorderRadius.circular(12),
+                          // FTP Upload Status Overlay
+                          if ((widget.uploadProgress
+                                          ?.containsKey(currentImagePath) ==
+                                      true &&
+                                  widget.uploadProgress![currentImagePath]! <
+                                      1.0) ||
+                              widget.queuedUploads
+                                      ?.contains(currentImagePath) ==
+                                  true)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.8),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (widget.uploadProgress?.containsKey(
+                                                currentImagePath) ==
+                                            true &&
+                                        widget.uploadProgress![
+                                                currentImagePath]! <
+                                            1.0) ...[
+                                      // Currently uploading
+                                      const Icon(Icons.rocket_launch,
+                                          color: Colors.blue, size: 16),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${(widget.uploadProgress![currentImagePath]! * 100).toInt()}%',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      // Queued
+                                      const Icon(Icons.schedule,
+                                          color: Colors.orange, size: 16),
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        'Queued',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (widget.uploadProgress
-                                            ?.containsKey(currentImagePath) ==
-                                        true &&
-                                    widget.uploadProgress![currentImagePath]! <
-                                        1.0) ...[
-                                  // Currently uploading
-                                  const Icon(Icons.rocket_launch,
-                                      color: Colors.blue, size: 16),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${(widget.uploadProgress![currentImagePath]! * 100).toInt()}%',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ] else ...[
-                                  // Queued
-                                  const Icon(Icons.schedule,
-                                      color: Colors.orange, size: 16),
-                                  const SizedBox(width: 4),
-                                  const Text(
-                                    'Queued',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ],
-          );
-        },
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }

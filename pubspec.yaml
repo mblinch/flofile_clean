@@ -63,7 +63,6 @@ dependencies:
   # Tighter, styled checkbox than Material (avoids huge default control + padding)
   custom_checkbox_plus: ^1.0.0
   timezone: ^0.10.1
-  google_fonts: ^6.3.2
   firebase_auth: ^6.5.1
   google_sign_in: ^7.2.0
 
@@ -81,24 +80,6 @@ flutter:
     - assets/images/rocket_icon_white_only.svg
 
   fonts:
-    - family: Manrope
-      fonts:
-        - asset: fonts/Manrope-Variable.ttf
-    - family: SpaceGrotesk
-      fonts:
-        - asset: fonts/SpaceGrotesk-Variable.ttf
-    - family: PlusJakartaSans
-      fonts:
-        - asset: fonts/PlusJakartaSans-Variable.ttf
-    - family: DMSans
-      fonts:
-        - asset: fonts/DMSans-Variable.ttf
-    - family: Outfit
-      fonts:
-        - asset: fonts/Outfit-Variable.ttf
-    - family: Geist
-      fonts:
-        - asset: fonts/Geist-Variable.ttf
     - family: Inter
       fonts:
         - asset: fonts/Inter-Variable.ttf
@@ -119,9 +100,14 @@ flutter:
           weight: 800
         - asset: fonts/Inter-Variable.ttf
           weight: 900
-    - family: Lora
+    # Cross-platform monospace (Windows lacks Menlo/SF Mono; Consolas differs).
+    # License: fonts/JetBrainsMono-OFL.txt
+    - family: JetBrainsMono
       fonts:
-        - asset: fonts/Lora-Variable.ttf
+        - asset: fonts/JetBrainsMono-Regular.ttf
+          weight: 400
+        - asset: fonts/JetBrainsMono-Medium.ttf
+          weight: 500
 
 flutter_launcher_icons:
   android: "launcher_icon"

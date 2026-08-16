@@ -1,3 +1,5 @@
+import 'verb_sub_options.dart';
+
 /// Default action phrase for a verb label (no "against the team" suffix).
 class VerbCaptionWording {
   VerbCaptionWording._();
@@ -223,6 +225,52 @@ class VerbCaptionWording {
     final explicit = byVerb[verb];
     if (explicit != null) return explicit;
     return inferPluralFromSingular(singularPhrase);
+  }
+
+  /// Default -ing / gerund phrase used in reaction captions
+  /// (e.g. "celebrates after [hitting a single]").
+  static String defaultIngWording(String verb, String singularPhrase) {
+    const byVerb = <String, String>{
+      'Single': 'hitting a single',
+      'Double': 'hitting a double',
+      'Triple': 'hitting a triple',
+      'Home Run': 'hitting a home run',
+      'Grand Slam': 'hitting a grand slam',
+      'Sacrifice Fly': 'hitting a sacrifice fly',
+      'Bunts': 'hitting a bunt',
+      'Walks': 'drawing a walk',
+      'Hit by Pitch': 'being hit by a pitch',
+      'Steals': 'stealing a base',
+      'Slides': 'sliding into a base',
+      'Runs': 'running to a base',
+      'Rounds': 'rounding a base',
+      'At Bat': 'taking an at bat in his batting stance',
+      'Pitching': 'delivering a pitch',
+      'Swings': 'swinging',
+      'Catches': 'catching a ball',
+      'Throws': 'throwing a ball',
+      'Looks On': 'looking on',
+      'Skates': 'skating',
+      'Shoots': 'shooting',
+      'Battles': 'battling',
+      'Scores': 'scoring',
+      'Blocks': 'blocking a shot',
+      'Checks': 'checking',
+      'Defends': 'defending',
+      'Saves': 'making a save',
+      'Celebrates': 'celebrating',
+      'Celebrates a Goal': 'celebrating a goal',
+      'Post Game Win': 'celebrating',
+      'Post Game Loss': 'reacting',
+      'Goes to the Net': 'going to the net',
+      'Drives': 'driving',
+      'Dribbles': 'dribbling',
+      'Dunks': 'dunking',
+      'Kicks': 'kicking',
+    };
+    final explicit = byVerb[verb];
+    if (explicit != null) return explicit;
+    return VerbSubOptions.gerundPhraseFromSingular(singularPhrase);
   }
 
   /// Rough third-person singular → base form for multi-player captions.

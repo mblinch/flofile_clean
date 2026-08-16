@@ -5,6 +5,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:timezone/data/latest.dart' as tz_data;
 
 import 'firebase_options.dart';
+import 'flo_layout_constants.dart';
+import 'theme/app_tokens.dart';
 import 'screens/caption_builder_screen.dart';
 import 'services/auth_service.dart';
 import 'widgets/app_auth_shell.dart';
@@ -170,14 +172,25 @@ class MyApp extends StatelessWidget {
           title: 'Caption Writer',
           navigatorKey: appNavigatorKey,
           debugShowCheckedModeBanner: false,
+          scrollBehavior: const FloScrollBehavior(),
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF2E3A59),
+              seedColor: AppTokens.accent,
               brightness: Brightness.light,
             ),
-            scaffoldBackgroundColor: const Color(0xFFF5F5F4),
+            scaffoldBackgroundColor: AppTokens.canvas,
             useMaterial3: true,
             fontFamily: 'Inter',
+            scrollbarTheme: ScrollbarThemeData(
+              thickness: const WidgetStatePropertyAll(kFloScrollbarThickness),
+              radius: const Radius.circular(4),
+              thumbVisibility: const WidgetStatePropertyAll(true),
+              trackVisibility: const WidgetStatePropertyAll(false),
+              crossAxisMargin: 2,
+              mainAxisMargin: 2,
+              // Keep thumb in the reserved gutter; content uses kFloScrollbarGutter.
+              minThumbLength: 28,
+            ),
             popupMenuTheme: PopupMenuThemeData(
               color: Colors.white,
               surfaceTintColor: Colors.transparent,

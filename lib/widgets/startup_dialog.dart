@@ -2512,12 +2512,60 @@ class _StartupTeamAutocomplete extends StatefulWidget {
 class _StartupTeamAutocompleteState extends State<_StartupTeamAutocomplete> {
   final GlobalKey _fieldKey = GlobalKey();
   double? _fieldWidth;
+  TextEditingController? _textController;
+  FocusNode? _focusNode;
+  /// After a pick, next tap should reopen the full list (not just a caret).
+  bool _openListOnNextTap = false;
 
   static const _fieldStyle = TextStyle(
     fontSize: 11,
     color: Color(0xFF2A4858),
     fontWeight: FontWeight.w500,
   );
+
+  @override
+  void didUpdateWidget(covariant _StartupTeamAutocomplete oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedTeam != widget.selectedTeam &&
+        _textController != null &&
+        !(_focusNode?.hasFocus ?? false)) {
+      _textController!.text = widget.selectedTeam ?? '';
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode?.removeListener(_onFocusChanged);
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    final focusNode = _focusNode;
+    final controller = _textController;
+    if (focusNode == null || controller == null) return;
+    if (!focusNode.hasFocus) {
+      // Dismissed without a new pick — put the selected label back.
+      final selected = widget.selectedTeam ?? '';
+      if (controller.text != selected) {
+        controller.text = selected;
+      }
+      _openListOnNextTap = false;
+    }
+  }
+
+  void _attachFieldHandles(
+    TextEditingController controller,
+    FocusNode focusNode,
+  ) {
+    if (!identical(_textController, controller)) {
+      _textController = controller;
+    }
+    if (!identical(_focusNode, focusNode)) {
+      _focusNode?.removeListener(_onFocusChanged);
+      _focusNode = focusNode;
+      _focusNode!.addListener(_onFocusChanged);
+    }
+  }
 
   InputDecoration _fieldDecoration({required bool focused}) {
     final borderRadius = BorderRadius.circular(focused ? 8 : 5);
@@ -2569,6 +2617,22 @@ class _StartupTeamAutocompleteState extends State<_StartupTeamAutocomplete> {
     });
   }
 
+  /// Clears the filter so Autocomplete rebuilds options and shows the list.
+  void _openTeamList(TextEditingController controller) {
+    _openListOnNextTap = false;
+    // Empty query → full team list; Autocomplete opens on text change.
+    if (controller.text.isNotEmpty) {
+      controller.clear();
+    } else {
+      // Already empty (re-tap): nudge so optionsBuilder runs again.
+      controller.value = const TextEditingValue(
+        text: ' ',
+        selection: TextSelection.collapsed(offset: 1),
+      );
+      controller.clear();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncFieldWidth());
@@ -2582,8 +2646,14 @@ class _StartupTeamAutocompleteState extends State<_StartupTeamAutocomplete> {
       onSelected: (team) {
         if (widget.otherTeam == team) return;
         widget.onTeamSelected(team);
+        _openListOnNextTap = true;
+        // Drop focus so a caret doesn't sit in the field after picking.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _focusNode?.unfocus();
+        });
       },
       fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+        _attachFieldHandles(controller, focusNode);
         return KeyedSubtree(
           key: _fieldKey,
           child: ListenableBuilder(
@@ -2595,10 +2665,18 @@ class _StartupTeamAutocompleteState extends State<_StartupTeamAutocomplete> {
                 style: _fieldStyle,
                 decoration: _fieldDecoration(focused: focusNode.hasFocus),
                 onTap: () {
-                  controller.selection = TextSelection(
-                    baseOffset: 0,
-                    extentOffset: controller.text.length,
-                  );
+                  // First open or re-open after a selection: show full list.
+                  // (If already focused with an open filter, keep typing.)
+                  if (_openListOnNextTap ||
+                      !focusNode.hasFocus ||
+                      controller.text == (widget.selectedTeam ?? '')) {
+                    _openTeamList(controller);
+                  } else {
+                    controller.selection = TextSelection(
+                      baseOffset: 0,
+                      extentOffset: controller.text.length,
+                    );
+                  }
                 },
                 onSubmitted: (_) => onFieldSubmitted(),
               );

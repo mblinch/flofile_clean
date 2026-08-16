@@ -35,6 +35,8 @@ import '../services/camera_serial_service.dart';
 import '../utils/exiftool_helper.dart';
 import '../utils/burst_chain_helper.dart';
 import '../flo_layout_constants.dart';
+import '../theme/app_tokens.dart';
+import '../widgets/card_container.dart';
 
 /// Writes IPTC keyword bag and XMP/IPTC **Subject** so apps like Photo Mechanic
 /// show keywords (PM often reads `Subject` / dc:subject; IPTC-only is easy to miss).
@@ -2728,8 +2730,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
         await _reportSessionLoading(
           progress: 0.44 + (0.18 * (i + 1) / imageFiles.length),
           title: 'Loading images',
-          detail:
-              'Reading capture times · ${i + 1} of ${imageFiles.length}',
+          detail: 'Reading capture times · ${i + 1} of ${imageFiles.length}',
         );
       }
       try {
@@ -4198,66 +4199,66 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     if (_isLoadingPlayers || _isLoadingImages) {
       return _wrapPreSessionChrome(
         Padding(
-        padding: padding,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  _loadingStatusTitle,
-                  textAlign: TextAlign.center,
-                  style: loadingTitleStyle,
-                ),
-                if (_loadingStatusDetail.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+          padding: padding,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                   Text(
-                    _loadingStatusDetail,
+                    _loadingStatusTitle,
                     textAlign: TextAlign.center,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 11,
-                      fontVariations: const [FontVariation('wght', 500)],
-                      color: Colors.grey.shade700,
-                      height: 1.35,
+                    style: loadingTitleStyle,
+                  ),
+                  if (_loadingStatusDetail.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _loadingStatusDetail,
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 11,
+                        fontVariations: const [FontVariation('wght', 500)],
+                        color: Colors.grey.shade700,
+                        height: 1.35,
+                      ),
                     ),
+                  ],
+                  const SizedBox(height: 20),
+                  FloTealGradientProgressBar(
+                    value: _loadingProgress,
+                    height: 14,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '${(_loadingProgress * 100).round()}%',
+                    textAlign: TextAlign.center,
+                    style: loadingPercentStyle,
                   ),
                 ],
-                const SizedBox(height: 20),
-                FloTealGradientProgressBar(
-                  value: _loadingProgress,
-                  height: 14,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '${(_loadingProgress * 100).round()}%',
-                  textAlign: TextAlign.center,
-                  style: loadingPercentStyle,
-                ),
-              ],
+              ),
             ),
           ),
         ),
-      ),
       );
     }
 
     return _wrapPreSessionChrome(
       Padding(
-      padding: padding,
-      child: SizedBox.expand(
-        child: StartupDialog(
-          inline: true,
-          sport: _isSportSelected ? _selectedSport : null,
-          onSportSelected: _handleSportSelected,
-          onConfigurationComplete: _handleStartupComplete,
+        padding: padding,
+        child: SizedBox.expand(
+          child: StartupDialog(
+            inline: true,
+            sport: _isSportSelected ? _selectedSport : null,
+            onSportSelected: _handleSportSelected,
+            onConfigurationComplete: _handleStartupComplete,
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -4273,169 +4274,177 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       appBar: _inPreSession
           ? null
           : AppHeaderWidget(
-        cameraService: _cameraService,
-        currentImagePath:
-            imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
-        currentIndex: currentIndex,
-        totalImages: imagePaths.length,
-        currentExifData: _currentExifData,
-        onImagesLoaded: (images) {
-          print('CaptionBuilderScreen received ${images.length} images');
-          setState(() {
-            imagePaths = images;
-            currentIndex = 0;
-          });
-          print(
-              'Updated state: ${imagePaths.length} images, currentIndex: $currentIndex');
+              cameraService: _cameraService,
+              currentImagePath:
+                  imagePaths.isNotEmpty ? imagePaths[currentIndex] : null,
+              currentIndex: currentIndex,
+              totalImages: imagePaths.length,
+              currentExifData: _currentExifData,
+              onImagesLoaded: (images) {
+                print('CaptionBuilderScreen received ${images.length} images');
+                setState(() {
+                  imagePaths = images;
+                  currentIndex = 0;
+                });
+                print(
+                    'Updated state: ${imagePaths.length} images, currentIndex: $currentIndex');
 
-          // Load metadata for the first image
-          if (images.isNotEmpty) {
-            _loadMetadata();
-          }
-        },
-        onStartFolderWatcher: _startFolderWatcher,
-        onHomeTeamChanged: (team) {
-          setState(() {
-            selectedHomeTeam = team;
-          });
-        },
-        onAwayTeamChanged: (team) {
-          setState(() {
-            selectedAwayTeam = team;
-          });
-        },
-        onApiChanged: (api) {
-          setState(() {
-            selectedApi = api;
-          });
-          print('API changed in main screen: $api');
-        },
-        currentLayout: _currentLayout,
-        onLayoutChanged: (String newLayout) async {
-          setState(() {
-            _currentLayout = newLayout;
-          });
-          // Save to preferences
-          final preferencesService = await PreferencesService.getInstance();
-          await preferencesService.saveCurrentLayout(newLayout);
-        },
-        onPreferencesClosed: () async {
-          final preferencesService = await PreferencesService.getInstance();
-          final mode = await preferencesService.getCaptionEntryMode();
-          final burst = await preferencesService.getBurstDetectionEnabled();
-          final serial = await preferencesService.getSerialNumberBylines();
-          final kwVerbs = await preferencesService.getApplyVerbKeywords();
-          final kwNames =
-              await preferencesService.getApplyPlayerNamesToKeywords();
-          if (mounted) {
-            setState(() {
-              _useKeyboardFireAsDefault = mode == 'keyboard_fire';
-              _burstDetectionEnabled = burst;
-              _serialBylinesEnabled = serial;
-              _keywordVerbsEnabled = kwVerbs;
-              _keywordNamesEnabled = kwNames;
-              _keywordModeEnabled =
-                  preferencesService.captionFieldKeywordsVisibleSync;
-            });
-            if (_keywordModeEnabled) {
-              _ensureKeywordModeAppliedToPanels();
-            }
-          }
-        },
-        onBurstDetectionChanged: (enabled) {
-          if (mounted) setState(() => _burstDetectionEnabled = enabled);
-        },
-        onOpenFtpSettings: () {
-          try {
-            (_captionFieldsKey2.currentState as dynamic)?.showFtpSettings();
-          } catch (_) {}
-        },
-      ),
+                // Load metadata for the first image
+                if (images.isNotEmpty) {
+                  _loadMetadata();
+                }
+              },
+              onStartFolderWatcher: _startFolderWatcher,
+              onHomeTeamChanged: (team) {
+                setState(() {
+                  selectedHomeTeam = team;
+                });
+              },
+              onAwayTeamChanged: (team) {
+                setState(() {
+                  selectedAwayTeam = team;
+                });
+              },
+              onApiChanged: (api) {
+                setState(() {
+                  selectedApi = api;
+                });
+                print('API changed in main screen: $api');
+              },
+              currentLayout: _currentLayout,
+              onLayoutChanged: (String newLayout) async {
+                setState(() {
+                  _currentLayout = newLayout;
+                });
+                // Save to preferences
+                final preferencesService =
+                    await PreferencesService.getInstance();
+                await preferencesService.saveCurrentLayout(newLayout);
+              },
+              onPreferencesClosed: () async {
+                final preferencesService =
+                    await PreferencesService.getInstance();
+                final mode = await preferencesService.getCaptionEntryMode();
+                final burst =
+                    await preferencesService.getBurstDetectionEnabled();
+                final serial =
+                    await preferencesService.getSerialNumberBylines();
+                final kwVerbs = await preferencesService.getApplyVerbKeywords();
+                final kwNames =
+                    await preferencesService.getApplyPlayerNamesToKeywords();
+                if (mounted) {
+                  setState(() {
+                    _useKeyboardFireAsDefault = mode == 'keyboard_fire';
+                    _burstDetectionEnabled = burst;
+                    _serialBylinesEnabled = serial;
+                    _keywordVerbsEnabled = kwVerbs;
+                    _keywordNamesEnabled = kwNames;
+                    _keywordModeEnabled =
+                        preferencesService.captionFieldKeywordsVisibleSync;
+                  });
+                  if (_keywordModeEnabled) {
+                    _ensureKeywordModeAppliedToPanels();
+                  }
+                }
+              },
+              onBurstDetectionChanged: (enabled) {
+                if (mounted) setState(() => _burstDetectionEnabled = enabled);
+              },
+              onOpenFtpSettings: () {
+                try {
+                  (_captionFieldsKey2.currentState as dynamic)
+                      ?.showFtpSettings();
+                } catch (_) {}
+              },
+            ),
       body: _inPreSession
           ? _buildPreSessionBody()
           : Shortcuts(
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.keyV, meta: true, shift: true):
-              _PastePreviousCaptionIntent(),
-          SingleActivator(LogicalKeyboardKey.enter, meta: true):
-              _SaveAndNextIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowLeft): _PreviousImageIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowUp): _PreviousRowIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowRight): _NextImageIntent(),
-          SingleActivator(LogicalKeyboardKey.arrowDown): _NextRowIntent(),
-        },
-        child: Actions(
-          actions: <Type, Action<Intent>>{
-            _PastePreviousCaptionIntent:
-                CallbackAction<_PastePreviousCaptionIntent>(
-              onInvoke: (_) {
-                final state = _captionFieldsKey2.currentState;
-                (state as dynamic)?.pasteLastCaption();
-                return null;
+              shortcuts: const <ShortcutActivator, Intent>{
+                SingleActivator(LogicalKeyboardKey.keyV,
+                    meta: true, shift: true): _PastePreviousCaptionIntent(),
+                SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                    _SaveAndNextIntent(),
+                SingleActivator(LogicalKeyboardKey.arrowLeft):
+                    _PreviousImageIntent(),
+                SingleActivator(LogicalKeyboardKey.arrowUp):
+                    _PreviousRowIntent(),
+                SingleActivator(LogicalKeyboardKey.arrowRight):
+                    _NextImageIntent(),
+                SingleActivator(LogicalKeyboardKey.arrowDown): _NextRowIntent(),
               },
+              child: Actions(
+                actions: <Type, Action<Intent>>{
+                  _PastePreviousCaptionIntent:
+                      CallbackAction<_PastePreviousCaptionIntent>(
+                    onInvoke: (_) {
+                      final state = _captionFieldsKey2.currentState;
+                      (state as dynamic)?.pasteLastCaption();
+                      return null;
+                    },
+                  ),
+                  _SaveAndNextIntent: CallbackAction<_SaveAndNextIntent>(
+                    onInvoke: (_) async {
+                      await _saveCurrentMetadata();
+                      if (!mounted) return null;
+                      if (currentIndex < imagePaths.length - 1) {
+                        setState(() {
+                          currentIndex = currentIndex + 1;
+                        });
+                        _loadMetadata();
+                      }
+                      return null;
+                    },
+                  ),
+                  _PreviousImageIntent: _ConditionalArrowAction(
+                    consumesKeyWhen: () => !_isTextInputFocused(),
+                    onInvoke: (_) {
+                      if (_isTextInputFocused()) return null;
+                      if (imagePaths.isEmpty) return null;
+                      _clearMultiSelection();
+                      if (currentIndex > 0) {
+                        setState(() => _thumbCenterRequestId++);
+                        _onImageSelected(currentIndex - 1);
+                      }
+                      return null;
+                    },
+                  ),
+                  _NextImageIntent: _ConditionalArrowAction(
+                    consumesKeyWhen: () => !_isTextInputFocused(),
+                    onInvoke: (_) {
+                      if (_isTextInputFocused()) return null;
+                      if (imagePaths.isEmpty) return null;
+                      _clearMultiSelection();
+                      if (currentIndex < imagePaths.length - 1) {
+                        setState(() => _thumbCenterRequestId++);
+                        _onImageSelected(currentIndex + 1);
+                      }
+                      return null;
+                    },
+                  ),
+                  _PreviousRowIntent: _ConditionalArrowAction(
+                    consumesKeyWhen: () => !_isTextInputFocused(),
+                    onInvoke: (_) {
+                      if (_isTextInputFocused()) return null;
+                      _clearMultiSelection();
+                      return _handleArrowUpDownByRow(up: true);
+                    },
+                  ),
+                  _NextRowIntent: _ConditionalArrowAction(
+                    consumesKeyWhen: () => !_isTextInputFocused(),
+                    onInvoke: (_) {
+                      if (_isTextInputFocused()) return null;
+                      _clearMultiSelection();
+                      return _handleArrowUpDownByRow(up: false);
+                    },
+                  ),
+                },
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8.0, 1.0, 4.0, 0.0),
+                  child: _buildLayout(),
+                ),
+              ),
             ),
-            _SaveAndNextIntent: CallbackAction<_SaveAndNextIntent>(
-              onInvoke: (_) async {
-                await _saveCurrentMetadata();
-                if (!mounted) return null;
-                if (currentIndex < imagePaths.length - 1) {
-                  setState(() {
-                    currentIndex = currentIndex + 1;
-                  });
-                  _loadMetadata();
-                }
-                return null;
-              },
-            ),
-            _PreviousImageIntent: _ConditionalArrowAction(
-              consumesKeyWhen: () => !_isTextInputFocused(),
-              onInvoke: (_) {
-                if (_isTextInputFocused()) return null;
-                if (imagePaths.isEmpty) return null;
-                _clearMultiSelection();
-                if (currentIndex > 0) {
-                  setState(() => _thumbCenterRequestId++);
-                  _onImageSelected(currentIndex - 1);
-                }
-                return null;
-              },
-            ),
-            _NextImageIntent: _ConditionalArrowAction(
-              consumesKeyWhen: () => !_isTextInputFocused(),
-              onInvoke: (_) {
-                if (_isTextInputFocused()) return null;
-                if (imagePaths.isEmpty) return null;
-                _clearMultiSelection();
-                if (currentIndex < imagePaths.length - 1) {
-                  setState(() => _thumbCenterRequestId++);
-                  _onImageSelected(currentIndex + 1);
-                }
-                return null;
-              },
-            ),
-            _PreviousRowIntent: _ConditionalArrowAction(
-              consumesKeyWhen: () => !_isTextInputFocused(),
-              onInvoke: (_) {
-                if (_isTextInputFocused()) return null;
-                _clearMultiSelection();
-                return _handleArrowUpDownByRow(up: true);
-              },
-            ),
-            _NextRowIntent: _ConditionalArrowAction(
-              consumesKeyWhen: () => !_isTextInputFocused(),
-              onInvoke: (_) {
-                if (_isTextInputFocused()) return null;
-                _clearMultiSelection();
-                return _handleArrowUpDownByRow(up: false);
-              },
-            ),
-          },
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8.0, 1.0, 4.0, 0.0),
-            child: _buildLayout(),
-          ),
-        ),
-      ),
     );
   }
 
@@ -4622,206 +4631,230 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     );
   }
 
+  static const double _kbActionSidebarWidth = 132;
+
   Widget _buildRightSidebar() {
     final dynamic cs = _captionFieldsKey2.currentState;
 
-    return Container(
-      width: 172,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.18),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+    String ftpProfileLabel() {
+      try {
+        final profile = cs?.currentFtpProfile as String?;
+        return 'FTP Profile: ${profile ?? 'None'}';
+      } catch (_) {
+        return 'FTP Profile: None';
+      }
+    }
+
+    return SizedBox(
+      width: _kbActionSidebarWidth,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(4, 2, 4, 8),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _sbBtn(
-              label: '⇧ FTP',
-              ftp: true,
-              fullWidth: true,
-              onTap: cs != null
-                  ? () {
-                      try {
-                        cs.triggerFtp();
-                      } catch (_) {}
-                    }
-                  : null,
-            ),
-            if (cs != null) ...[
-              GestureDetector(
-                onTap: () {
-                  try {
-                    cs.showFtpSettings();
-                  } catch (_) {}
-                },
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 6, bottom: 0, left: 4),
-                    child: Text(
-                      (() {
-                        try {
-                          final profile = cs.currentFtpProfile as String?;
-                          return 'FTP Profile: ${profile ?? 'None'}';
-                        } catch (_) {
-                          return 'FTP Profile: None';
-                        }
-                      })(),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 9,
-                        color: Colors.grey.shade600,
-                        letterSpacing: -0.2,
+            _sbSection(
+              label: 'Transmit',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _sbBtn(
+                    label: '⇧ FTP',
+                    ftp: true,
+                    fullWidth: true,
+                    onTap: cs != null
+                        ? () {
+                            try {
+                              cs.triggerFtp();
+                            } catch (_) {}
+                          }
+                        : null,
+                  ),
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: cs != null
+                        ? () {
+                            try {
+                              cs.showFtpSettings();
+                            } catch (_) {}
+                          }
+                        : null,
+                    child: MouseRegion(
+                      cursor: cs != null
+                          ? SystemMouseCursors.click
+                          : SystemMouseCursors.basic,
+                      child: Text(
+                        ftpProfileLabel(),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTokens.meta.copyWith(
+                          fontSize: 8.5,
+                          color: AppTokens.inkMuted,
+                          letterSpacing: -0.2,
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
-            ],
-            const SizedBox(height: 5),
-            Row(children: [
-              Expanded(
-                  child: _sbBtn(
-                label: '‹ Save',
-                primary: true,
-                onTap: (currentIndex > 0)
-                    ? () {
-                        cs?.storeCurrentCaption();
-                        _saveIptcMetadata();
-                        setState(() => _thumbCenterRequestId++);
-                        _onImageSelected(currentIndex - 1);
-                      }
-                    : null,
-              )),
-              const SizedBox(width: 5),
-              Expanded(
-                  child: _sbBtn(
-                label: 'Save ›',
-                primary: true,
-                onTap: (currentIndex < imagePaths.length - 1)
-                    ? () {
-                        cs?.storeCurrentCaption();
-                        _saveIptcMetadata();
-                        setState(() => _thumbCenterRequestId++);
-                        _onImageSelected(currentIndex + 1);
-                      }
-                    : null,
-              )),
-            ]),
-            Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 8),
-              child: Container(height: 1, color: const Color(0xFFF0EFEC)),
             ),
-            _sbBtn(
-              label: 'Paste Previous',
-              fullWidth: true,
-              onTap: cs != null
-                  ? () {
-                      try {
-                        cs.pastePreviousCaption();
-                      } catch (_) {}
-                    }
-                  : null,
-            ),
-            const SizedBox(height: 5),
-            Row(children: [
-              Expanded(
-                  child: _sbBtn(
-                label: 'Copy',
-                onTap: cs != null
-                    ? () {
-                        try {
-                          cs.copyCaption();
-                        } catch (_) {}
-                      }
-                    : null,
-              )),
-              const SizedBox(width: 5),
-              Expanded(
-                  child: _sbBtn(
-                label: 'Paste',
-                onTap: cs != null
-                    ? () {
-                        try {
-                          cs.pasteCaption();
-                        } catch (_) {}
-                      }
-                    : null,
-              )),
-            ]),
-            const SizedBox(height: 5),
-            _sbBtn(
-              label: 'Reset Caption',
-              danger: true,
-              fullWidth: true,
-              onTap: () => _handleReset(),
-            ),
-            _sbDivider(),
-            _sbToggleRow(
-              label: 'Keyword mode',
-              value: _keywordModeEnabled,
-              onChanged: (v) => _setKeywordModeEnabled(v),
-            ),
-            if (_keywordModeEnabled) ...[
-              const SizedBox(height: 6),
-              _sbToggleRow(
-                label: 'Keyword verbs',
-                value: _keywordVerbsEnabled,
-                onChanged: (v) async {
-                  setState(() => _keywordVerbsEnabled = v);
-                  (_kbPanelKey.currentState as dynamic)
-                      ?.setKeywordVerbsEnabled(v);
-                  (_captionFieldsKey2.currentState as dynamic)
-                      ?.setApplyVerbKeywordsEnabled(v);
-                },
+            _sbSection(
+              label: 'Navigate',
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _sbBtn(
+                      label: '‹ Save',
+                      onTap: currentIndex > 0
+                          ? () {
+                              cs?.storeCurrentCaption();
+                              _saveIptcMetadata();
+                              setState(() => _thumbCenterRequestId++);
+                              _onImageSelected(currentIndex - 1);
+                            }
+                          : null,
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: _sbBtn(
+                      label: 'Save ›',
+                      onTap: currentIndex < imagePaths.length - 1
+                          ? () {
+                              cs?.storeCurrentCaption();
+                              _saveIptcMetadata();
+                              setState(() => _thumbCenterRequestId++);
+                              _onImageSelected(currentIndex + 1);
+                            }
+                          : null,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              _sbToggleRow(
-                label: 'Keyword names',
-                value: _keywordNamesEnabled,
-                onChanged: (v) async {
-                  setState(() => _keywordNamesEnabled = v);
-                  (_kbPanelKey.currentState as dynamic)
-                      ?.setKeywordNamesEnabled(v);
-                  (_captionFieldsKey2.currentState as dynamic)
-                      ?.setApplyPlayerNamesToKeywordsEnabled(v);
-                },
+            ),
+            _sbSection(
+              label: 'Clipboard',
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _sbBtn(
+                          label: 'Copy',
+                          onTap: cs != null
+                              ? () {
+                                  try {
+                                    cs.copyCaption();
+                                  } catch (_) {}
+                                }
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: _sbBtn(
+                          label: 'Paste',
+                          onTap: cs != null
+                              ? () {
+                                  try {
+                                    cs.pasteCaption();
+                                  } catch (_) {}
+                                }
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  _sbBtn(
+                    label: 'Paste Previous',
+                    fullWidth: true,
+                    onTap: cs != null
+                        ? () {
+                            try {
+                              cs.pastePreviousCaption();
+                            } catch (_) {}
+                          }
+                        : null,
+                  ),
+                ],
               ),
-            ],
-            const SizedBox(height: 6),
-            _sbToggleRow(
-              label: 'Serial bylines',
-              value: _serialBylinesEnabled,
-              onChanged: (v) async {
-                setState(() => _serialBylinesEnabled = v);
-                final prefs = await PreferencesService.getInstance();
-                await prefs.saveSerialNumberBylines(v);
-              },
             ),
-            const SizedBox(height: 4),
-            _sbToggleRow(
-              label: 'Burst detection',
-              value: _burstDetectionEnabled,
-              onChanged: (v) async {
-                setState(() => _burstDetectionEnabled = v);
-                final prefs = await PreferencesService.getInstance();
-                await prefs.saveBurstDetectionEnabled(v);
-              },
+            _sbSection(
+              label: 'Caption',
+              child: _sbBtn(
+                label: 'Reset Caption',
+                fullWidth: true,
+                onTap: _handleReset,
+              ),
             ),
-            _sbDivider(),
-            _sbBtn(
-              label: 'Shortcuts',
-              fullWidth: true,
-              onTap: () => _showKeyboardShortcutsDialog(),
+            _sbSection(
+              label: 'Modes',
+              child: Column(
+                children: [
+                  _sbToggleRow(
+                    label: 'Keyword mode',
+                    value: _keywordModeEnabled,
+                    onChanged: _setKeywordModeEnabled,
+                  ),
+                  if (_keywordModeEnabled) ...[
+                    const SizedBox(height: 6),
+                    _sbToggleRow(
+                      label: 'Keyword verbs',
+                      value: _keywordVerbsEnabled,
+                      onChanged: (v) async {
+                        setState(() => _keywordVerbsEnabled = v);
+                        (_kbPanelKey.currentState as dynamic)
+                            ?.setKeywordVerbsEnabled(v);
+                        (_captionFieldsKey2.currentState as dynamic)
+                            ?.setApplyVerbKeywordsEnabled(v);
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    _sbToggleRow(
+                      label: 'Keyword names',
+                      value: _keywordNamesEnabled,
+                      onChanged: (v) async {
+                        setState(() => _keywordNamesEnabled = v);
+                        (_kbPanelKey.currentState as dynamic)
+                            ?.setKeywordNamesEnabled(v);
+                        (_captionFieldsKey2.currentState as dynamic)
+                            ?.setApplyPlayerNamesToKeywordsEnabled(v);
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  _sbToggleRow(
+                    label: 'Serial bylines',
+                    value: _serialBylinesEnabled,
+                    onChanged: (v) async {
+                      setState(() => _serialBylinesEnabled = v);
+                      final prefs = await PreferencesService.getInstance();
+                      await prefs.saveSerialNumberBylines(v);
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  _sbToggleRow(
+                    label: 'Burst detection',
+                    value: _burstDetectionEnabled,
+                    onChanged: (v) async {
+                      setState(() => _burstDetectionEnabled = v);
+                      final prefs = await PreferencesService.getInstance();
+                      await prefs.saveBurstDetectionEnabled(v);
+                    },
+                  ),
+                ],
+              ),
+            ),
+            _sbSection(
+              label: 'Help',
+              bottomSpacing: 0,
+              child: _sbBtn(
+                label: 'Shortcuts',
+                fullWidth: true,
+                onTap: _showKeyboardShortcutsDialog,
+              ),
             ),
           ],
         ),
@@ -4829,18 +4862,29 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     );
   }
 
-  Widget _sbLabel(String text) => Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8,
-            color: Color(0xFFBBBBBB)),
-      );
-
-  Widget _sbDivider() => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Container(height: 1, color: const Color(0xFFF0EFEC)),
+  Widget _sbSection({
+    required String label,
+    required Widget child,
+    double bottomSpacing = 10,
+  }) =>
+      Padding(
+        padding: EdgeInsets.only(bottom: bottomSpacing),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 4),
+              child: Text(
+                label.toUpperCase(),
+                style: AppTokens.microLabel.copyWith(color: AppTokens.inkMuted),
+              ),
+            ),
+            CardContainer(
+              padding: const EdgeInsets.all(8),
+              child: child,
+            ),
+          ],
+        ),
       );
 
   Widget _sbToggleRow({
@@ -4852,24 +4896,34 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       behavior: HitTestBehavior.opaque,
       onTap: () => onChanged(!value),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w500,
-              color: Color(0xFF555555),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTokens.secondaryLabel.copyWith(
+                fontSize: 9,
+                fontWeight: FontWeight.w500,
+                color: AppTokens.inkSecondary,
+                height: 1.1,
+              ),
             ),
           ),
-          Transform.scale(
-            scale: 0.7,
-            alignment: Alignment.centerRight,
-            child: Switch(
-              value: value,
-              onChanged: onChanged,
-              activeColor: const Color(0xFF3A5F78),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          const SizedBox(width: 2),
+          // Switch keeps full layout size when only Transform.scale'd — box it.
+          SizedBox(
+            width: 34,
+            height: 20,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              alignment: Alignment.centerRight,
+              child: Switch(
+                value: value,
+                onChanged: onChanged,
+                activeColor: AppTokens.accent,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
           ),
         ],
@@ -4880,67 +4934,58 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   Widget _sbBtn(
       {required String label,
       VoidCallback? onTap,
-      bool primary = false,
       bool ftp = false,
-      bool danger = false,
       bool fullWidth = false}) {
     final enabled = onTap != null;
+    final radius = BorderRadius.circular(ftp ? 999 : AppTokens.radiusControl);
+    final foreground =
+        enabled ? (ftp ? Colors.white : AppTokens.ink) : AppTokens.inkMuted;
 
-    // FTP keeps its teal gradient style
-    if (ftp) {
-      const tealGrad = LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFF4A7A96), Color(0xFF2A4858)]);
-      return GestureDetector(
-        onTap: onTap,
-        child: MouseRegion(
-          cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+    return SizedBox(
+      width: fullWidth ? double.infinity : null,
+      height: 28,
+      child: Material(
+        color: enabled && ftp ? AppTokens.accent : Colors.transparent,
+        borderRadius: radius,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          splashColor: ftp
+              ? Colors.white.withValues(alpha: 0.16)
+              : AppTokens.accent.withValues(alpha: 0.08),
+          child: Ink(
             decoration: BoxDecoration(
-              gradient: enabled ? tealGrad : null,
-              color: enabled ? null : Colors.grey.shade300,
+              borderRadius: radius,
               border: Border.all(
-                  color:
-                      enabled ? const Color(0xFF4A7A96) : Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(6),
-              boxShadow: enabled
+                color: ftp && enabled ? AppTokens.accent : AppTokens.cardBorder,
+              ),
+              boxShadow: ftp && enabled
                   ? [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.18),
-                        blurRadius: 4,
+                        color: AppTokens.accent.withValues(alpha: 0.20),
+                        blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
                     ]
                   : null,
             ),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
             child: Center(
-                child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontFamily: 'Inter',
-                  letterSpacing: -0.25,
-                  fontSize: 12,
-                  fontVariations: const [FontVariation('wght', 500)],
-                  color: enabled ? Colors.white : Colors.grey.shade600),
-            )),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTokens.secondaryLabel.copyWith(
+                  fontSize: ftp ? 12 : 10,
+                  fontWeight: ftp ? FontWeight.w600 : FontWeight.w500,
+                  color: foreground,
+                  letterSpacing: ftp ? -0.2 : 0,
+                ),
+              ),
+            ),
           ),
         ),
-      );
-    }
-
-    // All other buttons use ElevatedGreyButton style
-    return ElevatedGreyButton(
-      label: label,
-      fontSize: 11,
-      fullWidth: fullWidth,
-      isDanger: danger,
-      isPrimary: primary,
-      onPressed: onTap,
+      ),
     );
   }
 

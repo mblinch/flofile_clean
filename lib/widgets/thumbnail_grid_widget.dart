@@ -6,7 +6,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:extended_image/extended_image.dart';
 import '../utils/exiftool_helper.dart';
-import '../flo_layout_constants.dart';
+import '../theme/app_tokens.dart';
 import '../utils/image_file_operations.dart';
 import 'app_styled_dialogs.dart';
 import 'caption_fields_widget.dart' show CustomButton;
@@ -182,19 +182,11 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(5),
+            color: active ? AppTokens.accentTint : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: active ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0),
-              width: active ? 1.5 : 0.7,
+              color: active ? AppTokens.accent : AppTokens.cardBorder,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.14),
-                blurRadius: 3,
-                offset: const Offset(0, 1.5),
-              ),
-            ],
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -205,17 +197,15 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     ? Icons.visibility_off_outlined
                     : Icons.visibility_outlined,
                 size: 15,
-                color: active ? const Color(0xFF4A7A96) : Colors.grey.shade500,
+                color: active ? AppTokens.accentDeep : AppTokens.inkSecondary,
               ),
               const SizedBox(width: 5),
               Text(
                 active ? 'Hide $label' : label,
-                style: TextStyle(
-                  fontFamily: 'Inter',
+                style: AppTokens.secondaryLabel.copyWith(
                   fontSize: 11,
-                  fontVariations: const [FontVariation('wght', 600)],
-                  color:
-                      active ? const Color(0xFF2A4858) : Colors.grey.shade700,
+                  fontWeight: FontWeight.w600,
+                  color: active ? AppTokens.accentDeep : AppTokens.inkSecondary,
                   height: 1.0,
                   letterSpacing: -0.2,
                 ),
@@ -227,9 +217,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
     );
   }
 
-  /// Toolbar row: same fill as the image preview filename/EXIF bars (`grey.shade50`).
   Widget _buildThumbnailToolbar() {
-    final bar = Colors.grey.shade100;
     return Material(
       color: Colors.transparent,
       child: Row(
@@ -278,21 +266,16 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         height: 24,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(5),
+                          color: widget.isExpanded
+                              ? AppTokens.accentTint
+                              : Colors.transparent,
+                          borderRadius:
+                              BorderRadius.circular(AppTokens.radiusControl),
                           border: Border.all(
                             color: widget.isExpanded
-                                ? const Color(0xFF4A7A96)
-                                : const Color(0xFFD0D0D0),
-                            width: widget.isExpanded ? 1.5 : 0.7,
+                                ? AppTokens.accent
+                                : AppTokens.cardBorder,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.14),
-                              blurRadius: 3,
-                              offset: const Offset(0, 1.5),
-                            ),
-                          ],
                         ),
                         child: Icon(
                           widget.isExpanded
@@ -300,8 +283,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               : Icons.keyboard_arrow_up,
                           size: 15,
                           color: widget.isExpanded
-                              ? const Color(0xFF4A7A96)
-                              : Colors.grey.shade500,
+                              ? AppTokens.accentDeep
+                              : AppTokens.inkSecondary,
                         ),
                       ),
                     ),
@@ -320,22 +303,15 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                       height: 24,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(5),
-                        border: Border.all(
-                            color: const Color(0xFFD0D0D0), width: 0.7),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.14),
-                            blurRadius: 3,
-                            offset: const Offset(0, 1.5),
-                          ),
-                        ],
+                        color: Colors.transparent,
+                        borderRadius:
+                            BorderRadius.circular(AppTokens.radiusControl),
+                        border: Border.all(color: AppTokens.cardBorder),
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.image_search,
                         size: 14,
-                        color: Colors.grey.shade500,
+                        color: AppTokens.inkSecondary,
                       ),
                     ),
                   ),
@@ -343,79 +319,58 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               ),
             ],
           ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              GestureDetector(
-                onTap: () => _adjustThumbSizeStep(-1),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                          color: const Color(0xFFD0D0D0), width: 0.7),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.14),
-                          blurRadius: 3,
-                          offset: const Offset(0, 1.5),
-                        ),
-                      ],
+          Container(
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+              border: Border.all(color: AppTokens.cardBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildThumbnailSizeButton(
+                  icon: Icons.remove,
+                  onTap: () => _adjustThumbSizeStep(-1),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Text(
+                    '${_thumbSize.toInt()}px',
+                    textAlign: TextAlign.center,
+                    style: AppTokens.meta.copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: AppTokens.inkSecondary,
+                      height: 1.0,
                     ),
-                    child: Icon(Icons.remove,
-                        size: 12, color: Colors.grey.shade600),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                child: Text(
-                  '${_thumbSize.toInt()}px',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 10,
-                    fontVariations: const [FontVariation('wght', 500)],
-                    color: Colors.grey.shade700,
-                    height: 1.0,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+                _buildThumbnailSizeButton(
+                  icon: Icons.add,
+                  onTap: () => _adjustThumbSizeStep(1),
                 ),
-              ),
-              GestureDetector(
-                onTap: () => _adjustThumbSizeStep(1),
-                child: MouseRegion(
-                  cursor: SystemMouseCursors.click,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(5),
-                      border: Border.all(
-                          color: const Color(0xFFD0D0D0), width: 0.7),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.14),
-                          blurRadius: 3,
-                          offset: const Offset(0, 1.5),
-                        ),
-                      ],
-                    ),
-                    child:
-                        Icon(Icons.add, size: 12, color: Colors.grey.shade600),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildThumbnailSizeButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: Icon(icon, size: 12, color: AppTokens.inkSecondary),
+        ),
       ),
     );
   }
@@ -857,16 +812,10 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           margin: const EdgeInsets.only(left: 3, right: 3, top: 3, bottom: 8),
           clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
-            borderRadius: BorderRadius.circular(7),
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.18),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            border: Border.all(color: AppTokens.cardBorder),
+            borderRadius: BorderRadius.circular(AppTokens.radiusCard),
+            color: AppTokens.surface,
+            boxShadow: AppTokens.cardShadow,
           ),
           child: Column(
             children: [
@@ -875,17 +824,13 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
                 alignment: Alignment.center,
                 decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
-                    colors: [Color(0xFFF8F8F8), Color(0xFFFEFEFE)],
-                  ),
+                  color: AppTokens.surface,
                   borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(7),
-                    topRight: Radius.circular(7),
+                    topLeft: Radius.circular(AppTokens.radiusCard),
+                    topRight: Radius.circular(AppTokens.radiusCard),
                   ),
                   border: Border(
-                    bottom: BorderSide(color: Color(0xFFE8E8E8), width: 0.5),
+                    bottom: BorderSide(color: AppTokens.cardBorder),
                   ),
                 ),
                 child: _buildThumbnailToolbar(),
@@ -908,17 +853,20 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                     final isCurrent = widget.imagePaths.indexOf(imagePath) ==
                         widget.currentIndex;
                     final isMultiSelected = _selectedImages.contains(imagePath);
-                    final accent = kFloTealLight;
                     final borderColor = isCurrent
-                        ? accent
+                        ? AppTokens.accent
                         : isMultiSelected
                             ? Colors.blue.shade600
-                            : Colors.grey.shade400;
+                            : AppTokens.cardBorder;
                     final borderWidth = isCurrent
-                        ? 3.0
+                        ? 2.0
                         : isMultiSelected
                             ? 2.5
-                            : 0.5;
+                            : 1.0;
+                    final timestampStyle = AppTokens.monoSmall.copyWith(
+                      fontSize: 9,
+                      color: isCurrent ? AppTokens.accent : AppTokens.inkMuted,
+                    );
                     return MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
@@ -930,35 +878,17 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                               context, imagePath, details.globalPosition));
                         },
                         child: Container(
+                          clipBehavior: Clip.antiAlias,
                           decoration: BoxDecoration(
                             color: isCurrent
-                                ? const Color(0xFFF5F5F5)
-                                : Colors.white,
-                            borderRadius: BorderRadius.circular(6),
+                                ? AppTokens.accentTint
+                                : AppTokens.surface,
+                            borderRadius: BorderRadius.circular(11),
                             border: Border.all(
                               color: borderColor,
                               width: borderWidth,
                             ),
-                            boxShadow: isCurrent
-                                ? [
-                                    BoxShadow(
-                                      color: accent.withValues(alpha: 0.25),
-                                      blurRadius: 8,
-                                      spreadRadius: 0,
-                                    ),
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.10),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ]
-                                : [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.1),
-                                      blurRadius: 2,
-                                      offset: const Offset(0, 1),
-                                    ),
-                                  ],
+                            boxShadow: AppTokens.cardShadow,
                           ),
                           child: Stack(
                             children: [
@@ -1088,14 +1018,14 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                     ),
                                     child: Text(
                                       p.basename(imagePath),
-                                      style: TextStyle(
+                                      style: AppTokens.monoSmall.copyWith(
                                         fontSize: 9,
                                         fontWeight: isCurrent
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
                                         color: isCurrent
-                                            ? const Color(0xFF2A4858)
-                                            : Colors.black87,
+                                            ? AppTokens.accentDeep
+                                            : AppTokens.ink,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -1116,8 +1046,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                           provided.isNotEmpty) {
                                         return Text(
                                           provided,
-                                          style: const TextStyle(
-                                              fontSize: 9, color: Colors.grey),
+                                          style: timestampStyle,
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         );
@@ -1129,9 +1058,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                               snapshot.data!.isNotEmpty) {
                                             return Text(
                                               snapshot.data!,
-                                              style: const TextStyle(
-                                                  fontSize: 9,
-                                                  color: Colors.grey),
+                                              style: timestampStyle,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                             );

@@ -4,6 +4,7 @@ import 'package:adaptive_navigation/adaptive_navigation.dart';
 import '../utils/native_file_picker.dart';
 import 'dart:io';
 import 'dart:async';
+import '../flo_layout_constants.dart';
 import '../services/api_manager.dart';
 import '../services/admin_service.dart';
 import '../services/auth_service.dart';
@@ -11,6 +12,7 @@ import '../services/preferences_service.dart';
 import 'preferences_dialog.dart';
 import 'app_styled_dialogs.dart';
 import '../services/camera_serial_service.dart';
+import '../theme/app_tokens.dart';
 import 'app_compact_checkbox.dart';
 import 'flo_chrome_header.dart';
 import 'admin_screen.dart';
@@ -27,12 +29,16 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   final CameraSerialService cameraService;
   final String? currentLayout;
   final Function(String)? onLayoutChanged;
+
   /// Called when the preferences dialog is closed (so the screen can reload caption entry mode etc.).
   final VoidCallback? onPreferencesClosed;
+
   /// Called to open FTP Settings (e.g. from Preferences > FTP). When set, Preferences dialog shows "Open FTP Settings" in the FTP section.
   final VoidCallback? onOpenFtpSettings;
+
   /// Burst detection toggled from the title bar; keeps [CaptionBuilderScreen] in sync.
   final ValueChanged<bool>? onBurstDetectionChanged;
+
   /// Current image path, index, total, and EXIF data for title bar display.
   final String? currentImagePath;
   final int currentIndex;
@@ -62,7 +68,7 @@ class AppHeaderWidget extends StatefulWidget implements PreferredSizeWidget {
   _AppHeaderWidgetState createState() => _AppHeaderWidgetState();
 
   @override
-  Size get preferredSize => const Size.fromHeight(34);
+  Size get preferredSize => const Size.fromHeight(kFloAppHeaderHeight);
 }
 
 class _AppHeaderWidgetState extends State<AppHeaderWidget> {
@@ -269,20 +275,22 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     );
   }
 
-  Widget _topbarBadge(String label, {Color? color}) {
+  Widget _topbarBadge(String label, {bool emphasized = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: (color ?? Colors.white.withOpacity(0.15)),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white24),
+        color: emphasized ? AppTokens.adminTint : AppTokens.topBarBadgeFill,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: emphasized ? AppTokens.adminAccent : AppTokens.onAccentSubtle,
+        ),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w500,
-          color: Colors.white70,
+          color: AppTokens.onAccent,
           height: 1.0,
         ),
       ),
@@ -292,7 +300,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
   @override
   Widget build(BuildContext context) {
     return AdaptiveAppBar(
-      toolbarHeight: 34,
+      toolbarHeight: kFloAppHeaderHeight,
       titleSpacing: 0,
       centerTitle: false,
       backgroundColor: Colors.transparent,
@@ -300,18 +308,40 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       automaticallyImplyLeading: false,
       flexibleSpace: Container(
         decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
+          gradient: AppTokens.topBarGradient,
+          border: Border(
+            bottom: BorderSide(color: AppTokens.topBarBorder),
           ),
         ),
       ),
       title: Padding(
-        padding: const EdgeInsets.only(left: 12, right: 4),
+        padding: const EdgeInsets.only(left: 4, right: 8),
         child: _buildFileInfoTitle(),
       ),
       actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: Center(
+            child: Builder(
+              builder: (context) {
+                final size = MediaQuery.sizeOf(context);
+                return Tooltip(
+                  message: 'App window size',
+                  child: Text(
+                    '${size.width.round()}×${size.height.round()}',
+                    style: AppTokens.mono.copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppTokens.onAccent,
+                      letterSpacing: 0.2,
+                      height: 1.0,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
         const FloHeaderRestartButton(),
         if (AuthService.instance.isFirebaseReady &&
             AuthService.instance.currentUser != null)
@@ -320,7 +350,8 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           onPressed: () async {
             await showDialog(
               context: context,
-              builder: (context) => PreferencesDialog(onOpenFtpSettings: widget.onOpenFtpSettings),
+              builder: (context) => PreferencesDialog(
+                  onOpenFtpSettings: widget.onOpenFtpSettings),
             );
             _serialNumberBylinesEnabled =
                 await _preferencesService.getSerialNumberBylines();
@@ -330,7 +361,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             widget.onBurstDetectionChanged?.call(_burstDetectionEnabled);
             widget.onPreferencesClosed?.call();
           },
-          icon: const Icon(Icons.settings, color: Colors.white70),
+          icon: const Icon(Icons.settings, color: AppTokens.onAccent),
           tooltip: 'Preferences',
           iconSize: 16,
           padding: const EdgeInsets.all(4),
@@ -339,6 +370,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
+        const SizedBox(width: 4),
       ],
     );
   }
@@ -357,9 +389,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           Text(
             'FLO FILE',
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w400,
-              color: Colors.white70,
+              color: AppTokens.onAccent,
               letterSpacing: 0.5,
               height: 1.0,
             ),
@@ -371,7 +403,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             AdminBadgeButton(
               child: _topbarBadge(
                 'Admin',
-                color: const Color(0xFFE8C547).withValues(alpha: 0.45),
+                emphasized: true,
               ),
             ),
           ],
@@ -392,8 +424,18 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
         final timeParts = parts[1].split(':');
         if (dateParts.length == 3 && timeParts.length == 3) {
           const months = [
-            'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-            'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec'
           ];
           final year = dateParts[0];
           final monthIdx = int.tryParse(dateParts[1]) ?? 0;
@@ -413,10 +455,14 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
       }
     }
 
-    // Resolution
+    // Image resolution (from EXIF)
     String resolution = '';
-    if (exif != null && exif['ImageWidth'] != null && exif['ImageHeight'] != null) {
-      resolution = '${exif['ImageWidth']}×${exif['ImageHeight']}';
+    if (exif != null) {
+      final w = exif['ImageWidth'] ?? exif['ExifImageWidth'];
+      final h = exif['ImageHeight'] ?? exif['ExifImageHeight'];
+      if (w != null && h != null) {
+        resolution = '${w}×${h}';
+      }
     }
 
     // Camera
@@ -430,7 +476,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     // Lens
     String lens = '';
     if (exif != null) {
-      lens = (exif['LensModel'] ?? exif['Lens'] ?? exif['LensID'] ?? '').toString().trim();
+      lens = (exif['LensModel'] ?? exif['Lens'] ?? exif['LensID'] ?? '')
+          .toString()
+          .trim();
     }
 
     // Exposure parts split individually so each gets its own separator
@@ -446,7 +494,8 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
         } else {
           final d = double.tryParse(s);
           if (d != null && d > 0) {
-            shutterStr = d < 1 ? '1/${(1 / d).round()}s' : '${d.toStringAsFixed(1)}s';
+            shutterStr =
+                d < 1 ? '1/${(1 / d).round()}s' : '${d.toStringAsFixed(1)}s';
           } else {
             shutterStr = s;
           }
@@ -457,85 +506,102 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
         if (f != null) apertureStr = 'f/${f.toStringAsFixed(1)}';
       }
       if (exif['FocalLength'] != null) {
-        final raw = exif['FocalLength'].toString().replaceAll(RegExp(r'm+$'), '').trim();
+        final raw = exif['FocalLength']
+            .toString()
+            .replaceAll(RegExp(r'm+$'), '')
+            .trim();
         final d = double.tryParse(raw);
         focalStr = d != null ? '${d.toInt()}mm' : '${raw}mm';
       }
-      if (exif['ISO'] != null) isoStr = 'ISO ${exif['ISO']}';
+      if (exif['ISO'] != null) isoStr = exif['ISO'].toString();
     }
 
-    const sep = TextSpan(
-      text: '    |    ',
-      style: TextStyle(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w400),
+    final sep = TextSpan(
+      text: '  │  ',
+      style: AppTokens.meta.copyWith(
+        color: AppTokens.onAccent,
+        fontSize: 11,
+        fontWeight: FontWeight.w400,
+        height: 1,
+      ),
     );
 
-    const sepStrong = sep;
-
-    const TextStyle _bold = TextStyle(
+    final fileNameStyle = AppTokens.mono.copyWith(
       fontSize: 11,
-      fontWeight: FontWeight.w600,
-      color: Colors.white70,
-      height: 1.0,
+      fontWeight: FontWeight.w500,
+      color: AppTokens.onAccent,
+      height: 1,
     );
 
-    const TextStyle _regular = TextStyle(
-      fontSize: 10,
+    final valueStyle = AppTokens.meta.copyWith(
+      fontSize: 11,
       fontWeight: FontWeight.w400,
-      color: Colors.white70,
-      height: 1.0,
+      color: AppTokens.onAccent,
+      height: 1,
     );
 
-    // keep _val/_dim as aliases so the spans below compile unchanged
-    TextStyle _val({double size = 10}) => _regular;
-    final TextStyle _dim = _regular;
+    final numericStyle = valueStyle.copyWith(color: AppTokens.onAccent);
 
     final spans = <InlineSpan>[
-      // File name
-      TextSpan(text: fileName, style: _bold),
-      if (dateTime.isNotEmpty) ...[sep, TextSpan(text: dateTime, style: _val())],
-      if (resolution.isNotEmpty) ...[sepStrong, TextSpan(text: resolution, style: _dim)],
-      if (camera.isNotEmpty) ...[sep, TextSpan(text: camera, style: _val())],
-      if (lens.isNotEmpty) ...[sep, TextSpan(text: lens, style: _dim)],
-      if (shutterStr.isNotEmpty || apertureStr.isNotEmpty) ...[
+      if (dateTime.isNotEmpty) TextSpan(text: dateTime, style: valueStyle),
+      if (resolution.isNotEmpty) ...[
         sep,
-        TextSpan(
-          text: [shutterStr, apertureStr].where((s) => s.isNotEmpty).join('  '),
-          style: _regular,
-        ),
+        TextSpan(text: resolution, style: numericStyle)
       ],
-      if (focalStr.isNotEmpty) ...[sep, TextSpan(text: focalStr, style: _regular)],
+      if (camera.isNotEmpty) ...[
+        sep,
+        TextSpan(text: camera, style: valueStyle)
+      ],
+      if (lens.isNotEmpty) ...[sep, TextSpan(text: lens, style: valueStyle)],
+      if (shutterStr.isNotEmpty) ...[
+        sep,
+        TextSpan(text: shutterStr, style: numericStyle),
+      ],
+      if (apertureStr.isNotEmpty)
+        TextSpan(text: ' $apertureStr', style: valueStyle),
+      if (focalStr.isNotEmpty) ...[
+        sep,
+        TextSpan(text: focalStr, style: numericStyle)
+      ],
       if (isoStr.isNotEmpty) ...[
         sep,
-        TextSpan(text: isoStr, style: _regular),
-        sep,
+        TextSpan(text: 'ISO ', style: valueStyle),
+        TextSpan(text: isoStr, style: numericStyle),
       ],
     ];
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         // Counter badge on the far left
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(3),
+            color: AppTokens.midSlate,
+            borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             '${idx + 1}/$total',
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-              height: 1.0,
+            style: AppTokens.mono.copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: AppTokens.onAccent,
+              height: 1,
               letterSpacing: 0.2,
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        // Remaining file info
+        const SizedBox(width: 14),
+        Text(fileName, style: fileNameStyle, maxLines: 1),
+        const SizedBox(width: 12),
+        Container(
+          width: 1,
+          height: 18,
+          color: AppTokens.onAccent,
+        ),
+        const SizedBox(width: 12),
+        // Remaining EXIF info
         Flexible(
           child: RichText(
             maxLines: 1,
@@ -1015,4 +1081,3 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
     }
   }
 }
-

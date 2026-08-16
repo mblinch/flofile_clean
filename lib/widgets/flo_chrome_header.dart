@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../flo_layout_constants.dart';
 import '../services/admin_service.dart';
+import '../theme/app_tokens.dart';
 import '../services/auth_service.dart';
 import 'admin_screen.dart';
 import 'app_styled_dialogs.dart';
 
-/// Top chrome bar matching [AppHeaderWidget] (teal gradient, 34px).
+/// Top chrome bar matching [AppHeaderWidget] (teal gradient,
+/// [kFloAppHeaderHeight]).
 class FloChromeHeader extends StatelessWidget {
   const FloChromeHeader({
     super.key,
@@ -22,14 +24,17 @@ class FloChromeHeader extends StatelessWidget {
   /// Kept for callers; account email is shown in the menu trigger.
   final String? signOutTooltip;
 
-  static const double toolbarHeight = 34;
+  static const double toolbarHeight = kFloAppHeaderHeight;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: toolbarHeight,
       decoration: const BoxDecoration(
-        gradient: kFloTealGradientHorizontal,
+        gradient: AppTokens.topBarGradient,
+        border: Border(
+          bottom: BorderSide(color: AppTokens.topBarBorder),
+        ),
       ),
       child: Row(
         children: [
@@ -37,10 +42,9 @@ class FloChromeHeader extends StatelessWidget {
           const Text(
             'FLO FILE',
             style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: FontWeight.w400,
-              color: Colors.white70,
+              color: AppTokens.onAccent,
               letterSpacing: 0.5,
               height: 1.0,
             ),
@@ -54,9 +58,30 @@ class FloChromeHeader extends StatelessWidget {
             ),
           ],
           const Spacer(),
+          Builder(
+            builder: (context) {
+              final size = MediaQuery.sizeOf(context);
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Tooltip(
+                  message: 'App window size',
+                  child: Text(
+                    '${size.width.round()}×${size.height.round()}',
+                    style: AppTokens.mono.copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: AppTokens.onAccent,
+                      letterSpacing: 0.2,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
           const FloHeaderRestartButton(),
           if (showSignOut) const FloHeaderSignedInAs(),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
         ],
       ),
     );
@@ -66,12 +91,10 @@ class FloChromeHeader extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: emphasized
-            ? const Color(0xFFE8C547).withValues(alpha: 0.35)
-            : Colors.white.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(10),
+        color: emphasized ? AppTokens.adminTint : AppTokens.topBarBadgeFill,
+        borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: emphasized ? const Color(0xFFE8C547) : Colors.white24,
+          color: emphasized ? AppTokens.adminAccent : AppTokens.onAccentSubtle,
         ),
       ),
       child: Text(
@@ -79,7 +102,7 @@ class FloChromeHeader extends StatelessWidget {
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w600,
-          color: emphasized ? const Color(0xFFFFF3C4) : Colors.white70,
+          color: AppTokens.onAccent,
           height: 1.0,
         ),
       ),
@@ -129,8 +152,8 @@ class FloHeaderRestartButton extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             minimumSize: Size.zero,
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            foregroundColor: Colors.white70,
-            overlayColor: Colors.white.withValues(alpha: 0.08),
+            foregroundColor: AppTokens.onAccent,
+            overlayColor: AppTokens.onAccentOverlay,
           ),
           child: const Row(
             mainAxisSize: MainAxisSize.min,
@@ -141,7 +164,7 @@ class FloHeaderRestartButton extends StatelessWidget {
                 'Restart app',
                 style: TextStyle(
                   fontFamily: 'Inter',
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.w500,
                   height: 1.0,
                 ),
@@ -196,7 +219,7 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: kAppContextMenuTextStyle.copyWith(
-              color: Colors.black54,
+              color: AppTokens.inkSecondary,
               fontWeight: FontWeight.w400,
               fontSize: 10,
             ),
@@ -236,16 +259,28 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
           color: Colors.transparent,
           child: InkWell(
             onTap: () => _openAccountMenu(account),
-            borderRadius: BorderRadius.circular(4),
-            hoverColor: Colors.white.withValues(alpha: 0.08),
-            splashColor: Colors.white.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            hoverColor: AppTokens.onAccentOverlay,
+            splashColor: AppTokens.onAccentSubtle,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.account_circle,
-                      color: Colors.white70, size: 14),
+                  Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: AppTokens.accent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppTokens.onAccentSubtle),
+                    ),
+                    child: const Icon(
+                      Icons.person,
+                      color: AppTokens.onAccent,
+                      size: 11,
+                    ),
+                  ),
                   const SizedBox(width: 4),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 200),
@@ -253,10 +288,9 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
                       account,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                        color: AppTokens.onAccent,
                         height: 1.0,
                       ),
                     ),
@@ -265,7 +299,7 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
                   Icon(
                     Icons.arrow_drop_down,
                     key: _arrowKey,
-                    color: Colors.white70,
+                    color: AppTokens.onAccent,
                     size: 16,
                   ),
                 ],

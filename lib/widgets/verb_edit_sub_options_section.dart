@@ -130,16 +130,17 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
 
     final celebrationBlock = showCelebration
         ? _optionBlock(
-            label: 'Celebration',
+            label: 'Reactions',
             enabled: widget.value.celebrationEnabled,
             defaultOn: defaults.celebrationEnabled,
             onEnabledChanged: (v) =>
                 _patch((o) => o.copyWith(celebrationEnabled: v)),
             children: [
               AppDialogLabeledTextField(
-                label: 'Celebration verb',
+                label: 'Reaction phrases (comma-separated)',
                 controller: _celebrationPhrase,
-                hintText: 'e.g., celebrates',
+                hintText: VerbSubOptions.suggestedReactionPhrases,
+                maxLines: 2,
                 enabled: widget.value.celebrationEnabled,
                 bottomGap: showCelebrationTypes ? 8 : 0,
                 onChanged: (_) => _patch(
@@ -164,8 +165,8 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
                 const SizedBox(height: 4),
                 Text(
                   VerbSubOptions.isBaseballSport(widget.sport)
-                      ? 'Used for the Cele button on hitting verbs (Keyboard Fire).'
-                      : 'Used when this verb triggers a celebration caption.',
+                      ? 'Each reaction becomes a chip in Keyboard Fire (Cele, React, …).'
+                      : 'Each reaction becomes a chip when this verb is selected.',
                   style: const TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 9,

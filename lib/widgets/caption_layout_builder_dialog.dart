@@ -158,10 +158,13 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   /// True when the user opened the [CaptionSegment.customText] snippet — show
   /// a plain text field only, not the full IPTC byline chip row.
   bool _customTextSnippetEditorOpen = false;
+  bool _freeTextSnippetEditorOpen = false;
   bool _separatorSnippetEditorOpen = false;
   bool _punctuationSnippetEditorOpen = false;
   final TextEditingController _snippetLiteralCtrl = TextEditingController();
   bool _syncingSnippetLiteralCtrl = false;
+  final TextEditingController _freeTextCtrl = TextEditingController();
+  bool _syncingFreeTextCtrl = false;
   int? _activeFormulaIndex;
 
   /// Which formula separator field (index in [customSeparators]) has focus.
@@ -244,6 +247,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     _customCreatorCtrl.addListener(_onCustomCreatorEdited);
     _customCreditCtrl.addListener(_onCustomCreditEdited);
     _snippetLiteralCtrl.addListener(_onSnippetLiteralEdited);
+    _freeTextCtrl.addListener(_onFreeTextEdited);
     _load = widget.adminMode ? _loadForAdmin() : _loadFromPrefs();
   }
 
@@ -512,6 +516,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _venuePreviewSelected = false;
       _bylinePreviewSelected = false;
       _customTextSnippetEditorOpen = false;
+      _freeTextSnippetEditorOpen = false;
       _separatorSnippetEditorOpen = false;
       _punctuationSnippetEditorOpen = false;
       _activeFormulaIndex = null;
@@ -536,6 +541,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   (_customTextSnippetEditorOpen ||
                       (_singleCustomNarrativeInlineEligible &&
                           _activeFormulaIndex == index))) ||
+              (segment == CaptionSegment.freeText &&
+                  _freeTextSnippetEditorOpen) ||
               (segment == CaptionSegment.separator &&
                   _separatorSnippetEditorOpen) ||
               (segment == CaptionSegment.punctuation &&
@@ -547,6 +554,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         _venuePreviewSelected = false;
         _bylinePreviewSelected = false;
         _customTextSnippetEditorOpen = false;
+        _freeTextSnippetEditorOpen = false;
         _separatorSnippetEditorOpen = false;
         _punctuationSnippetEditorOpen = false;
         _activeFormulaIndex = null;
@@ -563,6 +571,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       // Multi–custom narrative still uses the panel editor; single custom is inline in preview.
       _customTextSnippetEditorOpen = segment == CaptionSegment.customText &&
           !_singleCustomNarrativeInlineEligible;
+      _freeTextSnippetEditorOpen = segment == CaptionSegment.freeText;
       _separatorSnippetEditorOpen = segment == CaptionSegment.separator;
       _punctuationSnippetEditorOpen = segment == CaptionSegment.punctuation;
       if (_separatorSnippetEditorOpen || _punctuationSnippetEditorOpen) {
@@ -575,6 +584,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               CaptionFormulaRenderer.punctuationSnippetFor(_template, index);
         }
         _syncingSnippetLiteralCtrl = false;
+      }
+      if (_freeTextSnippetEditorOpen) {
+        _syncingFreeTextCtrl = true;
+        _freeTextCtrl.text =
+            CaptionFormulaRenderer.freeTextBodyFor(_template, index);
+        _syncingFreeTextCtrl = false;
       }
       if (segment == CaptionSegment.date) {
         final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
@@ -1193,6 +1208,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         _venuePreviewSelected = false;
         _bylinePreviewSelected = false;
         _customTextSnippetEditorOpen = false;
+        _freeTextSnippetEditorOpen = false;
         _separatorSnippetEditorOpen = false;
         _punctuationSnippetEditorOpen = false;
         _activeFormulaIndex = null;
@@ -1241,6 +1257,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               : null,
           punctuationSnippets: factory.punctuationSnippets != null
               ? List<String>.from(factory.punctuationSnippets!)
+              : null,
+          freeTextSnippets: factory.freeTextSnippets != null
+              ? List<String>.from(factory.freeTextSnippets!)
+              : null,
+          freeTextSuffixes: factory.freeTextSuffixes != null
+              ? List<String>.from(factory.freeTextSuffixes!)
               : null,
         )
         .normalizePerOccurrenceLists();
@@ -1309,6 +1331,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           punctuationSnippets: t.punctuationSnippets != null
               ? List<String>.from(t.punctuationSnippets!)
               : null,
+          freeTextSnippets: t.freeTextSnippets != null
+              ? List<String>.from(t.freeTextSnippets!)
+              : null,
+          freeTextSuffixes: t.freeTextSuffixes != null
+              ? List<String>.from(t.freeTextSuffixes!)
+              : null,
         );
       case WireStyle.imagn:
         return _wiredBaseline(WireStyle.imagn).copyWith(
@@ -1339,6 +1367,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               : null,
           punctuationSnippets: t.punctuationSnippets != null
               ? List<String>.from(t.punctuationSnippets!)
+              : null,
+          freeTextSnippets: t.freeTextSnippets != null
+              ? List<String>.from(t.freeTextSnippets!)
+              : null,
+          freeTextSuffixes: t.freeTextSuffixes != null
+              ? List<String>.from(t.freeTextSuffixes!)
               : null,
         );
       case WireStyle.ap:
@@ -1371,6 +1405,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               : null,
           punctuationSnippets: t.punctuationSnippets != null
               ? List<String>.from(t.punctuationSnippets!)
+              : null,
+          freeTextSnippets: t.freeTextSnippets != null
+              ? List<String>.from(t.freeTextSnippets!)
+              : null,
+          freeTextSuffixes: t.freeTextSuffixes != null
+              ? List<String>.from(t.freeTextSuffixes!)
               : null,
         );
       case WireStyle.custom:
@@ -1416,6 +1456,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _venuePreviewSelected = false;
       _bylinePreviewSelected = false;
       _customTextSnippetEditorOpen = false;
+      _freeTextSnippetEditorOpen = false;
       _separatorSnippetEditorOpen = false;
       _punctuationSnippetEditorOpen = false;
       _activeFormulaIndex = null;
@@ -1632,6 +1673,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         _venuePreviewSelected = false;
         _bylinePreviewSelected = false;
         _customTextSnippetEditorOpen = false;
+        _freeTextSnippetEditorOpen = false;
         _separatorSnippetEditorOpen = false;
         _punctuationSnippetEditorOpen = false;
         _activeFormulaIndex = null;
@@ -1686,20 +1728,22 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   /// Inserts [kind] into [segmentOrder] immediately after the snippet at
   /// [_activeFormulaIndex], or at the end when no snippet is selected.
   ///
-  /// [CaptionSegment.customText] may appear at most once (it maps to the
-  /// shared byline custom fields); the menu disables a second add.
+  /// [CaptionSegment.customText] may appear at most once (game identifier);
+  /// [CaptionSegment.freeText] may appear multiple times.
   void _addSegmentSnippet(CaptionSegment kind) {
     if (kind == CaptionSegment.customText &&
         _template.segmentOrder.contains(CaptionSegment.customText)) {
       return;
     }
+    late final int insertedAt;
     setState(() {
       final order = List<CaptionSegment>.from(_template.segmentOrder);
       final idx = _activeFormulaIndex;
       final insert = (idx != null && idx >= 0 && idx < order.length)
           ? idx + 1
           : order.length;
-      order.insert(insert.clamp(0, order.length), kind);
+      insertedAt = insert.clamp(0, order.length);
+      order.insert(insertedAt, kind);
       var next = _template.copyWith(
         segmentOrder: order,
         customSeparators: null,
@@ -1712,6 +1756,16 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _template = next.normalizePerOccurrenceLists();
       _initGapControllers(_template);
     });
+    _scheduleAutosave();
+    if (kind == CaptionSegment.freeText ||
+        kind == CaptionSegment.customText ||
+        kind == CaptionSegment.caption ||
+        kind == CaptionSegment.location ||
+        kind == CaptionSegment.date ||
+        kind == CaptionSegment.venue ||
+        kind == CaptionSegment.credit) {
+      _activateFormulaEditor(index: insertedAt, segment: kind);
+    }
   }
 
   /// Removes the snippet at [index] from [segmentOrder].
@@ -1733,10 +1787,20 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _initGapControllers(_template);
       if (_activeFormulaIndex == index) {
         _activeFormulaIndex = null;
+        _locationEditorOpen = false;
+        _dateEditorOpen = false;
+        _captionPreviewSelected = false;
+        _venuePreviewSelected = false;
+        _bylinePreviewSelected = false;
+        _customTextSnippetEditorOpen = false;
+        _freeTextSnippetEditorOpen = false;
+        _separatorSnippetEditorOpen = false;
+        _punctuationSnippetEditorOpen = false;
       } else if (_activeFormulaIndex != null && _activeFormulaIndex! > index) {
         _activeFormulaIndex = _activeFormulaIndex! - 1;
       }
     });
+    _scheduleAutosave();
   }
 
   /// Reorders [CaptionTemplate.segmentOrder] when the user drags one preview
@@ -1782,6 +1846,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _template = next.normalizePerOccurrenceLists();
       _initGapControllers(_template);
     });
+    _scheduleAutosave();
   }
 
   void _onGapEdited() {
@@ -1879,6 +1944,67 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     return normalized.copyWith(punctuationSnippets: list);
   }
 
+  CaptionTemplate _templateWithFreeTextAtOccurrence(
+    CaptionTemplate t,
+    int occurrenceIndex,
+    String value,
+  ) {
+    final normalized = t.normalizePerOccurrenceLists();
+    final n = normalized.segmentOrder
+        .where((s) => s == CaptionSegment.freeText)
+        .length;
+    if (n == 0) return normalized;
+    final list = List<String>.from(normalized.freeTextSnippets!);
+    list[occurrenceIndex.clamp(0, n - 1)] = value;
+    return normalized.copyWith(freeTextSnippets: list);
+  }
+
+  CaptionTemplate _templateWithFreeTextSuffixAtOccurrence(
+    CaptionTemplate t,
+    int occurrenceIndex,
+    String value,
+  ) {
+    final normalized = t.normalizePerOccurrenceLists();
+    final n = normalized.segmentOrder
+        .where((s) => s == CaptionSegment.freeText)
+        .length;
+    if (n == 0) return normalized;
+    final list = List<String>.from(normalized.freeTextSuffixes!);
+    list[occurrenceIndex.clamp(0, n - 1)] = value;
+    return normalized.copyWith(freeTextSuffixes: list);
+  }
+
+  void _setFreeTextSuffix(String value) {
+    final idx = _activeFormulaIndex;
+    if (idx == null || idx < 0 || idx >= _template.segmentOrder.length) {
+      return;
+    }
+    if (_template.segmentOrder[idx] != CaptionSegment.freeText) return;
+    setState(() {
+      final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
+          _template.segmentOrder, idx, CaptionSegment.freeText);
+      _template =
+          _templateWithFreeTextSuffixAtOccurrence(_template, occ, value);
+    });
+    _scheduleAutosave();
+  }
+
+  void _onFreeTextEdited() {
+    if (_syncingFreeTextCtrl) return;
+    final idx = _activeFormulaIndex;
+    if (idx == null || idx < 0 || idx >= _template.segmentOrder.length) {
+      return;
+    }
+    if (_template.segmentOrder[idx] != CaptionSegment.freeText) return;
+    setState(() {
+      final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
+          _template.segmentOrder, idx, CaptionSegment.freeText);
+      _template =
+          _templateWithFreeTextAtOccurrence(_template, occ, _freeTextCtrl.text);
+    });
+    _scheduleAutosave();
+  }
+
   void _onSnippetLiteralEdited() {
     if (_syncingSnippetLiteralCtrl) return;
     final idx = _activeFormulaIndex;
@@ -1935,6 +2061,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _venuePreviewSelected = false;
       _bylinePreviewSelected = false;
       _customTextSnippetEditorOpen = false;
+      _freeTextSnippetEditorOpen = false;
       _separatorSnippetEditorOpen = false;
       _punctuationSnippetEditorOpen = false;
       _disposeGapControllers();
@@ -1980,6 +2107,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 : null,
             punctuationSnippets: ref.punctuationSnippets != null
                 ? List<String>.from(ref.punctuationSnippets!)
+                : null,
+            freeTextSnippets: ref.freeTextSnippets != null
+                ? List<String>.from(ref.freeTextSnippets!)
+                : null,
+            freeTextSuffixes: ref.freeTextSuffixes != null
+                ? List<String>.from(ref.freeTextSuffixes!)
                 : null,
             gameIdentifierText: ref.gameIdentifierText,
           ));
@@ -2273,10 +2406,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     _bylineBetweenCtrl.removeListener(_onBylineTextEdited);
     _bylineSuffixCtrl.removeListener(_onBylineTextEdited);
     _snippetLiteralCtrl.removeListener(_onSnippetLiteralEdited);
+    _freeTextCtrl.removeListener(_onFreeTextEdited);
     _bylinePrefixCtrl.dispose();
     _bylineBetweenCtrl.dispose();
     _bylineSuffixCtrl.dispose();
     _snippetLiteralCtrl.dispose();
+    _freeTextCtrl.dispose();
     for (final ctrl in _customChipCtrls) {
       ctrl.removeListener(_onBylineTextEdited);
       ctrl.dispose();
@@ -2303,6 +2438,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         return 'Caption';
       case CaptionSegment.customText:
         return 'Game identifier';
+      case CaptionSegment.freeText:
+        return 'Custom text';
       case CaptionSegment.venue:
         return 'IPTC:Location';
       case CaptionSegment.credit:
@@ -2319,7 +2456,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     if (segment != CaptionSegment.location &&
         segment != CaptionSegment.date &&
         segment != CaptionSegment.separator &&
-        segment != CaptionSegment.punctuation) {
+        segment != CaptionSegment.punctuation &&
+        segment != CaptionSegment.freeText) {
       return base;
     }
     var seen = 0;
@@ -2336,6 +2474,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         !_venuePreviewSelected &&
         !_bylinePreviewSelected &&
         !_customTextSnippetEditorOpen &&
+        !_freeTextSnippetEditorOpen &&
         !_separatorSnippetEditorOpen &&
         !_punctuationSnippetEditorOpen &&
         _focusedGapIndex == null) {
@@ -3539,6 +3678,43 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     );
   }
 
+  /// Freeform [CaptionSegment.freeText] editor (e.g. Getty NOTE TO USER).
+  Widget _freeTextSnippetEditor() {
+    final idx = _activeFormulaIndex;
+    final suffix = (idx != null &&
+            idx >= 0 &&
+            idx < _template.segmentOrder.length &&
+            _template.segmentOrder[idx] == CaptionSegment.freeText)
+        ? CaptionFormulaRenderer.freeTextSuffixFor(_template, idx)
+        : '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _CaptionLayoutBorderedMultilineField(
+                controller: _freeTextCtrl,
+                minLines: 2,
+                maxLines: 8,
+                autofocus: true,
+                hintText: 'Type custom text to include in the caption…',
+              ),
+            ),
+            _BylineSeparatorInput(
+              key: ValueKey('free-text-suffix-$idx'),
+              value: suffix,
+              onChanged: _setFreeTextSuffix,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        _spaceLegend(),
+      ],
+    );
+  }
+
   Widget _shuffleCaptionButton() {
     return Material(
       color: Colors.transparent,
@@ -3606,6 +3782,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           ),
         ),
         PopupMenuItem(
+          value: CaptionSegment.freeText,
+          child: Text('Custom text', style: menuStyle),
+        ),
+        PopupMenuItem(
           value: CaptionSegment.venue,
           child: Text('Venue (IPTC:Location)', style: menuStyle),
         ),
@@ -3651,6 +3831,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   CaptionSegment? _activePreviewSegment() {
     if (_customTextSnippetEditorOpen) return CaptionSegment.customText;
+    if (_freeTextSnippetEditorOpen) return CaptionSegment.freeText;
     if (_singleCustomNarrativeInlineEligible) {
       final idx = _activeFormulaIndex;
       if (idx != null &&
@@ -3705,6 +3886,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     CaptionSegment.customText: _SegmentTint(
       bg: Color(0xFFE8F4FA),
       fg: Color(0xFF1A4A5E),
+    ),
+    CaptionSegment.freeText: _SegmentTint(
+      bg: Color(0xFFE6F7F2),
+      fg: Color(0xFF1A5C4A),
     ),
     CaptionSegment.credit: _SegmentTint(
       bg: Color(0xFFFCE2E2),
@@ -3781,6 +3966,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           return '${_template.gameIdentifierPrefix}'
               '${_template.gameIdentifierText.trim()}'
               '${_template.gameIdentifierSuffix}';
+        case CaptionSegment.freeText:
+          return CaptionFormulaRenderer.freeTextSnippetFor(
+              _template, segmentIndex);
         case CaptionSegment.venue:
           return '${_template.venuePrefix}$venue${_template.venueSuffix}';
         case CaptionSegment.credit:
@@ -3859,7 +4047,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       final rawValue = valueAt(i, order);
 
       var chipValue = rawValue;
-      if (seg == CaptionSegment.customText && chipValue.trim().isEmpty) {
+      if ((seg == CaptionSegment.customText ||
+              seg == CaptionSegment.freeText) &&
+          chipValue.trim().isEmpty) {
         chipValue = '(no text)';
       }
 
@@ -3870,7 +4060,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         tooltipLabel: _segmentDisplayLabel(seg, i),
         titleLeading: _previewSegmentDragHandle(i),
         onSnippetTap: () => _activateFormulaEditor(index: i, segment: seg),
-        onRemove: seg == CaptionSegment.caption ? null : () => _removeSegmentSnippet(i),
+        onRemove: () => _removeSegmentSnippet(i),
       );
 
       final snippetRow = DragTarget<int>(
@@ -3974,7 +4164,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         break;
     }
 
-    final chipContent = Container(
+    Widget chipContent = Container(
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(4),
@@ -4021,48 +4211,53 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       ),
     );
 
-    final chip = onRemove != null
-        ? Stack(
-            clipBehavior: Clip.none,
-            children: [
-              chipContent,
-              Positioned(
-                top: -4,
-                right: -4,
-                child: GestureDetector(
-                  onTap: onRemove,
-                  child: Container(
-                    width: 14,
-                    height: 14,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade600,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.close, size: 8, color: Colors.white),
-                  ),
-                ),
-              ),
-            ],
-          )
-        : chipContent;
-
-    Widget body = Tooltip(
+    chipContent = Tooltip(
       message: tooltipLabel,
       waitDuration: const Duration(milliseconds: 400),
-      child: chip,
+      child: chipContent,
     );
 
     if (onSnippetTap != null) {
-      return MouseRegion(
+      chipContent = MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
           behavior: HitTestBehavior.translucent,
           onTap: onSnippetTap,
-          child: body,
+          child: chipContent,
         ),
       );
     }
-    return body;
+
+    // Keep the remove control outside the activate GestureDetector so the
+    // close tap is not swallowed by "open editor".
+    if (onRemove == null) return chipContent;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        chipContent,
+        Positioned(
+          top: -4,
+          right: -4,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onRemove,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade600,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.close, size: 8, color: Colors.white),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   /// Plain text rendered between snippet chips. Kept as a single [Text] widget
@@ -5298,12 +5493,13 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                           ],
                                         ),
                                       ),
-                                      if (_locationEditorOpen ||
+                                          if (_locationEditorOpen ||
                                           _dateEditorOpen ||
                                           _captionPreviewSelected ||
                                           _venuePreviewSelected ||
                                           _bylinePreviewSelected ||
-                                          _customTextSnippetEditorOpen) ...[
+                                          _customTextSnippetEditorOpen ||
+                                          _freeTextSnippetEditorOpen) ...[
                                         const SizedBox(height: 8),
                                         Container(
                                           decoration: BoxDecoration(
@@ -5358,6 +5554,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                       _captionSegmentEditor()
                                                     else if (_customTextSnippetEditorOpen)
                                                       _customTextSnippetEditor()
+                                                    else if (_freeTextSnippetEditorOpen)
+                                                      _freeTextSnippetEditor()
                                                     else if (_venuePreviewSelected)
                                                       _venueEditor()
                                                     else if (_bylinePreviewSelected)
@@ -5561,12 +5759,14 @@ class _CaptionLayoutBorderedMultilineField extends StatefulWidget {
     this.minLines = 1,
     this.maxLines = 5,
     this.autofocus = false,
+    this.hintText,
   });
 
   final TextEditingController controller;
   final int minLines;
   final int maxLines;
   final bool autofocus;
+  final String? hintText;
 
   @override
   State<_CaptionLayoutBorderedMultilineField> createState() =>
@@ -5621,12 +5821,18 @@ class _CaptionLayoutBorderedMultilineFieldState
         ),
         cursorColor: _captionLayoutBlue,
         cursorWidth: 1.2,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           isDense: true,
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
           contentPadding: EdgeInsets.zero,
+          hintText: widget.hintText,
+          hintStyle: TextStyle(
+            fontSize: 13,
+            color: Colors.grey.shade400,
+            height: 1.35,
+          ),
         ),
       ),
     );

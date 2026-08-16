@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../services/preferences_service.dart';
+import '../flo_layout_constants.dart';
 import 'app_styled_dialogs.dart';
 import 'oriented_file_preview.dart';
 
@@ -303,37 +304,14 @@ class _BurstCaptionConfirmDialogBodyState
         return KeyEventResult.ignored;
       },
       child: AlertDialog(
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
-      ),
+      shape: kAppDialogShape,
       contentPadding: EdgeInsets.zero,
-      titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+      titlePadding: EdgeInsets.zero,
       actionsPadding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
       backgroundColor: Colors.white,
-      title: Text.rich(
-        TextSpan(
-          style: const TextStyle(
-            fontSize: 14,
-            height: 1.35,
-            color: Colors.black87,
-          ),
-          children: [
-            const TextSpan(
-              text: 'Burst sequence: ',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            TextSpan(
-              text:
-                  '$n photos taken within 1 second of each other. Apply the same caption to all?',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w400,
-                color: Colors.grey.shade800,
-              ),
-            ),
-          ],
-        ),
-      ),
+      surfaceTintColor: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      title: const AppDialogTealTitleBar(title: 'Burst sequence'),
       content: SizedBox(
         width: dialogW,
         height: math.min(
@@ -341,10 +319,21 @@ class _BurstCaptionConfirmDialogBodyState
           MediaQuery.sizeOf(context).height * 0.62,
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                '$n photos taken within 1 second of each other. Apply the same caption to all?',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w400,
+                  color: Colors.grey.shade800,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 10),
               const Text('Caption to apply', style: _kLabelStyle),
               const SizedBox(height: 4),
               Container(
@@ -362,11 +351,11 @@ class _BurstCaptionConfirmDialogBodyState
                     ),
                   ],
                 ),
-                child: Scrollbar(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
+                child: SingleChildScrollView(
+                    padding: floScrollPadding(
+                      left: 8,
+                      top: 8,
+                      bottom: 8,
                     ),
                     child: SelectableText(
                       widget.captionPreview.trim().isEmpty
@@ -380,7 +369,6 @@ class _BurstCaptionConfirmDialogBodyState
                           : _kCaptionPreviewStyle,
                     ),
                   ),
-                ),
               ),
               const SizedBox(height: 14),
               Divider(

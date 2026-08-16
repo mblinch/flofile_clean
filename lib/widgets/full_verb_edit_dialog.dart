@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../caption_style/verb_caption_wording.dart';
 import '../caption_style/verb_sub_options.dart';
 import '../flo_layout_constants.dart';
 import '../utils/default_verb_keywords.dart';
@@ -35,6 +36,9 @@ class FullVerbEditDialog extends StatefulWidget {
     this.selectedAwayPlayerLabel,
     this.onCategoryOrderChanged,
     this.onVerbOrderChanged,
+    this.isCustomVerb,
+    this.onCreateCustomVerb,
+    this.onUpdateCustomVerb,
   });
 
   final String initialVerb;
@@ -48,6 +52,7 @@ class FullVerbEditDialog extends StatefulWidget {
     required String newLabel,
     required String newSingular,
     required String pluralText,
+    required String ingText,
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
@@ -61,6 +66,32 @@ class FullVerbEditDialog extends StatefulWidget {
   final Future<void> Function(List<String> categoryOrder)? onCategoryOrderChanged;
   final Future<void> Function(Map<String, List<String>> verbsByCategory)?
       onVerbOrderChanged;
+  final bool Function(String verb)? isCustomVerb;
+  final Future<void> Function({
+    required String label,
+    required String singular,
+    required String pluralText,
+    required String ingText,
+    required bool usePluralPhrase,
+    required List<String> keywords,
+    required bool wantsOpponent,
+    required bool omitAgainst,
+    required String selectedCategory,
+    required VerbSubOptions subOptions,
+  })? onCreateCustomVerb;
+  final Future<void> Function({
+    required String previousLabel,
+    required String label,
+    required String singular,
+    required String pluralText,
+    required String ingText,
+    required bool usePluralPhrase,
+    required List<String> keywords,
+    required bool wantsOpponent,
+    required bool omitAgainst,
+    required String selectedCategory,
+    required VerbSubOptions subOptions,
+  })? onUpdateCustomVerb;
   final bool Function(String verb) hasSavedDefault;
   final bool isAdmin;
   final String homeTeamName;
@@ -83,10 +114,12 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   late final TextEditingController _label;
   late final TextEditingController _singular;
   late final TextEditingController _plural;
+  late final TextEditingController _ing;
   late final TextEditingController _keywords;
   late final TextEditingController _celebrationPhrase;
   late final TextEditingController _celebrationTypes;
   late final TextEditingController _grandSlamPhrase;
+  late final TextEditingController _reactionPhraseDraft;
   late bool _omitAgainst;
   late bool _wantsOpponent;
   late bool _usePluralPhrase;
@@ -102,6 +135,16 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   String _snapshot = '';
   bool _busy = false;
   String _previewVariantId = 'no_opp';
+  bool _isCreating = false;
+  bool _editingCustom = false;
+  /// Last auto-generated ing phrase — keep the field synced until the user edits it.
+  String _lastAutoIng = '';
+  bool _addingReactionPhrase = false;
+
+  bool get _isCustomContext =>
+      _isCreating ||
+      _editingCustom ||
+      (widget.isCustomVerb?.call(_currentVerb) ?? false);
 
   @override
   void initState() {
@@ -115,10 +158,12 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _label = TextEditingController();
     _singular = TextEditingController();
     _plural = TextEditingController();
+    _ing = TextEditingController();
     _keywords = TextEditingController();
     _celebrationPhrase = TextEditingController();
     _celebrationTypes = TextEditingController();
     _grandSlamPhrase = TextEditingController();
+    _reactionPhraseDraft = TextEditingController();
     _currentVerb = widget.initialVerb;
     _browseCategory = _resolveBrowseCategory(widget.initialVerb);
     _expandedCategories = {_browseCategory};
@@ -130,11 +175,204 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _label.dispose();
     _singular.dispose();
     _plural.dispose();
+    _ing.dispose();
     _keywords.dispose();
     _celebrationPhrase.dispose();
     _celebrationTypes.dispose();
     _grandSlamPhrase.dispose();
+    _reactionPhraseDraft.dispose();
     super.dispose();
+  }
+
+  List<String> get _reactionPhrases => _celebrationPhrase.text
+      .split(',')
+      .map((e) => e.trim())
+      .where((e) => e.isNotEmpty)
+      .toList();
+
+  void _setReactionPhrases(List<String> phrases) {
+    _setText(_celebrationPhrase, phrases.join(', '));
+    setState(() {});
+  }
+
+  void _removeReactionPhrase(String phrase) {
+    final next = _reactionPhrases.where((p) => p != phrase).toList();
+    _setReactionPhrases(next);
+  }
+
+  void _commitReactionPhraseDraft() {
+    final draft = _reactionPhraseDraft.text.trim();
+    if (draft.isEmpty) {
+      setState(() => _addingReactionPhrase = false);
+      return;
+    }
+    final next = [..._reactionPhrases];
+    final exists = next.any((p) => p.toLowerCase() == draft.toLowerCase());
+    if (!exists) next.add(draft);
+    _reactionPhraseDraft.clear();
+    _addingReactionPhrase = false;
+    _setReactionPhrases(next);
+  }
+
+  void _startAddingReactionPhrase() {
+    if (!(_subOptions.celebrationEnabled)) return;
+    _reactionPhraseDraft.clear();
+    setState(() => _addingReactionPhrase = true);
+  }
+
+  Widget _buildReactionPhraseChips({required bool enabled}) {
+    final phrases = _reactionPhrases;
+    return AppDialogLabeledField(
+      label: 'Reaction phrases',
+      bottomGap: 0,
+      child: Material(
+        color: enabled ? Colors.white : const Color(0xFFF5F5F5),
+        elevation: enabled ? 2 : 0,
+        shadowColor: const Color(0x33000000),
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.fromLTRB(5, 4, 4, 4),
+          alignment: Alignment.topLeft,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: enabled ? const Color(0xFFE4E4E4) : Colors.grey.shade300,
+            ),
+          ),
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final phrase in phrases)
+                _reactionPhraseChip(
+                  phrase: phrase,
+                  enabled: enabled,
+                  onDelete: enabled ? () => _removeReactionPhrase(phrase) : null,
+                ),
+              if (enabled && _addingReactionPhrase)
+                SizedBox(
+                  width: 88,
+                  height: 18,
+                  child: TextField(
+                    controller: _reactionPhraseDraft,
+                    autofocus: true,
+                    style: kAppDialogFieldTextStyle.copyWith(fontSize: 9),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _commitReactionPhraseDraft(),
+                    onEditingComplete: _commitReactionPhraseDraft,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText: 'add',
+                      hintStyle: kAppDialogFieldTextStyle.copyWith(
+                        fontSize: 9,
+                        color: const Color(0xFFB0B0B0),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(9),
+                        borderSide: BorderSide(
+                          color: kFloTealLight.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(9),
+                        borderSide: BorderSide(
+                          color: kFloTealLight.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(9),
+                        borderSide: const BorderSide(
+                          color: kFloTealLight,
+                          width: 1.2,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else if (enabled)
+                Tooltip(
+                  message: 'Add reaction phrase',
+                  child: Material(
+                    color: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(9),
+                      side: BorderSide(
+                        color: kFloTealLight.withValues(alpha: 0.55),
+                      ),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(9),
+                      onTap: _startAddingReactionPhrase,
+                      child: const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: Icon(
+                          Icons.add,
+                          size: 12,
+                          color: kFloTealDark,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _reactionPhraseChip({
+    required String phrase,
+    required bool enabled,
+    VoidCallback? onDelete,
+  }) {
+    return Container(
+      height: 18,
+      padding: EdgeInsets.only(left: 5, right: onDelete != null ? 1 : 5),
+      decoration: BoxDecoration(
+        color: enabled ? kFloTealSelectedFill : const Color(0xFFF0F0F0),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(
+          color: enabled
+              ? kFloTealLight.withValues(alpha: 0.45)
+              : Colors.grey.shade300,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            phrase,
+            style: kAppDialogFieldTextStyle.copyWith(
+              fontSize: 9,
+              height: 1.0,
+              color: enabled ? kFloTealDark : const Color(0xFFB0B0B0),
+            ),
+          ),
+          if (onDelete != null)
+            InkWell(
+              onTap: onDelete,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Icon(
+                  Icons.close,
+                  size: 11,
+                  color: enabled ? kFloTealMid : const Color(0xFFB0B0B0),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   String _resolveBrowseCategory(String verb) {
@@ -161,10 +399,14 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     final label = initial['label'] as String? ?? verb;
     final singular = initial['verbPhrase'] as String? ?? verb;
     final plural = initial['pluralPhrase'] as String? ?? singular;
+    final ing = initial['ingPhrase'] as String? ??
+        VerbCaptionWording.defaultIngWording(verb, singular);
     _currentVerb = verb;
     _setText(_label, label);
     _setText(_singular, singular);
     _setText(_plural, plural);
+    _setText(_ing, ing);
+    _lastAutoIng = VerbCaptionWording.defaultIngWording(verb, singular);
     _omitAgainst = initial['omitAgainst'] as bool? ?? false;
     _wantsOpponent = initial['wantsOpponent'] as bool? ?? true;
     _usePluralPhrase = initial['usePluralPhrase'] as bool? ?? true;
@@ -185,11 +427,20 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     }
     _assignedCategory = cat;
     _isFavorite = _favorites.contains(verb);
+    _isCreating = false;
+    _editingCustom = initial['isCustom'] as bool? ??
+        (widget.isCustomVerb?.call(verb) ?? false);
     _subOptions = initial['subOptions'] as VerbSubOptions? ??
         VerbSubOptions.defaultsFor(verb, sport: widget.sport);
+    // Customs never use RBI.
+    if (_editingCustom && _subOptions.rbiEnabled) {
+      _subOptions = _subOptions.copyWith(rbiEnabled: false);
+    }
     _setText(_celebrationPhrase, _subOptions.celebrationPhrase);
     _setText(_celebrationTypes, _subOptions.celebrationTypes);
     _setText(_grandSlamPhrase, _subOptions.grandSlamPhrase);
+    _reactionPhraseDraft.clear();
+    _addingReactionPhrase = false;
 
     final inCurrentBrowse =
         (_verbsByCategory[_browseCategory] ?? const <String>[])
@@ -218,6 +469,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       'label': _label.text.trim(),
       'singular': _singular.text.trim(),
       'plural': _plural.text.trim(),
+      'ing': _ing.text.trim(),
       'keywords': _keywords.text.trim(),
       'omitAgainst': _omitAgainst,
       'wantsOpponent': _wantsOpponent,
@@ -246,6 +498,15 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     return t.isEmpty ? _singularPhrase : t;
   }
 
+  String get _ingPhrase {
+    final t = _ing.text.trim();
+    if (t.isNotEmpty) return t;
+    return VerbCaptionWording.defaultIngWording(
+      _verbLabelForMods.isEmpty ? _currentVerb : _verbLabelForMods,
+      _singularPhrase,
+    );
+  }
+
   String get _verbLabelForMods {
     final t = _label.text.trim();
     return t.isEmpty ? _currentVerb : t;
@@ -264,6 +525,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       case 'Sacrifice Fly':
         return 'sacrifice fly';
       case 'Bunt':
+      case 'Bunts':
         return 'bunt';
       case 'Hit by Pitch':
         return 'hit by pitch';
@@ -283,23 +545,26 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       variants.add(const _CaptionVariant(id: 'plural', label: '2+ players'));
     }
 
-    final showRbi = VerbSubOptions.showRbiEditor(
-      sport: widget.sport,
-      verbLabel: _verbLabelForMods,
-      value: _liveSubOptions,
-    );
+    final showRbi = !_isCustomContext &&
+        VerbSubOptions.showRbiEditor(
+          sport: widget.sport,
+          verbLabel: _verbLabelForMods,
+          value: _liveSubOptions,
+        );
     final showCele = VerbSubOptions.showCelebrationEditor(
       verbLabel: _verbLabelForMods,
       value: _liveSubOptions,
+      isCustom: _isCustomContext,
     );
-    final isHit = VerbSubOptions.isHitVerb(_currentVerb) ||
-        VerbSubOptions.isHitVerb(_verbLabelForMods);
+    final isHit = !_isCustomContext &&
+        (VerbSubOptions.isHitVerb(_currentVerb) ||
+            VerbSubOptions.isHitVerb(_verbLabelForMods));
 
     if (showRbi && _liveSubOptions.rbiEnabled) {
       variants.add(const _CaptionVariant(id: 'rbi', label: 'RBI'));
     }
-    final isHomeRun =
-        _currentVerb == 'Home Run' || _verbLabelForMods == 'Home Run';
+    final isHomeRun = !_isCustomContext &&
+        (_currentVerb == 'Home Run' || _verbLabelForMods == 'Home Run');
     if (isHomeRun) {
       variants.add(const _CaptionVariant(id: 'grand_slam', label: 'Grand Slam'));
     }
@@ -319,12 +584,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
             ),
           );
         }
-      } else if (VerbSubOptions.isCelebrationVerb(_verbLabelForMods)) {
-        final chips = _liveSubOptions.celebrationTypeList(sport: widget.sport);
-        final chip = chips.isNotEmpty ? chips.first : 'Scoring';
-        variants.add(
-          _CaptionVariant(id: 'cele_chip', label: 'Celebration · $chip'),
-        );
+      } else if (_isCustomContext ||
+          VerbSubOptions.isCelebrationVerb(_verbLabelForMods)) {
+        variants.add(const _CaptionVariant(id: 'cele', label: 'Celebration'));
       }
     }
     return variants;
@@ -371,9 +633,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
 
   String _actionPhraseForVariant(String id) {
     final live = _liveSubOptions;
-    final cele = live.celebrationPhrase.trim().isEmpty
-        ? 'celebrates'
-        : live.celebrationPhrase.trim();
+    final cele = live.primaryReactionPhrase;
     switch (id) {
       case 'plural':
         return _pluralPhrase;
@@ -389,16 +649,32 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           hitNoun: _hitNoun,
         );
       case 'cele':
-        return '$cele a $_hitNoun';
+        if (_isCustomContext ||
+            (!VerbSubOptions.isHitVerb(_currentVerb) &&
+                !VerbSubOptions.isHitVerb(_verbLabelForMods))) {
+          final parts = VerbSubOptions.reactionAfterPartsFor(
+            _currentVerb,
+            singularPhrase: _singularPhrase,
+            ingPhrase: _ingPhrase,
+          );
+          if (parts.appendNoun) {
+            return '$cele ${parts.afterText} $_hitNoun';
+          }
+          return '$cele ${parts.afterText}';
+        }
+        final parts = VerbSubOptions.reactionAfterPartsFor(_currentVerb);
+        return '$cele ${parts.afterText} $_hitNoun';
       case 'cele_rbi':
+        final celeParts = VerbSubOptions.reactionAfterPartsFor(_currentVerb);
         return live.hitClauseWithRbi(
-          leadIn: '$cele a',
+          leadIn: '$cele ${celeParts.afterText}',
           hitNoun: _hitNoun,
           count: 2,
         );
       case 'cele_grand_slam':
+        final celeParts = VerbSubOptions.reactionAfterPartsFor(_currentVerb);
         return live.hitClauseWithGrandSlam(
-          leadIn: '$cele a',
+          leadIn: '$cele ${celeParts.afterText}',
           hitNoun: _hitNoun,
         );
       case 'cele_chip':
@@ -426,8 +702,27 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Caption variant', style: kAppDialogFieldLabelStyle),
-        const SizedBox(height: 4),
+        Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFAFAFA),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFE4E4E4)),
+          ),
+          alignment: Alignment.topLeft,
+          child: Text(
+            _buildSelectedCaption(),
+            style: const TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11,
+              color: Color(0xFF444444),
+              height: 1.35,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: Row(
@@ -443,12 +738,6 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
               ],
             ],
           ),
-        ),
-        const SizedBox(height: 8),
-        AppDialogExamplePreview(
-          compact: true,
-          title: 'Caption',
-          text: _buildSelectedCaption(),
         ),
       ],
     );
@@ -491,8 +780,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     final result = await showAppConfirmDialog(
       context: context,
       title: 'Unsaved changes',
-      message:
-          'You have unsaved changes for "$_currentVerb". Discard them and switch verbs?',
+      message: _isCreating
+          ? 'You have an unsaved new verb. Discard it and continue?'
+          : 'You have unsaved changes for "$_currentVerb". Discard them and switch verbs?',
       cancelLabel: 'Stay',
       confirmLabel: 'Discard',
     );
@@ -538,33 +828,163 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     await widget.onFavoriteChanged(verb, next);
   }
 
+  Future<void> _startCreateVerb() async {
+    if (!await _confirmLeaveIfDirty()) return;
+    if (!mounted) return;
+    final cat = _browseCategory.isNotEmpty
+        ? _browseCategory
+        : (_categories.isNotEmpty ? _categories.first : 'Offense');
+    setState(() {
+      _isCreating = true;
+      _editingCustom = true;
+      _currentVerb = '';
+      _assignedCategory = cat;
+      _browseCategory = cat;
+      _expandedCategories
+        ..clear()
+        ..add(cat);
+      _isFavorite = false;
+      _omitAgainst = false;
+      _wantsOpponent = true;
+      _usePluralPhrase = true;
+      _subOptions = const VerbSubOptions(
+        celebrationEnabled: false,
+        celebrationPhrase: VerbSubOptions.defaultReactionPhrases,
+      );
+      _setText(_label, '');
+      _setText(_singular, '');
+      _setText(_plural, '');
+      _setText(_ing, '');
+      _lastAutoIng = '';
+      _setText(_keywords, '');
+      _setText(_celebrationPhrase, VerbSubOptions.defaultReactionPhrases);
+      _setText(_celebrationTypes, '');
+      _setText(_grandSlamPhrase, '');
+      _reactionPhraseDraft.clear();
+      _addingReactionPhrase = false;
+      _previewVariantId = 'no_opp';
+      _snapshot = _formFingerprint();
+    });
+  }
+
   Future<void> _save({required bool asDefault, bool closeAfter = false}) async {
     final newLabel = _label.text.trim();
     final newSingular = _singular.text.trim();
     if (newLabel.isEmpty || newSingular.isEmpty || _busy) return;
+
+    // Customs: Celebration only — strip RBI if somehow set.
+    final sub = _isCustomContext
+        ? _liveSubOptions.copyWith(rbiEnabled: false)
+        : _liveSubOptions;
+
     setState(() => _busy = true);
     try {
-      await widget.onSave(
-        overrideKey: _currentVerb,
-        newLabel: newLabel,
-        newSingular: newSingular,
-        pluralText: _plural.text.trim(),
-        usePluralPhrase: _usePluralPhrase,
-        keywords: parseVerbKeywordsField(_keywords.text),
-        wantsOpponent: _wantsOpponent,
-        omitAgainst: _omitAgainst,
-        selectedCategory: _assignedCategory,
-        subOptions: _liveSubOptions,
-        asDefault: asDefault,
-      );
+      if (_isCreating) {
+        final create = widget.onCreateCustomVerb;
+        if (create == null) return;
+        // Prevent duplicate labels against existing browser verbs.
+        final exists = _verbsByCategory.values.any((list) => list.contains(newLabel));
+        if (exists) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'A verb named "$newLabel" already exists',
+                style: const TextStyle(fontSize: 11),
+              ),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+        await create(
+          label: newLabel,
+          singular: newSingular,
+          pluralText: _plural.text.trim(),
+          ingText: _ing.text.trim(),
+          usePluralPhrase: _usePluralPhrase,
+          keywords: parseVerbKeywordsField(_keywords.text),
+          wantsOpponent: _wantsOpponent,
+          omitAgainst: _omitAgainst,
+          selectedCategory: _assignedCategory,
+          subOptions: sub,
+        );
+        if (!mounted) return;
+        setState(() {
+          final dest =
+              _verbsByCategory.putIfAbsent(_assignedCategory, () => <String>[]);
+          if (!dest.contains(newLabel)) dest.add(newLabel);
+          _isCreating = false;
+          _editingCustom = true;
+          _currentVerb = newLabel;
+          _browseCategory = _assignedCategory;
+          _expandedCategories
+            ..clear()
+            ..add(_assignedCategory);
+          _snapshot = _formFingerprint();
+        });
+      } else if (_isCustomContext) {
+        final update = widget.onUpdateCustomVerb;
+        if (update == null) return;
+        final previous = _currentVerb;
+        await update(
+          previousLabel: previous,
+          label: newLabel,
+          singular: newSingular,
+          pluralText: _plural.text.trim(),
+          ingText: _ing.text.trim(),
+          usePluralPhrase: _usePluralPhrase,
+          keywords: parseVerbKeywordsField(_keywords.text),
+          wantsOpponent: _wantsOpponent,
+          omitAgainst: _omitAgainst,
+          selectedCategory: _assignedCategory,
+          subOptions: sub,
+        );
+        if (!mounted) return;
+        setState(() {
+          if (previous != newLabel) {
+            for (final list in _verbsByCategory.values) {
+              list.remove(previous);
+            }
+            final dest = _verbsByCategory.putIfAbsent(
+                _assignedCategory, () => <String>[]);
+            if (!dest.contains(newLabel)) dest.add(newLabel);
+            _favorites.remove(previous);
+            if (_isFavorite) _favorites.add(newLabel);
+          }
+          _currentVerb = newLabel;
+          _editingCustom = true;
+          _snapshot = _formFingerprint();
+        });
+        await _persistVerbOrder();
+      } else {
+        await widget.onSave(
+          overrideKey: _currentVerb,
+          newLabel: newLabel,
+          newSingular: newSingular,
+          pluralText: _plural.text.trim(),
+          ingText: _ing.text.trim(),
+          usePluralPhrase: _usePluralPhrase,
+          keywords: parseVerbKeywordsField(_keywords.text),
+          wantsOpponent: _wantsOpponent,
+          omitAgainst: _omitAgainst,
+          selectedCategory: _assignedCategory,
+          subOptions: sub,
+          asDefault: asDefault,
+        );
+        if (!mounted) return;
+        _snapshot = _formFingerprint();
+      }
       if (!mounted) return;
-      _snapshot = _formFingerprint();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            asDefault
-                ? 'Saved "$newLabel" as default for this sport'
-                : 'Saved "$newLabel"',
+            _isCustomContext
+                ? 'Saved custom verb "$newLabel"'
+                : (asDefault
+                    ? 'Saved "$newLabel" as default for this sport'
+                    : 'Saved "$newLabel"'),
             style: const TextStyle(fontSize: 11),
           ),
           duration: const Duration(seconds: 2),
@@ -637,7 +1057,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
           actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
           title: AppDialogTealTitleBar(
-            title: 'Edit Verb',
+            title: _isCreating
+                ? 'Create Verb'
+                : (_isCustomContext ? 'Edit Custom Verb' : 'Edit Verb'),
             trailing: Material(
               color: Colors.transparent,
               child: InkWell(
@@ -645,7 +1067,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 borderRadius: BorderRadius.circular(4),
                 child: const Padding(
                   padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 20, color: Colors.white70),
+                  child: Icon(Icons.close, size: 16, color: Colors.white70),
                 ),
               ),
             ),
@@ -660,7 +1082,10 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: SingleChildScrollView(
-                    key: ValueKey('verb-editor-$_currentVerb'),
+                    key: ValueKey(
+                      _isCreating ? 'verb-editor-new' : 'verb-editor-$_currentVerb',
+                    ),
+                    clipBehavior: Clip.none,
                     child: _buildEditor(),
                   ),
                 ),
@@ -671,7 +1096,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           actionsOverflowAlignment: OverflowBarAlignment.end,
           actionsOverflowButtonSpacing: 8,
           actions: [
-            if (widget.isAdmin)
+            if (widget.isAdmin && !_isCustomContext)
               Tooltip(
                 message:
                     'Admin only: save this wording as the Reset baseline for ${widget.sport}',
@@ -688,17 +1113,18 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Tooltip(
-                  message: hasSavedDefault
-                      ? 'Restore this verb to your saved default for ${widget.sport}'
-                      : 'Restore this verb to the built-in factory wording',
-                  child: ElevatedGreyButton(
-                    label: 'Reset to Default',
-                    fontSize: 11,
-                    onPressed: _busy ? null : _reset,
+                if (!_isCustomContext)
+                  Tooltip(
+                    message: hasSavedDefault
+                        ? 'Restore this verb to your saved default for ${widget.sport}'
+                        : 'Restore this verb to the built-in factory wording',
+                    child: ElevatedGreyButton(
+                      label: 'Reset to Default',
+                      fontSize: 11,
+                      onPressed: _busy ? null : _reset,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
+                if (!_isCustomContext) const SizedBox(width: 8),
                 ElevatedGreyButton(
                   label: 'Cancel',
                   fontSize: 11,
@@ -706,7 +1132,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedGreyButton(
-                  label: 'Save',
+                  label: _isCreating ? 'Create' : 'Save',
                   fontSize: 11,
                   isPrimary: true,
                   onPressed: _busy
@@ -811,19 +1237,47 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(10, 8, 10, 2),
-              child: Text('Verbs', style: kAppDialogFieldLabelStyle),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+              child: _sectionHeader('Verbs'),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
-              child: Text(
-                'Drag ≡ to reorder categories or verbs. Change Category to move a verb.',
-                style: kAppDialogFieldTextStyle.copyWith(
-                  fontSize: 9.5,
-                  color: const Color(0xFF888888),
-                  height: 1.25,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    height: 28,
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _startCreateVerb,
+                      icon: const Icon(Icons.add, size: 14),
+                      label: const Text(
+                        'Create verb',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: kFloTealDark,
+                        side: const BorderSide(color: kFloTealLight),
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Drag ≡ to reorder. Change Category to move a verb.',
+                    style: kAppDialogFieldTextStyle.copyWith(
+                      fontSize: 9.5,
+                      color: const Color(0xFF888888),
+                      height: 1.25,
+                    ),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -1008,10 +1462,30 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   }
 
   Widget _buildEditor() {
+    final showRbi = !_isCustomContext &&
+        VerbSubOptions.showRbiEditor(
+          sport: widget.sport,
+          verbLabel: _verbLabelForMods,
+          value: _subOptions,
+        );
+    final showCele = VerbSubOptions.showCelebrationEditor(
+      verbLabel: _verbLabelForMods,
+      value: _subOptions,
+      isCustom: _isCustomContext,
+    );
+    final showCeleTypes = showCele &&
+        !_isCustomContext &&
+        VerbSubOptions.isCelebrationVerb(_verbLabelForMods);
+    final chipsHint =
+        VerbSubOptions.defaultCelebrationTypesForSport(widget.sport);
+    final reactionsOn = _subOptions.celebrationEnabled;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _sectionHeader('Verb'),
+        const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1081,61 +1555,293 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        _buildOptionsBox(),
-        const SizedBox(height: 10),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: AppDialogLabeledTextField(
-                label: 'Singular phrase (1 player)',
-                controller: _singular,
-                hintText: 'e.g., skates, battles, shoots',
-                onChanged: (_) => setState(() {}),
-                bottomGap: 0,
+        _sectionDivider(),
+        _sectionHeader(
+          'Preview',
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _optionCheckbox(
+                value: _wantsOpponent,
+                label: 'Include opponent',
+                onChanged: (v) => setState(() => _wantsOpponent = v),
+                compact: true,
+                textColor: Colors.white,
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: VerbEditPluralPhraseField(
-                pluralController: _plural,
-                usePluralPhrase: _usePluralPhrase,
-                onUsePluralChanged: (v) =>
-                    setState(() => _usePluralPhrase = v),
-                onPluralChanged: (_) => setState(() {}),
-                bottomGap: 0,
+              const SizedBox(width: 12),
+              _optionCheckbox(
+                value: _omitAgainst,
+                label: 'Omit "against"',
+                onChanged: (v) => setState(() => _omitAgainst = v),
+                compact: true,
+                textColor: Colors.white,
               ),
-            ),
-          ],
+            ],
+          ),
         ),
-        if (_currentVerb == 'Home Run' || _verbLabelForMods == 'Home Run') ...[
-          const SizedBox(height: 10),
+        const SizedBox(height: 8),
+        _buildCaptionPreview(),
+        _sectionDivider(),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sectionHeader('Phrase'),
+                    const SizedBox(height: 8),
+                    AppDialogLabeledTextField(
+                      label: 'Singular phrase (1 player)',
+                      controller: _singular,
+                      hintText: 'e.g., skates, battles, shoots',
+                      onChanged: (_) {
+                        final label = _label.text.trim().isEmpty
+                            ? (_currentVerb.isEmpty ? 'Custom' : _currentVerb)
+                            : _label.text.trim();
+                        final singular = _singular.text.trim().isEmpty
+                            ? _currentVerb
+                            : _singular.text.trim();
+                        final autoIng = VerbCaptionWording.defaultIngWording(
+                          label,
+                          singular,
+                        );
+                        if (_ing.text.trim().isEmpty ||
+                            _ing.text.trim() == _lastAutoIng) {
+                          _setText(_ing, autoIng);
+                        }
+                        _lastAutoIng = autoIng;
+                        setState(() {});
+                      },
+                      bottomGap: 0,
+                    ),
+                    const SizedBox(height: 10),
+                    VerbEditPluralPhraseField(
+                      pluralController: _plural,
+                      usePluralPhrase: _usePluralPhrase,
+                      onUsePluralChanged: (v) =>
+                          setState(() => _usePluralPhrase = v),
+                      onPluralChanged: (_) => setState(() {}),
+                      bottomGap: 0,
+                    ),
+                    if (_currentVerb == 'Home Run' ||
+                        _verbLabelForMods == 'Home Run') ...[
+                      const SizedBox(height: 10),
+                      AppDialogLabeledTextField(
+                        label: 'Grand Slam phrase',
+                        controller: _grandSlamPhrase,
+                        hintText: 'e.g., grand slam home run',
+                        onChanged: (_) => setState(() {}),
+                        bottomGap: 0,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (showRbi) ...[
+                _columnDivider(),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _sectionHeader(
+                        'RBI',
+                        trailing: _optionCheckbox(
+                          value: _subOptions.rbiEnabled,
+                          label: 'On',
+                          compact: true,
+                          checkboxOnRight: true,
+                          textColor: Colors.white,
+                          onChanged: (v) => setState(
+                            () => _subOptions =
+                                _subOptions.copyWith(rbiEnabled: v),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      AppDialogLabeledDropdown<RbiCaptionStyle>(
+                        label: 'RBI style',
+                        value: _subOptions.rbiStyle,
+                        items: RbiCaptionStyle.values
+                            .map(
+                              (s) => DropdownMenuItem<RbiCaptionStyle>(
+                                value: s,
+                                child: Text(s.menuLabel),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: _subOptions.rbiEnabled
+                            ? (v) {
+                                if (v != null) {
+                                  setState(
+                                    () => _subOptions =
+                                        _subOptions.copyWith(rbiStyle: v),
+                                  );
+                                }
+                              }
+                            : null,
+                        bottomGap: 0,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              _columnDivider(),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _sectionHeader(
+                      'Reactions',
+                      trailing: _optionCheckbox(
+                        value: reactionsOn,
+                        label: 'On',
+                        compact: true,
+                        checkboxOnRight: true,
+                        textColor: Colors.white,
+                        onChanged: (v) => setState(() {
+                          _subOptions = _subOptions.copyWith(
+                            celebrationEnabled: v,
+                          );
+                          if (!v) {
+                            _addingReactionPhrase = false;
+                            _reactionPhraseDraft.clear();
+                          }
+                        }),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildReactionPhraseChips(enabled: reactionsOn),
+                    const SizedBox(height: 10),
+                    AppDialogLabeledTextField(
+                      label: 'Ing phrase',
+                      controller: _ing,
+                      hintText:
+                          'e.g., skating, hitting a single, tagging a runner out',
+                      enabled: reactionsOn,
+                      maxLines: 1,
+                      bottomGap: 0,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        'Used after the reaction verb — e.g. "celebrates after '
+                        'hitting a double." Without it, reaction captions can\'t '
+                        'name the play.',
+                        style: kAppDialogFieldTextStyle.copyWith(
+                          fontSize: 9.5,
+                          color: const Color(0xFF888888),
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (showCeleTypes && reactionsOn) ...[
+          _sectionDivider(),
+          _sectionHeader('Celebration chips'),
+          const SizedBox(height: 8),
           AppDialogLabeledTextField(
-            label: 'Grand Slam phrase',
-            controller: _grandSlamPhrase,
-            hintText: 'e.g., grand slam home run',
-            onChanged: (_) => setState(() {}),
+            label: 'Chips (comma-separated)',
+            controller: _celebrationTypes,
+            hintText: chipsHint,
+            maxLines: 2,
             bottomGap: 0,
+            onChanged: (_) => setState(() {}),
           ),
         ],
-        const SizedBox(height: 10),
-        _buildCaptionPreview(),
-        const SizedBox(height: 12),
-        AppDialogLabeledField(
-          label: 'Keywords',
-          bottomGap: 0,
-          child: TextField(
-            controller: _keywords,
-            style: kAppDialogFieldTextStyle,
-            maxLines: 2,
-            onChanged: (_) => setState(() {}),
-            decoration: appDialogFieldDecoration(
-              hintText: 'comma-separated',
+        _sectionDivider(),
+        _sectionHeader('Keywords'),
+        const SizedBox(height: 8),
+        Material(
+          color: Colors.white,
+          elevation: 2,
+          shadowColor: const Color(0x33000000),
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFE4E4E4)),
+            ),
+            child: TextField(
+              controller: _keywords,
+              style: kAppDialogFieldTextStyle,
+              maxLines: 2,
+              onChanged: (_) => setState(() {}),
+              decoration: appDialogBareFieldDecoration(
+                hintText: 'comma-separated',
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            'Only written into keywords, not captions.',
+            style: kAppDialogFieldTextStyle.copyWith(
+              fontSize: 9.5,
+              color: const Color(0xFF888888),
+              height: 1.3,
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _sectionDivider() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 14),
+      child: Divider(height: 1, thickness: 1, color: Color(0xFFE8E8E8)),
+    );
+  }
+
+  Widget _columnDivider() {
+    return const Padding(
+      padding: EdgeInsets.only(top: 36),
+      child: VerticalDivider(
+        width: 25,
+        thickness: 1,
+        color: Color(0xFFE8E8E8),
+      ),
+    );
+  }
+
+  Widget _sectionHeader(String title, {Widget? trailing}) {
+    return Container(
+      height: 28,
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        gradient: kFloTealGradientHorizontalHeader,
+        borderRadius: BorderRadius.circular(5),
+      ),
+      alignment: Alignment.centerLeft,
+      child: Row(
+        children: [
+          Text(
+            title.toUpperCase(),
+            style: kAppDialogFieldLabelStyle.copyWith(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.6,
+              color: Colors.white,
+            ),
+          ),
+          if (trailing != null) ...[
+            const Spacer(),
+            trailing,
+          ],
+        ],
+      ),
     );
   }
 
@@ -1143,175 +1849,38 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     required bool value,
     required String label,
     required ValueChanged<bool> onChanged,
+    bool compact = false,
+    bool checkboxOnRight = false,
+    Color? textColor,
   }) {
+    final text = Text(
+      label,
+      style: kAppDialogFieldTextStyle.copyWith(
+        color: textColor,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+    final box = AppCompactCheckbox(
+      value: value,
+      accentColor: kFloTealDark,
+      onChanged: onChanged,
+    );
+    final children = checkboxOnRight
+        ? <Widget>[
+            if (compact) text else Expanded(child: text),
+            const SizedBox(width: 6),
+            box,
+          ]
+        : <Widget>[
+            box,
+            const SizedBox(width: 6),
+            if (compact) text else Expanded(child: text),
+          ];
     return Row(
-      children: [
-        AppCompactCheckbox(
-          value: value,
-          accentColor: kFloTealLight,
-          onChanged: onChanged,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(label, style: kAppDialogFieldTextStyle),
-        ),
-      ],
+      mainAxisSize: compact ? MainAxisSize.min : MainAxisSize.max,
+      children: children,
     );
-  }
-
-  Widget _buildOptionsBox() {
-    final showRbi = VerbSubOptions.showRbiEditor(
-      sport: widget.sport,
-      verbLabel: _verbLabelForMods,
-      value: _subOptions,
-    );
-    final showCele = VerbSubOptions.showCelebrationEditor(
-      verbLabel: _verbLabelForMods,
-      value: _subOptions,
-    );
-    final showCeleTypes =
-        showCele && VerbSubOptions.isCelebrationVerb(_verbLabelForMods);
-    final chipsHint =
-        VerbSubOptions.defaultCelebrationTypesForSport(widget.sport);
-
-    final checks = <Widget>[
-      Expanded(
-        child: _optionCheckbox(
-          value: _wantsOpponent,
-          label: 'Include opponent',
-          onChanged: (v) => setState(() => _wantsOpponent = v),
-        ),
-      ),
-      Expanded(
-        child: _optionCheckbox(
-          value: _omitAgainst,
-          label: 'Omit "against"',
-          onChanged: (v) => setState(() => _omitAgainst = v),
-        ),
-      ),
-      if (showRbi)
-        Expanded(
-          child: _optionCheckbox(
-            value: _subOptions.rbiEnabled,
-            label: 'RBI',
-            onChanged: (v) =>
-                setState(() => _subOptions = _subOptions.copyWith(rbiEnabled: v)),
-          ),
-        ),
-      if (showCele)
-        Expanded(
-          child: _optionCheckbox(
-            value: _subOptions.celebrationEnabled,
-            label: 'Celebration',
-            onChanged: (v) => setState(
-              () => _subOptions = _subOptions.copyWith(celebrationEnabled: v),
-            ),
-          ),
-        ),
-    ];
-
-    // Two rows if all four are present so labels stay readable.
-    final Widget checkRows;
-    if (checks.length <= 2) {
-      checkRows = Row(children: _withGaps(checks));
-    } else if (checks.length == 3) {
-      checkRows = Column(
-        children: [
-          Row(children: _withGaps(checks.sublist(0, 2))),
-          const SizedBox(height: 6),
-          Row(children: [checks[2], const Spacer(), const Spacer()]),
-        ],
-      );
-    } else {
-      checkRows = Column(
-        children: [
-          Row(children: _withGaps(checks.sublist(0, 2))),
-          const SizedBox(height: 6),
-          Row(children: _withGaps(checks.sublist(2))),
-        ],
-      );
-    }
-
-    final fieldChildren = <Widget>[];
-    if (showRbi && _subOptions.rbiEnabled) {
-      fieldChildren.add(
-        Expanded(
-          child: AppDialogLabeledDropdown<RbiCaptionStyle>(
-            label: 'RBI style',
-            value: _subOptions.rbiStyle,
-            items: RbiCaptionStyle.values
-                .map(
-                  (s) => DropdownMenuItem<RbiCaptionStyle>(
-                    value: s,
-                    child: Text(s.menuLabel),
-                  ),
-                )
-                .toList(),
-            onChanged: (v) {
-              if (v != null) {
-                setState(
-                  () => _subOptions = _subOptions.copyWith(rbiStyle: v),
-                );
-              }
-            },
-            bottomGap: 0,
-          ),
-        ),
-      );
-    }
-    if (showCele && _subOptions.celebrationEnabled) {
-      fieldChildren.add(
-        Expanded(
-          child: AppDialogLabeledTextField(
-            label: 'Celebration verb',
-            controller: _celebrationPhrase,
-            hintText: 'e.g., celebrates',
-            bottomGap: 0,
-            onChanged: (_) => setState(() {}),
-          ),
-        ),
-      );
-    }
-
-    return AppDialogLabeledField(
-      label: 'Options',
-      bottomGap: 0,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        decoration: appDialogCardDecoration(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            checkRows,
-            if (fieldChildren.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(children: _withGaps(fieldChildren)),
-            ],
-            if (showCeleTypes && _subOptions.celebrationEnabled) ...[
-              const SizedBox(height: 8),
-              AppDialogLabeledTextField(
-                label: 'Celebration chips (comma-separated)',
-                controller: _celebrationTypes,
-                hintText: chipsHint,
-                maxLines: 2,
-                bottomGap: 0,
-                onChanged: (_) => setState(() {}),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _withGaps(List<Widget> items) {
-    final out = <Widget>[];
-    for (var i = 0; i < items.length; i++) {
-      if (i > 0) out.add(const SizedBox(width: 12));
-      out.add(items[i]);
-    }
-    return out;
   }
 }
 

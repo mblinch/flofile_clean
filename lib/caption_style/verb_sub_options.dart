@@ -43,6 +43,20 @@ enum RbiCaptionStyle {
 }
 
 /// Per-verb caption sub-options editable in the verb editor (RBI + celebration).
+/// How a reaction phrase joins to the underlying verb wording.
+class ReactionAfterParts {
+  const ReactionAfterParts({
+    required this.appendNoun,
+    required this.afterText,
+  });
+
+  /// When true, append the hit noun / RBI fragment after [afterText]
+  /// (e.g. `after hitting a` + `single`). When false, [afterText] is the full
+  /// tail (e.g. `after tagging a runner out`).
+  final bool appendNoun;
+  final String afterText;
+}
+
 class VerbSubOptions {
   const VerbSubOptions({
     this.rbiEnabled = false,
@@ -50,7 +64,7 @@ class VerbSubOptions {
     this.rbiStyle = RbiCaptionStyle.defaultStyle,
     this.grandSlamPhrase = defaultGrandSlamPhrase,
     this.celebrationEnabled = false,
-    this.celebrationPhrase = 'celebrates',
+    this.celebrationPhrase = defaultReactionPhrases,
     this.celebrationTypes =
         'Scoring, Single, Double, Triple, Home Run, Strikeout',
   });
@@ -64,14 +78,15 @@ class VerbSubOptions {
   /// Caption formatting for RBI counts (e.g. `two-RBI` vs `2 RBI`).
   final RbiCaptionStyle rbiStyle;
 
-  /// Full noun phrase after "hits a" / "celebrates a" for grand slam.
+  /// Full noun phrase after "hits a" / "celebrates after a" for grand slam.
   /// Default: `grand slam home run`.
   final String grandSlamPhrase;
 
   /// Show celebration (Cele on hits, or celebration chips on celebration verbs).
   final bool celebrationEnabled;
 
-  /// Verb used when Cele is selected, e.g. "celebrates".
+  /// Comma-separated reaction verbs used when Cele/Reactions is on
+  /// (e.g. "celebrates, reacts, cheers"). First entry is the default.
   final String celebrationPhrase;
 
   /// Comma-separated chip labels for Celebration / Celebrates verbs.
@@ -82,13 +97,228 @@ class VerbSubOptions {
 
   static const String defaultGrandSlamPhrase = 'grand slam home run';
 
+  /// Present-tense reaction verbs for sports captions.
+  static const String defaultReactionPhrases = 'celebrates, reacts';
+
+  /// Extra suggestions shown in the editor hint (not all enabled by default).
+  static const String suggestedReactionPhrases =
+      'celebrates, reacts, cheers, shouts, yells, screams, roars, '
+      'claps, waves, grins, smiles, gestures, acknowledges, pumps, '
+      'jumps, embraces';
+
+  /// Parsed reaction verbs from [celebrationPhrase].
+  List<String> get reactionPhraseList {
+    final list = celebrationPhrase
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+    if (list.isNotEmpty) return list;
+    return defaultReactionPhrases
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
+  /// Default / first reaction verb.
+  String get primaryReactionPhrase {
+    final list = reactionPhraseList;
+    return list.isNotEmpty ? list.first : 'celebrates';
+  }
+
+  /// Whether [action] is one of this verb's reaction phrases (or dugout cele).
+  bool isReactionAction(String? action) {
+    if (action == null || action.isEmpty) return false;
+    if (action == 'celebrates_in_dugout') return true;
+    return reactionPhraseList.any(
+      (p) => p.toLowerCase() == action.toLowerCase(),
+    );
+  }
+
+  /// Middle of a reaction caption after the reaction verb — e.g. `after hitting a`
+  /// so the line reads "celebrates after hitting a single" (not "after a single").
+  ///
+  /// Prefer [reactionAfterPartsFor] when building full captions (handles custom verbs).
+  static String reactionAfterLeadInFor(String verbLabel) =>
+      reactionAfterPartsFor(verbLabel).afterText;
+
+  /// How to join a reaction verb with the action wording.
+  ///
+  /// Built-in hit verbs use [ReactionAfterParts.appendNoun] so RBI/home-run fragments
+  /// still work (`celebrates after hitting a single`). Custom / full-phrase verbs
+  /// convert the saved singular phrase to a gerund (`celebrates after tagging a runner out`).
+  static ReactionAfterParts reactionAfterPartsFor(
+    String verbLabel, {
+    String? singularPhrase,
+    String? ingPhrase,
+  }) {
+    switch (verbLabel) {
+      case 'Bunts':
+        // Hit-path captions use nouns like "bunt single" / "bunt".
+        return const ReactionAfterParts(
+          appendNoun: true,
+          afterText: 'after hitting a',
+        );
+      case 'Walks':
+        return const ReactionAfterParts(
+          appendNoun: true,
+          afterText: 'after drawing a',
+        );
+      case 'Hit by Pitch':
+        return const ReactionAfterParts(
+          appendNoun: true,
+          afterText: 'after being hit by a',
+        );
+      case 'Grand Slam':
+        return const ReactionAfterParts(
+          appendNoun: true,
+          afterText: 'after hitting a',
+        );
+      default:
+        if (isHitVerb(verbLabel)) {
+          return const ReactionAfterParts(
+            appendNoun: true,
+            afterText: 'after hitting a',
+          );
+        }
+    }
+
+    final savedIng = ingPhrase?.trim();
+    if (savedIng != null && savedIng.isNotEmpty) {
+      return ReactionAfterParts(
+        appendNoun: false,
+        afterText: 'after $savedIng',
+      );
+    }
+
+    final phrase = singularPhrase?.trim();
+    if (phrase != null && phrase.isNotEmpty) {
+      final lower = phrase.toLowerCase();
+      if (lower.startsWith('hits a ') || lower.startsWith('hit a ')) {
+        return const ReactionAfterParts(
+          appendNoun: true,
+          afterText: 'after hitting a',
+        );
+      }
+      return ReactionAfterParts(
+        appendNoun: false,
+        afterText: 'after ${gerundPhraseFromSingular(phrase)}',
+      );
+    }
+
+    return const ReactionAfterParts(appendNoun: true, afterText: 'after a');
+  }
+
+  /// Converts a saved singular phrase to a gerund clause (custom verbs).
+  static String gerundPhraseFromSingular(String phrase) {
+    final trimmed = phrase.trim();
+    if (trimmed.isEmpty) return trimmed;
+
+    final lower = trimmed.toLowerCase();
+    final hitsMatch =
+        RegExp(r'^hits? a (.+)$', caseSensitive: false).firstMatch(trimmed);
+    if (hitsMatch != null) {
+      return 'hitting a ${hitsMatch.group(1)!}';
+    }
+    if (lower.startsWith('is hit by')) {
+      return 'being hit by${trimmed.substring(9)}';
+    }
+    if (lower.startsWith('gets hit by')) {
+      return 'getting hit by${trimmed.substring(11)}';
+    }
+    if (lower.startsWith('takes a walk')) return 'drawing a walk';
+    if (lower.startsWith('take a walk')) return 'drawing a walk';
+    if (lower.startsWith('takes an at bat')) {
+      return 'taking an at bat${trimmed.substring(13)}';
+    }
+    if (lower.startsWith('take an at bat')) {
+      return 'taking an at bat${trimmed.substring(12)}';
+    }
+
+    final words = trimmed.split(RegExp(r'\s+'));
+    if (words.isEmpty) return trimmed;
+    words[0] = _verbWordToGerund(words.first);
+    return words.join(' ');
+  }
+
+  static String _verbWordToGerund(String verb) {
+    final v = verb.toLowerCase();
+    const irregular = <String, String>{
+      'hit': 'hitting',
+      'run': 'running',
+      'steal': 'stealing',
+      'slide': 'sliding',
+      'tag': 'tagging',
+      'catch': 'catching',
+      'throw': 'throwing',
+      'bunt': 'bunting',
+      'take': 'taking',
+      'get': 'getting',
+      'is': 'being',
+      'draw': 'drawing',
+      'round': 'rounding',
+      'cross': 'crossing',
+      'celebrate': 'celebrating',
+      'field': 'fielding',
+      'turn': 'turning',
+      'deliver': 'delivering',
+      'swing': 'swinging',
+      'walk': 'walking',
+      'guard': 'guarding',
+      'skate': 'skating',
+      'shoot': 'shooting',
+      'battle': 'battling',
+      'score': 'scoring',
+      'check': 'checking',
+      'defend': 'defending',
+      'block': 'blocking',
+      'clear': 'clearing',
+      'drive': 'driving',
+      'dribble': 'dribbling',
+      'dunk': 'dunking',
+      'lay': 'laying',
+      'contest': 'contesting',
+      'rebound': 'rebounding',
+      'wave': 'waving',
+      'look': 'looking',
+      'stretch': 'stretching',
+      'participate': 'participating',
+    };
+    if (irregular.containsKey(v)) return irregular[v]!;
+    if (v.endsWith('ie')) return '${v.substring(0, v.length - 2)}ying';
+    if (v.endsWith('e') && v.length > 2) {
+      return '${v.substring(0, v.length - 1)}ing';
+    }
+    if (v.length > 2 &&
+        v.endsWith('y') &&
+        !'aeiou'.contains(v[v.length - 2])) {
+      return '${v.substring(0, v.length - 1)}ying';
+    }
+    return '${v}ing';
+  }
+
+  /// Converts legacy "celebrates a steal of …" cores into gerund tails for
+  /// "reacts after stealing …".
+  static String reactionAfterTailFromCelebratoryCore(String celebratoryCore) {
+    var rest = celebratoryCore.trim();
+    if (rest.startsWith('celebrates ')) {
+      rest = rest.substring('celebrates '.length);
+    }
+    if (rest.startsWith('a steal of ')) {
+      return 'stealing ${rest.substring('a steal of '.length)}';
+    }
+    if (rest == 'a stolen base') return 'stealing a base';
+    return rest;
+  }
+
   static const Set<String> hitVerbs = {
     'Single',
     'Double',
     'Triple',
     'Home Run',
     'Sacrifice Fly',
-    'Bunt',
+    'Bunts',
     'Hit by Pitch',
   };
 
@@ -121,12 +351,15 @@ class VerbSubOptions {
     return isHitVerb(verbLabel) || (value?.rbiEnabled ?? false);
   }
 
-  /// Celebration block when the verb is celebration-related or already enabled.
+  /// Celebration block when the verb is celebration-related, already enabled,
+  /// or a custom verb (customs may opt into Cele; they never get RBI).
   static bool showCelebrationEditor({
     required String verbLabel,
     VerbSubOptions? value,
+    bool isCustom = false,
   }) {
-    return isHitVerb(verbLabel) ||
+    return isCustom ||
+        isHitVerb(verbLabel) ||
         isCelebrationVerb(verbLabel) ||
         (value?.celebrationEnabled ?? false);
   }
@@ -135,7 +368,16 @@ class VerbSubOptions {
     required String? sport,
     required String verbLabel,
     VerbSubOptions? value,
+    bool isCustom = false,
   }) {
+    if (isCustom) {
+      // Custom verbs: Celebration only — never RBI.
+      return showCelebrationEditor(
+        verbLabel: verbLabel,
+        value: value,
+        isCustom: true,
+      );
+    }
     return showRbiEditor(
           sport: sport,
           verbLabel: verbLabel,
@@ -238,6 +480,7 @@ class VerbSubOptions {
           : RbiCaptionStyle.defaultStyle,
       grandSlamPhrase: defaultGrandSlamPhrase,
       celebrationEnabled: isHit || isCele,
+      celebrationPhrase: defaultReactionPhrases,
       celebrationTypes: defaultCelebrationTypesForSport(sport),
     );
   }
@@ -271,7 +514,7 @@ class VerbSubOptions {
   bool get rbiPlacesAfterHit =>
       rbiStyle == RbiCaptionStyle.withRunsBattedIn;
 
-  /// Phrase inserted after "hits a …" / "celebrates a …" for an RBI count
+  /// Phrase inserted after "hits a …" / "celebrates after hitting a …" for an RBI count
   /// (infix styles only). Prefer [hitClauseWithRbi] for full clauses.
   String rbiCountLabel(int count) {
     final c = count < 1 ? 1 : count;
@@ -301,7 +544,7 @@ class VerbSubOptions {
 
   /// Builds "hits a two-RBI single" or "hits a single with two runs batted in".
   ///
-  /// [leadIn] is typically `hits a` or `celebrates a`.
+  /// [leadIn] is typically `hits a` or `celebrates after hitting a`.
   String hitClauseWithRbi({
     required String leadIn,
     required String hitNoun,
@@ -318,7 +561,7 @@ class VerbSubOptions {
     return '$leadIn $label $hitNoun';
   }
 
-  /// Resolved grand slam noun phrase (after "hits a" / "celebrates a").
+  /// Resolved grand slam noun phrase (after "hits a" / "celebrates after hitting a").
   String resolvedGrandSlamPhrase({String hitNoun = 'home run'}) {
     final custom = grandSlamPhrase.trim();
     if (custom.isNotEmpty) return custom;

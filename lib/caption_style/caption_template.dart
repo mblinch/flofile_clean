@@ -623,6 +623,9 @@ enum CaptionSegment {
   /// Any literal text between snippets — punctuation, dashes, spaces, etc.
   /// Displayed as "Custom" in the UI; editable per slot.
   punctuation,
+  /// Freeform custom text the user types (e.g. Getty NOTE TO USER). Multiple
+  /// allowed; each occurrence has its own string in [CaptionTemplate.freeTextSnippets].
+  freeText,
   venue,
   credit,
 }
@@ -659,6 +662,8 @@ class CaptionTemplate {
     this.customSeparators,
     this.separatorSnippets,
     this.punctuationSnippets,
+    this.freeTextSnippets,
+    this.freeTextSuffixes,
     this.venuePrefix = '',
     this.venueSuffix = '',
     this.locationOptionsByOccurrence,
@@ -751,6 +756,13 @@ class CaptionTemplate {
   /// One string per [CaptionSegment.punctuation] ("Custom" in UI) in [segmentOrder],
   /// e.g. ` - `, `: `, `. `. Any literal text is valid.
   final List<String>? punctuationSnippets;
+
+  /// One string per [CaptionSegment.freeText] ("Custom text" in UI) in
+  /// [segmentOrder] (left-to-right). Freeform user text (e.g. Getty NOTE TO USER).
+  final List<String>? freeTextSnippets;
+
+  /// Trailing literal after each [freeTextSnippets] body (period, space, etc.).
+  final List<String>? freeTextSuffixes;
 
   final String venuePrefix;
   final String venueSuffix;
@@ -980,6 +992,8 @@ class CaptionTemplate {
     List<String>? customSeparators,
     List<String>? separatorSnippets,
     List<String>? punctuationSnippets,
+    List<String>? freeTextSnippets,
+    List<String>? freeTextSuffixes,
     String captionPrefix = '',
     String captionSuffix = ' ',
     String gameIdentifierText = '',
@@ -1035,6 +1049,8 @@ class CaptionTemplate {
       customSeparators: resolvedCustomSeparators,
       separatorSnippets: resolvedSepSnippets,
       punctuationSnippets: resolvedPunSnippets,
+      freeTextSnippets: freeTextSnippets,
+      freeTextSuffixes: freeTextSuffixes,
       venuePrefix: venuePrefix,
       venueSuffix: venueSuffix,
       locationOptionsByOccurrence: locationOptionsByOccurrence,
@@ -1070,6 +1086,8 @@ class CaptionTemplate {
     List<String>? customSeparators,
     Object? separatorSnippets = _unset,
     Object? punctuationSnippets = _unset,
+    Object? freeTextSnippets = _unset,
+    Object? freeTextSuffixes = _unset,
     String? venuePrefix,
     String? venueSuffix,
     Object? locationOptionsByOccurrence = _unset,
@@ -1113,6 +1131,12 @@ class CaptionTemplate {
         punctuationSnippets: identical(punctuationSnippets, _unset)
             ? this.punctuationSnippets
             : punctuationSnippets as List<String>?,
+        freeTextSnippets: identical(freeTextSnippets, _unset)
+            ? this.freeTextSnippets
+            : freeTextSnippets as List<String>?,
+        freeTextSuffixes: identical(freeTextSuffixes, _unset)
+            ? this.freeTextSuffixes
+            : freeTextSuffixes as List<String>?,
         venuePrefix: venuePrefix ?? this.venuePrefix,
         venueSuffix: venueSuffix ?? this.venueSuffix,
         locationOptionsByOccurrence: identical(locationOptionsByOccurrence, _unset)
@@ -1237,6 +1261,37 @@ class CaptionTemplate {
       r = r.copyWith(punctuationSnippets: null);
     }
 
+    final freeCount =
+        r.segmentOrder.where((s) => s == CaptionSegment.freeText).length;
+    if (freeCount > 0) {
+      final by = r.freeTextSnippets;
+      if (by == null || by.length != freeCount) {
+        final list = <String>[];
+        for (var i = 0; i < freeCount; i++) {
+          if (by != null && i < by.length) {
+            list.add(by[i]);
+          } else {
+            list.add('');
+          }
+        }
+        r = r.copyWith(freeTextSnippets: list);
+      }
+      final suf = r.freeTextSuffixes;
+      if (suf == null || suf.length != freeCount) {
+        final list = <String>[];
+        for (var i = 0; i < freeCount; i++) {
+          if (suf != null && i < suf.length) {
+            list.add(suf[i]);
+          } else {
+            list.add('');
+          }
+        }
+        r = r.copyWith(freeTextSuffixes: list);
+      }
+    } else if (r.freeTextSnippets != null || r.freeTextSuffixes != null) {
+      r = r.copyWith(freeTextSnippets: null, freeTextSuffixes: null);
+    }
+
     return r;
   }
 
@@ -1270,6 +1325,8 @@ class CaptionTemplate {
         if (customSeparators != null) 'customSeparators': customSeparators,
         if (separatorSnippets != null) 'separatorSnippets': separatorSnippets,
         if (punctuationSnippets != null) 'punctuationSnippets': punctuationSnippets,
+        if (freeTextSnippets != null) 'freeTextSnippets': freeTextSnippets,
+        if (freeTextSuffixes != null) 'freeTextSuffixes': freeTextSuffixes,
         if (venuePrefix.isNotEmpty) 'venuePrefix': venuePrefix,
         if (venueSuffix.isNotEmpty) 'venueSuffix': venueSuffix,
         if (layoutPrefix.isNotEmpty) 'layoutPrefix': layoutPrefix,
@@ -1359,6 +1416,12 @@ class CaptionTemplate {
           ?.map((e) => e.toString())
           .toList(),
       punctuationSnippets: (json['punctuationSnippets'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList(),
+      freeTextSnippets: (json['freeTextSnippets'] as List<dynamic>?)
+          ?.map((e) => e.toString())
+          .toList(),
+      freeTextSuffixes: (json['freeTextSuffixes'] as List<dynamic>?)
           ?.map((e) => e.toString())
           .toList(),
       venuePrefix: json['venuePrefix'] as String? ?? '',

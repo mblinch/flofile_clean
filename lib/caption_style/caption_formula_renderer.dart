@@ -348,6 +348,46 @@ class CaptionFormulaRenderer {
     return '';
   }
 
+  /// [occurrenceIndex] counts only [CaptionSegment.freeText] entries, left-to-right.
+  static String freeTextSnippetFor(
+    CaptionTemplate template,
+    int segmentIndex,
+  ) {
+    final occ = segmentOccurrenceIndex(
+        template.segmentOrder, segmentIndex, CaptionSegment.freeText);
+    final list = template.freeTextSnippets;
+    final body =
+        (list != null && occ >= 0 && occ < list.length) ? list[occ] : '';
+    final suffixes = template.freeTextSuffixes;
+    final suffix = (suffixes != null && occ >= 0 && occ < suffixes.length)
+        ? suffixes[occ]
+        : '';
+    return '$body$suffix';
+  }
+
+  /// Body-only free text (no trailing suffix) for the editor field.
+  static String freeTextBodyFor(
+    CaptionTemplate template,
+    int segmentIndex,
+  ) {
+    final occ = segmentOccurrenceIndex(
+        template.segmentOrder, segmentIndex, CaptionSegment.freeText);
+    final list = template.freeTextSnippets;
+    if (list != null && occ >= 0 && occ < list.length) return list[occ];
+    return '';
+  }
+
+  static String freeTextSuffixFor(
+    CaptionTemplate template,
+    int segmentIndex,
+  ) {
+    final occ = segmentOccurrenceIndex(
+        template.segmentOrder, segmentIndex, CaptionSegment.freeText);
+    final list = template.freeTextSuffixes;
+    if (list != null && occ >= 0 && occ < list.length) return list[occ];
+    return '';
+  }
+
   /// [occurrenceIndex] counts only [CaptionSegment.date] entries, left-to-right.
   static DateFormula? dateFormulaForOccurrence(
     CaptionTemplate template,
@@ -849,6 +889,8 @@ class CaptionFormulaRenderer {
           return '${template.gameIdentifierPrefix}'
               '$gameIdentifier'
               '${template.gameIdentifierSuffix}';
+        case CaptionSegment.freeText:
+          return freeTextSnippetFor(template, segmentIndex);
         case CaptionSegment.separator:
           return separatorSnippetFor(template, segmentIndex);
         case CaptionSegment.punctuation:
@@ -888,7 +930,7 @@ class CaptionFormulaRenderer {
       for (var i = 0; i < n; i++) {
         final s = order[i];
         if (customSegmentPlaceholderIndex == null &&
-            s == CaptionSegment.customText &&
+            (s == CaptionSegment.customText || s == CaptionSegment.freeText) &&
             valueAt(i).trim().isEmpty) {
           continue;
         }
@@ -901,7 +943,7 @@ class CaptionFormulaRenderer {
       for (var i = 0; i < n; i++) {
         final s = order[i];
         if (customSegmentPlaceholderIndex == null &&
-            s == CaptionSegment.customText &&
+            (s == CaptionSegment.customText || s == CaptionSegment.freeText) &&
             valueAt(i).trim().isEmpty) {
           continue;
         }

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+/// Main app top bar ([AppHeaderWidget] / [FloChromeHeader]) and dialog title bars.
+const double kFloAppHeaderHeight = 34.0;
+
 /// Pic preview top/bottom bars, caption (CAPTION) title row, thumbnail toolbar,
 /// and Keyboard Fire caption strip header — keep heights aligned (compact strip).
 const double kFloChromeHeaderHeight = 22.0;
@@ -11,6 +14,81 @@ const double kFloInningButtonHeight = 22.0;
 /// Border radius for inning / period / +/− buttons.
 const double kFloInningButtonRadius = 5.0;
 
+/// Trailing inset on scrollable content so the scrollbar thumb never covers rows.
+const double kFloScrollbarGutter = 12.0;
+
+/// Visible scrollbar thickness (pairs with [kFloScrollbarGutter]).
+const double kFloScrollbarThickness = 8.0;
+
+/// Content padding that reserves [kFloScrollbarGutter] on the right.
+EdgeInsets floScrollPadding({
+  double left = 0,
+  double top = 0,
+  double bottom = 0,
+  double? right,
+}) {
+  return EdgeInsets.fromLTRB(
+    left,
+    top,
+    right ?? kFloScrollbarGutter,
+    bottom,
+  );
+}
+
+/// App scrollbar — use with [floScrollPadding] / [kFloScrollbarGutter] on the
+/// scrollable's *content* padding so the thumb does not overlap list items.
+class FloScrollbar extends StatelessWidget {
+  const FloScrollbar({
+    super.key,
+    required this.child,
+    this.controller,
+    this.thumbVisibility = true,
+    this.trackVisibility = false,
+    this.thickness = kFloScrollbarThickness,
+  });
+
+  final Widget child;
+  final ScrollController? controller;
+  final bool thumbVisibility;
+  final bool trackVisibility;
+  final double thickness;
+
+  @override
+  Widget build(BuildContext context) {
+    return RawScrollbar(
+      controller: controller,
+      thumbVisibility: thumbVisibility,
+      trackVisibility: trackVisibility,
+      thickness: thickness,
+      radius: const Radius.circular(4),
+      child: child,
+    );
+  }
+}
+
+/// Desktop scrollbars use [FloScrollbar]. Pair vertical scrollables with
+/// [floScrollPadding] so content clears [kFloScrollbarGutter].
+class FloScrollBehavior extends MaterialScrollBehavior {
+  const FloScrollBehavior();
+
+  @override
+  Widget buildScrollbar(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) {
+    switch (axisDirectionToAxis(details.direction)) {
+      case Axis.horizontal:
+        return child;
+      case Axis.vertical:
+        return FloScrollbar(
+          controller: details.controller,
+          child: child,
+        );
+    }
+  }
+}
+
 /// FloFile teal accent (MLB clock, selections, primary actions).
 const Color kFloTealLight = Color(0xFF4A7A96);
 const Color kFloTealDark = Color(0xFF2A4858);
@@ -19,13 +97,34 @@ const Color kFloTealMid = Color(0xFF3A5F78);
 /// Light fill behind selected chips / player cells.
 const Color kFloTealSelectedFill = Color(0xFFE4EEF2);
 
-/// Submenu strip beside verb options (was blue-tinted).
-const Color kFloTealSubmenuFill = Color(0xFFF0F5F7);
+/// Submenu strip beside verb options (RBI, reactions, base, etc.).
+const Color kFloTealSubmenuFill = Color(0xFFD6E8F0);
 
 const LinearGradient kFloTealGradientHorizontal = LinearGradient(
   begin: Alignment.centerLeft,
   end: Alignment.centerRight,
   colors: [kFloTealLight, kFloTealDark],
+);
+
+/// Lighter teal row fill for selected verbs (parent category uses [kFloTealGradientHorizontal]).
+const LinearGradient kFloTealGradientHorizontalLight = LinearGradient(
+  begin: Alignment.centerLeft,
+  end: Alignment.centerRight,
+  colors: [Color(0xFFC8DDE8), Color(0xFFE2EDF3)],
+);
+
+/// Mid-light teal for Edit Verb section headers (darker than [kFloTealGradientHorizontalLight]).
+const LinearGradient kFloTealGradientHorizontalHeader = LinearGradient(
+  begin: Alignment.centerLeft,
+  end: Alignment.centerRight,
+  colors: [Color(0xFF6F9CB4), Color(0xFF8FB4C8)],
+);
+
+/// Light teal fill for idle category rows in Keyboard Fire.
+const LinearGradient kFloCategoryRowGradient = LinearGradient(
+  begin: Alignment.centerLeft,
+  end: Alignment.centerRight,
+  colors: [Color(0xFFDCEBF2), Color(0xFFF0F7FA)],
 );
 
 const LinearGradient kFloTealGradientVertical = LinearGradient(

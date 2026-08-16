@@ -210,6 +210,12 @@ class CaptionStyleCatalog {
             punctuationSnippets: ref.punctuationSnippets != null
                 ? List<String>.from(ref.punctuationSnippets!)
                 : null,
+            freeTextSnippets: ref.freeTextSnippets != null
+                ? List<String>.from(ref.freeTextSnippets!)
+                : null,
+            freeTextSuffixes: ref.freeTextSuffixes != null
+                ? List<String>.from(ref.freeTextSuffixes!)
+                : null,
             gameIdentifierText: ref.gameIdentifierText,
           ),
         );
@@ -266,6 +272,12 @@ class CaptionStyleCatalog {
               : null,
           punctuationSnippets: factory.punctuationSnippets != null
               ? List<String>.from(factory.punctuationSnippets!)
+              : null,
+          freeTextSnippets: factory.freeTextSnippets != null
+              ? List<String>.from(factory.freeTextSnippets!)
+              : null,
+          freeTextSuffixes: factory.freeTextSuffixes != null
+              ? List<String>.from(factory.freeTextSuffixes!)
               : null,
         )
         .normalizePerOccurrenceLists();

@@ -24,19 +24,23 @@ const TextStyle kAppDialogTitleStyle = TextStyle(
   height: 1.35,
 );
 
+/// Matches [kFloAppHeaderHeight] / [AppHeaderWidget] / [FloChromeHeader].
+const double kAppDialogTitleBarHeight = kFloAppHeaderHeight;
+
 /// White title text for [AppDialogTealTitleBar] / chrome-style dialog headers.
 const TextStyle kAppDialogTealTitleStyle = TextStyle(
   fontFamily: 'Inter',
-  fontSize: 13,
+  fontSize: 12,
   fontWeight: FontWeight.w600,
   color: Colors.white,
-  letterSpacing: -0.2,
-  height: 1.2,
+  letterSpacing: 0.2,
+  height: 1.0,
 );
 
-/// Teal gradient header matching the main app chrome / Admin originals dialog.
+/// Teal gradient header matching the main app chrome (34px).
 ///
-/// Use with [AlertDialog.titlePadding] = [EdgeInsets.zero] so the bar is flush.
+/// Default for app popups. Use with [AlertDialog.titlePadding] = [EdgeInsets.zero]
+/// so the bar is flush with the dialog edges.
 class AppDialogTealTitleBar extends StatelessWidget {
   const AppDialogTealTitleBar({
     super.key,
@@ -51,7 +55,9 @@ class AppDialogTealTitleBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      height: kAppDialogTitleBarHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      alignment: Alignment.centerLeft,
       decoration: BoxDecoration(
         gradient: kFloTealGradientHorizontal,
         border: Border(
@@ -61,7 +67,12 @@ class AppDialogTealTitleBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(title, style: kAppDialogTealTitleStyle),
+            child: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: kAppDialogTealTitleStyle,
+            ),
           ),
           if (trailing != null) trailing!,
         ],
@@ -138,11 +149,11 @@ InputDecoration appDialogFieldDecoration({String? hintText}) => InputDecoration(
       contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(6),
-        borderSide: const BorderSide(color: Color(0xFFD8D8D8)),
+        borderSide: const BorderSide(color: Color(0xFFE4E4E4)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(6),
-        borderSide: const BorderSide(color: Color(0xFFD8D8D8)),
+        borderSide: const BorderSide(color: Color(0xFFE4E4E4)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(6),
@@ -173,16 +184,19 @@ InputDecoration appDialogBareFieldDecoration({String? hintText}) =>
     );
 
 /// Shared outer chrome so text fields and dropdowns share one height.
+/// Matches [appDialogCardDecoration] border + elevation (Options panel).
 BoxDecoration appDialogControlBoxDecoration({bool enabled = true}) =>
     BoxDecoration(
       color: enabled ? Colors.white : const Color(0xFFF5F5F5),
       borderRadius: BorderRadius.circular(6),
       border: Border.all(
-        color: enabled ? const Color(0xFFD8D8D8) : Colors.grey.shade300,
+        color: enabled ? const Color(0xFFE4E4E4) : Colors.grey.shade300,
       ),
+      boxShadow: enabled ? kAppDialogCardShadow : null,
     );
 
 /// Fixed-height shell used by dialog text fields and dropdowns.
+/// Uses [Material] elevation so the Options-style shadow isn’t clipped away.
 class AppDialogControlShell extends StatelessWidget {
   const AppDialogControlShell({
     super.key,
@@ -197,13 +211,24 @@ class AppDialogControlShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final box = Container(
-      height: kAppDialogControlHeight,
-      width: double.infinity,
-      decoration: appDialogControlBoxDecoration(enabled: enabled),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      alignment: Alignment.centerLeft,
-      child: child,
+    final box = Material(
+      color: enabled ? Colors.white : const Color(0xFFF5F5F5),
+      elevation: enabled ? 2 : 0,
+      shadowColor: const Color(0x33000000),
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        height: kAppDialogControlHeight,
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: enabled ? const Color(0xFFE4E4E4) : Colors.grey.shade300,
+          ),
+        ),
+        child: child,
+      ),
     );
     if (onTap == null) return box;
     return Material(
@@ -309,16 +334,33 @@ class AppDialogLabeledTextField extends StatelessWidget {
             : const Color(0xFFB0B0B0),
       ),
       onChanged: onChanged,
-      decoration: maxLines == 1
-          ? appDialogBareFieldDecoration(hintText: hintText)
-          : appDialogFieldDecoration(hintText: hintText),
+      decoration: appDialogBareFieldDecoration(hintText: hintText),
     );
     return AppDialogLabeledField(
       label: label,
       bottomGap: bottomGap,
       child: maxLines == 1
           ? AppDialogControlShell(enabled: enabled, child: field)
-          : field,
+          : Material(
+              color: enabled ? Colors.white : const Color(0xFFF5F5F5),
+              elevation: enabled ? 2 : 0,
+              shadowColor: const Color(0x33000000),
+              borderRadius: BorderRadius.circular(6),
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: enabled
+                        ? const Color(0xFFE4E4E4)
+                        : Colors.grey.shade300,
+                  ),
+                ),
+                child: field,
+              ),
+            ),
     );
   }
 }
@@ -483,7 +525,7 @@ class AppDialogExamplePreview extends StatelessWidget {
         border: Border.all(
           color: enabled ? const Color(0xFFE4E4E4) : const Color(0xFFE0E0E0),
         ),
-        boxShadow: enabled && !compact ? kAppDialogCardShadow : const [],
+        boxShadow: enabled ? kAppDialogCardShadow : const [],
       ),
       alignment: Alignment.topLeft,
       child: Column(
@@ -503,8 +545,7 @@ class AppDialogExamplePreview extends StatelessWidget {
   }
 }
 
-/// Square, white dialogs consistent with burst caption UI
-/// (`burst_caption_confirm_dialog.dart`) — not default M3 rounded/surface tint.
+/// Square, white dialogs with the standard [AppDialogTealTitleBar] (34px app chrome).
 Future<bool?> showAppConfirmDialog({
   required BuildContext context,
   required String title,
@@ -526,27 +567,20 @@ Future<bool?> showAppConfirmDialog({
         child: SizedBox(
           width: dialogW,
           child: AlertDialog(
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.zero,
-            ),
+            shape: kAppDialogShape,
             backgroundColor: Colors.white,
             surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
-            contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+            elevation: 8,
+            shadowColor: Colors.black.withValues(alpha: 0.18),
+            clipBehavior: Clip.antiAlias,
+            titlePadding: EdgeInsets.zero,
+            contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
             actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-            title: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
-                height: 1.35,
-              ),
-            ),
+            title: AppDialogTealTitleBar(title: title),
             content: Text(
               message,
               style: TextStyle(
+                fontFamily: 'Inter',
                 fontSize: 11,
                 color: Colors.grey.shade800,
                 height: 1.35,
