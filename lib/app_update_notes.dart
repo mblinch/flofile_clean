@@ -12,11 +12,9 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-When you sign in, your caption styles, verb layouts, and FTP settings sync to your account and follow you to other computers. Skip sign in still works — everything stays local on that machine.
+UI polish with a tighter theme and JetBrains Mono for mono fields. Caption layout supports Custom text snippets with a trailing suffix. Startup team pickers reopen the full list on a second click instead of leaving a caret.
 
-Caption preview spacing is more reliable (no doubled punctuation or missing spaces at segment joins). Home Run type options show again in Keyboard Fire. Burst captions are not re-prompted when you revisit an image you already decided on.
-
-Admin caption editing keeps your game identifier when switching sports. The geographical editor wraps instead of clipping. FTP controls sit above the Save buttons in the sidebar.
+Baseball: MLB inning-from-timestamp starts matching when Timestamp is On (no toggle click needed). RBI captions no longer double “hits a” when the verb phrase already includes it (e.g. “hits a RBI single”).
 
 This message shows one time after you update. Tap OK or outside the box to close it.
 ''';
