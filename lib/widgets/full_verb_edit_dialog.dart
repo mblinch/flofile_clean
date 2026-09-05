@@ -56,10 +56,10 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
-    required bool omitAgainst,
     required String selectedCategory,
     required VerbSubOptions subOptions,
     required bool asDefault,
+    required bool asAppDefault,
   }) onSave;
   final Future<void> Function(String verb) onReset;
   final Future<void> Function(String verb, bool isFavorite) onFavoriteChanged;
@@ -75,7 +75,6 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
-    required bool omitAgainst,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   })? onCreateCustomVerb;
@@ -88,7 +87,6 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
-    required bool omitAgainst,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   })? onUpdateCustomVerb;
@@ -120,8 +118,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   late final TextEditingController _celebrationTypes;
   late final TextEditingController _grandSlamPhrase;
   late final TextEditingController _reactionPhraseDraft;
-  late bool _omitAgainst;
   late bool _wantsOpponent;
+  /// Preview-only: starts off when the dialog opens; toggling syncs [_wantsOpponent].
+  bool _previewIncludeOpponent = false;
   late bool _usePluralPhrase;
   late String _assignedCategory;
   late bool _isFavorite;
@@ -232,97 +231,100 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         borderRadius: BorderRadius.circular(6),
         child: Container(
           width: double.infinity,
-          constraints: const BoxConstraints(minHeight: 48),
-          padding: const EdgeInsets.fromLTRB(5, 4, 4, 4),
-          alignment: Alignment.topLeft,
+          height: kAppDialogControlHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.centerLeft,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: enabled ? const Color(0xFFE4E4E4) : Colors.grey.shade300,
             ),
           ),
-          child: Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final phrase in phrases)
-                _reactionPhraseChip(
-                  phrase: phrase,
-                  enabled: enabled,
-                  onDelete: enabled ? () => _removeReactionPhrase(phrase) : null,
-                ),
-              if (enabled && _addingReactionPhrase)
-                SizedBox(
-                  width: 88,
-                  height: 18,
-                  child: TextField(
-                    controller: _reactionPhraseDraft,
-                    autofocus: true,
-                    style: kAppDialogFieldTextStyle.copyWith(fontSize: 9),
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _commitReactionPhraseDraft(),
-                    onEditingComplete: _commitReactionPhraseDraft,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      hintText: 'add',
-                      hintStyle: kAppDialogFieldTextStyle.copyWith(
-                        fontSize: 9,
-                        color: const Color(0xFFB0B0B0),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final phrase in phrases) ...[
+                  _reactionPhraseChip(
+                    phrase: phrase,
+                    enabled: enabled,
+                    onDelete:
+                        enabled ? () => _removeReactionPhrase(phrase) : null,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                if (enabled && _addingReactionPhrase)
+                  SizedBox(
+                    width: 88,
+                    height: 18,
+                    child: TextField(
+                      controller: _reactionPhraseDraft,
+                      autofocus: true,
+                      style: kAppDialogFieldTextStyle.copyWith(fontSize: 9),
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _commitReactionPhraseDraft(),
+                      onEditingComplete: _commitReactionPhraseDraft,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: 'add',
+                        hintStyle: kAppDialogFieldTextStyle.copyWith(
+                          fontSize: 9,
+                          color: const Color(0xFFB0B0B0),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(9),
+                          borderSide: BorderSide(
+                            color: kFloTealLight.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(9),
+                          borderSide: BorderSide(
+                            color: kFloTealLight.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(9),
+                          borderSide: const BorderSide(
+                            color: kFloTealLight,
+                            width: 1.2,
+                          ),
+                        ),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 2,
-                      ),
-                      border: OutlineInputBorder(
+                    ),
+                  )
+                else if (enabled)
+                  Tooltip(
+                    message: 'Add reaction phrase',
+                    child: Material(
+                      color: Colors.white,
+                      shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(9),
-                        borderSide: BorderSide(
+                        side: BorderSide(
                           color: kFloTealLight.withValues(alpha: 0.55),
                         ),
                       ),
-                      enabledBorder: OutlineInputBorder(
+                      child: InkWell(
                         borderRadius: BorderRadius.circular(9),
-                        borderSide: BorderSide(
-                          color: kFloTealLight.withValues(alpha: 0.55),
-                        ),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(9),
-                        borderSide: const BorderSide(
-                          color: kFloTealLight,
-                          width: 1.2,
+                        onTap: _startAddingReactionPhrase,
+                        child: const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: Icon(
+                            Icons.add,
+                            size: 12,
+                            color: kFloTealDark,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                )
-              else if (enabled)
-                Tooltip(
-                  message: 'Add reaction phrase',
-                  child: Material(
-                    color: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(9),
-                      side: BorderSide(
-                        color: kFloTealLight.withValues(alpha: 0.55),
-                      ),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(9),
-                      onTap: _startAddingReactionPhrase,
-                      child: const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: Icon(
-                          Icons.add,
-                          size: 12,
-                          color: kFloTealDark,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -407,8 +409,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _setText(_plural, plural);
     _setText(_ing, ing);
     _lastAutoIng = VerbCaptionWording.defaultIngWording(verb, singular);
-    _omitAgainst = initial['omitAgainst'] as bool? ?? false;
     _wantsOpponent = initial['wantsOpponent'] as bool? ?? true;
+    _previewIncludeOpponent = false;
     _usePluralPhrase = initial['usePluralPhrase'] as bool? ?? true;
     final rawKw = initial['keywords'];
     final kwList = rawKw is List
@@ -471,7 +473,6 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       'plural': _plural.text.trim(),
       'ing': _ing.text.trim(),
       'keywords': _keywords.text.trim(),
-      'omitAgainst': _omitAgainst,
       'wantsOpponent': _wantsOpponent,
       'usePluralPhrase': _usePluralPhrase,
       'category': _assignedCategory,
@@ -559,12 +560,16 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     final isHit = !_isCustomContext &&
         (VerbSubOptions.isHitVerb(_currentVerb) ||
             VerbSubOptions.isHitVerb(_verbLabelForMods));
-
-    if (showRbi && _liveSubOptions.rbiEnabled) {
-      variants.add(const _CaptionVariant(id: 'rbi', label: 'RBI'));
-    }
     final isHomeRun = !_isCustomContext &&
         (_currentVerb == 'Home Run' || _verbLabelForMods == 'Home Run');
+
+    if (showRbi && _liveSubOptions.rbiEnabled) {
+      if (isHomeRun) {
+        variants.add(const _CaptionVariant(id: 'two_run', label: 'Two-Run'));
+      } else {
+        variants.add(const _CaptionVariant(id: 'rbi', label: 'RBI'));
+      }
+    }
     if (isHomeRun) {
       variants.add(const _CaptionVariant(id: 'grand_slam', label: 'Grand Slam'));
     }
@@ -573,7 +578,10 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         variants.add(const _CaptionVariant(id: 'cele', label: 'Celebration'));
         if (_liveSubOptions.rbiEnabled) {
           variants.add(
-            const _CaptionVariant(id: 'cele_rbi', label: 'Celebration · RBI'),
+            _CaptionVariant(
+              id: isHomeRun ? 'cele_two_run' : 'cele_rbi',
+              label: isHomeRun ? 'Celebration · Two-Run' : 'Celebration · RBI',
+            ),
           );
         }
         if (isHomeRun) {
@@ -612,8 +620,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   }
 
   String _withOpponent(String base) {
-    if (!_wantsOpponent) return base;
-    final againstText = _omitAgainst ? '' : ' against';
+    if (!_previewIncludeOpponent) return base;
+    const againstText = ' against';
     final selectedOpp = widget.selectedAwayPlayerLabel?.trim();
     if (selectedOpp != null && selectedOpp.isNotEmpty) {
       return '$base$againstText $selectedOpp of the ${widget.awayTeamName}';
@@ -627,8 +635,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
 
   /// Team only — no opposing player name (e.g. "… against the Yankees").
   String _withOpposingTeamOnly(String base) {
-    final againstText = _omitAgainst ? '' : ' against';
-    return '$base$againstText the ${widget.awayTeamName}';
+    return '$base against the ${widget.awayTeamName}';
   }
 
   String _actionPhraseForVariant(String id) {
@@ -639,6 +646,12 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         return _pluralPhrase;
       case 'rbi':
         return live.hitClauseWithRbi(
+          leadIn: 'hits a',
+          hitNoun: _hitNoun,
+          count: 2,
+        );
+      case 'two_run':
+        return live.hitClauseWithHomeRun(
           leadIn: 'hits a',
           hitNoun: _hitNoun,
           count: 2,
@@ -668,6 +681,13 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         final celeParts = VerbSubOptions.reactionAfterPartsFor(_currentVerb);
         return live.hitClauseWithRbi(
           leadIn: '$cele ${celeParts.afterText}',
+          hitNoun: _hitNoun,
+          count: 2,
+        );
+      case 'cele_two_run':
+        final celePartsHr = VerbSubOptions.reactionAfterPartsFor(_currentVerb);
+        return live.hitClauseWithHomeRun(
+          leadIn: '$cele ${celePartsHr.afterText}',
           hitNoun: _hitNoun,
           count: 2,
         );
@@ -723,21 +743,26 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           ),
         ),
         const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (var i = 0; i < variants.length; i++) ...[
-                if (i > 0) const SizedBox(width: 6),
-                _variantChip(
-                  label: variants[i].label,
-                  selected: variants[i].id == selectedId,
-                  onTap: () =>
-                      setState(() => _previewVariantId = variants[i].id),
-                ),
-              ],
-            ],
-          ),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              'Preview example options:',
+              style: kAppDialogFieldTextStyle.copyWith(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF666666),
+              ),
+            ),
+            for (final v in variants)
+              _variantChip(
+                label: v.label,
+                selected: v.id == selectedId,
+                onTap: () => setState(() => _previewVariantId = v.id),
+              ),
+          ],
         ),
       ],
     );
@@ -844,8 +869,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         ..clear()
         ..add(cat);
       _isFavorite = false;
-      _omitAgainst = false;
       _wantsOpponent = true;
+      _previewIncludeOpponent = false;
       _usePluralPhrase = true;
       _subOptions = const VerbSubOptions(
         celebrationEnabled: false,
@@ -867,7 +892,11 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     });
   }
 
-  Future<void> _save({required bool asDefault, bool closeAfter = false}) async {
+  Future<void> _save({
+    required bool asDefault,
+    bool asAppDefault = false,
+    bool closeAfter = false,
+  }) async {
     final newLabel = _label.text.trim();
     final newSingular = _singular.text.trim();
     if (newLabel.isEmpty || newSingular.isEmpty || _busy) return;
@@ -876,6 +905,19 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     final sub = _isCustomContext
         ? _liveSubOptions.copyWith(rbiEnabled: false)
         : _liveSubOptions;
+
+    if (asAppDefault) {
+      final ok = await showAppConfirmDialog(
+        context: context,
+        title: 'Set as app default?',
+        message:
+            'Publishes "$newLabel" wording into Firebase app originals for '
+            '${widget.sport}. Other users keep their personal defaults until '
+            'they restore app originals or first seed. Continue?',
+        confirmLabel: 'Publish',
+      );
+      if (ok != true || !mounted) return;
+    }
 
     setState(() => _busy = true);
     try {
@@ -906,7 +948,6 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           usePluralPhrase: _usePluralPhrase,
           keywords: parseVerbKeywordsField(_keywords.text),
           wantsOpponent: _wantsOpponent,
-          omitAgainst: _omitAgainst,
           selectedCategory: _assignedCategory,
           subOptions: sub,
         );
@@ -937,7 +978,6 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           usePluralPhrase: _usePluralPhrase,
           keywords: parseVerbKeywordsField(_keywords.text),
           wantsOpponent: _wantsOpponent,
-          omitAgainst: _omitAgainst,
           selectedCategory: _assignedCategory,
           subOptions: sub,
         );
@@ -968,10 +1008,10 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           usePluralPhrase: _usePluralPhrase,
           keywords: parseVerbKeywordsField(_keywords.text),
           wantsOpponent: _wantsOpponent,
-          omitAgainst: _omitAgainst,
           selectedCategory: _assignedCategory,
           subOptions: sub,
-          asDefault: asDefault,
+          asDefault: asDefault || asAppDefault,
+          asAppDefault: asAppDefault,
         );
         if (!mounted) return;
         _snapshot = _formFingerprint();
@@ -982,9 +1022,12 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           content: Text(
             _isCustomContext
                 ? 'Saved custom verb "$newLabel"'
-                : (asDefault
-                    ? 'Saved "$newLabel" as default for this sport'
-                    : 'Saved "$newLabel"'),
+                : (asAppDefault
+                    ? 'Published "$newLabel" as app default for ${widget.sport}'
+                    : (asDefault
+                        ? 'Saved "$newLabel" as your Reset default '
+                            '(only for your account)'
+                        : 'Saved "$newLabel"')),
             style: const TextStyle(fontSize: 11),
           ),
           duration: const Duration(seconds: 2),
@@ -992,6 +1035,19 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         ),
       );
       if (closeAfter) Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Save failed: $e',
+            style: const TextStyle(fontSize: 11),
+          ),
+          duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1092,24 +1148,10 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
               ],
             ),
           ),
-          actionsAlignment: MainAxisAlignment.spaceBetween,
+          actionsAlignment: MainAxisAlignment.end,
           actionsOverflowAlignment: OverflowBarAlignment.end,
           actionsOverflowButtonSpacing: 8,
           actions: [
-            if (widget.isAdmin && !_isCustomContext)
-              Tooltip(
-                message:
-                    'Admin only: save this wording as the Reset baseline for ${widget.sport}',
-                child: ElevatedGreyButton(
-                  label: 'Set as Default · Admin',
-                  fontSize: 11,
-                  onPressed: _busy
-                      ? null
-                      : () => _save(asDefault: true, closeAfter: false),
-                ),
-              )
-            else
-              const SizedBox.shrink(),
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1139,6 +1181,27 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                       ? null
                       : () => _save(asDefault: false, closeAfter: false),
                 ),
+                if (widget.isAdmin && !_isCustomContext) ...[
+                  const SizedBox(width: 8),
+                  Tooltip(
+                    message:
+                        'Admin: publish this wording into app originals for '
+                        '${widget.sport}. Other users keep personal defaults '
+                        'until restore / first seed.',
+                    child: ElevatedGreyButton(
+                      label: 'Set as App Default · Admin',
+                      fontSize: 11,
+                      isAdmin: true,
+                      onPressed: _busy
+                          ? null
+                          : () => _save(
+                                asDefault: false,
+                                asAppDefault: true,
+                                closeAfter: false,
+                              ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -1556,32 +1619,6 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           ],
         ),
         _sectionDivider(),
-        _sectionHeader(
-          'Preview',
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _optionCheckbox(
-                value: _wantsOpponent,
-                label: 'Include opponent',
-                onChanged: (v) => setState(() => _wantsOpponent = v),
-                compact: true,
-                textColor: Colors.white,
-              ),
-              const SizedBox(width: 12),
-              _optionCheckbox(
-                value: _omitAgainst,
-                label: 'Omit "against"',
-                onChanged: (v) => setState(() => _omitAgainst = v),
-                compact: true,
-                textColor: Colors.white,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        _buildCaptionPreview(),
-        _sectionDivider(),
         IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1646,7 +1683,10 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _sectionHeader(
-                        'RBI',
+                        (_currentVerb == 'Home Run' ||
+                                _verbLabelForMods == 'Home Run')
+                            ? 'Home run'
+                            : 'RBI',
                         trailing: _optionCheckbox(
                           value: _subOptions.rbiEnabled,
                           label: 'On',
@@ -1660,29 +1700,57 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      AppDialogLabeledDropdown<RbiCaptionStyle>(
-                        label: 'RBI style',
-                        value: _subOptions.rbiStyle,
-                        items: RbiCaptionStyle.values
-                            .map(
-                              (s) => DropdownMenuItem<RbiCaptionStyle>(
-                                value: s,
-                                child: Text(s.menuLabel),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: _subOptions.rbiEnabled
-                            ? (v) {
-                                if (v != null) {
-                                  setState(
-                                    () => _subOptions =
-                                        _subOptions.copyWith(rbiStyle: v),
-                                  );
+                      if (_currentVerb == 'Home Run' ||
+                          _verbLabelForMods == 'Home Run')
+                        AppDialogLabeledDropdown<HomeRunCaptionStyle>(
+                          label:
+                              'Style — default for all run situations',
+                          value: _subOptions.homeRunStyle,
+                          items: HomeRunCaptionStyle.values
+                              .map(
+                                (s) => DropdownMenuItem<HomeRunCaptionStyle>(
+                                  value: s,
+                                  child: Text(s.menuLabel),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _subOptions.rbiEnabled
+                              ? (v) {
+                                  if (v != null) {
+                                    setState(
+                                      () => _subOptions = _subOptions
+                                          .copyWith(homeRunStyle: v),
+                                    );
+                                  }
                                 }
-                              }
-                            : null,
-                        bottomGap: 0,
-                      ),
+                              : null,
+                          bottomGap: 0,
+                        )
+                      else
+                        AppDialogLabeledDropdown<RbiCaptionStyle>(
+                          label:
+                              'RBI style — default for all RBI situations',
+                          value: _subOptions.rbiStyle,
+                          items: RbiCaptionStyle.values
+                              .map(
+                                (s) => DropdownMenuItem<RbiCaptionStyle>(
+                                  value: s,
+                                  child: Text(s.menuLabel),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: _subOptions.rbiEnabled
+                              ? (v) {
+                                  if (v != null) {
+                                    setState(
+                                      () => _subOptions =
+                                          _subOptions.copyWith(rbiStyle: v),
+                                    );
+                                  }
+                                }
+                              : null,
+                          bottomGap: 0,
+                        ),
                     ],
                   ),
                 ),
@@ -1715,7 +1783,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                     _buildReactionPhraseChips(enabled: reactionsOn),
                     const SizedBox(height: 10),
                     AppDialogLabeledTextField(
-                      label: 'Ing phrase',
+                      label: '-ing phrase',
                       controller: _ing,
                       hintText:
                           'e.g., skating, hitting a single, tagging a runner out',
@@ -1757,6 +1825,27 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           ),
         ],
         _sectionDivider(),
+        _sectionHeader(
+          'Preview',
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _optionCheckbox(
+                value: _previewIncludeOpponent,
+                label: 'Include opponent',
+                onChanged: (v) => setState(() {
+                  _previewIncludeOpponent = v;
+                  _wantsOpponent = v;
+                }),
+                compact: true,
+                textColor: Colors.white,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        _buildCaptionPreview(),
+        _sectionDivider(),
         _sectionHeader('Keywords'),
         const SizedBox(height: 8),
         Material(
@@ -1785,7 +1874,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
-            'Only written into keywords, not captions.',
+            'Only written into keywords, not captions. Keywording mode must be enabled.',
             style: kAppDialogFieldTextStyle.copyWith(
               fontSize: 9.5,
               color: const Color(0xFF888888),
@@ -1821,7 +1910,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        gradient: kFloTealGradientHorizontalHeader,
+        gradient: kFloTealGradientHorizontal,
         borderRadius: BorderRadius.circular(5),
       ),
       alignment: Alignment.centerLeft,

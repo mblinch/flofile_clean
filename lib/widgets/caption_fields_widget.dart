@@ -447,6 +447,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   // it runs after (not before) the metadata setState rebuild.
   int? _pendingPinnedVerbCategory;
   int? _pendingPinnedVerbIndex;
+
+  /// Wired by Keyboard Fire so singular-only blocks can offer to unpin.
+  VoidCallback? keyboardFireClearPinnedVerb;
+  bool Function()? keyboardFireHasPinnedVerb;
   String? _selectedHittingAction;
   bool _showExtraInnings = false;
   int _extraInningsPage = 0;
@@ -6917,7 +6921,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             child: GestureDetector(
               onTap: () {
                 if (!isSelected && !_mayAddSubjectPlayerToTeam(isHome)) {
-                  _notifySingularPlayerLimit();
+                  unawaited(_handleSingularSubjectBlocked(
+                    isHome: isHome,
+                    displayName: player.displayName,
+                  ));
                   return;
                 }
                 setState(() {
@@ -7710,7 +7717,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           },
           onTap: () {
             if (!isSelected && !_mayAddSubjectPlayerToTeam(isHome)) {
-              _notifySingularPlayerLimit();
+              unawaited(_handleSingularSubjectBlocked(
+                isHome: isHome,
+                displayName: player.displayName,
+              ));
               return;
             }
             setState(() {
@@ -8332,7 +8342,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       onTap: () {
                         if (!isSelected && !_mayAddSubjectPlayerToTeam(true)) {
-                          _notifySingularPlayerLimit();
+                          unawaited(_handleSingularSubjectBlocked(
+                            isHome: true,
+                            displayName: player.displayName,
+                          ));
                           return;
                         }
                         setState(() {
@@ -8477,7 +8490,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       },
                       onTap: () {
                         if (!isSelected && !_mayAddSubjectPlayerToTeam(false)) {
-                          _notifySingularPlayerLimit();
+                          unawaited(_handleSingularSubjectBlocked(
+                            isHome: false,
+                            displayName: player.displayName,
+                          ));
                           return;
                         }
                         setState(() {
@@ -9646,6 +9662,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     _selectVerbByCategoryAndIndex(category1Based, verb1Based);
   }
 
+  /// Keyboard Fire: clear the selected verb (re-click to unpick).
+  void clearVerbSelectionFromKeyboardFire() {
+    setState(() {
+      _selectedVerb = null;
+      _selectedActionVerb = null;
+      _selectedHomeRunType = null;
+      _selectedTagsAction = null;
+      _selectedBase = null;
+      _rbiCount = null;
+      _buntSingle = false;
+      _putRbiInning(null);
+      _popupCustomVerb = null;
+      _selectedHittingAction = null;
+    });
+    _updateCaption();
+  }
+
   /// Keyboard Fire: set verb and update caption without showing any dialog.
   /// Use this when the verb is picked from the Keyboard Fire panel so only the panel’s Save/Copy/FTP popup appears.
   void selectVerbByCategoryAndIndexFromKeyboardFire(
@@ -9894,6 +9927,29 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  /// Keyboard Fire: toggle one player by jersey (same as clicking the roster row).
+  void togglePlayerByJersey(bool isHomeTeam, String jerseyNumber) {
+    final jersey = jerseyNumber.trim();
+    if (jersey.isEmpty) return;
+    final roster = isHomeTeam ? _homeRoster : _awayRoster;
+    Player? match;
+    for (final p in roster) {
+      if ((p.jerseyNumber ?? '').trim() == jersey) {
+        match = p;
+        break;
+      }
+    }
+    if (match == null) return;
+    final name = match.displayName;
+    if (name.isEmpty) return;
+    final selected = isHomeTeam ? selectedHomePlayers : selectedAwayPlayers;
+    if (selected.contains(name)) {
+      removePlayerByJersey(isHomeTeam, jersey);
+    } else {
+      addPlayerByJersey(isHomeTeam, jersey);
+    }
+  }
+
   /// Keyboard Fire: toggle a staff line for captions using a roster token
   /// (`Full Name Manager`, `Full Name Pitching Coach`, …), same selection sets as players.
   void toggleCoachFromKeyboardFire({
@@ -10122,7 +10178,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'ingPhrase': ing,
         'usePluralPhrase': o['usePluralPhrase'] as bool? ?? true,
         'keywords': kw,
-        'omitAgainst': o['omitAgainst'] as bool? ?? false,
         'wantsOpponent':
             o['wantsOpponent'] as bool? ?? _defaultWantsOpponentForVerb(verb),
         'category': o['category'] as String? ?? _findVerbCategory(verb),
@@ -10157,7 +10212,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           }(),
           'usePluralPhrase': c['usePluralPhrase'] as bool? ?? true,
           'keywords': verbKeywordsFromJson(c['keywords']),
-          'omitAgainst': c['omitAgainst'] as bool? ?? false,
           'wantsOpponent':
               c['wantsOpponent'] as bool? ?? _defaultWantsOpponentForVerb(verb),
           'category': c['category'] as String? ?? _findVerbCategory(verb),
@@ -10199,7 +10253,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'ingPhrase': ing,
         'usePluralPhrase': wordingDefault['usePluralPhrase'] as bool? ?? true,
         'keywords': kw,
-        'omitAgainst': wordingDefault['omitAgainst'] as bool? ?? false,
         'wantsOpponent': wordingDefault['wantsOpponent'] as bool? ??
             _defaultWantsOpponentForVerb(verb),
         'category': wordingDefault['category'] as String? ??
@@ -10223,7 +10276,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'ingPhrase': VerbCaptionWording.defaultIngWording(verb, vp),
       'usePluralPhrase': true,
       'keywords': defaultKeywordsForVerbLabel(verb),
-      'omitAgainst': false,
       'wantsOpponent': _defaultWantsOpponentForVerb(verb),
       'category': category ??
           (verbCategories.isNotEmpty ? verbCategories.keys.first : null),
@@ -10275,7 +10327,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
-    required bool omitAgainst,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   }) {
@@ -10294,7 +10345,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'usePluralPhrase': usePluralPhrase,
       'keywords': keywords,
       'wantsOpponent': wantsOpponent,
-      'omitAgainst': omitAgainst,
       'isCustom': false,
       'category': selectedCategory,
       if (subOptions.differsFromDefaults(newLabel, sport: _currentSport))
@@ -10315,7 +10365,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'usePluralPhrase': true,
       'keywords': defaultKeywordsForVerbLabel(verb),
       'wantsOpponent': _defaultWantsOpponentForVerb(verb),
-      'omitAgainst': false,
       'isCustom': false,
       'category': category ??
           (verbCategories.isNotEmpty ? verbCategories.keys.first : ''),
@@ -10329,15 +10378,23 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required Map<String, dynamic> override,
     required String singularPhrase,
     bool alsoSetAsDefault = false,
+    bool alsoSetAsAppDefault = false,
   }) async {
     await _preferencesService.saveVerbOverride(overrideKey, override,
         sport: _currentSport);
     await _preferencesService.saveCustomVerbWording(overrideKey, singularPhrase,
         sport: _currentSport);
-    if (alsoSetAsDefault) {
+    if (alsoSetAsDefault || alsoSetAsAppDefault) {
       await _preferencesService.saveVerbWordingDefault(
           overrideKey, Map<String, dynamic>.from(override),
           sport: _currentSport);
+    }
+    if (alsoSetAsAppDefault) {
+      await _preferencesService.publishVerbAsAppDefault(
+        sport: _currentSport,
+        verbKey: overrideKey,
+        override: Map<String, dynamic>.from(override),
+      );
     }
     _verbOverrides =
         await _preferencesService.getVerbOverrides(sport: _currentSport);
@@ -10386,7 +10443,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     widget.onVerbOverridesChanged?.call();
   }
 
-  /// Full verb editor dialog (Display Name, Singular/Plural phrase, Category, Omit against) — same as classic.
+  /// Full verb editor dialog (Display Name, Singular/Plural phrase, Category) — same as classic.
   Future<void> _showFullVerbEditorDialog(String verb) async {
     await _preferencesService.ensureWantsOpponentDefaultOn(
         sport: _currentSport);
@@ -10460,7 +10517,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             required bool usePluralPhrase,
             required List<String> keywords,
             required bool wantsOpponent,
-            required bool omitAgainst,
             required String selectedCategory,
             required VerbSubOptions subOptions,
           }) async {
@@ -10472,7 +10528,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               usePluralPhrase: usePluralPhrase,
               keywords: keywords,
               wantsOpponent: wantsOpponent,
-              omitAgainst: omitAgainst,
               selectedCategory: selectedCategory,
               subOptions: subOptions,
             );
@@ -10486,7 +10541,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             required bool usePluralPhrase,
             required List<String> keywords,
             required bool wantsOpponent,
-            required bool omitAgainst,
             required String selectedCategory,
             required VerbSubOptions subOptions,
           }) async {
@@ -10499,7 +10553,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               usePluralPhrase: usePluralPhrase,
               keywords: keywords,
               wantsOpponent: wantsOpponent,
-              omitAgainst: omitAgainst,
               selectedCategory: selectedCategory,
               subOptions: subOptions,
             );
@@ -10528,10 +10581,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             required bool usePluralPhrase,
             required List<String> keywords,
             required bool wantsOpponent,
-            required bool omitAgainst,
             required String selectedCategory,
             required VerbSubOptions subOptions,
             required bool asDefault,
+            required bool asAppDefault,
           }) async {
             final override = _buildVerbEditorOverrideMap(
               overrideKey: overrideKey,
@@ -10542,7 +10595,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               usePluralPhrase: usePluralPhrase,
               keywords: keywords,
               wantsOpponent: wantsOpponent,
-              omitAgainst: omitAgainst,
               selectedCategory: selectedCategory,
               subOptions: subOptions,
             );
@@ -10551,6 +10603,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               override: override,
               singularPhrase: newSingular,
               alsoSetAsDefault: asDefault,
+              alsoSetAsAppDefault: asAppDefault,
             );
             // Keep list membership in sync when Category dropdown changes.
             await moveVerbToCategoryForKeyboardFire(
@@ -10571,7 +10624,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
-    required bool omitAgainst,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   }) {
@@ -10590,7 +10642,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'usePluralPhrase': usePluralPhrase,
       'keywords': keywords,
       'wantsOpponent': wantsOpponent,
-      'omitAgainst': omitAgainst,
       'isCustom': true,
       'category': selectedCategory,
       if (celeOnly.differsFromDefaults(label, sport: _currentSport) ||
@@ -10607,7 +10658,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
-    required bool omitAgainst,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   }) async {
@@ -10619,7 +10669,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       usePluralPhrase: usePluralPhrase,
       keywords: keywords,
       wantsOpponent: wantsOpponent,
-      omitAgainst: omitAgainst,
       selectedCategory: selectedCategory,
       subOptions: subOptions,
     );
@@ -10641,7 +10690,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
-    required bool omitAgainst,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   }) async {
@@ -10653,7 +10701,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       usePluralPhrase: usePluralPhrase,
       keywords: keywords,
       wantsOpponent: wantsOpponent,
-      omitAgainst: omitAgainst,
       selectedCategory: selectedCategory,
       subOptions: subOptions,
     );
@@ -17071,12 +17118,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
     // Handle opponent players if selected
     String opponentPart = '';
-    // Hockey verbs that always embed the opponent (with or without "against") in
-    // their own action phrase via _buildActionPhrase(). We suppress opponentPart
-    // for all of them so the opponent name is never appended twice — even when the
-    // user has set omitAgainst=true (which removes "against" from the phrase but
-    // still includes the player name, causing the old contains('against') check to
-    // miss and double-append).
+    // Hockey/basketball verbs that embed the opponent in their own action phrase
+    // via _buildActionPhrase(). Suppress opponentPart so the name is never appended twice.
     const Set<String> hockeyOpponentVerbs = {
       // Hockey
       'Shoots', 'Scores', 'Skates', 'Goes to the Net', 'Battles', 'Faceoff',
@@ -21139,25 +21182,6 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     return v;
   }
 
-  // Helper to check if "against" should be omitted for a verb
-  bool _shouldOmitAgainst(String verbLabel) {
-    // First, try direct lookup by label (the key used when saving built-in verb overrides)
-    if (_verbOverrides.containsKey(verbLabel)) {
-      final override = _verbOverrides[verbLabel]!;
-      return override['omitAgainst'] as bool? ?? false;
-    }
-
-    // Fallback: Find the override by checking each override's label field
-    for (final entry in _verbOverrides.entries) {
-      final override = entry.value;
-      final overrideLabel = override['label'] as String?;
-      if (overrideLabel == verbLabel) {
-        return override['omitAgainst'] as bool? ?? false;
-      }
-    }
-    return false; // Default: include "against"
-  }
-
   /// Celebration verbs / Cele flow may select multiple teammates even when the
   /// underlying hit verb is singular-only.
   bool _isCelebrationMultiPlayerExempt() {
@@ -21220,6 +21244,53 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     );
   }
 
+  /// When a singular-only verb is pinned, offer to unpin/clear it so multi-select works.
+  Future<void> _handleSingularSubjectBlocked({
+    required bool isHome,
+    required String displayName,
+    bool affectFirstStar = true,
+  }) async {
+    if (!mounted) return;
+    final verbLabel =
+        (_selectedActionVerb ?? _selectedVerb)?.trim() ?? 'This verb';
+    final pinned = keyboardFireHasPinnedVerb?.call() ?? false;
+    if (!pinned) {
+      _notifySingularPlayerLimit();
+      return;
+    }
+
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: 'Singular verb pinned',
+      message:
+          '"$verbLabel" is singular-only and pinned. Unpin and clear it to select multiple players?',
+      confirmLabel: 'Unpin',
+      cancelLabel: 'Cancel',
+    );
+    if (ok != true || !mounted) return;
+
+    keyboardFireClearPinnedVerb?.call();
+    setState(() {
+      _selectedVerb = null;
+      _selectedActionVerb = null;
+      _popupCustomVerb = null;
+      _clearVerbSubSelections();
+    });
+
+    if (_tryAddPlayerSelection(
+      isHome: isHome,
+      displayName: displayName,
+      affectFirstStar: affectFirstStar,
+      notifyIfBlocked: false,
+    )) {
+      setState(() {});
+      await _updateCaption();
+      if (mounted) {
+        _keyboardFireCaptionNotifier.value = captionController.text;
+      }
+    }
+  }
+
   /// Adds [displayName] to the team roster selection when allowed.
   bool _tryAddPlayerSelection({
     required bool isHome,
@@ -21230,7 +21301,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     final set = isHome ? selectedHomePlayers : selectedAwayPlayers;
     if (set.contains(displayName)) return true;
     if (!_mayAddSubjectPlayerToTeam(isHome)) {
-      if (notifyIfBlocked) _notifySingularPlayerLimit();
+      if (notifyIfBlocked) {
+        unawaited(_handleSingularSubjectBlocked(
+          isHome: isHome,
+          displayName: displayName,
+          affectFirstStar: affectFirstStar,
+        ));
+      }
       return false;
     }
     if (affectFirstStar && _firstTeamSelected == null) {
@@ -21551,20 +21628,46 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return '$action against the ${_getOpposingTeamName()}';
         }
       case 'Walks Off Field':
-        return 'walks off the field against the ${_getOpposingTeamName()}';
+        {
+          final multi = activePlayerCount >= 2;
+          final action =
+              multi ? 'walk off the field' : 'walks off the field';
+          if (hasResolvedVerbPhrase) {
+            return '$resolvedVerbPhrase against the ${_getOpposingTeamName()}';
+          }
+          return '$action against the ${_getOpposingTeamName()}';
+        }
       case 'Runs Off Field':
-        return 'runs off the field against the ${_getOpposingTeamName()}';
+        {
+          final multi = activePlayerCount >= 2;
+          final action = multi ? 'run off the field' : 'runs off the field';
+          if (hasResolvedVerbPhrase) {
+            return '$resolvedVerbPhrase against the ${_getOpposingTeamName()}';
+          }
+          return '$action against the ${_getOpposingTeamName()}';
+        }
       case 'Takes the Field':
-        if (_isPriorToGame) {
-          return 'takes the field';
-        } else {
-          return 'takes the field against the ${_getOpposingTeamName()}';
+        {
+          final multi = activePlayerCount >= 2;
+          final action = multi ? 'take the field' : 'takes the field';
+          if (hasResolvedVerbPhrase) {
+            if (_isPriorToGame) return resolvedVerbPhrase!;
+            return '$resolvedVerbPhrase against the ${_getOpposingTeamName()}';
+          }
+          if (_isPriorToGame) return action;
+          return '$action against the ${_getOpposingTeamName()}';
         }
       case 'Comes Off the Field':
-        if (_isPriorToGame) {
-          return 'comes off the field';
-        } else {
-          return 'comes off the field against the ${_getOpposingTeamName()}';
+        {
+          final multi = activePlayerCount >= 2;
+          final action =
+              multi ? 'come off the field' : 'comes off the field';
+          if (hasResolvedVerbPhrase) {
+            if (_isPriorToGame) return resolvedVerbPhrase!;
+            return '$resolvedVerbPhrase against the ${_getOpposingTeamName()}';
+          }
+          if (_isPriorToGame) return action;
+          return '$action against the ${_getOpposingTeamName()}';
         }
       case 'National Anthem':
         if (overriddenPhrase != null && overriddenPhrase.isNotEmpty) {
@@ -22263,8 +22366,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Shoots':
         final opposingPlayers = _getOpposingPlayers();
         final shootsPhrase = resolvedVerbPhrase ?? 'shoots';
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$shootsPhrase$againstText $playerNames';
@@ -22273,8 +22375,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Scores':
         final opposingPlayers = _getOpposingPlayers();
         final scoresPhrase = resolvedVerbPhrase ?? 'scores';
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$scoresPhrase$againstText $playerNames';
@@ -22283,8 +22384,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Scores a Goal':
         final opposingPlayers = _getOpposingPlayers();
         final scoresGoalPhrase = resolvedVerbPhrase ?? 'scores a goal';
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$scoresGoalPhrase$againstText $playerNames';
@@ -22292,8 +22392,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$scoresGoalPhrase$againstText the ${_getOpposingTeamName()}';
       case 'Passes':
         final opposingPlayers = _getOpposingPlayers();
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return hasResolvedVerbPhrase
@@ -22306,8 +22405,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Skates':
         final opposingPlayers = _getOpposingPlayers();
         final skatesPhrase = resolvedVerbPhrase ?? 'skates';
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$skatesPhrase$againstText $playerNames';
@@ -22317,8 +22415,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final opposingPlayersNet = _getOpposingPlayers();
         final goesNetPhrase = overriddenPhrase ??
             (hasResolvedVerbPhrase ? resolvedVerbPhrase : 'goes to the net');
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayersNet.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayersNet);
           return '$goesNetPhrase$againstText $playerNames';
@@ -22330,8 +22427,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         // Soccer default is more explicit; other sports keep existing default.
         final battlesPhrase = resolvedVerbPhrase ??
             (isSoccer ? 'battles for the ball' : 'battles');
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers2.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers2);
           return '$battlesPhrase$againstText $playerNames';
@@ -22341,8 +22437,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final opposingPlayers = _getOpposingPlayers();
         final faceoffPhrase = overriddenPhrase ??
             (hasResolvedVerbPhrase ? resolvedVerbPhrase : 'takes a faceoff');
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$faceoffPhrase$againstText $playerNames';
@@ -22350,8 +22445,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$faceoffPhrase$againstText the ${_getOpposingTeamName()}';
       case 'Power Play':
         final opposingPlayers = _getOpposingPlayers();
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return hasResolvedVerbPhrase
@@ -22363,8 +22457,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             : 'on the power play$againstText the ${_getOpposingTeamName()}';
       case 'Breakaway':
         final opposingPlayers = _getOpposingPlayers();
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return hasResolvedVerbPhrase
@@ -22377,8 +22470,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Blocks':
         final opposingPlayers = _getOpposingPlayers();
         final blocksPhrase = resolvedVerbPhrase ?? 'blocks';
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$blocksPhrase$againstText $playerNames';
@@ -22386,8 +22478,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         return '$blocksPhrase$againstText the ${_getOpposingTeamName()}';
       case 'Saves':
         final opposingPlayers = _getOpposingPlayers();
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return hasResolvedVerbPhrase
@@ -22444,8 +22535,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Checks':
         final opposingPlayers = _getOpposingPlayers();
         final checksPhrase = resolvedVerbPhrase ?? 'checks';
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$checksPhrase$againstText $playerNames';
@@ -22454,8 +22544,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Defends':
         final opposingPlayers = _getOpposingPlayers();
         final defendsPhrase = resolvedVerbPhrase ?? 'defends';
-        final omitAgainst = _shouldOmitAgainst(originalVerb);
-        final againstText = omitAgainst ? '' : ' against';
+        const againstText = ' against';
         if (opposingPlayers.isNotEmpty) {
           final playerNames = _formatPlayersWithTeam(opposingPlayers);
           return '$defendsPhrase$againstText $playerNames';
@@ -22505,8 +22594,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             (hasResolvedVerbPhrase
                 ? resolvedVerbPhrase
                 : 'drives to the basket');
-        final drivesOmit = _shouldOmitAgainst(originalVerb);
-        final drivesAgainst = drivesOmit ? '' : ' against';
+        const drivesAgainst = ' against';
         if (drivesOpp.isNotEmpty) {
           return '$drivesPhrase$drivesAgainst ${_formatPlayersWithTeam(drivesOpp)}';
         }
@@ -22515,8 +22603,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Dunks':
         final dunksOpp = _getOpposingPlayers();
         final dunksPhrase = resolvedVerbPhrase ?? 'dunks';
-        final dunksOmit = _shouldOmitAgainst(originalVerb);
-        final dunksAgainst = dunksOmit ? '' : ' against';
+        const dunksAgainst = ' against';
         if (dunksOpp.isNotEmpty) {
           return '$dunksPhrase$dunksAgainst ${_formatPlayersWithTeam(dunksOpp)}';
         }
@@ -22525,8 +22612,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Lays Up':
         final layupOpp = _getOpposingPlayers();
         final layupPhrase = resolvedVerbPhrase ?? 'lays up';
-        final layupOmit = _shouldOmitAgainst(originalVerb);
-        final layupAgainst = layupOmit ? '' : ' against';
+        const layupAgainst = ' against';
         if (layupOpp.isNotEmpty) {
           return '$layupPhrase$layupAgainst ${_formatPlayersWithTeam(layupOpp)}';
         }
@@ -22535,8 +22621,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       case 'Dribbles':
         final dribblesOpp = _getOpposingPlayers();
         final dribblesPhrase = resolvedVerbPhrase ?? 'dribbles';
-        final dribblesOmit = _shouldOmitAgainst(originalVerb);
-        final dribblesAgainst = dribblesOmit ? '' : ' against';
+        const dribblesAgainst = ' against';
         if (dribblesOpp.isNotEmpty) {
           return '$dribblesPhrase$dribblesAgainst ${_formatPlayersWithTeam(dribblesOpp)}';
         }
@@ -22548,8 +22633,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             (hasResolvedVerbPhrase
                 ? resolvedVerbPhrase
                 : 'makes a three-pointer');
-        final threeOmit = _shouldOmitAgainst(originalVerb);
-        final threeAgainst = threeOmit ? '' : ' against';
+        const threeAgainst = ' against';
         if (threeOpp.isNotEmpty) {
           return '$threePhrase$threeAgainst ${_formatPlayersWithTeam(threeOpp)}';
         }
@@ -22561,8 +22645,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             (hasResolvedVerbPhrase
                 ? resolvedVerbPhrase
                 : 'shoots a free throw');
-        final ftOmit = _shouldOmitAgainst(originalVerb);
-        final ftAgainst = ftOmit ? '' : ' against';
+        const ftAgainst = ' against';
         if (ftOpp.isNotEmpty) {
           return '$ftPhrase$ftAgainst ${_formatPlayersWithTeam(ftOpp)}';
         }
@@ -22592,8 +22675,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         final reboundOpp = _getOpposingPlayers();
         final reboundPhrase = overriddenPhrase ??
             (hasResolvedVerbPhrase ? resolvedVerbPhrase : 'rebounds');
-        final reboundOmit = _shouldOmitAgainst(originalVerb);
-        final reboundAgainst = reboundOmit ? '' : ' against';
+        const reboundAgainst = ' against';
         if (reboundOpp.isNotEmpty) {
           return '$reboundPhrase$reboundAgainst ${_formatPlayersWithTeam(reboundOpp)}';
         }
@@ -24181,10 +24263,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       if (count >= 4) {
         return opts.resolvedGrandSlamPhrase(hitNoun: baseNoun);
       }
-      if (opts.rbiStyle == RbiCaptionStyle.runDash && count == 1) {
+      if (count == 1) {
         return 'solo $baseNoun';
       }
-      return '${opts.rbiCountLabel(count)} $baseNoun';
+      return '${opts.homeRunCountLabel(count)} $baseNoun';
     }
 
     switch (_selectedHomeRunType!) {
@@ -27645,7 +27727,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         onTap: () {
                           if (!isSelected &&
                               !_mayAddSubjectPlayerToTeam(true)) {
-                            _notifySingularPlayerLimit();
+                            unawaited(_handleSingularSubjectBlocked(
+                              isHome: true,
+                              displayName: player.displayName,
+                            ));
                             return;
                           }
                           setState(() {
@@ -27795,7 +27880,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         onTap: () {
                           if (!isSelected &&
                               !_mayAddSubjectPlayerToTeam(false)) {
-                            _notifySingularPlayerLimit();
+                            unawaited(_handleSingularSubjectBlocked(
+                              isHome: false,
+                              displayName: player.displayName,
+                            ));
                             return;
                           }
                           setState(() {

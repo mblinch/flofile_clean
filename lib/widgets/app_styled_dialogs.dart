@@ -909,6 +909,8 @@ class ElevatedGreyButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final bool isPrimary;
   final bool isTealGradient;
+  /// Gold chrome for admin-only actions.
+  final bool isAdmin;
   final bool isDanger;
   final bool fullWidth;
   final double fontSize;
@@ -920,6 +922,7 @@ class ElevatedGreyButton extends StatefulWidget {
     required this.onPressed,
     this.isPrimary = false,
     this.isTealGradient = false,
+    this.isAdmin = false,
     this.isDanger = false,
     this.fullWidth = false,
     this.fontSize = 13,
@@ -938,7 +941,8 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
   Widget build(BuildContext context) {
     final enabled = widget.onPressed != null;
     final danger = widget.isDanger && _hovered && enabled;
-    final teal = widget.isTealGradient;
+    final admin = widget.isAdmin;
+    final teal = widget.isTealGradient && !admin;
 
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -958,44 +962,57 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: !enabled
-                  ? (teal ? Colors.grey.shade300 : const Color(0x1A000000))
+                  ? ((teal || admin)
+                      ? Colors.grey.shade300
+                      : const Color(0x1A000000))
                   : danger
                       ? const Color(0x33C0392B)
-                      : teal
-                          ? kFloTealDark
-                          : const Color(0x2E000000),
-              width: teal ? 0.7 : 0.5,
+                      : admin
+                          ? kFloAdminGoldDark
+                          : teal
+                              ? kFloTealDark
+                              : const Color(0x2E000000),
+              width: (teal || admin) ? 0.7 : 0.5,
             ),
             gradient: !enabled
                 ? null
-                : teal
+                : admin
                     ? (_pressed
-                        ? kFloTealGradientVertical
-                        : (_hovered
-                            ? kFloTealGradientHorizontal
-                            : kFloTealGradientHorizontal))
-                    : LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: _pressed
-                            ? [const Color(0xFFE0E0E0), const Color(0xFFF0F0F0)]
-                            : danger
+                        ? kFloAdminGoldGradientVertical
+                        : kFloAdminGoldGradientHorizontal)
+                    : teal
+                        ? (_pressed
+                            ? kFloTealGradientVertical
+                            : (_hovered
+                                ? kFloTealGradientHorizontal
+                                : kFloTealGradientHorizontal))
+                        : LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: _pressed
                                 ? [
-                                    const Color(0xFFFFF5F5),
-                                    const Color(0xFFFFE8E8)
+                                    const Color(0xFFE0E0E0),
+                                    const Color(0xFFF0F0F0)
                                   ]
-                                : _hovered
+                                : danger
                                     ? [
-                                        const Color(0xFFFFFFFF),
-                                        const Color(0xFFFAFAFA)
+                                        const Color(0xFFFFF5F5),
+                                        const Color(0xFFFFE8E8)
                                       ]
-                                    : [
-                                        const Color(0xFFFFFFFF),
-                                        const Color(0xFFFAFAFA)
-                                      ],
-                      ),
+                                    : _hovered
+                                        ? [
+                                            const Color(0xFFFFFFFF),
+                                            const Color(0xFFFAFAFA)
+                                          ]
+                                        : [
+                                            const Color(0xFFFFFFFF),
+                                            const Color(0xFFFAFAFA)
+                                          ],
+                          ),
             color: !enabled
-                ? (teal ? Colors.grey.shade300 : const Color(0xFFF0F0F0))
+                ? ((teal || admin)
+                    ? Colors.grey.shade300
+                    : const Color(0xFFF0F0F0))
                 : null,
             boxShadow: !enabled
                 ? null
@@ -1010,16 +1027,19 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                     : [
                         BoxShadow(
                           color: Colors.black.withValues(
-                              alpha: _hovered ? 0.18 : (teal ? 0.14 : 0.13)),
-                          blurRadius: _hovered ? 4.5 : (teal ? 3.5 : 2.5),
-                          offset:
-                              Offset(0, _hovered ? 1.5 : (teal ? 1.5 : 1.25)),
+                              alpha: _hovered
+                                  ? 0.18
+                                  : ((teal || admin) ? 0.14 : 0.13)),
+                          blurRadius:
+                              _hovered ? 4.5 : ((teal || admin) ? 3.5 : 2.5),
+                          offset: Offset(
+                              0, _hovered ? 1.5 : ((teal || admin) ? 1.5 : 1.25)),
                         ),
                       ],
           ),
           padding: EdgeInsets.symmetric(
-            horizontal: teal ? 14 : (widget.isPrimary ? 10 : 8),
-            vertical: teal ? 6 : 5,
+            horizontal: (teal || admin) ? 14 : (widget.isPrimary ? 10 : 8),
+            vertical: (teal || admin) ? 6 : 5,
           ),
           child: Row(
             mainAxisSize:
@@ -1031,12 +1051,16 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                   widget.icon,
                   size: widget.fontSize,
                   color: !enabled
-                      ? (teal ? Colors.grey.shade600 : const Color(0xFFAAAAAA))
+                      ? ((teal || admin)
+                          ? Colors.grey.shade600
+                          : const Color(0xFFAAAAAA))
                       : danger
                           ? const Color(0xFFC0392B)
-                          : teal
-                              ? Colors.white
-                              : const Color(0xFF555555),
+                          : admin
+                              ? kFloAdminGoldText
+                              : teal
+                                  ? Colors.white
+                                  : const Color(0xFF555555),
                 ),
                 const SizedBox(width: 5),
               ],
@@ -1052,14 +1076,16 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                     fontVariations: const [FontVariation('wght', 500)],
                     letterSpacing: -0.5,
                     color: !enabled
-                        ? (teal
+                        ? ((teal || admin)
                             ? Colors.grey.shade600
                             : const Color(0xFFAAAAAA))
                         : danger
                             ? const Color(0xFFC0392B)
-                            : teal
-                                ? Colors.white
-                                : const Color(0xFF555555),
+                            : admin
+                                ? kFloAdminGoldText
+                                : teal
+                                    ? Colors.white
+                                    : const Color(0xFF555555),
                   ),
                 ),
               ),

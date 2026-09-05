@@ -1,28 +1,27 @@
 /// How multi-count RBI phrases are written in captions (e.g. "two-RBI" vs "2 RBI").
+/// Menu order: number styles first, then word styles.
+/// Home-run run-count wording uses [HomeRunCaptionStyle], not these.
 enum RbiCaptionStyle {
   /// `2 RBI`
   digitSpace('digitSpace', '2 RBI'),
 
-  /// `two RBI`
-  wordSpace('wordSpace', 'two RBI'),
-
   /// `2-RBI`
   digitDash('digitDash', '2-RBI'),
-
-  /// `two-RBI` (app default)
-  wordDash('wordDash', 'two-RBI'),
-
-  /// `2 runs batted in` (before the hit noun)
-  runsBattedIn('runsBattedIn', '2 runs batted in'),
 
   /// `2 R.B.I.`
   dotted('dotted', '2 R.B.I.'),
 
-  /// After the hit noun: `single with two runs batted in`
-  withRunsBattedIn('withRunsBattedIn', 'with two runs batted in'),
+  /// `2 runs batted in` (before the hit noun)
+  runsBattedIn('runsBattedIn', '2 runs batted in'),
 
-  /// Home-run style run count: `two-run` (also `solo` / `three-run`)
-  runDash('runDash', 'two-run');
+  /// `two RBI`
+  wordSpace('wordSpace', 'two RBI'),
+
+  /// `two-RBI` (app default)
+  wordDash('wordDash', 'two-RBI'),
+
+  /// After the hit noun: `single with two runs batted in`
+  withRunsBattedIn('withRunsBattedIn', 'with two runs batted in');
 
   const RbiCaptionStyle(this.id, this.menuLabel);
 
@@ -35,10 +34,60 @@ enum RbiCaptionStyle {
 
   static RbiCaptionStyle fromId(String? raw) {
     final id = (raw ?? '').trim();
+    // Legacy run-count ids now live on [HomeRunCaptionStyle].
+    if (id == 'digitRunDash' ||
+        id == 'digitRunSpace' ||
+        id == 'runDash') {
+      return defaultStyle;
+    }
     for (final s in RbiCaptionStyle.values) {
       if (s.id == id) return s;
     }
     return defaultStyle;
+  }
+}
+
+/// How Home Run run-count phrases are written (separate from RBI styles).
+/// Menu order: number styles first, then word styles.
+enum HomeRunCaptionStyle {
+  /// `2-run home run`
+  digitRunDash('digitRunDash', '2-run'),
+
+  /// `2 run home run`
+  digitRunSpace('digitRunSpace', '2 run'),
+
+  /// `two-run home run` (app default)
+  wordRunDash('wordRunDash', 'two-run'),
+
+  /// `two run home run`
+  wordRunSpace('wordRunSpace', 'two run');
+
+  const HomeRunCaptionStyle(this.id, this.menuLabel);
+
+  final String id;
+
+  /// Sample shown in the style dropdown (always for a two-run HR).
+  final String menuLabel;
+
+  static const HomeRunCaptionStyle defaultStyle =
+      HomeRunCaptionStyle.wordRunDash;
+
+  static HomeRunCaptionStyle fromId(String? raw) {
+    final id = (raw ?? '').trim();
+    for (final s in HomeRunCaptionStyle.values) {
+      if (s.id == id) return s;
+    }
+    // Legacy values previously stored on [RbiCaptionStyle].
+    switch (id) {
+      case 'digitRunDash':
+        return HomeRunCaptionStyle.digitRunDash;
+      case 'digitRunSpace':
+        return HomeRunCaptionStyle.digitRunSpace;
+      case 'runDash':
+        return HomeRunCaptionStyle.wordRunDash;
+      default:
+        return defaultStyle;
+    }
   }
 }
 
@@ -62,6 +111,7 @@ class VerbSubOptions {
     this.rbiEnabled = false,
     this.rbiWord = 'RBI',
     this.rbiStyle = RbiCaptionStyle.defaultStyle,
+    this.homeRunStyle = HomeRunCaptionStyle.defaultStyle,
     this.grandSlamPhrase = defaultGrandSlamPhrase,
     this.celebrationEnabled = false,
     this.celebrationPhrase = defaultReactionPhrases,
@@ -77,6 +127,9 @@ class VerbSubOptions {
 
   /// Caption formatting for RBI counts (e.g. `two-RBI` vs `2 RBI`).
   final RbiCaptionStyle rbiStyle;
+
+  /// Caption formatting for Home Run run counts (e.g. `two-run` vs `2-run`).
+  final HomeRunCaptionStyle homeRunStyle;
 
   /// Full noun phrase after "hits a" / "celebrates after a" for grand slam.
   /// Default: `grand slam home run`.
@@ -402,6 +455,7 @@ class VerbSubOptions {
     bool? rbiEnabled,
     String? rbiWord,
     RbiCaptionStyle? rbiStyle,
+    HomeRunCaptionStyle? homeRunStyle,
     String? grandSlamPhrase,
     bool? celebrationEnabled,
     String? celebrationPhrase,
@@ -411,6 +465,7 @@ class VerbSubOptions {
       rbiEnabled: rbiEnabled ?? this.rbiEnabled,
       rbiWord: rbiWord ?? this.rbiWord,
       rbiStyle: rbiStyle ?? this.rbiStyle,
+      homeRunStyle: homeRunStyle ?? this.homeRunStyle,
       grandSlamPhrase: grandSlamPhrase ?? this.grandSlamPhrase,
       celebrationEnabled: celebrationEnabled ?? this.celebrationEnabled,
       celebrationPhrase: celebrationPhrase ?? this.celebrationPhrase,
@@ -422,6 +477,7 @@ class VerbSubOptions {
         'rbiEnabled': rbiEnabled,
         'rbiWord': rbiWord.trim(),
         'rbiStyle': rbiStyle.id,
+        'homeRunStyle': homeRunStyle.id,
         'grandSlamPhrase': grandSlamPhrase.trim(),
         'celebrationEnabled': celebrationEnabled,
         'celebrationPhrase': celebrationPhrase.trim(),
@@ -440,6 +496,18 @@ class VerbSubOptions {
         (raw['rbiEnabled'] as bool? ??
             raw['rbiMenu'] as bool? ??
             d.rbiEnabled);
+    final legacyRbiId = raw['rbiStyle'] as String?;
+    final HomeRunCaptionStyle homeRunStyle;
+    if (raw['homeRunStyle'] != null) {
+      homeRunStyle =
+          HomeRunCaptionStyle.fromId(raw['homeRunStyle'] as String?);
+    } else if (legacyRbiId == 'digitRunDash' ||
+        legacyRbiId == 'digitRunSpace' ||
+        legacyRbiId == 'runDash') {
+      homeRunStyle = HomeRunCaptionStyle.fromId(legacyRbiId);
+    } else {
+      homeRunStyle = d.homeRunStyle;
+    }
     return VerbSubOptions(
       rbiEnabled: rbiEnabled,
       rbiWord: (raw['rbiWord'] as String?)?.trim().isNotEmpty == true
@@ -448,6 +516,7 @@ class VerbSubOptions {
       rbiStyle: raw['rbiStyle'] != null
           ? RbiCaptionStyle.fromId(raw['rbiStyle'] as String?)
           : d.rbiStyle,
+      homeRunStyle: homeRunStyle,
       grandSlamPhrase:
           (raw['grandSlamPhrase'] as String?)?.trim().isNotEmpty == true
               ? (raw['grandSlamPhrase'] as String).trim()
@@ -470,14 +539,12 @@ class VerbSubOptions {
   static VerbSubOptions defaultsFor(String verbLabel, {String? sport}) {
     final baseball = isBaseballSport(sport);
     final isHit = baseball && isHitVerb(verbLabel);
-    final isHomeRun = verbLabel == 'Home Run';
     final isCele = isCelebrationVerb(verbLabel);
 
     return VerbSubOptions(
       rbiEnabled: isHit,
-      rbiStyle: isHomeRun
-          ? RbiCaptionStyle.runDash
-          : RbiCaptionStyle.defaultStyle,
+      rbiStyle: RbiCaptionStyle.defaultStyle,
+      homeRunStyle: HomeRunCaptionStyle.defaultStyle,
       grandSlamPhrase: defaultGrandSlamPhrase,
       celebrationEnabled: isHit || isCele,
       celebrationPhrase: defaultReactionPhrases,
@@ -490,6 +557,7 @@ class VerbSubOptions {
     return rbiEnabled != d.rbiEnabled ||
         rbiWord != d.rbiWord ||
         rbiStyle != d.rbiStyle ||
+        homeRunStyle != d.homeRunStyle ||
         grandSlamPhrase != d.grandSlamPhrase ||
         celebrationEnabled != d.celebrationEnabled ||
         celebrationPhrase != d.celebrationPhrase ||
@@ -535,10 +603,23 @@ class VerbSubOptions {
         return c <= 1
             ? 'with one run batted in'
             : 'with ${_numberWord(c)} runs batted in';
-      case RbiCaptionStyle.runDash:
-        if (c <= 1) return 'solo';
-        if (c >= 4) return 'grand slam';
+    }
+  }
+
+  /// Run-count label for Home Run (solo / 2-run / three-run / …).
+  String homeRunCountLabel(int count) {
+    final c = count < 1 ? 1 : count;
+    if (c <= 1) return 'solo';
+    if (c >= 4) return 'grand slam';
+    switch (homeRunStyle) {
+      case HomeRunCaptionStyle.digitRunDash:
+        return '$c-run';
+      case HomeRunCaptionStyle.digitRunSpace:
+        return '$c run';
+      case HomeRunCaptionStyle.wordRunDash:
         return '${_numberWord(c)}-run';
+      case HomeRunCaptionStyle.wordRunSpace:
+        return '${_numberWord(c)} run';
     }
   }
 
@@ -559,6 +640,19 @@ class VerbSubOptions {
       return '$leadIn $hitNoun $label';
     }
     return '$leadIn $label $hitNoun';
+  }
+
+  /// Builds "hits a two-run home run" using [homeRunStyle].
+  String hitClauseWithHomeRun({
+    required String leadIn,
+    required String hitNoun,
+    required int count,
+  }) {
+    final c = count < 1 ? 1 : count;
+    if (c >= 4) {
+      return hitClauseWithGrandSlam(leadIn: leadIn, hitNoun: hitNoun);
+    }
+    return '$leadIn ${homeRunCountLabel(count)} $hitNoun';
   }
 
   /// Resolved grand slam noun phrase (after "hits a" / "celebrates after hitting a").

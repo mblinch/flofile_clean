@@ -30,11 +30,33 @@ class _FirebarVIntent extends Intent {
   const _FirebarVIntent();
 }
 
-/// ShortcutManager that does not handle H/V when focus is in a text input (TextField/EditableText).
+/// US Mac Option+digit characters → jersey digit.
+const Map<String, String> _kMacOptionDigitChars = {
+  'º': '0',
+  '¡': '1',
+  '™': '2',
+  '£': '3',
+  '¢': '4',
+  '∞': '5',
+  '§': '6',
+  '¶': '7',
+  '•': '8',
+  'ª': '9',
+};
+
+const Map<ShortcutActivator, Intent> _kFirebarShortcuts =
+    <ShortcutActivator, Intent>{
+  SingleActivator(LogicalKeyboardKey.keyH): _FirebarHIntent(),
+  SingleActivator(LogicalKeyboardKey.keyV): _FirebarVIntent(),
+};
+
+/// ShortcutManager that does not handle firebar H/V when focus is in a text
+/// input. Ctrl/Alt jersey digit shortcuts still apply in search bars.
 class _FirebarShortcutManager extends ShortcutManager {
   _FirebarShortcutManager({required super.shortcuts});
 
-  static bool _isFocusInTextInput(FocusNode? focus) {
+  static bool isFocusInTextInput([FocusNode? focus]) {
+    focus ??= FocusManager.instance.primaryFocus;
     if (focus == null) return false;
     final context = focus.context;
     if (context == null) return false;
@@ -56,8 +78,11 @@ class _FirebarShortcutManager extends ShortcutManager {
   KeyEventResult handleKeypress(BuildContext context, KeyEvent event) {
     if (event is KeyDownEvent &&
         (event.logicalKey == LogicalKeyboardKey.keyH ||
-            event.logicalKey == LogicalKeyboardKey.keyV)) {
-      if (_isFocusInTextInput(FocusManager.instance.primaryFocus)) {
+            event.logicalKey == LogicalKeyboardKey.keyV) &&
+        !HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isAltPressed &&
+        !HardwareKeyboard.instance.isMetaPressed) {
+      if (isFocusInTextInput()) {
         return KeyEventResult.ignored;
       }
     }
@@ -135,6 +160,9 @@ class KeyboardFirePanel extends StatefulWidget {
 }
 
 class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
+  static const MethodChannel _jerseyShortcutChannel =
+      MethodChannel('caption_writer/jersey_shortcuts');
+
   /// Must match [_buildCaptionField] — roster player names use this too.
   static const TextStyle _captionFieldTextStyle = TextStyle(
     fontSize: 11.5,
@@ -181,6 +209,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   final FocusNode _awayBarFocus = FocusNode();
   final FocusNode _categoryBarFocus = FocusNode();
   final FocusNode _verbBarFocus = FocusNode();
+  /// Caption text field in the Caption card.
+  final FocusNode _captionFocus = FocusNode();
 
   /// Personality field in the Caption card header.
   final FocusNode _personalityFieldFocus = FocusNode();
@@ -247,6 +277,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   /// After a verb drag session, ignore the synthetic [InkWell.onTap] on pointer up.
   bool _suppressVerbTapAfterVerbDrag = false;
+
+  /// Ctrl/Alt + digits: buffer for multi-digit jersey shortcuts.
+  String _modJerseyBuffer = '';
+  bool? _modJerseyIsHome;
+  Timer? _modJerseyTimer;
+
+  /// True while Shift is held — shows shortcut badges on verb sub-option chips.
+  bool _shiftHintHeld = false;
 
   GlobalKey _catKey(int i) => _catRowKeys.putIfAbsent(i, () => GlobalKey());
 
@@ -541,14 +579,14 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             }
           }
         }
-        setState(() {
-          _dragFromVerbCatIndex = null;
-          _dragFromVerbIndex = null;
-          _dragToVerbCatIndex = null;
-          _dragToVerbIndex = null;
-          _verbDragGhostLocal = null;
-        });
         if (hadSession) {
+          setState(() {
+            _dragFromVerbCatIndex = null;
+            _dragFromVerbIndex = null;
+            _dragToVerbCatIndex = null;
+            _dragToVerbIndex = null;
+            _verbDragGhostLocal = null;
+          });
           _suppressVerbTapAfterVerbDrag = true;
         }
       },
@@ -574,8 +612,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   bool _useSquarePlayerView = false;
   String _kbPlayerSortBy = 'number'; // 'number', 'lastname', 'firstname'
   bool _kbPlayerSortAscending = true;
-  bool _showHomeCoachingPanel = true;
-  bool _showAwayCoachingPanel = true;
+  bool _showHomeCoachingPanel = false;
+  bool _showAwayCoachingPanel = false;
 
   // Lock list sizing to each column's initial viewport height so resizing the
   // dialog does not keep changing player text/row size.
@@ -653,8 +691,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final verbIcon = math.max(8.0, 11.0 * scale);
     final verbNumW = math.max(16.0, 24.0 * scale);
     final dragGap = 3.0 * scale;
-    final submenuContentLeft =
-        verbPadLReorder + verbIcon + dragGap + verbNumW - 40.0;
+    final submenuContentLeft = 0.0;
 
     return _KbCatVerbMetrics(
       scale: scale,
@@ -826,6 +863,34 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       }
       return;
     }
+
+    // Re-clicking the active verb clears pick + pin and restores undimmed list.
+    final thisPicked =
+        _pickedVerbCategory == selectedCatNum && _pickedVerbIndex == verbNum;
+    final thisPinned =
+        _pinnedVerbCategory == selectedCatNum && _pinnedVerbIndex == verbNum;
+    if (thisPicked || thisPinned) {
+      setState(() {
+        _pickedVerbCategory = null;
+        _pickedVerbIndex = null;
+        if (thisPinned) {
+          _pinnedVerbCategory = null;
+          _pinnedVerbIndex = null;
+        }
+        _waitingForVerb = false;
+        _verbSummary = '';
+      });
+      try {
+        (widget.captionState as dynamic)?.clearVerbSelectionFromKeyboardFire();
+      } catch (_) {
+        widget.captionState?.selectVerbByCategoryAndIndexFromKeyboardFire(
+            selectedCatNum, verbNum);
+        widget.captionState?.updateCaptionFromKeyboardFire();
+      }
+      _refreshCaptionPreviewLater();
+      return;
+    }
+
     _discardCustomVerbFieldForListSelection();
     widget.captionState
         ?.selectVerbByCategoryAndIndexFromKeyboardFire(selectedCatNum, verbNum);
@@ -837,6 +902,26 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _pickedVerbIndex = verbNum;
     });
     _refreshCaptionPreviewLater();
+  }
+
+  /// When leaving a category (collapse or switch), clear its picked verb.
+  /// Pinned verbs stay pinned and keep the caption; unpinned picks are cleared.
+  void _unpickVerbIfInCategory(int catNum) {
+    if (_pickedVerbCategory != catNum || _pickedVerbIndex == null) return;
+    final cat = catNum;
+    final idx = _pickedVerbIndex!;
+    final keepCaption =
+        _pinnedVerbCategory == cat && _pinnedVerbIndex == idx;
+    setState(() {
+      _pickedVerbCategory = null;
+      _pickedVerbIndex = null;
+    });
+    if (!keepCaption) {
+      widget.captionState
+          ?.selectVerbByCategoryAndIndexFromKeyboardFire(cat, idx);
+      widget.captionState?.updateCaptionFromKeyboardFire();
+      _refreshCaptionPreviewLater();
+    }
   }
 
   /// Pin a verb by category+index (from context menu).
@@ -862,6 +947,40 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       _pinnedVerbIndex = null;
       _pinnedCustomVerb = null;
     });
+  }
+
+  /// Unpin and drop the selected verb so multi-player selection can proceed.
+  void _clearPinnedVerbAndSelection() {
+    setState(() {
+      _pinnedVerbCategory = null;
+      _pinnedVerbIndex = null;
+      _pinnedCustomVerb = null;
+      _pickedVerbCategory = null;
+      _pickedVerbIndex = null;
+    });
+  }
+
+  bool _hasPinnedVerb() =>
+      _pinnedVerbCategory != null ||
+      _pinnedVerbIndex != null ||
+      (_pinnedCustomVerb != null && _pinnedCustomVerb!.trim().isNotEmpty);
+
+  void _wireCaptionPinHooks() {
+    final cs = widget.captionState;
+    if (cs == null) return;
+    try {
+      (cs as dynamic).keyboardFireClearPinnedVerb = _clearPinnedVerbAndSelection;
+      (cs as dynamic).keyboardFireHasPinnedVerb = _hasPinnedVerb;
+    } catch (_) {}
+  }
+
+  void _clearCaptionPinHooks() {
+    final cs = widget.captionState;
+    if (cs == null) return;
+    try {
+      (cs as dynamic).keyboardFireClearPinnedVerb = null;
+      (cs as dynamic).keyboardFireHasPinnedVerb = null;
+    } catch (_) {}
   }
 
   List<Map<String, String>> _computeStaffDisplayLines(
@@ -1122,7 +1241,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   @override
   void initState() {
     super.initState();
+    _wireCaptionPinHooks();
     _personalityFieldFocus.addListener(_onPersonalityFieldFocusChanged);
+    HardwareKeyboard.instance.addHandler(_handlePlayerJerseyShortcut);
+    _enableNativeJerseyShortcuts(true);
     if (widget.keywordModeEnabled) {
       _showKeywordsField = true;
     }
@@ -1152,8 +1274,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     // Defer state changes to avoid setState() during build (CaptionFieldsWidget).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       widget.captionState?.clearPlayersForKeyboardFire();
-      if (mounted) _homeBarFocus.requestFocus();
+      if (mounted) _captionFocus.requestFocus();
     });
+  }
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    // Hot reload does not re-run initState; keep the jersey handler live.
+    HardwareKeyboard.instance.removeHandler(_handlePlayerJerseyShortcut);
+    HardwareKeyboard.instance.addHandler(_handlePlayerJerseyShortcut);
+    _enableNativeJerseyShortcuts(true);
   }
 
   void _onKeyboardFireCaptionFieldVisibilityRevision() {
@@ -1337,6 +1468,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handlePlayerJerseyShortcut);
+    _enableNativeJerseyShortcuts(false);
+    _modJerseyTimer?.cancel();
+    _clearCaptionPinHooks();
     _prefsService?.captionFieldVisibilityRevision
         .removeListener(_onKeyboardFireCaptionFieldVisibilityRevision);
     _inputController.dispose();
@@ -1356,10 +1491,369 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     _awayBarFocus.dispose();
     _categoryBarFocus.dispose();
     _verbBarFocus.dispose();
+    _captionFocus.dispose();
     _personalityFieldFocus
       ..removeListener(_onPersonalityFieldFocusChanged)
       ..dispose();
     super.dispose();
+  }
+
+  /// Digits arrive from the native layer (see `MainFlutterWindow.swift`); Dart
+  /// only watches for the modifier release, which commits the typed number.
+  /// Shift+# selects a verb, or RBI/HR sub-options when those chips are showing.
+  bool _handlePlayerJerseyShortcut(KeyEvent event) {
+    if (!mounted) return false;
+
+    if (_updateShiftHintHeld(event)) {
+      // Fall through so Shift+digit / Shift+C can still be handled below.
+    }
+
+    if (event is KeyDownEvent) {
+      if (_tryConsumeShiftCelebrationShortcut(event)) return true;
+      if (_tryConsumeShiftVerbShortcut(event)) return true;
+    }
+
+    if (event is! KeyUpEvent) return false;
+    final k = event.logicalKey;
+    final isModifier = k == LogicalKeyboardKey.controlLeft ||
+        k == LogicalKeyboardKey.controlRight ||
+        k == LogicalKeyboardKey.metaLeft ||
+        k == LogicalKeyboardKey.metaRight ||
+        k == LogicalKeyboardKey.altLeft ||
+        k == LogicalKeyboardKey.altRight ||
+        k == LogicalKeyboardKey.altGraph;
+    if (!isModifier) return false;
+
+    final stillCtrl = HardwareKeyboard.instance.isControlPressed;
+    final stillAlt = HardwareKeyboard.instance.isAltPressed ||
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance
+            .isLogicalKeyPressed(LogicalKeyboardKey.altGraph);
+    if (_modJerseyIsHome == true && !stillCtrl) {
+      _flushModJerseyBuffer();
+    } else if (_modJerseyIsHome == false && !stillAlt) {
+      _flushModJerseyBuffer();
+    }
+    return false;
+  }
+
+  /// Keeps [_shiftHintHeld] in sync so RBI/🎉 chips can show shortcut badges.
+  bool _updateShiftHintHeld(KeyEvent event) {
+    final held = HardwareKeyboard.instance.isShiftPressed &&
+        !HardwareKeyboard.instance.isControlPressed &&
+        !HardwareKeyboard.instance.isMetaPressed &&
+        !HardwareKeyboard.instance.isAltPressed;
+    if (held == _shiftHintHeld) return false;
+    setState(() => _shiftHintHeld = held);
+    return true;
+  }
+
+  /// Active verb's inline sub-option mode (RBI / Home Run), if any.
+  String? _activeVerbSubMode() {
+    final cat = _pickedVerbCategory;
+    final idx = _pickedVerbIndex;
+    if (cat == null || idx == null) return null;
+    final cats = _verbList;
+    final ci = cats.indexWhere(
+        (c) => (c['number'] as int? ?? (cats.indexOf(c) + 1)) == cat);
+    final useCi = ci >= 0 ? ci : (cat - 1);
+    if (useCi < 0 || useCi >= cats.length) return null;
+    final verbs =
+        (cats[useCi]['verbs'] as List<dynamic>?)?.cast<String>() ?? const [];
+    if (idx < 1 || idx > verbs.length) return null;
+    final verb = verbs[idx - 1];
+    final canon = (() {
+      final raw = cats[useCi]['verbsCanonical'];
+      if (raw is List && idx - 1 < raw.length) {
+        return (raw[idx - 1] as String?) ?? verb;
+      }
+      return verb;
+    })();
+    if (VerbSubOptions.legacyHomeRunTypeMenu(verb)) return 'homeRun';
+    if (verb == 'Bunts' || canon == 'Bunts') return null;
+    try {
+      final opts = (widget.captionState as dynamic)
+          .getVerbSubOptionsFromKeyboardFire(verb) as VerbSubOptions;
+      if (opts.rbiEnabled) return 'rbi';
+    } catch (_) {}
+    return null;
+  }
+
+  bool _activeVerbHasCelebration() {
+    final cat = _pickedVerbCategory;
+    final idx = _pickedVerbIndex;
+    if (cat == null || idx == null) return false;
+    final cats = _verbList;
+    final ci = cats.indexWhere(
+        (c) => (c['number'] as int? ?? (cats.indexOf(c) + 1)) == cat);
+    final useCi = ci >= 0 ? ci : (cat - 1);
+    if (useCi < 0 || useCi >= cats.length) return false;
+    final verbs =
+        (cats[useCi]['verbs'] as List<dynamic>?)?.cast<String>() ?? const [];
+    if (idx < 1 || idx > verbs.length) return false;
+    final verb = verbs[idx - 1];
+    try {
+      final opts = (widget.captionState as dynamic)
+          .getVerbSubOptionsFromKeyboardFire(verb) as VerbSubOptions;
+      return opts.celebrationEnabled;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _applyRbiShortcut(int rbi) {
+    final state = widget.captionState;
+    if (state == null) return;
+    try {
+      final current = (state as dynamic).currentRbiCount as int?;
+      (state as dynamic).setRbiFromKeyboardFire(current == rbi ? null : rbi);
+    } catch (_) {}
+    setState(() {});
+    _refreshCaptionPreviewLater();
+  }
+
+  void _applyHomeRunShortcut(int n) {
+    const types = ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam'];
+    if (n < 1 || n > types.length) return;
+    final type = types[n - 1];
+    final state = widget.captionState;
+    if (state == null) return;
+    try {
+      final current = (state as dynamic).currentHomeRunType as String?;
+      (state as dynamic)
+          .setHomeRunTypeFromKeyboardFire(current == type ? null : type);
+    } catch (_) {}
+    setState(() {});
+    _refreshCaptionPreviewLater();
+  }
+
+  void _toggleCelebrationShortcut() {
+    final state = widget.captionState;
+    if (state == null || !_activeVerbHasCelebration()) return;
+    final cat = _pickedVerbCategory!;
+    final idx = _pickedVerbIndex!;
+    final cats = _verbList;
+    final ci = cats.indexWhere(
+        (c) => (c['number'] as int? ?? (cats.indexOf(c) + 1)) == cat);
+    final useCi = ci >= 0 ? ci : (cat - 1);
+    if (useCi < 0 || useCi >= cats.length) return;
+    final verbs =
+        (cats[useCi]['verbs'] as List<dynamic>?)?.cast<String>() ?? const [];
+    if (idx < 1 || idx > verbs.length) return;
+    final verb = verbs[idx - 1];
+    try {
+      final opts = (state as dynamic).getVerbSubOptionsFromKeyboardFire(verb)
+          as VerbSubOptions;
+      final phrases = opts.reactionPhraseList;
+      if (phrases.isEmpty) return;
+      final current = (state as dynamic).currentHittingAction as String?;
+      final isOn = current != null &&
+          phrases.any((p) => p.toLowerCase() == current.toLowerCase());
+      if (isOn) {
+        (state as dynamic).setHittingActionFromKeyboardFire(null);
+      } else {
+        final target = _lastReactionPhrase ?? opts.primaryReactionPhrase;
+        _lastReactionPhrase = target;
+        (state as dynamic).setHittingActionFromKeyboardFire(target);
+      }
+    } catch (_) {}
+    setState(() {});
+    _refreshCaptionPreviewLater();
+  }
+
+  bool _tryConsumeShiftCelebrationShortcut(KeyEvent event) {
+    final kb = HardwareKeyboard.instance;
+    if (!kb.isShiftPressed) return false;
+    if (kb.isControlPressed || kb.isMetaPressed || kb.isAltPressed) {
+      return false;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.keyC) return false;
+    if (!_activeVerbHasCelebration()) return false;
+    _toggleCelebrationShortcut();
+    return true;
+  }
+
+  /// Shift+1…9 (0 = 10) → verb number, or RBI/HR chip when those are showing.
+  bool _tryConsumeShiftVerbShortcut(KeyEvent event) {
+    final kb = HardwareKeyboard.instance;
+    if (!kb.isShiftPressed) return false;
+    if (kb.isControlPressed || kb.isMetaPressed || kb.isAltPressed) {
+      return false;
+    }
+    final verbNum = _logicalKeyToVerbNumber(event.logicalKey);
+    if (verbNum == null) return false;
+    _handleShiftAssignedNumber(verbNum);
+    return true;
+  }
+
+  void _handleShiftAssignedNumber(int n) {
+    final mode = _activeVerbSubMode();
+    if (mode == 'rbi' && n >= 1 && n <= 3) {
+      _applyRbiShortcut(n);
+      return;
+    }
+    if (mode == 'homeRun' && n >= 1 && n <= 4) {
+      _applyHomeRunShortcut(n);
+      return;
+    }
+    _selectVerbByAssignedNumber(n);
+  }
+
+  int? _logicalKeyToVerbNumber(LogicalKeyboardKey k) {
+    if (k == LogicalKeyboardKey.digit1 || k == LogicalKeyboardKey.numpad1) {
+      return 1;
+    }
+    if (k == LogicalKeyboardKey.digit2 || k == LogicalKeyboardKey.numpad2) {
+      return 2;
+    }
+    if (k == LogicalKeyboardKey.digit3 || k == LogicalKeyboardKey.numpad3) {
+      return 3;
+    }
+    if (k == LogicalKeyboardKey.digit4 || k == LogicalKeyboardKey.numpad4) {
+      return 4;
+    }
+    if (k == LogicalKeyboardKey.digit5 || k == LogicalKeyboardKey.numpad5) {
+      return 5;
+    }
+    if (k == LogicalKeyboardKey.digit6 || k == LogicalKeyboardKey.numpad6) {
+      return 6;
+    }
+    if (k == LogicalKeyboardKey.digit7 || k == LogicalKeyboardKey.numpad7) {
+      return 7;
+    }
+    if (k == LogicalKeyboardKey.digit8 || k == LogicalKeyboardKey.numpad8) {
+      return 8;
+    }
+    if (k == LogicalKeyboardKey.digit9 || k == LogicalKeyboardKey.numpad9) {
+      return 9;
+    }
+    if (k == LogicalKeyboardKey.digit0 || k == LogicalKeyboardKey.numpad0) {
+      return 10;
+    }
+    return null;
+  }
+
+  void _selectVerbByAssignedNumber(int verbNum) {
+    final cats = _verbList;
+    if (cats.isEmpty || verbNum < 1) return;
+    final ci = (_expandedCategoryIndex ?? _selectedCategoryIndex ?? 0)
+        .clamp(0, cats.length - 1);
+    final verbs =
+        (cats[ci]['verbs'] as List<dynamic>?)?.cast<String>() ?? const [];
+    if (verbNum > verbs.length) return;
+    final catNum = cats[ci]['number'] as int? ?? (ci + 1);
+    if (_expandedCategoryIndex != ci || _selectedCategoryIndex != ci) {
+      setState(() {
+        _expandedCategoryIndex = ci;
+        _selectedCategoryIndex = ci;
+      });
+    }
+    _onVerbTapped(catNum, verbNum);
+  }
+
+  void _enableNativeJerseyShortcuts(bool enabled) {
+    _jerseyShortcutChannel.setMethodCallHandler(
+      enabled ? _onNativeJerseyShortcut : null,
+    );
+    _jerseyShortcutChannel.invokeMethod<void>('setEnabled', enabled);
+  }
+
+  Future<void> _onNativeJerseyShortcut(MethodCall call) async {
+    if (call.method == 'verbDigit') {
+      final args = call.arguments;
+      if (args is! Map) return;
+      final digit = args['digit']?.toString() ?? '';
+      if (digit.isEmpty) return;
+      final verbNum = digit == '0' ? 10 : int.tryParse(digit);
+      if (verbNum == null) return;
+      _handleShiftAssignedNumber(verbNum);
+      return;
+    }
+    if (call.method != 'jerseyDigit') return;
+    final args = call.arguments;
+    if (args is! Map) return;
+    final digit = args['digit']?.toString() ?? '';
+    if (digit.isEmpty) return;
+    _appendModJerseyDigit(isHome: args['isHome'] == true, digit: digit);
+  }
+
+  List<String> _rosterJerseys(bool isHome) {
+    final roster = isHome ? _homeRosterView : _awayRosterView;
+    return roster
+        .map((p) => (p.jerseyNumber ?? '').trim())
+        .where((j) => j.isNotEmpty)
+        .toList();
+  }
+
+  /// Builds up a jersey number across keystrokes, firing as soon as the number
+  /// is unambiguous for the roster (so single-digit jerseys are instant).
+  void _appendModJerseyDigit({required bool isHome, required String digit}) {
+    _modJerseyTimer?.cancel();
+    _modJerseyTimer = null;
+    if (_modJerseyIsHome != isHome) _modJerseyBuffer = '';
+    _modJerseyIsHome = isHome;
+
+    final jerseys = _rosterJerseys(isHome);
+    var candidate = _modJerseyBuffer + digit;
+    if (!jerseys.any((j) => j.startsWith(candidate))) {
+      candidate = digit;
+    }
+    _modJerseyBuffer = candidate;
+
+    final hasExact = jerseys.contains(candidate);
+    final hasLonger = jerseys.any(
+        (j) => j.length > candidate.length && j.startsWith(candidate));
+
+    if (hasExact && !hasLonger) {
+      _flushModJerseyBuffer();
+      return;
+    }
+    if (!hasExact && !hasLonger) {
+      _modJerseyBuffer = '';
+      _modJerseyIsHome = null;
+      return;
+    }
+    // Ambiguous (e.g. "4" with "44" on the roster): the number is committed when
+    // the modifier is released. The timer is only a fallback if that is missed.
+    _modJerseyTimer = Timer(
+        const Duration(milliseconds: 1500), _flushModJerseyBuffer);
+  }
+
+  void _flushModJerseyBuffer() {
+    _modJerseyTimer?.cancel();
+    _modJerseyTimer = null;
+    final buf = _modJerseyBuffer;
+    final isHome = _modJerseyIsHome;
+    _modJerseyBuffer = '';
+    _modJerseyIsHome = null;
+    if (buf.isEmpty || isHome == null) return;
+    _togglePlayerJerseyShortcut(isHome: isHome, jersey: buf);
+  }
+
+  void _togglePlayerJerseyShortcut({
+    required bool isHome,
+    required String jersey,
+  }) {
+    final state = widget.captionState;
+    if (state == null) return;
+    final roster = isHome ? _homeRosterView : _awayRosterView;
+    Player? match;
+    for (final p in roster) {
+      if ((p.jerseyNumber ?? '').trim() == jersey.trim()) {
+        match = p;
+        break;
+      }
+    }
+    if (match == null) return;
+    final selected = _getSelectedPlayerNames(isHome);
+    if (selected.contains(match.displayName)) {
+      state.removePlayerByJersey(isHome, jersey);
+    } else {
+      state.addPlayerByJersey(isHome, jersey);
+    }
+    state.updateCaptionFromKeyboardFire();
+    if (mounted) setState(() {});
+    _refreshCaptionPreviewLater();
   }
 
   List<String> _parseNumbers(String text) {
@@ -1573,6 +2067,12 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         final cats = _verbList;
         if (cats.isNotEmpty) {
           final index = (n - 1).clamp(0, cats.length - 1);
+          final leavingCi = _expandedCategoryIndex;
+          if (leavingCi != null && leavingCi != index) {
+            final leavingCatNum =
+                cats[leavingCi]['number'] as int? ?? (leavingCi + 1);
+            _unpickVerbIfInCategory(leavingCatNum);
+          }
           setState(() {
             _selectedCategoryIndex = index;
             _expandedCategoryIndex = index;
@@ -1813,6 +2313,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
       } catch (_) {}
       return TextField(
         controller: ctrl,
+        focusNode: _captionFocus,
         expands: true,
         maxLines: null,
         textAlignVertical: TextAlignVertical.top,
@@ -3359,11 +3860,21 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _shortcutHelpRow('⌘S', 'Save caption & next image (Ctrl+S)'),
-                _shortcutHelpRow('⌘⏎',
-                    'Save, FTP upload, next image (Ctrl+Enter). Uses active FTP profile.'),
+                _shortcutHelpRow('⇧⏎', 'Save caption & next image (also ⌘S)'),
+                _shortcutHelpRow('⇧⌘⏎',
+                    'Save, FTP upload, next image (⇧Ctrl+Enter). Uses active FTP profile.'),
                 _shortcutHelpRow(
                     '⌘⇧V', 'Paste previous caption (Ctrl+Shift+V)'),
+                _shortcutHelpRow('Ctrl+#',
+                    'Hold Ctrl, type a jersey number → home player'),
+                _shortcutHelpRow('⌘+# / ⌥+#',
+                    'Hold Cmd (or Option), type a jersey number → away player'),
+                _shortcutHelpRow('⇧+#',
+                    'Hold Shift, press a verb’s number → select that verb'),
+                _shortcutHelpRow('⇧+1/2/3',
+                    'With RBI/HR chips showing: set RBI or HR type (badges appear while Shift is held)'),
+                _shortcutHelpRow('⇧+C',
+                    'Toggle celebration (🎉) on the selected verb'),
               ],
             ),
           ),
@@ -3452,6 +3963,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         cursorHeight: 13,
         cursorColor: AppTokens.accent,
         style: AppTokens.listBody.copyWith(color: AppTokens.ink),
+        inputFormatters: const [_MacOptionCharStripper()],
         decoration: InputDecoration(
           isDense: true,
           filled: true,
@@ -3899,6 +4411,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           label: 'Compare rosters',
           fontSize: 10,
           icon: Icons.compare_arrows,
+          isAdmin: true,
           onPressed: () => AdminScreen.open(
             context,
             openRosterCompare: true,
@@ -3924,6 +4437,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     required bool selected,
     bool small = false,
     bool onDark = false,
+    bool dimmed = false,
   }) {
     final size = small ? 18.0 : 20.0;
     final textStyle = (small ? AppTokens.monoSmall : AppTokens.mono).copyWith(
@@ -3932,7 +4446,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           ? AppTokens.surface
           : selected
               ? AppTokens.accentDeep
-              : AppTokens.inkMuted,
+              : dimmed
+                  ? AppTokens.inkMuted.withValues(alpha: 0.55)
+                  : AppTokens.inkMuted,
       fontWeight: selected || onDark ? FontWeight.w600 : FontWeight.w400,
       height: 1.0,
     );
@@ -4392,6 +4908,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       final isDragging = _dragFromCatIndex == ci;
                       final isDragOver =
                           _dragToCatIndex == ci && _dragFromCatIndex != ci;
+                      // Mute other categories when one is expanded or a verb is active.
+                      final isFocusCat = isExpanded ||
+                          _pickedVerbCategory == catNum ||
+                          _pinnedVerbCategory == catNum;
+                      final hasCatFocus = _expandedCategoryIndex != null ||
+                          _pickedVerbCategory != null ||
+                          _pinnedVerbCategory != null ||
+                          _pinnedCustomVerb != null;
+                      final isCatDimmed = hasCatFocus && !isFocusCat;
                       return Listener(
                         behavior: HitTestBehavior.opaque,
                         onPointerDown: (e) {
@@ -4465,8 +4990,17 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               _categoryDragGhostLocal = null;
                             });
                           } else if (_dragFromCatIndex == null) {
+                            final leavingCi = _expandedCategoryIndex;
+                            final collapsing = leavingCi == ci;
+                            if (leavingCi != null &&
+                                (collapsing || leavingCi != ci)) {
+                              final leavingCatNum =
+                                  cats[leavingCi]['number'] as int? ??
+                                      (leavingCi + 1);
+                              _unpickVerbIfInCategory(leavingCatNum);
+                            }
                             setState(() {
-                              if (_expandedCategoryIndex == ci) {
+                              if (collapsing) {
                                 _expandedCategoryIndex = null;
                               } else {
                                 _expandedCategoryIndex = ci;
@@ -4527,6 +5061,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     '$catNum',
                                     selected: false,
                                     onDark: isExpanded,
+                                    dimmed: isCatDimmed,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -4535,7 +5070,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       style: AppTokens.listBody.copyWith(
                                         color: isExpanded
                                             ? AppTokens.surface
-                                            : AppTokens.ink,
+                                            : isCatDimmed
+                                                ? AppTokens.inkMuted
+                                                : AppTokens.ink,
                                         fontWeight: isExpanded
                                             ? FontWeight.w600
                                             : FontWeight.w400,
@@ -4553,7 +5090,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       size: 16,
                                       color: isExpanded
                                           ? AppTokens.surface
-                                          : AppTokens.inkMuted,
+                                          : isCatDimmed
+                                              ? AppTokens.inkMuted
+                                                  .withValues(alpha: 0.55)
+                                              : AppTokens.inkMuted,
                                     ),
                                   ),
                                 ],
@@ -4587,6 +5127,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           final isPinned = _pinnedVerbCategory == catNum &&
                               _pinnedVerbIndex == verbNum;
                           final isActive = isPicked || isPinned;
+                          // When a verb is picked/pinned, mute the rest of the list.
+                          final hasActiveVerb = _pickedVerbCategory != null ||
+                              _pinnedVerbCategory != null ||
+                              _pinnedCustomVerb != null;
+                          final isDimmed = hasActiveVerb && !isActive;
                           String kbSport = 'baseball';
                           try {
                             kbSport = (state as dynamic).currentSportName
@@ -4621,6 +5166,47 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               !showBaseMenu &&
                               !showTagsMenu &&
                               !showBuntMenu;
+                          // RBI / Home Run options sit on a row under the verb.
+                          final showRbiInline =
+                              showRbiMenu && !showHomeRunMenu;
+                          final showHomeRunInline = showHomeRunMenu;
+
+                          int? currentRbi;
+                          String? currentAction;
+                          String? currentHrType;
+                          bool currentBuntSingle = false;
+                          if (state != null &&
+                              (showRbiInline ||
+                                  showHomeRunInline ||
+                                  showBuntMenu ||
+                                  showHomeRunMenu ||
+                                  showCeleOnlyMenu ||
+                                  showRbiMenu)) {
+                            try {
+                              currentRbi =
+                                  (state as dynamic).currentRbiCount as int?;
+                            } catch (_) {}
+                            try {
+                              currentAction = (state as dynamic)
+                                  .currentHittingAction as String?;
+                            } catch (_) {}
+                            if (showHomeRunInline || isHomeRun) {
+                              try {
+                                currentHrType = (state as dynamic)
+                                    .currentHomeRunType as String?;
+                              } catch (_) {}
+                            }
+                            if (showBuntMenu) {
+                              try {
+                                currentBuntSingle = (state as dynamic)
+                                        .currentBuntSingle as bool? ??
+                                    false;
+                              } catch (_) {}
+                            }
+                          }
+                          final showBuntSubExtras = showBuntMenu &&
+                              (subOpts.rbiEnabled ||
+                                  subOpts.celebrationEnabled);
 
                           final allowVerbReorder = name != 'Favorites' &&
                               canonVerb.trim().isNotEmpty;
@@ -4654,88 +5240,118 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     verbNum: verbNum,
                                     isPinned: isPinned);
                               },
-                              child: InkWell(
-                                onTapDown: (TapDownDetails d) {
-                                  _verbRowTapConsumedByCmd = false;
-                                  if (HardwareKeyboard
-                                      .instance.isControlPressed) {
-                                    _verbRowTapConsumedByCmd = true;
-                                    _showVerbContextMenu(context,
-                                        d.globalPosition, verb, isFavorite,
-                                        catNum: catNum,
-                                        verbNum: verbNum,
-                                        isPinned: isPinned);
-                                    return;
-                                  }
-                                  if (HardwareKeyboard.instance.isMetaPressed) {
-                                    _verbRowTapConsumedByCmd = true;
-                                    _onVerbTapped(catNum, verbNum,
-                                        cmdHeld: true);
-                                  }
-                                },
-                                onTap: () {
-                                  if (_suppressVerbTapAfterVerbDrag) {
-                                    _suppressVerbTapAfterVerbDrag = false;
-                                    return;
-                                  }
-                                  if (_verbRowTapConsumedByCmd) {
-                                    _verbRowTapConsumedByCmd = false;
-                                    return;
-                                  }
-                                  if (!HardwareKeyboard
-                                          .instance.isMetaPressed &&
-                                      !HardwareKeyboard
-                                          .instance.isControlPressed) {
-                                    _onVerbTapped(catNum, verbNum);
-                                  }
-                                },
-                                child: AnimatedContainer(
-                                  key: allowVerbReorder
-                                      ? _verbRowKey(ci, vi)
-                                      : null,
-                                  duration: AppTokens.motionFast,
-                                  curve: AppTokens.motionCurve,
-                                  padding: const EdgeInsets.only(
-                                    left: 16,
-                                    right: 4,
-                                    top: 2,
-                                    bottom: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isPicked
-                                        ? AppTokens.accentTint
-                                        : (isHovered
-                                            ? AppTokens.canvas
-                                            : AppTokens.surface),
-                                    borderRadius: (showRbiMenu || showBuntMenu)
-                                        ? const BorderRadius.vertical(
-                                            top: Radius.circular(
-                                              AppTokens.radiusControl,
-                                            ),
-                                          )
-                                        : null,
-                                    border: Border(
-                                      top: isVerbDragOver
-                                          ? const BorderSide(
-                                              color: AppTokens.accent,
-                                              width: 2,
+                              child: AnimatedContainer(
+                                key: allowVerbReorder
+                                    ? _verbRowKey(ci, vi)
+                                    : null,
+                                duration: AppTokens.motionFast,
+                                curve: AppTokens.motionCurve,
+                                padding: EdgeInsets.only(
+                                  left: 4,
+                                  right: 4,
+                                  top: (showRbiInline ||
+                                          showHomeRunInline ||
+                                          showBuntSubExtras)
+                                      ? 3
+                                      : 2,
+                                  bottom: (showRbiInline ||
+                                          showHomeRunInline ||
+                                          showBuntSubExtras)
+                                      ? 0
+                                      : 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isPicked
+                                      ? AppTokens.accentTint
+                                      : (isHovered
+                                          ? AppTokens.canvas
+                                          : AppTokens.surface),
+                                  borderRadius: (showRbiInline ||
+                                          showHomeRunInline)
+                                      ? const BorderRadius.vertical(
+                                          top: Radius.circular(
+                                            AppTokens.radiusControl,
+                                          ),
+                                        )
+                                      : ((showBuntSubExtras ||
+                                              showCeleOnlyMenu ||
+                                              showTagsMenu ||
+                                              showBaseMenu)
+                                          ? const BorderRadius.vertical(
+                                              top: Radius.circular(
+                                                AppTokens.radiusControl,
+                                              ),
                                             )
-                                          : BorderSide.none,
-                                      bottom: BorderSide.none,
-                                    ),
+                                          : null),
+                                  border: Border(
+                                    top: isVerbDragOver
+                                        ? const BorderSide(
+                                            color: AppTokens.accent,
+                                            width: 2,
+                                          )
+                                        : BorderSide.none,
+                                    bottom: BorderSide.none,
                                   ),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      _buildVerbKeycap(
-                                        '$verbNum',
-                                        selected: isPicked,
-                                        small: true,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    _buildVerbKeycap(
+                                      '$verbNum',
+                                      selected: isPicked,
+                                      small: true,
+                                      dimmed: isDimmed,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      fit: FlexFit.loose,
+                                      child: InkWell(
+                                        onTapDown: (TapDownDetails d) {
+                                          _verbRowTapConsumedByCmd = false;
+                                          if (HardwareKeyboard
+                                              .instance.isControlPressed) {
+                                            _verbRowTapConsumedByCmd = true;
+                                            _showVerbContextMenu(
+                                                context,
+                                                d.globalPosition,
+                                                verb,
+                                                isFavorite,
+                                                catNum: catNum,
+                                                verbNum: verbNum,
+                                                isPinned: isPinned);
+                                            return;
+                                          }
+                                          if (HardwareKeyboard
+                                              .instance.isMetaPressed) {
+                                            _verbRowTapConsumedByCmd = true;
+                                            _onVerbTapped(catNum, verbNum,
+                                                cmdHeld: true);
+                                            return;
+                                          }
+                                          if (isPicked || isPinned) {
+                                            _verbRowTapConsumedByCmd = true;
+                                            _onVerbTapped(catNum, verbNum);
+                                          }
+                                        },
+                                        onTap: () {
+                                          if (_suppressVerbTapAfterVerbDrag) {
+                                            _suppressVerbTapAfterVerbDrag =
+                                                false;
+                                            return;
+                                          }
+                                          if (_verbRowTapConsumedByCmd) {
+                                            _verbRowTapConsumedByCmd = false;
+                                            return;
+                                          }
+                                          if (!HardwareKeyboard
+                                                  .instance.isMetaPressed &&
+                                              !HardwareKeyboard
+                                                  .instance.isControlPressed) {
+                                            _onVerbTapped(catNum, verbNum);
+                                          }
+                                        },
                                         child: Row(
+                                          mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Flexible(
                                               child: Text(
@@ -4745,7 +5361,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                                   height: 1.0,
                                                   color: isPicked
                                                       ? AppTokens.accentDeep
-                                                      : AppTokens.ink,
+                                                      : isDimmed
+                                                          ? AppTokens.inkMuted
+                                                          : AppTokens.ink,
                                                   fontWeight: isPicked
                                                       ? FontWeight.w600
                                                       : FontWeight.w400,
@@ -4772,7 +5390,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                                   '← Last used',
                                                   style: AppTokens.microLabel
                                                       .copyWith(
-                                                    color: AppTokens.inkMuted,
+                                                    color: isDimmed
+                                                        ? AppTokens.inkMuted
+                                                            .withValues(
+                                                                alpha: 0.55)
+                                                        : AppTokens.inkMuted,
                                                     letterSpacing: 0,
                                                   ),
                                                 ),
@@ -4780,8 +5402,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                           ],
                                         ),
                                       ),
+                                    ),
+                                    if (showBuntMenu && state != null) ...[
+                                      const SizedBox(width: 6),
+                                      _buildBuntSingleChip(
+                                        state,
+                                        currentBuntSingle,
+                                      ),
                                     ],
-                                  ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -4800,9 +5429,115 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               !showHomeRunMenu &&
                               !showBaseMenu &&
                               !showTagsMenu &&
-                              !showBuntMenu &&
+                              !showBuntSubExtras &&
                               !showCeleOnlyMenu) {
                             return wrappedVerbRow;
+                          }
+
+                          if (showRbiInline) {
+                            if (state == null) return wrappedVerbRow;
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                wrappedVerbRow,
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    3,
+                                    6,
+                                    5,
+                                  ),
+                                  decoration: const BoxDecoration(
+                                    color: AppTokens.accentTint,
+                                    borderRadius: BorderRadius.vertical(
+                                      bottom: Radius.circular(
+                                        AppTokens.radiusControl,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      if (subOpts.celebrationEnabled) ...[
+                                        _buildCelebrationEmojiButton(
+                                          state,
+                                          subOpts,
+                                          currentAction,
+                                        ),
+                                        const SizedBox(width: 3),
+                                      ],
+                                      Flexible(
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: _buildRbiLabeledControl(
+                                                state, currentRbi),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
+
+                          if (showHomeRunInline) {
+                            if (state == null) return wrappedVerbRow;
+                            return Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                wrappedVerbRow,
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    10,
+                                    3,
+                                    6,
+                                    5,
+                                  ),
+                                  decoration: const BoxDecoration(
+                                    color: AppTokens.accentTint,
+                                    borderRadius: BorderRadius.vertical(
+                                      bottom: Radius.circular(
+                                        AppTokens.radiusControl,
+                                      ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      if (subOpts.celebrationEnabled) ...[
+                                        _buildCelebrationEmojiButton(
+                                          state,
+                                          subOpts,
+                                          currentAction,
+                                        ),
+                                        const SizedBox(width: 3),
+                                      ],
+                                      Flexible(
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: _buildHomeRunTypeControl(
+                                                state, currentHrType),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
                           }
 
                           if (showTagsMenu) {
@@ -4810,6 +5545,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 (state as dynamic).currentTagsAction as String?;
                             return Column(
                               mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 wrappedVerbRow,
                                 _buildTagsSubMenuKb(state, currentTags),
@@ -4822,6 +5558,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 .currentSelectedBase as String?;
                             return Column(
                               mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 wrappedVerbRow,
                                 _buildBaseSubMenu(
@@ -4831,46 +5568,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                             );
                           }
 
-                          // Bunt / RBI / Home Run / Cele-only sub-menu
-                          final currentRbi =
-                              (state as dynamic).currentRbiCount as int?;
-                          final currentHrType = isHomeRun
-                              ? (state as dynamic).currentHomeRunType as String?
-                              : null;
-                          bool currentBuntSingle = false;
-                          if (showBuntMenu) {
-                            try {
-                              currentBuntSingle = (state as dynamic)
-                                      .currentBuntSingle as bool? ??
-                                  false;
-                            } catch (_) {}
-                          }
-                          String? currentAction;
-                          try {
-                            currentAction = (state as dynamic)
-                                .currentHittingAction as String?;
-                          } catch (_) {}
-
+                          // Bunt extras (RBI / celebration) under the title row.
+                          // Single chip lives on the Bunts title line.
                           return Column(
                             mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               wrappedVerbRow,
-                              if (showBuntMenu)
+                              if (showBuntSubExtras)
                                 _buildBuntSubMenu(
                                   state,
-                                  currentBuntSingle,
                                   currentRbi,
                                   subOpts,
-                                  contentLeft: m.submenuContentLeft,
                                 )
-                              else if (isHomeRun)
-                                _buildHomeRunTypeSubMenu(
-                                    state, currentHrType, subOpts,
-                                    contentLeft: m.submenuContentLeft)
-                              else if (subOpts.rbiEnabled)
-                                _buildRbiSubMenu(
-                                    state, verb, currentRbi, subOpts,
-                                    contentLeft: m.submenuContentLeft)
                               else if (showCeleOnlyMenu)
                                 _buildCeleOnlySubMenu(
                                     state, subOpts, currentAction,
@@ -4894,33 +5604,269 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     );
   }
 
+  /// Compact 🎉 toggle + chevron menu for celebration phrases.
+  Widget _buildCelebrationEmojiButton(
+    dynamic captionState,
+    VerbSubOptions subOpts,
+    String? currentAction,
+  ) {
+    final phrases = subOpts.reactionPhraseList;
+    if (phrases.isEmpty) return const SizedBox.shrink();
+
+    String? selected;
+    for (final p in phrases) {
+      if (currentAction != null &&
+          currentAction.toLowerCase() == p.toLowerCase()) {
+        selected = p;
+        break;
+      }
+    }
+    final isActive = selected != null;
+    final target = _lastReactionPhrase ?? subOpts.primaryReactionPhrase;
+    final showHint = _shiftHintHeld;
+
+    void applyReaction(String? value) {
+      try {
+        (captionState as dynamic).setHittingActionFromKeyboardFire(value);
+      } catch (_) {}
+      setState(() {});
+      _refreshCaptionPreviewLater();
+    }
+
+    Future<void> onArrowTap(BuildContext context) async {
+      final box = context.findRenderObject() as RenderBox?;
+      if (box == null) return;
+      final overlay =
+          Overlay.of(context).context.findRenderObject() as RenderBox;
+      final topLeft = box.localToGlobal(Offset.zero);
+      final bottomRight = box.localToGlobal(box.size.bottomRight(Offset.zero));
+      // Drop directly under the chevron; grow right from its left edge.
+      final position = RelativeRect.fromLTRB(
+        topLeft.dx,
+        bottomRight.dy,
+        0,
+        overlay.size.height - bottomRight.dy,
+      );
+
+      final picked = await showMenu<String>(
+        context: context,
+        position: position,
+        color: AppTokens.surface,
+        elevation: 4,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          side: const BorderSide(color: AppTokens.cardBorder),
+        ),
+        items: [
+          for (final phrase in phrases)
+            PopupMenuItem<String>(
+              value: phrase,
+              height: 26,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 14,
+                    child: selected != null &&
+                            selected.toLowerCase() == phrase.toLowerCase()
+                        ? const Icon(
+                            Icons.check,
+                            size: 12,
+                            color: AppTokens.accent,
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    phrase,
+                    style: AppTokens.listBody.copyWith(
+                      fontSize: 12,
+                      fontWeight: selected != null &&
+                              selected.toLowerCase() == phrase.toLowerCase()
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                      color: AppTokens.ink,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+
+      if (picked == null) return;
+      final clear =
+          selected != null && selected.toLowerCase() == picked.toLowerCase();
+      if (clear) {
+        applyReaction(null);
+      } else {
+        _lastReactionPhrase = picked;
+        applyReaction(picked);
+      }
+    }
+
+    final button = SizedBox(
+      height: _kbInlineReactionHeight,
+      child: AnimatedContainer(
+        duration: AppTokens.motionFast,
+        curve: AppTokens.motionCurve,
+        decoration: BoxDecoration(
+          color: isActive ? AppTokens.accentTint : AppTokens.surface,
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          border: Border.all(
+            color: showHint
+                ? AppTokens.accent
+                : (isActive ? AppTokens.accent : AppTokens.cardBorder),
+            width: showHint ? 1.5 : 1,
+          ),
+          boxShadow: showHint
+              ? [
+                  BoxShadow(
+                    color: AppTokens.accent.withValues(alpha: 0.35),
+                    blurRadius: 4,
+                    spreadRadius: 0.5,
+                  ),
+                ]
+              : null,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl - 1),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Material(
+                color: AppTokens.surface.withValues(alpha: 0),
+                child: InkWell(
+                  onTap: () {
+                    if (isActive) {
+                      applyReaction(null);
+                    } else {
+                      _lastReactionPhrase = target;
+                      applyReaction(target);
+                    }
+                  },
+                  child: SizedBox(
+                    width: _kbInlineReactionHeight,
+                    height: _kbInlineReactionHeight,
+                    child: Center(
+                      // 🎉's ink sits left in its em-box; shift right to look centered.
+                      child: Transform.translate(
+                        offset: const Offset(2.5, -0.5),
+                        child: const Text(
+                          '🎉',
+                          style: TextStyle(fontSize: 16, height: 1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: _kbInlineReactionHeight,
+                color: AppTokens.cardBorder,
+              ),
+              Builder(
+                builder: (arrowCtx) => Material(
+                  color: AppTokens.surface.withValues(alpha: 0),
+                  child: InkWell(
+                    onTap: () => onArrowTap(arrowCtx),
+                    child: SizedBox(
+                      width: 14,
+                      height: _kbInlineReactionHeight,
+                      child: Icon(
+                        Icons.keyboard_arrow_down,
+                        size: 14,
+                        color:
+                            isActive ? AppTokens.accent : AppTokens.inkMuted,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (!showHint) return button;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        button,
+        Positioned(
+          top: -7,
+          right: -5,
+          child: _buildSubOptionShortcutBadge('C'),
+        ),
+      ],
+    );
+  }
+
+  /// Tiny keycap badge shown while Shift is held on verb sub-option chips.
+  Widget _buildSubOptionShortcutBadge(String label) {
+    return Container(
+      height: 14,
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: AppTokens.accent,
+        borderRadius: BorderRadius.circular(3),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.18),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: Text(
+        label,
+        style: AppTokens.mono.copyWith(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: AppTokens.surface,
+          height: 1,
+        ),
+      ),
+    );
+  }
+
   Widget _buildRbiSegmentedControl(
     dynamic captionState,
     int? currentRbi,
   ) {
     const values = [1, 2, 3];
+    final showHint = _shiftHintHeld;
 
     Widget segment(int rbi) {
       final selected = currentRbi == rbi;
-      return Expanded(
-        child: Material(
-          color: selected ? AppTokens.accent : AppTokens.surface,
-          child: InkWell(
-            onTap: () {
-              try {
-                (captionState as dynamic)
-                    .setRbiFromKeyboardFire(selected ? null : rbi);
-              } catch (_) {}
-              setState(() {});
-              _refreshCaptionPreviewLater();
-            },
+      return Material(
+        color: selected ? AppTokens.accent : AppTokens.surface,
+        child: InkWell(
+          onTap: () {
+            try {
+              (captionState as dynamic)
+                  .setRbiFromKeyboardFire(selected ? null : rbi);
+            } catch (_) {}
+            setState(() {});
+            _refreshCaptionPreviewLater();
+          },
+          child: SizedBox(
+            width: _kbRbiSegmentWidth,
+            height: _kbInlineReactionHeight,
             child: Center(
               child: Text(
                 '$rbi',
                 style: AppTokens.mono.copyWith(
-                  fontSize: 10,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                  color: selected ? AppTokens.surface : AppTokens.inkSecondary,
+                  fontSize: showHint ? 11 : 10,
+                  fontWeight:
+                      selected || showHint ? FontWeight.w700 : FontWeight.w400,
+                  color: selected
+                      ? AppTokens.surface
+                      : (showHint
+                          ? AppTokens.accentDeep
+                          : AppTokens.inkSecondary),
                   height: 1,
                 ),
               ),
@@ -4931,14 +5877,15 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
 
     return SizedBox(
-      height: 24,
+      height: _kbInlineReactionHeight,
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           for (int i = 0; i < values.length; i++) ...[
             if (i > 0)
               Container(
                 width: 1,
-                height: 24,
+                height: _kbInlineReactionHeight,
                 color: AppTokens.cardBorder,
               ),
             segment(values[i]),
@@ -4952,39 +5899,194 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     dynamic captionState,
     int? currentRbi,
   ) {
-    return Container(
-      width: _reactionDropdownWidth,
-      height: 24,
+    final showHint = _shiftHintHeld;
+    return SizedBox(
+      height: _kbInlineReactionHeight,
+      child: AnimatedContainer(
+        duration: AppTokens.motionFast,
+        decoration: BoxDecoration(
+          color: AppTokens.surface,
+          border: Border.all(
+            color: showHint ? AppTokens.accent : AppTokens.cardBorder,
+            width: showHint ? 1.5 : 1,
+          ),
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+          boxShadow: showHint
+              ? [
+                  BoxShadow(
+                    color: AppTokens.accent.withValues(alpha: 0.28),
+                    blurRadius: 4,
+                    spreadRadius: 0.5,
+                  ),
+                ]
+              : null,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppTokens.radiusControl - 1),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(
+                  'RBI',
+                  style: AppTokens.microLabel.copyWith(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: showHint
+                        ? AppTokens.accentDeep
+                        : AppTokens.inkSecondary,
+                    letterSpacing: 0,
+                    height: 1,
+                  ),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: _kbInlineReactionHeight,
+                color: AppTokens.cardBorder,
+              ),
+              _buildRbiSegmentedControl(captionState, currentRbi),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Compact Home Run type segments (1R / 2R / 3R / GS), matching RBI control height.
+  Widget _buildHomeRunTypeControl(
+    dynamic captionState,
+    String? currentType,
+  ) {
+    const types = ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam'];
+    final showHint = _shiftHintHeld;
+
+    Widget segment(String type, int shortcutNum) {
+      final selected = currentType == type;
+      final label = shortHomeRunTypeLabel(type);
+      final body = Material(
+        color: selected ? AppTokens.accent : AppTokens.surface,
+        child: InkWell(
+          onTap: () {
+            try {
+              (captionState as dynamic).setHomeRunTypeFromKeyboardFire(
+                  selected ? null : type);
+            } catch (_) {}
+            setState(() {});
+            _refreshCaptionPreviewLater();
+          },
+          child: SizedBox(
+            width: _kbHomeRunSegmentWidth,
+            height: _kbInlineReactionHeight,
+            child: Center(
+              child: Text(
+                label,
+                style: AppTokens.mono.copyWith(
+                  fontSize: 10,
+                  fontWeight:
+                      selected || showHint ? FontWeight.w600 : FontWeight.w400,
+                  color: selected
+                      ? AppTokens.surface
+                      : (showHint
+                          ? AppTokens.accentDeep
+                          : AppTokens.inkSecondary),
+                  height: 1,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      if (!showHint) return body;
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          body,
+          Positioned(
+            top: -7,
+            right: -2,
+            child: _buildSubOptionShortcutBadge('$shortcutNum'),
+          ),
+        ],
+      );
+    }
+
+    return AnimatedContainer(
+      duration: AppTokens.motionFast,
+      height: showHint ? _kbInlineReactionHeight + 4 : _kbInlineReactionHeight,
+      padding: showHint ? const EdgeInsets.only(top: 4) : EdgeInsets.zero,
       decoration: BoxDecoration(
         color: AppTokens.surface,
-        border: Border.all(color: AppTokens.cardBorder),
+        border: Border.all(
+          color: showHint ? AppTokens.accent : AppTokens.cardBorder,
+          width: showHint ? 1.5 : 1,
+        ),
         borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        boxShadow: showHint
+            ? [
+                BoxShadow(
+                  color: AppTokens.accent.withValues(alpha: 0.28),
+                  blurRadius: 4,
+                  spreadRadius: 0.5,
+                ),
+              ]
+            : null,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppTokens.radiusControl - 1),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 7),
-              child: Text(
-                'RBI',
-                style: AppTokens.microLabel.copyWith(
-                  color: AppTokens.inkMuted,
-                  letterSpacing: 0,
-                  height: 1,
+            for (int i = 0; i < types.length; i++) ...[
+              if (i > 0)
+                Container(
+                  width: 1,
+                  height: _kbInlineReactionHeight,
+                  color: AppTokens.cardBorder,
                 ),
-              ),
-            ),
-            Container(
-              width: 1,
-              height: 24,
-              color: AppTokens.cardBorder,
-            ),
-            Expanded(
-              child: _buildRbiSegmentedControl(captionState, currentRbi),
-            ),
+              segment(types[i], i + 1),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBuntSingleChip(dynamic captionState, bool buntSingle) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+        onTap: () {
+          try {
+            (captionState as dynamic)
+                .setBuntSingleFromKeyboardFire(!buntSingle);
+          } catch (_) {}
+          setState(() {});
+          _refreshCaptionPreviewLater();
+        },
+        child: Container(
+          height: _kbInlineReactionHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: buntSingle ? AppTokens.accentTint : AppTokens.surface,
+            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+            border: Border.all(
+              color: buntSingle ? AppTokens.accent : AppTokens.cardBorder,
+            ),
+          ),
+          child: Text(
+            'Single',
+            style: AppTokens.microLabel.copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0,
+              height: 1,
+              color: buntSingle ? AppTokens.accentDeep : AppTokens.inkSecondary,
+            ),
+          ),
         ),
       ),
     );
@@ -4992,220 +6094,44 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   Widget _buildBuntSubMenu(
     dynamic captionState,
-    bool buntSingle,
     int? currentRbi,
-    VerbSubOptions subOpts, {
-    double contentLeft = _kbSubmenuContentLeft,
-  }) {
+    VerbSubOptions subOpts,
+  ) {
     String? currentAction;
     try {
       currentAction = (captionState as dynamic).currentHittingAction as String?;
     } catch (_) {}
     return Container(
-      padding: EdgeInsets.only(
-        left: contentLeft,
-        right: 7,
-        top: 3,
-        bottom: 5,
-      ),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 3, 6, 5),
       decoration: const BoxDecoration(
         color: AppTokens.accentTint,
         borderRadius: BorderRadius.vertical(
           bottom: Radius.circular(AppTokens.radiusControl),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(right: 3),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(_kbSubmenuChipRadius),
-                  onTap: () {
-                    try {
-                      (captionState as dynamic)
-                          .setBuntSingleFromKeyboardFire(!buntSingle);
-                    } catch (_) {}
-                    setState(() {});
-                    _refreshCaptionPreviewLater();
-                  },
-                  child: Container(
-                    height: _kbSubmenuChipHeight,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    alignment: Alignment.center,
-                    decoration: buntSingle
-                        ? floTealSelectedDecoration(
-                            borderRadius:
-                                BorderRadius.circular(_kbSubmenuChipRadius),
-                          )
-                        : BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(_kbSubmenuChipRadius),
-                            border: Border.all(color: Colors.grey.shade300),
-                          ),
-                    child: Text(
-                      'Single',
-                      style: TextStyle(
-                        fontSize: _kbSubmenuChipFontSize,
-                        fontWeight: FontWeight.w600,
-                        height: 1.0,
-                        color: buntSingle ? Colors.white : Colors.grey.shade800,
-                      ),
-                    ),
-                  ),
+          if (subOpts.celebrationEnabled) ...[
+            _buildCelebrationEmojiButton(
+              captionState,
+              subOpts,
+              currentAction,
+            ),
+            if (subOpts.rbiEnabled) const SizedBox(width: 3),
+          ],
+          if (subOpts.rbiEnabled)
+            Flexible(
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: _buildRbiLabeledControl(captionState, currentRbi),
                 ),
               ),
-              _buildRbiLabeledControl(captionState, currentRbi),
-            ],
-          ),
-          if (subOpts.celebrationEnabled) ...[
-            const SizedBox(height: 4),
-            _buildReactionDropdown(
-              captionState,
-              subOpts,
-              currentAction,
-              inline: true,
-              width: _reactionDropdownWidth,
             ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRbiSubMenu(
-    dynamic captionState,
-    String verb,
-    int? currentRbi,
-    VerbSubOptions subOpts, {
-    double contentLeft = _kbSubmenuContentLeft,
-  }) {
-    String? currentAction;
-    try {
-      currentAction = (captionState as dynamic).currentHittingAction as String?;
-    } catch (_) {}
-    return Container(
-      padding: EdgeInsets.only(
-        left: contentLeft,
-        right: 7,
-        top: 3,
-        bottom: 5,
-      ),
-      decoration: const BoxDecoration(
-        color: AppTokens.accentTint,
-        borderRadius: BorderRadius.vertical(
-          bottom: Radius.circular(AppTokens.radiusControl),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildRbiLabeledControl(captionState, currentRbi),
-          if (subOpts.celebrationEnabled) ...[
-            const SizedBox(height: 4),
-            _buildReactionDropdown(
-              captionState,
-              subOpts,
-              currentAction,
-              inline: true,
-              width: _reactionDropdownWidth,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHomeRunTypeSubMenu(
-    dynamic captionState,
-    String? currentType,
-    VerbSubOptions subOpts, {
-    double contentLeft = _kbSubmenuContentLeft,
-  }) {
-    const types = ['Solo', 'Two-Run', 'Three-Run', 'Grand Slam'];
-    String? currentAction;
-    try {
-      currentAction = (captionState as dynamic).currentHittingAction as String?;
-    } catch (_) {}
-    return Container(
-      padding: EdgeInsets.only(left: contentLeft, right: 8, top: 3, bottom: 4),
-      decoration: BoxDecoration(
-        color: kFloTealSubmenuFill,
-        border: Border(
-          bottom: BorderSide(color: Colors.grey.shade200, width: 0.5),
-          left: const BorderSide(color: kFloTealLight, width: 3),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              ...types.map((type) {
-                final isSelected = currentType == type;
-                final label = shortHomeRunTypeLabel(type);
-                return Padding(
-                  padding: const EdgeInsets.only(right: 3),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(_kbSubmenuChipRadius),
-                    onTap: () {
-                      try {
-                        (captionState as dynamic)
-                            .setHomeRunTypeFromKeyboardFire(
-                                isSelected ? null : type);
-                      } catch (_) {}
-                      setState(() {});
-                      _refreshCaptionPreviewLater();
-                    },
-                    child: Container(
-                      width: _kbSubmenuChipWidth,
-                      height: _kbSubmenuChipHeight,
-                      alignment: Alignment.center,
-                      decoration: isSelected
-                          ? floTealSelectedDecoration(
-                              borderRadius:
-                                  BorderRadius.circular(_kbSubmenuChipRadius),
-                            )
-                          : BoxDecoration(
-                              color: Colors.white,
-                              borderRadius:
-                                  BorderRadius.circular(_kbSubmenuChipRadius),
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: _kbSubmenuChipFontSize,
-                          fontWeight: FontWeight.w600,
-                          height: 1.0,
-                          color:
-                              isSelected ? Colors.white : Colors.grey.shade800,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }),
-              if (subOpts.celebrationEnabled) ...[
-                const SizedBox(width: 6),
-                Expanded(
-                  child: _buildReactionDropdown(
-                    captionState,
-                    subOpts,
-                    currentAction,
-                    inline: true,
-                  ),
-                ),
-              ],
-            ],
-          ),
         ],
       ),
     );
@@ -5218,6 +6144,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     double contentLeft = _kbSubmenuContentLeft,
   }) {
     return Container(
+      width: double.infinity,
       padding: EdgeInsets.only(left: contentLeft, right: 8, top: 3, bottom: 4),
       decoration: BoxDecoration(
         color: kFloTealSubmenuFill,
@@ -5233,19 +6160,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     );
   }
 
-  /// Wide enough for the full reaction label, leading icon, and chevron.
-  static const double _reactionDropdownWidth = 180;
+  /// Wide enough for the compact reaction label, leading icon, and chevron.
+  static const double _reactionDropdownWidth = 148;
 
   /// Verb label indent: left pad (7) + drag icon (11+3) + number column (24).
-  /// Submenu padding = indent minus the submenu's 3px teal left border so RBI /
-  /// reaction controls line up under the verb name (e.g. "Home Run").
   static const double _kbVerbLabelIndent = 7 + 11 + 3 + 24;
-  static const double _kbSubmenuContentLeft = _kbVerbLabelIndent - 40;
+  static const double _kbSubmenuContentLeft = 0;
   static const double _kbSubmenuChipHeight = 18;
   static const double _kbSubmenuChipFontSize = 9.5;
   static const double _kbSubmenuChipRadius = 3;
   static const double _kbSubmenuChipWidth = 20;
   static const double _kbInlineReactionHeight = 24;
+  static const double _kbRbiSegmentWidth = 28;
+  static const double _kbHomeRunSegmentWidth = 30;
 
   /// Full label for the reaction dropdown; sizing is handled by its parent.
   String _reactionChipLabel(String phrase) {
@@ -5390,16 +6317,16 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 child: InkWell(
                   onTap: onMainTap,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 7),
+                    padding: EdgeInsets.symmetric(horizontal: inline ? 5 : 7),
                     child: Row(
                       children: [
                         Icon(
                           Icons.celebration_outlined,
-                          size: 13,
+                          size: inline ? 11 : 13,
                           color:
                               isActive ? AppTokens.accent : AppTokens.inkMuted,
                         ),
-                        const SizedBox(width: 5),
+                        SizedBox(width: inline ? 4 : 5),
                         Expanded(
                           child: Align(
                             alignment: Alignment.centerLeft,
@@ -5410,6 +6337,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 triggerLabel,
                                 maxLines: 1,
                                 style: AppTokens.listBody.copyWith(
+                                  fontSize: inline ? 11 : null,
                                   color: isActive
                                       ? AppTokens.accentDeep
                                       : AppTokens.ink,
@@ -5429,7 +6357,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               ),
             ),
             Container(
-              width: 29,
+              width: inline ? 22 : 29,
               decoration: const BoxDecoration(
                 border: Border(
                   left: BorderSide(color: AppTokens.cardBorder),
@@ -5443,7 +6371,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     child: Center(
                       child: Icon(
                         Icons.keyboard_arrow_down,
-                        size: 15,
+                        size: inline ? 13 : 15,
                         color: isActive
                             ? AppTokens.accent
                             : AppTokens.inkMuted,
@@ -5626,6 +6554,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     }
 
     return Container(
+      width: double.infinity,
       padding: EdgeInsets.only(left: contentLeft, right: 8, top: 3, bottom: 4),
       decoration: BoxDecoration(
         color: kFloTealSubmenuFill,
@@ -5848,6 +6777,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     if (HardwareKeyboard.instance.isMetaPressed) {
                       _verbRowTapConsumedByCmd = true;
                       _onVerbTapped(selectedCatNum!, verbNum, cmdHeld: true);
+                      return;
+                    }
+                    if (isPicked) {
+                      _verbRowTapConsumedByCmd = true;
+                      _onVerbTapped(selectedCatNum!, verbNum);
                     }
                   },
                   onTap: () {
@@ -7164,11 +8098,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             : null,
       ),
       child: Shortcuts.manager(
-        manager: _FirebarShortcutManager(
-            shortcuts: const <ShortcutActivator, Intent>{
-              SingleActivator(LogicalKeyboardKey.keyH): _FirebarHIntent(),
-              SingleActivator(LogicalKeyboardKey.keyV): _FirebarVIntent(),
-            }),
+        manager: _FirebarShortcutManager(shortcuts: _kFirebarShortcuts),
         child: Actions(
           actions: <Type, Action<Intent>>{
             _FirebarHIntent: CallbackAction<_FirebarHIntent>(
@@ -7589,4 +8519,25 @@ class _KbCatVerbMetrics {
   final double verbIcon;
   final double verbNumW;
   final double submenuContentLeft;
+}
+
+/// Keeps stray macOS Option+digit characters (¡™£¢∞…) out of the search bars.
+class _MacOptionCharStripper extends TextInputFormatter {
+  const _MacOptionCharStripper();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var text = newValue.text;
+    for (final char in _kMacOptionDigitChars.keys) {
+      text = text.replaceAll(char, '');
+    }
+    if (text == newValue.text) return newValue;
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
 }

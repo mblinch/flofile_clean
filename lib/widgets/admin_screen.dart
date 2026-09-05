@@ -555,7 +555,6 @@ class _AdminScreenState extends State<AdminScreen> {
           usePluralPhrase: meta?['usePluralPhrase'] as bool? ?? true,
           category: meta?['category']?.toString() ?? category,
           wantsOpponent: meta?['wantsOpponent'] == true,
-          omitAgainst: meta?['omitAgainst'] == true,
           keywords: ((meta?['keywords'] as List?) ?? [])
               .map((e) => e.toString())
               .join(', '),
@@ -1193,7 +1192,7 @@ class _AdminScreenState extends State<AdminScreen> {
               label: _busy ? 'Publishing…' : 'Publish $_verbSport',
               fontSize: 11,
               icon: Icons.cloud_upload_outlined,
-              isTealGradient: true,
+              isAdmin: true,
               onPressed: _busy ? null : () => _publishVerbs(),
             ),
             const SizedBox(width: 8),
@@ -1201,6 +1200,7 @@ class _AdminScreenState extends State<AdminScreen> {
               label: 'Publish all sports',
               fontSize: 11,
               icon: Icons.cloud_upload_outlined,
+              isAdmin: true,
               onPressed: _busy ? null : () => _publishVerbs(allSports: true),
             ),
           ] else ...[
@@ -1210,7 +1210,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   : 'Publish ${WireIptcSpecs.factoryWireLabel(_captionWire)}',
               fontSize: 11,
               icon: Icons.cloud_upload_outlined,
-              isTealGradient: true,
+              isAdmin: true,
               onPressed: _busy ? null : () => _publishCaptions(),
             ),
             const SizedBox(width: 8),
@@ -1218,6 +1218,7 @@ class _AdminScreenState extends State<AdminScreen> {
               label: 'Publish all wires',
               fontSize: 11,
               icon: Icons.cloud_upload_outlined,
+              isAdmin: true,
               onPressed: _busy ? null : () => _publishCaptions(allWires: true),
             ),
             const SizedBox(width: 8),
@@ -1225,6 +1226,7 @@ class _AdminScreenState extends State<AdminScreen> {
               label: 'Publish style library',
               fontSize: 11,
               icon: Icons.style_outlined,
+              isAdmin: true,
               onPressed: _busy ? null : _publishCaptionStyleLibrary,
             ),
           ],
@@ -1456,7 +1458,7 @@ class _AdminScreenState extends State<AdminScreen> {
                 label: _compareRunning ? 'Comparing…' : 'Compare rosters',
                 fontSize: 11,
                 icon: Icons.compare_arrows,
-                isTealGradient: true,
+                isAdmin: true,
                 onPressed: _compareRunning || _compareTeamNames.isEmpty
                     ? null
                     : _runRosterCompare,
@@ -1671,7 +1673,6 @@ class _AdminVerbRow {
     this.usePluralPhrase = true,
     required this.category,
     this.wantsOpponent = true,
-    this.omitAgainst = false,
     this.keywords = '',
     this.subOptions = const VerbSubOptions(),
     this.sport = 'baseball',
@@ -1685,7 +1686,6 @@ class _AdminVerbRow {
   final bool usePluralPhrase;
   final String category;
   final bool wantsOpponent;
-  final bool omitAgainst;
   final String keywords;
   final VerbSubOptions subOptions;
   final String sport;
@@ -1697,7 +1697,6 @@ class _AdminVerbRow {
         'usePluralPhrase': usePluralPhrase,
         'category': category,
         'wantsOpponent': wantsOpponent,
-        'omitAgainst': omitAgainst,
         'isCustom': false,
         if (keywords.trim().isNotEmpty)
           'keywords': keywords
@@ -1741,7 +1740,6 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
   late final TextEditingController _keywords;
   late String _category;
   late bool _wantsOpponent;
-  late bool _omitAgainst;
   late bool _usePluralPhrase;
   late VerbSubOptions _subOptions;
 
@@ -1754,7 +1752,6 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
     _keywords = TextEditingController(text: widget.initial.keywords);
     _category = widget.initial.category;
     _wantsOpponent = widget.initial.wantsOpponent;
-    _omitAgainst = widget.initial.omitAgainst;
     _usePluralPhrase = widget.initial.usePluralPhrase;
     _subOptions = widget.initial.subOptions;
   }
@@ -1777,7 +1774,6 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
         usePluralPhrase: _usePluralPhrase,
         category: _category,
         wantsOpponent: _wantsOpponent,
-        omitAgainst: _omitAgainst,
         keywords: _keywords.text.trim(),
         subOptions: _subOptions,
         sport: widget.sport,
@@ -1911,21 +1907,10 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
                         maxLines: 2,
                         bottomGap: 8,
                       ),
-                      Row(
-                        children: [
-                          Expanded(child: _captionFlagRow(
-                            value: _wantsOpponent,
-                            label: 'Wants opponent',
-                            onChanged: (v) =>
-                                setState(() => _wantsOpponent = v),
-                          )),
-                          const SizedBox(width: 12),
-                          Expanded(child: _captionFlagRow(
-                            value: _omitAgainst,
-                            label: 'Omit "against"',
-                            onChanged: (v) => setState(() => _omitAgainst = v),
-                          )),
-                        ],
+                      _captionFlagRow(
+                        value: _wantsOpponent,
+                        label: 'Wants opponent',
+                        onChanged: (v) => setState(() => _wantsOpponent = v),
                       ),
                     ],
                   ),
@@ -1964,6 +1949,7 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
                           ? 'Update Default · Admin'
                           : 'Set as Default · Admin',
                       fontSize: 11,
+                      isAdmin: true,
                       onPressed: () => _popResult(recordAsDefault: true),
                     ),
                   ),

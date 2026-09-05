@@ -2318,6 +2318,79 @@ class PreferencesService {
     }
   }
 
+  /// Publish one verb's wording into Firebase app originals for [sport].
+  ///
+  /// Merges into the existing published sport bundle (or the local export if
+  /// none is cached). Does not overwrite other users' personal prefs — they
+  /// only pick this up on restore / first seed.
+  Future<void> publishVerbAsAppDefault({
+    required String sport,
+    required String verbKey,
+    required Map<String, dynamic> override,
+  }) async {
+    final normalized = sport.toLowerCase().trim();
+    await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(
+      forceNetwork: true,
+    );
+    final cached =
+        await AppDefaultsFirestoreService.getCachedSportVerbSettings(normalized);
+    final localExport = await exportVerbSettingsBySport();
+    final local = localExport[normalized] ?? <String, dynamic>{};
+    // Prefer published app originals as the base so we only change this verb.
+    final bundle = Map<String, dynamic>.from(
+      (cached != null && cached.isNotEmpty) ? cached : local,
+    );
+    for (final key in local.keys) {
+      if (!bundle.containsKey(key) || bundle[key] == null) {
+        bundle[key] = local[key];
+      }
+    }
+
+    final overrides = Map<String, dynamic>.from(
+      (bundle['verbOverrides'] as Map?) ??
+          (local['verbOverrides'] as Map?) ??
+          const {},
+    );
+    overrides[verbKey] = Map<String, dynamic>.from(override);
+    bundle['verbOverrides'] = overrides;
+
+    final wordingDefaults = Map<String, dynamic>.from(
+      (bundle['verbWordingDefaults'] as Map?) ??
+          (local['verbWordingDefaults'] as Map?) ??
+          const {},
+    );
+    wordingDefaults[verbKey] = Map<String, dynamic>.from(override);
+    bundle['verbWordingDefaults'] = wordingDefaults;
+
+    final singular = (override['verbPhrase'] as String?)?.trim();
+    if (singular != null && singular.isNotEmpty) {
+      final wordings = Map<String, dynamic>.from(
+        (bundle['customVerbWordings'] as Map?) ??
+            (local['customVerbWordings'] as Map?) ??
+            const {},
+      );
+      wordings[verbKey] = singular;
+      bundle['customVerbWordings'] = wordings;
+    }
+
+    // Prefer keeping catalog structure fields from local when cache was sparse.
+    for (final key in [
+      'categoryOrder',
+      'verbOrder',
+      'favoriteVerbs',
+      'favoriteTeams',
+      'customVerbs',
+      'deletedVerbs',
+    ]) {
+      if (!bundle.containsKey(key) && local.containsKey(key)) {
+        bundle[key] = local[key];
+      }
+    }
+
+    await AppDefaultsFirestoreService.publishVerbsForSport(normalized, bundle);
+    await setSportDefault(normalized, bundle);
+  }
+
   /// Per-sport verb bundle for admin publish (matches export format).
   Future<Map<String, Map<String, dynamic>>> exportVerbSettingsBySport() async {
     final out = <String, Map<String, dynamic>>{};

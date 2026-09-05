@@ -97,33 +97,56 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
             ? 'Optional RBI counts for this verb (baseball).'
             : 'Optional celebration wording for this verb.';
 
+    final isHomeRun = widget.verbLabel == 'Home Run';
     final rbiBlock = showRbi
         ? _optionBlock(
-            label: 'RBI',
+            label: isHomeRun ? 'Home run' : 'RBI',
             enabled: widget.value.rbiEnabled,
             defaultOn: defaults.rbiEnabled,
             onEnabledChanged: (v) => _patch((o) => o.copyWith(rbiEnabled: v)),
             children: [
-              AppDialogLabeledDropdown<RbiCaptionStyle>(
-                label: 'RBI style',
-                value: widget.value.rbiStyle,
-                items: RbiCaptionStyle.values
-                    .map(
-                      (s) => DropdownMenuItem<RbiCaptionStyle>(
-                        value: s,
-                        child: Text(s.menuLabel),
-                      ),
-                    )
-                    .toList(),
-                onChanged: widget.value.rbiEnabled
-                    ? (v) {
-                        if (v != null) {
-                          _patch((o) => o.copyWith(rbiStyle: v));
+              if (isHomeRun)
+                AppDialogLabeledDropdown<HomeRunCaptionStyle>(
+                  label: 'Style — default for all run situations',
+                  value: widget.value.homeRunStyle,
+                  items: HomeRunCaptionStyle.values
+                      .map(
+                        (s) => DropdownMenuItem<HomeRunCaptionStyle>(
+                          value: s,
+                          child: Text(s.menuLabel),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: widget.value.rbiEnabled
+                      ? (v) {
+                          if (v != null) {
+                            _patch((o) => o.copyWith(homeRunStyle: v));
+                          }
                         }
-                      }
-                    : null,
-                bottomGap: 0,
-              ),
+                      : null,
+                  bottomGap: 0,
+                )
+              else
+                AppDialogLabeledDropdown<RbiCaptionStyle>(
+                  label: 'RBI style — default for all RBI situations',
+                  value: widget.value.rbiStyle,
+                  items: RbiCaptionStyle.values
+                      .map(
+                        (s) => DropdownMenuItem<RbiCaptionStyle>(
+                          value: s,
+                          child: Text(s.menuLabel),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: widget.value.rbiEnabled
+                      ? (v) {
+                          if (v != null) {
+                            _patch((o) => o.copyWith(rbiStyle: v));
+                          }
+                        }
+                      : null,
+                  bottomGap: 0,
+                ),
             ],
           )
         : null;

@@ -1484,13 +1484,24 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   }
 
   /// Cmd+S: save current image and advance to the next one.
+  /// Cmd/Ctrl+S or Shift+Enter: save caption IPTC, then advance to the next image.
   bool _handleSaveAndNextShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
-    if (event.logicalKey != LogicalKeyboardKey.keyS) return false;
     final k = HardwareKeyboard.instance;
-    if (!(k.isMetaPressed || k.isControlPressed) || k.isShiftPressed) {
-      return false;
-    }
+    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    final isS = event.logicalKey == LogicalKeyboardKey.keyS;
+
+    final shiftEnter = isEnter &&
+        k.isShiftPressed &&
+        !k.isMetaPressed &&
+        !k.isControlPressed &&
+        !k.isAltPressed;
+    final cmdS = isS &&
+        (k.isMetaPressed || k.isControlPressed) &&
+        !k.isShiftPressed;
+    if (!shiftEnter && !cmdS) return false;
+
     _saveIptcMetadataInternal().then((r) {
       if (r.cancelled || !mounted) return;
       _clearPopupSelections();
@@ -1513,12 +1524,13 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     return true;
   }
 
-  /// Cmd+Enter: save, FTP upload, then advance to the next image.
+  /// Shift+Cmd/Ctrl+Enter: save, FTP upload, then advance to the next image.
   bool _handleSaveFtpNextShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     if (event.logicalKey != LogicalKeyboardKey.enter &&
         event.logicalKey != LogicalKeyboardKey.numpadEnter) return false;
     final k = HardwareKeyboard.instance;
+    if (!k.isShiftPressed) return false;
     if (!(k.isMetaPressed || k.isControlPressed)) return false;
     _saveFtpAndNext();
     return true;
@@ -1538,7 +1550,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       final dynamic cs = _captionFieldsKey2.currentState;
       if (cs != null) await cs.triggerFtp();
     } catch (e) {
-      print('FTP error in Cmd+Enter: $e');
+      print('FTP error in Shift+Cmd+Enter: $e');
     }
     if (!mounted) return;
 
@@ -4363,7 +4375,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
               shortcuts: const <ShortcutActivator, Intent>{
                 SingleActivator(LogicalKeyboardKey.keyV,
                     meta: true, shift: true): _PastePreviousCaptionIntent(),
-                SingleActivator(LogicalKeyboardKey.enter, meta: true):
+                SingleActivator(LogicalKeyboardKey.enter, shift: true):
                     _SaveAndNextIntent(),
                 SingleActivator(LogicalKeyboardKey.arrowLeft):
                     _PreviousImageIntent(),

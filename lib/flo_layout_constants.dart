@@ -133,6 +133,23 @@ const LinearGradient kFloTealGradientVertical = LinearGradient(
   colors: [kFloTealLight, kFloTealDark],
 );
 
+/// Admin-only control chrome (gold).
+const Color kFloAdminGoldLight = Color(0xFFF5E08A);
+const Color kFloAdminGoldDark = Color(0xFFB8922A);
+const Color kFloAdminGoldText = Color(0xFF3D3208);
+
+const LinearGradient kFloAdminGoldGradientHorizontal = LinearGradient(
+  begin: Alignment.centerLeft,
+  end: Alignment.centerRight,
+  colors: [kFloAdminGoldLight, kFloAdminGoldDark],
+);
+
+const LinearGradient kFloAdminGoldGradientVertical = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [kFloAdminGoldLight, kFloAdminGoldDark],
+);
+
 /// Solid or gradient decoration for a selected toggle chip / inning cell.
 BoxDecoration floTealSelectedDecoration({
   BorderRadius? borderRadius,

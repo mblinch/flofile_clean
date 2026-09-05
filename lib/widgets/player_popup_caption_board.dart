@@ -2697,7 +2697,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         text: effectiveVerb.pluralPhrase ?? effectiveVerb.verbPhrase);
     bool usePluralPhrase = effectiveVerb.usePluralPhrase;
     bool wantsOpponent = effectiveVerb.wantsOpponent;
-    bool omitAgainst = effectiveVerb.omitAgainst;
     bool removePlayerFromExample = false;
     String selectedCategory =
         targetCategory ?? verb.category ?? _verbCategories.keys.first;
@@ -2723,12 +2722,11 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         : null;
 
     // Helper to build example caption
-    // Uses omitAgainst setting to conditionally include "against"
     // Uses removePlayerFromExample to conditionally remove opposing player
     String buildExampleCaption(String verbPhrase, int playerCount) {
       final player1Name = homePlayer1?.fullName ?? 'Player One';
       final player2Name = homePlayer2?.fullName ?? 'Player Two';
-      final againstText = omitAgainst ? '' : ' against';
+      const againstText = ' against';
 
       String subjects(int count) => count == 1
           ? '$player1Name #${homePlayer1?.jerseyNumber ?? '00'} of the $homeTeamName'
@@ -2881,30 +2879,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             AppCompactCheckbox(
-                              value: omitAgainst,
-                              accentColor: kFloTealLight,
-                              onChanged: (value) {
-                                setDialogState(() => omitAgainst = value);
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Omit "against" (e.g., "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} player" instead of "${singularController.text.isNotEmpty ? singularController.text : (verb.verbPhrase.isNotEmpty ? verb.verbPhrase : verb.label.toLowerCase())} against player")',
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 11,
-                                  color: Colors.grey.shade700,
-                                ),
-                                softWrap: true,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AppCompactCheckbox(
                               value: removePlayerFromExample,
                               accentColor: kFloTealLight,
                               onChanged: (value) {
@@ -2966,7 +2940,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                     : pluralController.text,
                                 usePluralPhrase,
                                 wantsOpponent,
-                                omitAgainst,
                                 parseVerbKeywordsField(
                                     keywordsController.text),
                                 selectedCategory,
@@ -2994,7 +2967,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     String? newPlural,
     bool usePluralPhrase,
     bool wantsOpponent,
-    bool omitAgainst,
     List<String> newKeywords,
     String category,
   ) async {
@@ -3005,7 +2977,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     print('DEBUG: newLabel = "$newLabel"');
     print('DEBUG: newSingular = "$newSingular"');
     print('DEBUG: newPlural = "$newPlural"');
-    print('DEBUG: omitAgainst = $omitAgainst');
     print('DEBUG: category = "$category"');
 
     if (newLabel.isEmpty || newSingular.isEmpty) {
@@ -3020,7 +2991,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       usePluralPhrase: usePluralPhrase,
       keywords: newKeywords,
       wantsOpponent: wantsOpponent,
-      omitAgainst: omitAgainst,
       isCustom: originalVerb.isCustom,
       category: category,
     );
@@ -4060,7 +4030,6 @@ class VerbOption {
   /// IPTC-style search terms for this verb (comma-separated in editors).
   final List<String> keywords;
   final bool wantsOpponent;
-  final bool omitAgainst; // If true, don't include "against" in caption
   final bool isCustom;
   final String? category; // Category this verb belongs to
 
@@ -4071,7 +4040,6 @@ class VerbOption {
     this.usePluralPhrase = true,
     List<String>? keywords,
     this.wantsOpponent = true,
-    this.omitAgainst = false,
     this.isCustom = false,
     this.category,
   }) : keywords = keywords ?? const [];
@@ -4095,7 +4063,6 @@ class VerbOption {
     bool? usePluralPhrase,
     List<String>? keywords,
     bool? wantsOpponent,
-    bool? omitAgainst,
     bool? isCustom,
     String? category,
   }) {
@@ -4106,7 +4073,6 @@ class VerbOption {
       usePluralPhrase: usePluralPhrase ?? this.usePluralPhrase,
       keywords: keywords ?? this.keywords,
       wantsOpponent: wantsOpponent ?? this.wantsOpponent,
-      omitAgainst: omitAgainst ?? this.omitAgainst,
       isCustom: isCustom ?? this.isCustom,
       category: category ?? this.category,
     );
@@ -4121,7 +4087,6 @@ class VerbOption {
       'usePluralPhrase': usePluralPhrase,
       'keywords': keywords,
       'wantsOpponent': wantsOpponent,
-      'omitAgainst': omitAgainst,
       'isCustom': isCustom,
       'category': category,
     };
@@ -4136,7 +4101,6 @@ class VerbOption {
       usePluralPhrase: json['usePluralPhrase'] as bool? ?? true,
       keywords: verbKeywordsFromJson(json['keywords']),
       wantsOpponent: json['wantsOpponent'] as bool? ?? true,
-      omitAgainst: json['omitAgainst'] as bool? ?? false,
       isCustom: json['isCustom'] as bool? ?? true,
       category: json['category'] as String?,
     );
