@@ -15,6 +15,20 @@ String abbreviateRegionName(String fullName) {
   return _usStates[k] ?? _canada[k] ?? '';
 }
 
+/// True when [raw] is a known US state/territory full name, postal code, or
+/// AP-style abbreviation (e.g. Florida, FL, Fla.).
+bool isKnownUsStateOrTerritory(String raw) {
+  final k = normalizeRegionKey(raw);
+  if (k.isEmpty) return false;
+  if (_usStates.containsKey(k)) return true;
+  final upper = k.toUpperCase();
+  if (upper.length == 2 && _usPostalCodes.contains(upper)) return true;
+  for (final v in _usStatesApStyle.values) {
+    if (normalizeRegionKey(v) == k) return true;
+  }
+  return false;
+}
+
 /// US state full name -> AP-style abbreviation.
 /// Returns empty string when unknown / non-US.
 String abbreviateUsStateApStyle(String fullName) {
@@ -75,6 +89,11 @@ const Map<String, String> _usStates = {
   'wisconsin': 'WI',
   'wyoming': 'WY',
   'district of columbia': 'DC',
+};
+
+final Set<String> _usPostalCodes = {
+  ..._usStates.values,
+  'DC',
 };
 
 /// Canadian short forms: Ontario → Ont per common wire style; others mostly 2-letter.

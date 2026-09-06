@@ -111,6 +111,9 @@ class PreferencesService {
   /// library entry has been promoted to the new built-in wire.
   static const String _keyGettyInternationalMigrationDone =
       'getty_international_migration_done';
+  /// One-time: rewrite Getty wire default + active Getty template to factory shell.
+  static const String _keyGettyFactoryCementDone =
+      'getty_factory_cement_2026_09_06_b';
   static const String _keyCaptionGameInfoJson = 'caption_game_info_json';
   static const String _keyCaptionPreviewHomePrefix =
       'caption_preview_last_home_';
@@ -1985,6 +1988,31 @@ class PreferencesService {
         lib.where((e) => !matches.any((m) => m.id == e.id)).toList();
     await _saveCaptionStyleLibrary(remaining);
     await prefs.setBool(_keyGettyInternationalMigrationDone, true);
+  }
+
+  /// Rewrites the Getty wire baseline (and active template if it is Getty) to
+  /// the current factory shell. Custom/saved library styles are left alone.
+  Future<void> cementGettyFactoryDefaultsIfNeeded() async {
+    final prefs = await _getPrefs();
+    if (prefs.getBool(_keyGettyFactoryCementDone) == true) return;
+
+    final factory = CaptionTemplate.getty().normalizePerOccurrenceLists();
+    await saveCaptionTemplateWireDefault(WireStyle.getty, factory);
+    await clearCaptionTemplateWireDefault(WireStyle.gettyInternational);
+
+    final active = await getCaptionTemplate();
+    if (active.wireStyle == WireStyle.getty ||
+        active.wireStyle == WireStyle.gettyInternational) {
+      final sport = await getCurrentSport();
+      final withSport = await applyGameIdentifierForSport(
+        factory,
+        WireStyle.getty,
+        sport,
+      );
+      await saveCaptionTemplate(withSport);
+    }
+
+    await prefs.setBool(_keyGettyFactoryCementDone, true);
   }
 
   /// User-named layouts saved from the caption layout builder (not the active template).

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../caption_style/caption_formula_renderer.dart';
 import '../caption_style/caption_style_catalog.dart';
 import '../caption_style/caption_template.dart';
+import '../caption_style/game_info.dart';
 import '../services/caption_preview_data_service.dart';
 import '../services/preferences_service.dart';
 import 'app_styled_dialogs.dart';
@@ -17,11 +18,16 @@ class StartupCaptionLayoutPreview extends StatefulWidget {
     this.sport,
     this.compact = false,
     this.onWireStyleChanged,
+    this.locationOverride,
   });
 
   final String? sport;
   final bool compact;
   final ValueChanged<WireStyle>? onWireStyleChanged;
+
+  /// When set (e.g. IPTC City / State / Country from the load screen), the
+  /// sample caption uses this location instead of the mock LA / USA preview.
+  final GameInfo? locationOverride;
 
   @override
   State<StartupCaptionLayoutPreview> createState() =>
@@ -48,7 +54,43 @@ class _StartupCaptionLayoutPreviewState
   @override
   void didUpdateWidget(StartupCaptionLayoutPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.sport != widget.sport) _load();
+    if (oldWidget.sport != widget.sport) {
+      _load();
+      return;
+    }
+    if (!_sameLocation(oldWidget.locationOverride, widget.locationOverride)) {
+      setState(() {});
+    }
+  }
+
+  bool _sameLocation(GameInfo? a, GameInfo? b) {
+    if (identical(a, b)) return true;
+    if (a == null || b == null) return a == b;
+    return a.city == b.city &&
+        a.region == b.region &&
+        a.regionCode == b.regionCode &&
+        a.country == b.country &&
+        a.countryCode == b.countryCode &&
+        a.venue == b.venue;
+  }
+
+  GameInfo _effectiveGameInfo(GameInfo base) {
+    final o = widget.locationOverride;
+    if (o == null) return base;
+    final hasLocation = o.city.trim().isNotEmpty ||
+        o.region.trim().isNotEmpty ||
+        o.country.trim().isNotEmpty ||
+        o.countryCode.trim().isNotEmpty;
+    if (!hasLocation) return base;
+    return base.copyWith(
+      city: o.city,
+      region: o.region,
+      regionCode: o.regionCode,
+      country: o.country,
+      countryCode: o.countryCode,
+      venue: o.venue.trim().isNotEmpty ? o.venue : base.venue,
+      gameDate: o.gameDate ?? base.gameDate,
+    );
   }
 
   Future<void> _load() async {
@@ -135,9 +177,10 @@ class _StartupCaptionLayoutPreviewState
     );
     return CaptionFormulaRenderer.render(
       template: template,
-      game: snap.gameInfo,
+      game: _effectiveGameInfo(snap.gameInfo),
       sampleAgency: _agencyFor(template.wireStyle),
       captionOverride: body,
+      sport: widget.sport,
     );
   }
 
@@ -192,11 +235,14 @@ class _StartupCaptionLayoutPreviewState
         );
       },
       listItemBuilder: (context, item, isSelected, onItemSelect) {
+        final firstCustom = CaptionStyleCatalog.firstCustomTokenIndex(tokens);
         return CaptionStyleDropdownListRow(
           label: catalog.labelFor(item),
           isSelected: isSelected,
           isFavorite: _favoriteCaptionStyleToken == item,
           showSavedIcon: item.startsWith('saved:'),
+          showDividerAbove:
+              firstCustom >= 0 && tokens.indexOf(item) == firstCustom,
           onSelect: onItemSelect,
           onToggleFavorite: () => _toggleFavoriteCaptionStyle(item),
         );

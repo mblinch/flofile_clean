@@ -62,6 +62,26 @@ class CaptionStyleCatalog {
     return token;
   }
 
+  /// Built-in wire presets shown above the custom section (Getty / Imagn / AP / CP).
+  static bool isCoreWireToken(String token) =>
+      token == tokGetty ||
+      token == tokImagn ||
+      token == tokAp ||
+      token == tokCp ||
+      token == tokGettyIntl;
+
+  /// Custom working copy or a saved library style (below the menu divider).
+  static bool isCustomMenuToken(String token) =>
+      token == tokCustom || token.startsWith('saved:');
+
+  /// Index of the first custom/saved token in [tokens], or `-1`.
+  static int firstCustomTokenIndex(List<String> tokens) {
+    for (var i = 0; i < tokens.length; i++) {
+      if (isCustomMenuToken(tokens[i])) return i;
+    }
+    return -1;
+  }
+
   static Future<CaptionStyleCatalog> load(
     PreferencesService prefs, {
     String? sport,
@@ -118,21 +138,31 @@ class CaptionStyleCatalog {
       wireLabelGettyIntl: gettyIntlLabel,
     );
 
-    final tokens = <String>[
+    final coreTokens = <String>[
       tokGetty,
       tokImagn,
       tokAp,
       tokCp,
-      tokGettyIntl,
-      tokCustom,
-      ...lib.map((e) => 'saved:${e.id}'),
     ];
-    final options = tokens
+    final coreOptions = coreTokens
         .map((t) => CaptionStyleOption(token: t, label: catalog._menuLabel(t)))
+        .toList();
+    final savedOptions = lib
+        .map(
+          (e) => CaptionStyleOption(
+            token: 'saved:${e.id}',
+            label: catalog._menuLabel('saved:${e.id}'),
+          ),
+        )
         .toList()
       ..sort(
         (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
       );
+    final options = <CaptionStyleOption>[
+      ...coreOptions,
+      CaptionStyleOption(token: tokCustom, label: catalog._menuLabel(tokCustom)),
+      ...savedOptions,
+    ];
     final activeToken = catalog._tokenForTemplate(active, lib);
 
     return CaptionStyleCatalog._(
@@ -229,17 +259,21 @@ class CaptionStyleCatalog {
 
   CaptionTemplate _wiredBaseline(WireStyle wire) {
     CaptionTemplate apply(CaptionTemplate? saved, CaptionTemplate factory) {
-      final base = saved == null
+      var base = saved == null
           ? factory
           : (!_hasSnippetLayout(saved)
               ? _migrateSnippetLayout(saved, factory)
               : saved);
+      if (wire == WireStyle.getty || wire == WireStyle.gettyInternational) {
+        base = CaptionTemplate.migrateGettyClosingFormulaIfNeeded(base);
+      }
       return _withSport(base);
     }
 
     switch (wire) {
       case WireStyle.getty:
-        return apply(gettyWireDefault, CaptionTemplate.getty());
+        return apply(gettyWireDefault, CaptionTemplate.getty())
+            .copyWith(includePlayerPosition: false);
       case WireStyle.imagn:
         return apply(imagnWireDefault, CaptionTemplate.imagn());
       case WireStyle.ap:
@@ -247,7 +281,8 @@ class CaptionStyleCatalog {
       case WireStyle.cp:
         return apply(cpWireDefault, CaptionTemplate.cp());
       case WireStyle.gettyInternational:
-        return apply(gettyIntlWireDefault, CaptionTemplate.gettyInternational());
+        return apply(gettyIntlWireDefault, CaptionTemplate.gettyInternational())
+            .copyWith(includePlayerPosition: false);
       case WireStyle.custom:
         return apply(gettyWireDefault, CaptionTemplate.getty());
     }
@@ -298,7 +333,7 @@ class CaptionStyleCatalog {
     }
     switch (token) {
       case tokGetty:
-        return _wireLabel(WireStyle.getty, 'Getty USA');
+        return _wireLabel(WireStyle.getty, 'Getty');
       case tokImagn:
         return _wireLabel(WireStyle.imagn, 'Imagn');
       case tokAp:
@@ -330,13 +365,24 @@ class CaptionStyleCatalog {
         override = wireLabelCp;
         break;
       case WireStyle.gettyInternational:
-        override = wireLabelGettyIntl;
+        // Merged into a single Getty menu entry.
+        override = wireLabelGettyIntl ?? wireLabelGetty;
         break;
       case WireStyle.custom:
         override = null;
         break;
     }
-    if (override != null && override.trim().isNotEmpty) return override.trim();
+    if (override != null && override.trim().isNotEmpty) {
+      final t = override.trim();
+      // Stale prefs from before Getty USA / International were unified.
+      final lower = t.toLowerCase();
+      if (lower == 'getty usa' ||
+          lower == 'getty international' ||
+          lower == 'getty images') {
+        return factoryName;
+      }
+      return t;
+    }
     return factoryName;
   }
 
@@ -360,6 +406,8 @@ class CaptionStyleCatalog {
   static String _wireToken(WireStyle w) {
     switch (w) {
       case WireStyle.getty:
+      case WireStyle.gettyInternational:
+        // One menu entry; International uses the same Getty auto location.
         return tokGetty;
       case WireStyle.imagn:
         return tokImagn;
@@ -367,8 +415,6 @@ class CaptionStyleCatalog {
         return tokAp;
       case WireStyle.cp:
         return tokCp;
-      case WireStyle.gettyInternational:
-        return tokGettyIntl;
       case WireStyle.custom:
         return tokCustom;
     }
@@ -383,7 +429,8 @@ class CaptionStyleCatalog {
       case tokCp:
         return WireStyle.cp;
       case tokGettyIntl:
-        return WireStyle.gettyInternational;
+        // Legacy token from old sessions / favorites → unified Getty.
+        return WireStyle.getty;
       case tokCustom:
         return WireStyle.custom;
       case tokGetty:

@@ -5,9 +5,10 @@ import 'date_formula.dart';
 /// Wire service preset or fully custom formula.
 ///
 /// Enum order doubles as the display order in the Caption Style dropdown.
-/// [getty] is the North America / city–state–country preset (“Getty USA” in UI).
-/// [gettyInternational] matches the same caption formula with a City · Region ·
-/// Country location line. Added values are appended at the end so
+/// [getty] is the unified Getty preset (“Getty” in UI): location auto-adapts
+/// to City+State in the US and City+Country elsewhere.
+/// [gettyInternational] is kept for saved templates and uses the same
+/// auto-adapt location behavior. Added values are appended at the end so
 /// previously-serialised templates — which round-trip via `.name` — still
 /// decode correctly.
 enum WireStyle { getty, imagn, ap, custom, gettyInternational, cp }
@@ -175,21 +176,28 @@ class LocationLineOptions {
     required this.uppercase,
     required this.chips,
     this.autoSpacing = true,
+    this.autoAdaptUsIntl = false,
   });
 
   final bool uppercase;
   final List<LocationChip> chips;
   final bool autoSpacing;
 
+  /// When true, render City+State for the United States and City+Country
+  /// everywhere else (Getty wire style). Applies to each location occurrence.
+  final bool autoAdaptUsIntl;
+
   LocationLineOptions copyWith({
     bool? uppercase,
     List<LocationChip>? chips,
     bool? autoSpacing,
+    bool? autoAdaptUsIntl,
   }) =>
       LocationLineOptions(
         uppercase: uppercase ?? this.uppercase,
         chips: chips ?? List<LocationChip>.from(this.chips),
         autoSpacing: autoSpacing ?? this.autoSpacing,
+        autoAdaptUsIntl: autoAdaptUsIntl ?? this.autoAdaptUsIntl,
       );
 
   /// Deep copy for per–geo-chip templates (duplicate Geographical segments).
@@ -197,15 +205,18 @@ class LocationLineOptions {
         uppercase: uppercase,
         chips: chips.map((c) => c.copyWith()).toList(),
         autoSpacing: autoSpacing,
+        autoAdaptUsIntl: autoAdaptUsIntl,
       );
 
   Map<String, dynamic> toJson() => {
         'uppercase': uppercase,
         'locationChips': chips.map((e) => e.toJson()).toList(),
         if (!autoSpacing) 'autoSpacing': false,
+        if (autoAdaptUsIntl) 'autoAdaptUsIntl': true,
       };
 
   factory LocationLineOptions.fromJson(Map<String, dynamic> j) {
+    final autoAdaptUsIntl = j['autoAdaptUsIntl'] as bool? ?? false;
     if (j['locationChips'] is List) {
       final raw = j['locationChips'] as List<dynamic>;
       final parsed = raw
@@ -218,6 +229,7 @@ class LocationLineOptions {
           uppercase: uppercase,
           chips: LocationLineOptions.imagnDefault().chips,
           autoSpacing: j['autoSpacing'] as bool? ?? true,
+          autoAdaptUsIntl: autoAdaptUsIntl,
         );
       }
       // Migrate legacy global uppercase → per-chip caps, so once migrated the
@@ -232,6 +244,7 @@ class LocationLineOptions {
           uppercase: false,
           chips: migrated,
           autoSpacing: j['autoSpacing'] as bool? ?? true,
+          autoAdaptUsIntl: autoAdaptUsIntl,
         );
       }
       // Legacy: uppercase + per-chip caps meant whole-line upper still ran and
@@ -241,12 +254,14 @@ class LocationLineOptions {
           uppercase: false,
           chips: parsed,
           autoSpacing: j['autoSpacing'] as bool? ?? true,
+          autoAdaptUsIntl: autoAdaptUsIntl,
         );
       }
       return LocationLineOptions(
         uppercase: uppercase,
         chips: parsed,
         autoSpacing: j['autoSpacing'] as bool? ?? true,
+        autoAdaptUsIntl: autoAdaptUsIntl,
       );
     }
     return LocationLineOptions._fromLegacyFlatJson(j);
@@ -282,6 +297,7 @@ class LocationLineOptions {
       uppercase: uppercase,
       chips: chips,
       autoSpacing: j['autoSpacing'] as bool? ?? true,
+      autoAdaptUsIntl: j['autoAdaptUsIntl'] as bool? ?? false,
     );
   }
 
@@ -297,8 +313,11 @@ class LocationLineOptions {
     }
   }
 
+  /// Getty: city + state + country chips; [autoAdaptUsIntl] picks state vs country
+  /// at render time from the game country.
   static LocationLineOptions gettyDefault() => LocationLineOptions(
         uppercase: false,
+        autoAdaptUsIntl: true,
         chips: [
           const LocationChip(
               id: 'g_city', kind: LocationChipKind.city, caps: true),
@@ -306,6 +325,27 @@ class LocationLineOptions {
               id: 'g_lit1', kind: LocationChipKind.literal, literal: ', '),
           const LocationChip(
               id: 'g_reg', kind: LocationChipKind.region, caps: true),
+          const LocationChip(
+              id: 'g_lit2', kind: LocationChipKind.literal, literal: ', '),
+          const LocationChip(
+              id: 'g_ctr', kind: LocationChipKind.country, caps: true),
+        ],
+      );
+
+  /// Sentence-case Getty location (second occurrence / “in City, …” line).
+  static LocationLineOptions gettyDefaultSentenceCase() => LocationLineOptions(
+        uppercase: false,
+        autoAdaptUsIntl: true,
+        chips: [
+          const LocationChip(
+              id: 'g2_in', kind: LocationChipKind.literal, literal: 'in '),
+          const LocationChip(id: 'g2_city', kind: LocationChipKind.city),
+          const LocationChip(
+              id: 'g2_lit1', kind: LocationChipKind.literal, literal: ', '),
+          const LocationChip(id: 'g2_reg', kind: LocationChipKind.region),
+          const LocationChip(
+              id: 'g2_lit2', kind: LocationChipKind.literal, literal: ', '),
+          const LocationChip(id: 'g2_ctr', kind: LocationChipKind.country),
         ],
       );
 
@@ -703,6 +743,15 @@ class CaptionTemplate {
   /// the dynamic caption segment.
   final bool includePlayerPosition;
 
+  /// Getty wire captions never include roster positions (abbreviated or expanded).
+  bool get effectiveIncludePlayerPosition {
+    if (wireStyle == WireStyle.getty ||
+        wireStyle == WireStyle.gettyInternational) {
+      return false;
+    }
+    return includePlayerPosition;
+  }
+
   /// Controls US vs international spelling for expanded position labels
   /// (e.g. `center` vs `centre`) when AP / Imagn write positions out.
   final bool americanEnglish;
@@ -793,20 +842,21 @@ class CaptionTemplate {
 
   factory CaptionTemplate.getty() => CaptionTemplate(
         id: 'preset_getty',
-        name: 'Getty USA',
+        name: 'Getty',
         wireStyle: WireStyle.getty,
         dateFormat: 'MMMM d, yyyy',
         dateExpression: '',
-        locationOptions: LocationLineOptions.fromLegacyFormat(
-            LocationFormat.city_state_country),
+        dateFormula: DateFormula.gettyOpening(),
+        locationOptions: LocationLineOptions.gettyDefault(),
         numberFormat: NumberFormatStyle.hash,
         captionTeamOrder: CaptionTeamOrder.teamAfter,
-        includePlayerPosition: true,
+        includePlayerPosition: false,
         americanEnglish: true,
         removeDiacritics: true,
         separator: ' - ',
         creditFormat: CreditFormat.photo_by,
         bylineOptions: BylineOptions.getty(),
+        // LOC - DATE: CAPTION GAMEID at VENUE on DATE in LOC. (Photo…)
         segmentOrder: const [
           CaptionSegment.location,
           CaptionSegment.punctuation,
@@ -817,16 +867,25 @@ class CaptionTemplate {
           CaptionSegment.customText,
           CaptionSegment.separator,
           CaptionSegment.venue,
+          CaptionSegment.separator,
+          CaptionSegment.date,
+          CaptionSegment.location,
           CaptionSegment.punctuation,
           CaptionSegment.credit,
         ],
         customSeparators: const [
-          '', '', '', '', '', '', '', '', '', '',
+          '', '', '', '', '', '', '', '', '', '', '', '', '',
         ],
-        separatorSnippets: const [' at '],
+        separatorSnippets: const [' at ', ' on '],
         punctuationSnippets: const [' - ', ': ', ' ', '. '],
-        locationOptionsByOccurrence: null,
-        dateFormulasByOccurrence: null,
+        locationOptionsByOccurrence: [
+          LocationLineOptions.gettyDefault(),
+          LocationLineOptions.gettyDefaultSentenceCase(),
+        ],
+        dateFormulasByOccurrence: [
+          DateFormula.gettyOpening(),
+          DateFormula.gettyClosing(),
+        ],
       );
 
   factory CaptionTemplate.imagn() => CaptionTemplate(
@@ -863,46 +922,17 @@ class CaptionTemplate {
         dateFormulasByOccurrence: null,
       );
 
-  /// Same caption structure and Custom literal chips as [CaptionTemplate.getty]
-  /// ([WireStyle.getty] / Getty USA), with [LocationFormat.city_region_country]
-  /// so the default location line is City · Region · Country.
-  factory CaptionTemplate.gettyInternational() => CaptionTemplate(
-        id: 'preset_getty_international',
-        name: 'Getty International',
-        wireStyle: WireStyle.gettyInternational,
-        dateFormat: 'MMMM d, yyyy',
-        dateExpression: '',
-        locationOptions: LocationLineOptions.fromLegacyFormat(
-            LocationFormat.city_region_country),
-        numberFormat: NumberFormatStyle.hash,
-        captionTeamOrder: CaptionTeamOrder.teamAfter,
-        includePlayerPosition: true,
-        americanEnglish: false,
-        removeDiacritics: true,
-        separator: ' - ',
-        creditFormat: CreditFormat.photo_by,
-        bylineOptions: BylineOptions.getty(),
-        segmentOrder: const [
-          CaptionSegment.location,
-          CaptionSegment.punctuation,
-          CaptionSegment.date,
-          CaptionSegment.punctuation,
-          CaptionSegment.caption,
-          CaptionSegment.punctuation,
-          CaptionSegment.customText,
-          CaptionSegment.separator,
-          CaptionSegment.venue,
-          CaptionSegment.punctuation,
-          CaptionSegment.credit,
-        ],
-        customSeparators: const [
-          '', '', '', '', '', '', '', '', '', '',
-        ],
-        separatorSnippets: const [' at '],
-        punctuationSnippets: const [' - ', ': ', ' ', '. '],
-        locationOptionsByOccurrence: null,
-        dateFormulasByOccurrence: null,
-      );
+  /// Same formula as [CaptionTemplate.getty] with Getty International wire id.
+  /// Location lines use the same US City+State / world City+Country auto-adapt.
+  factory CaptionTemplate.gettyInternational() {
+    final base = CaptionTemplate.getty();
+    return base.copyWith(
+      id: 'preset_getty_international',
+      name: 'Getty International',
+      wireStyle: WireStyle.gettyInternational,
+      americanEnglish: false,
+    );
+  }
 
   factory CaptionTemplate.ap() => CaptionTemplate(
         id: 'preset_ap',
@@ -1148,6 +1178,44 @@ class CaptionTemplate {
         layoutPrefix: layoutPrefix ?? this.layoutPrefix,
         layoutSuffix: layoutSuffix ?? this.layoutSuffix,
       );
+
+  /// Older Getty prefs only had one date + one location (ending `at VENUE.`).
+  /// Current Getty needs `at VENUE on DATE in LOC. (Photo…)`.
+  static CaptionTemplate migrateGettyClosingFormulaIfNeeded(CaptionTemplate t) {
+    if (t.wireStyle != WireStyle.getty &&
+        t.wireStyle != WireStyle.gettyInternational) {
+      return t;
+    }
+    final dates = t.segmentOrder.where((s) => s == CaptionSegment.date).length;
+    final locs =
+        t.segmentOrder.where((s) => s == CaptionSegment.location).length;
+    if (dates >= 2 && locs >= 2) return t;
+
+    final factory = t.wireStyle == WireStyle.gettyInternational
+        ? CaptionTemplate.gettyInternational()
+        : CaptionTemplate.getty();
+    return t
+        .copyWith(
+          segmentOrder: List<CaptionSegment>.from(factory.segmentOrder),
+          customSeparators: factory.customSeparators != null
+              ? List<String>.from(factory.customSeparators!)
+              : null,
+          separatorSnippets: factory.separatorSnippets != null
+              ? List<String>.from(factory.separatorSnippets!)
+              : null,
+          punctuationSnippets: factory.punctuationSnippets != null
+              ? List<String>.from(factory.punctuationSnippets!)
+              : null,
+          locationOptions: factory.locationOptions.clone(),
+          locationOptionsByOccurrence: factory.locationOptionsByOccurrence
+              ?.map((e) => e.clone())
+              .toList(),
+          dateFormula: factory.dateFormula?.clone(),
+          dateFormulasByOccurrence:
+              factory.dateFormulasByOccurrence?.map((e) => e.clone()).toList(),
+        )
+        .normalizePerOccurrenceLists();
+  }
 
   /// Ensures [locationOptionsByOccurrence] / [dateFormulasByOccurrence] have one
   /// entry per [CaptionSegment.location] / [CaptionSegment.date] when duplicates

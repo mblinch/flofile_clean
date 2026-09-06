@@ -237,6 +237,25 @@ class DateFormula {
         separators: ['', ' ', ', ', ''],
       );
 
+  /// Opening Getty dateline — `APRIL 9` (month caps, no year).
+  static DateFormula gettyOpening() => DateFormula(
+        fields: [
+          DateFieldToken(kind: DateFieldKind.month, optionIndex: 0, caps: true),
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: 0),
+        ],
+        separators: ['', ' ', ''],
+      );
+
+  /// Closing Getty date — `April 9, 2026` (sentence case).
+  static DateFormula gettyClosing() => DateFormula(
+        fields: [
+          DateFieldToken(kind: DateFieldKind.month, optionIndex: 0),
+          DateFieldToken(kind: DateFieldKind.day, optionIndex: 0),
+          DateFieldToken(kind: DateFieldKind.year, optionIndex: 0),
+        ],
+        separators: ['', ' ', ', ', ''],
+      );
+
   /// `Apr 9, 2026` — Month (short), day, year.
   static DateFormula imagn() => DateFormula(
         fields: [

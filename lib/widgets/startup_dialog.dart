@@ -14,7 +14,6 @@ import '../services/preferences_service.dart';
 import '../config/tank01_config.dart';
 import 'flo_chrome_header.dart';
 import '../caption_style/caption_template.dart';
-import 'startup_caption_layout_preview.dart';
 import '../caption_style/wire_iptc_specs.dart';
 import '../services/iptc_template_apply_service.dart';
 import '../services/iptc_template_import_service.dart';
@@ -172,6 +171,8 @@ class _StartupDialogState extends State<StartupDialog> {
     // and verb seeds reach users who have never signed in.
     await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
     await _preferencesService.seedCaptionStyleLibraryFromAppDefaultsIfEmpty();
+    await _preferencesService.migrateGettyInternationalLibraryEntry();
+    await _preferencesService.cementGettyFactoryDefaultsIfNeeded();
     await _loadIptcCatalog();
     await _loadIptcWireContext();
     await _loadPresetForWire(
@@ -1994,19 +1995,6 @@ class _StartupDialogState extends State<StartupDialog> {
         const SizedBox(height: 10),
         _lockedUntilFolder(_buildTeamsSection()),
         const SizedBox(height: 10),
-        _lockedUntilTeams(
-          _sectionCard(
-            label: 'CAPTION LAYOUT',
-            children: [
-              StartupCaptionLayoutPreview(
-                sport: widget.sport,
-                compact: false,
-                onWireStyleChanged: _onCaptionWireStyleChanged,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
         _lockedUntilTeams(_buildOptionalSection()),
         const SizedBox(height: 12),
         _lockedUntilTeams(_buildGoTimeButton()),
@@ -2170,19 +2158,6 @@ class _StartupDialogState extends State<StartupDialog> {
         ),
         const SizedBox(height: 10),
         _lockedUntilFolder(_buildTeamsSection()),
-        const SizedBox(height: 10),
-        _lockedUntilTeams(
-          _sectionCard(
-            label: 'CAPTION LAYOUT',
-            children: [
-              StartupCaptionLayoutPreview(
-                sport: widget.sport,
-                compact: false,
-                onWireStyleChanged: _onCaptionWireStyleChanged,
-              ),
-            ],
-          ),
-        ),
         const SizedBox(height: 10),
         _lockedUntilTeams(_buildOptionalSection()),
         const SizedBox(height: 12),

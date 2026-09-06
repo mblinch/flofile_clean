@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// One row in the caption-style dropdown (label + optional saved icon + star).
+/// One row in the caption-style dropdown (label + optional lock/saved icon + star).
 class CaptionStyleDropdownListRow extends StatelessWidget {
   const CaptionStyleDropdownListRow({
     super.key,
@@ -10,6 +10,8 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
     required this.showSavedIcon,
     required this.onSelect,
     required this.onToggleFavorite,
+    this.showDividerAbove = false,
+    this.showLockIcon = false,
   });
 
   final String label;
@@ -18,16 +20,27 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
   final bool showSavedIcon;
   final VoidCallback onSelect;
   final VoidCallback onToggleFavorite;
+  final bool showDividerAbove;
+  final bool showLockIcon;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    final row = InkWell(
       onTap: onSelect,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(
           children: [
-            if (showSavedIcon)
+            if (showLockIcon)
+              Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: Icon(
+                  Icons.lock_outline,
+                  size: 13,
+                  color: Colors.grey.shade500,
+                ),
+              )
+            else if (showSavedIcon)
               Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: Icon(
@@ -44,7 +57,9 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: Colors.grey.shade800,
+                  color: showLockIcon
+                      ? Colors.grey.shade600
+                      : Colors.grey.shade800,
                 ),
               ),
             ),
@@ -66,6 +81,35 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+
+    if (!showDividerAbove) return row;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+              const SizedBox(height: 4),
+              Text(
+                'CUSTOM',
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.6,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ),
+        row,
+      ],
     );
   }
 }

@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../caption_style/caption_formula_renderer.dart';
 import '../caption_style/caption_session_context.dart';
+import '../caption_style/caption_style_catalog.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/date_formula.dart';
 import '../caption_style/game_info.dart';
@@ -529,6 +530,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     required int index,
     required CaptionSegment segment,
   }) {
+    if (_coreStyleLocked) return;
     setState(() {
       final currentlyActive = _activeFormulaIndex == index;
       final sameModeActive =
@@ -863,6 +865,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     // Promote any legacy "Getty International" library entry before we read
     // the library so it doesn't show up alongside the new built-in wire.
     await prefs.migrateGettyInternationalLibraryEntry();
+    await prefs.cementGettyFactoryDefaultsIfNeeded();
     var template = _withSessionSportGameId(await prefs.getCaptionTemplate());
     final mergedGaps = CaptionFormulaRenderer.effectiveSegmentGaps(template);
     if (template.customSeparators == null ||
@@ -989,7 +992,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
     if (syncBuiltInWireDefault &&
         libId == null &&
-        _isBuiltInWire(_selectedWire)) {
+        _isBuiltInWire(_selectedWire) &&
+        !_coreStyleLocked) {
       await prefs.saveCaptionTemplateWireDefault(_selectedWire, normalized);
     }
 
@@ -1040,15 +1044,14 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   String _factoryWireLabel(WireStyle w) {
     switch (w) {
       case WireStyle.getty:
-        return 'Getty USA';
+      case WireStyle.gettyInternational:
+        return 'Getty';
       case WireStyle.imagn:
         return 'Imagn';
       case WireStyle.ap:
         return 'AP';
       case WireStyle.cp:
         return 'CP';
-      case WireStyle.gettyInternational:
-        return 'Getty International';
       case WireStyle.custom:
         return 'Custom';
     }
@@ -1065,7 +1068,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       case WireStyle.cp:
         return _cpWireLabel;
       case WireStyle.gettyInternational:
-        return _gettyIntlWireLabel;
+        return _gettyIntlWireLabel ?? _gettyWireLabel;
       case WireStyle.custom:
         return null;
     }
@@ -1073,13 +1076,22 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   String _wireStyleDropdownLabel(WireStyle w) {
     final override = _wireLabelOverride(w);
-    if (override != null && override.isNotEmpty) return override;
+    if (override != null && override.isNotEmpty) {
+      final lower = override.trim().toLowerCase();
+      if (lower == 'getty usa' ||
+          lower == 'getty international' ||
+          lower == 'getty images') {
+        return _factoryWireLabel(w);
+      }
+      return override.trim();
+    }
     return _factoryWireLabel(w);
   }
 
   String _wireMenuToken(WireStyle w) {
     switch (w) {
       case WireStyle.getty:
+      case WireStyle.gettyInternational:
         return _menuTokGetty;
       case WireStyle.imagn:
         return _menuTokImagn;
@@ -1087,8 +1099,6 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         return _menuTokAp;
       case WireStyle.cp:
         return _menuTokCp;
-      case WireStyle.gettyInternational:
-        return _menuTokGettyIntl;
       case WireStyle.custom:
         return _menuTokCustom;
     }
@@ -1103,7 +1113,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       case _menuTokCp:
         return WireStyle.cp;
       case _menuTokGettyIntl:
-        return WireStyle.gettyInternational;
+        // Legacy token → unified Getty.
+        return WireStyle.getty;
       case _menuTokCustom:
         return WireStyle.custom;
       case _menuTokGetty:
@@ -1116,27 +1127,49 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     if (widget.adminMode) {
       return const [
         _menuTokGetty,
-        _menuTokGettyIntl,
         _menuTokImagn,
         _menuTokAp,
         _menuTokCp,
       ];
     }
-    final tokens = [
+    final saved = _captionStyleLibrary
+        .map((e) => 'saved:${e.id}')
+        .toList()
+      ..sort(
+        (a, b) => _captionStyleMenuLabel(a)
+            .toLowerCase()
+            .compareTo(_captionStyleMenuLabel(b).toLowerCase()),
+      );
+    return [
       _menuTokGetty,
       _menuTokImagn,
       _menuTokAp,
       _menuTokCp,
-      _menuTokGettyIntl,
       _menuTokCustom,
-      ..._captionStyleLibrary.map((e) => 'saved:${e.id}'),
+      ...saved,
     ];
-    tokens.sort(
-      (a, b) => _captionStyleMenuLabel(a)
-          .toLowerCase()
-          .compareTo(_captionStyleMenuLabel(b).toLowerCase()),
+  }
+
+  /// Built-in Getty / Imagn / AP / CP are view-only for normal users.
+  /// Admin mode can still edit wire defaults. Duplicate creates an editable copy.
+  bool get _coreStyleLocked =>
+      !widget.adminMode &&
+      _selectedSavedStyleId == null &&
+      _isBuiltInWire(_selectedWire);
+
+  bool _tokenIsLockedCore(String token) =>
+      !widget.adminMode && CaptionStyleCatalog.isCoreWireToken(token);
+
+  /// Greys out and blocks interaction for read-only built-in styles.
+  Widget _lockableEditorSurface({required Widget child}) {
+    if (!_coreStyleLocked) return child;
+    return IgnorePointer(
+      ignoring: true,
+      child: Opacity(
+        opacity: 0.42,
+        child: child,
+      ),
     );
-    return tokens;
   }
 
   CaptionStyleLibraryEntry? _entryForSavedStyleToken(String token) {
@@ -1273,17 +1306,21 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   /// migrated to the current factory segment layout on first load.
   CaptionTemplate _wiredBaseline(WireStyle wire) {
     CaptionTemplate apply(CaptionTemplate? saved, CaptionTemplate factory) {
-      final base = saved == null
+      var base = saved == null
           ? factory
           : (!_hasSnippetLayout(saved)
               ? _migrateSnippetLayout(saved, factory)
               : saved);
+      if (wire == WireStyle.getty || wire == WireStyle.gettyInternational) {
+        base = CaptionTemplate.migrateGettyClosingFormulaIfNeeded(base);
+      }
       return _withSessionSportGameId(base);
     }
 
     switch (wire) {
       case WireStyle.getty:
-        return apply(_gettyWireDefault, CaptionTemplate.getty());
+        return apply(_gettyWireDefault, CaptionTemplate.getty())
+            .copyWith(includePlayerPosition: false);
       case WireStyle.imagn:
         return apply(_imagnWireDefault, CaptionTemplate.imagn());
       case WireStyle.ap:
@@ -1292,7 +1329,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         return apply(_cpWireDefault, CaptionTemplate.cp());
       case WireStyle.gettyInternational:
         return apply(
-            _gettyIntlWireDefault, CaptionTemplate.gettyInternational());
+                _gettyIntlWireDefault, CaptionTemplate.gettyInternational())
+            .copyWith(includePlayerPosition: false);
       case WireStyle.custom:
         return apply(_gettyWireDefault, CaptionTemplate.getty());
     }
@@ -1421,6 +1459,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   bool _isBuiltInWire(WireStyle wire) => wire != WireStyle.custom;
 
   void _rememberCurrentWireDraft() {
+    if (_coreStyleLocked) return;
     if (!_isBuiltInWire(_selectedWire) || _selectedSavedStyleId != null) return;
     _flushGapControllersIntoTemplate();
     final normalized = _template.normalizePerOccurrenceLists();
@@ -1444,10 +1483,15 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }
 
   /// Copies the working layout as [WireStyle.custom] for editing without replacing
-  /// the Getty USA / Imagn / AP wire default.
+  /// the Getty / Imagn / AP / CP built-in defaults.
   void _duplicateCaptionStyle() {
     _rememberCurrentWireDraft();
     final previousWire = _selectedWire;
+    final duplicatedCore = _selectedSavedStyleId == null &&
+        _isBuiltInWire(previousWire);
+    final sourceLabel = _selectedSavedStyleId != null
+        ? _captionStyleMenuLabel('saved:$_selectedSavedStyleId')
+        : _wireStyleDropdownLabel(previousWire);
     final copy = _deepCopyCaptionTemplate(_template);
     setState(() {
       _locationEditorOpen = false;
@@ -1477,14 +1521,18 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncDateUiFromTemplate();
+      if (mounted && duplicatedCore) {
+        _openRenameCaptionStylePrompt();
+      }
     });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          previousWire == WireStyle.custom
-              ? 'Layout duplicated as Custom. Save to keep your caption template.'
-              : 'Copied ${_wireStyleDropdownLabel(previousWire)} layout as Custom. '
-                  'Save to keep it; your ${_wireStyleDropdownLabel(previousWire)} default is unchanged.',
+          duplicatedCore
+              ? 'Duplicated "$sourceLabel" as Custom. Name it to save under Custom captions.'
+              : previousWire == WireStyle.custom
+                  ? 'Layout duplicated as Custom. Save to keep your caption template.'
+                  : 'Copied $sourceLabel layout as Custom. Save to keep it.',
         ),
         duration: const Duration(seconds: 2),
       ),
@@ -2128,6 +2176,17 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   Future<void> _save() async {
     if (!_prefsLoaded) return;
+    if (_coreStyleLocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Built-in styles are read-only. Duplicate to create an editable custom caption.',
+          ),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
     try {
       await _persistCaptionLayoutToPreferences(
         syncBuiltInWireDefault: true,
@@ -2312,62 +2371,65 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         break;
     }
     return Material(
-      color: Colors.black38,
+      color: Colors.black.withValues(alpha: 0.45),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
-          child: Card(
+          child: Material(
+            color: Colors.white,
             elevation: 8,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade900,
+            shadowColor: Colors.black.withValues(alpha: 0.18),
+            shape: kAppDialogShape,
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppDialogTealTitleBar(title: title),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+                  child: AppDialogLabeledField(
+                    label: 'Name',
+                    bottomGap: 0,
+                    child: AppDialogControlShell(
+                      child: TextField(
+                        controller: ctrl,
+                        autofocus: true,
+                        style: kAppDialogFieldTextStyle,
+                        decoration: appDialogBareFieldDecoration(
+                          hintText: 'My caption style',
+                        ),
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: (value) {
+                          if (value.trim().isNotEmpty) {
+                            _submitRenameCaptionStyleName();
+                          }
+                        },
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: ctrl,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Name',
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                    onSubmitted: (value) {
-                      if (value.trim().isNotEmpty) {
-                        _submitRenameCaptionStyleName();
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       ElevatedGreyButton(
                         label: 'Cancel',
-                        fontSize: 12,
+                        fontSize: 11,
                         onPressed: _closeRenameCaptionStylePrompt,
                       ),
                       const SizedBox(width: 8),
                       ElevatedGreyButton(
                         label: submitLabel,
-                        fontSize: 12,
+                        fontSize: 11,
                         isPrimary: true,
                         onPressed: ok ? _submitRenameCaptionStyleName : null,
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -3353,7 +3415,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     required VoidCallback onTap,
   }) {
     return InkWell(
-      onTap: onTap,
+      onTap: _coreStyleLocked ? null : onTap,
       borderRadius: BorderRadius.circular(4),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
@@ -3403,13 +3465,21 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }
 
   Widget _positionToggleChoice(bool includePosition) {
+    final gettyLocked = _selectedWire == WireStyle.getty ||
+        _selectedWire == WireStyle.gettyInternational;
     final label = includePosition ? 'Include position' : 'No position';
     return _checkOptionChip(
-      selected: _template.includePlayerPosition == includePosition,
+      selected: gettyLocked
+          ? !includePosition
+          : _template.includePlayerPosition == includePosition,
       label: label,
-      onTap: () => setState(() {
-        _template = _template.copyWith(includePlayerPosition: includePosition);
-      }),
+      onTap: () {
+        if (gettyLocked || _coreStyleLocked) return;
+        setState(() {
+          _template =
+              _template.copyWith(includePlayerPosition: includePosition);
+        });
+      },
     );
   }
 
@@ -3436,10 +3506,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }
 
   Future<void> _setShowKeywordsField(bool show) async {
+    if (_coreStyleLocked) return;
     setState(() => _template = _template.copyWith(showKeywordsField: show));
   }
 
   Future<void> _setShowPersonalityField(bool show) async {
+    if (_coreStyleLocked) return;
     setState(() => _template = _template.copyWith(showPersonalityField: show));
   }
 
@@ -3940,11 +4012,18 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         case CaptionSegment.location:
           final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
               order, segmentIndex, CaptionSegment.location);
+          final locOpts =
+              CaptionFormulaRenderer.locationLineOptionsForOccurrence(
+                  _template, occ);
+          final gettyWire = _template.wireStyle == WireStyle.getty ||
+              _template.wireStyle == WireStyle.gettyInternational;
           return CaptionFormulaRenderer.formatLocationLine(
             _previewGameInfo,
-            CaptionFormulaRenderer.locationLineOptionsForOccurrence(
-                _template, occ),
-            apStyleCaption: _template.wireStyle == WireStyle.ap || _template.wireStyle == WireStyle.cp,
+            locOpts,
+            apStyleCaption: _template.wireStyle == WireStyle.ap ||
+                _template.wireStyle == WireStyle.cp,
+            forceAutoAdaptUsIntl: gettyWire,
+            locationOccurrenceIndex: occ,
           );
         case CaptionSegment.date:
           final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
@@ -4328,6 +4407,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       game: _previewGameInfo,
       sampleAgency: previewAgency,
       captionOverride: sampleCaption,
+      sport: _sessionSport,
     );
     final narrativeSplit = _singleCustomNarrativeInlineEligible
         ? CaptionFormulaRenderer.previewCaptionNarrativeSplit(
@@ -4542,30 +4622,55 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                               headerBuilder: (ctx,
                                                                   selectedItem,
                                                                   enabled) {
+                                                                final locked =
+                                                                    _tokenIsLockedCore(
+                                                                        selectedItem);
                                                                 return Align(
                                                                   alignment:
                                                                       Alignment
                                                                           .centerLeft,
-                                                                  child: Text(
-                                                                    _captionStyleMenuLabel(
-                                                                        selectedItem),
-                                                                    maxLines: 1,
-                                                                    overflow:
-                                                                        TextOverflow
-                                                                            .ellipsis,
-                                                                    style:
-                                                                        TextStyle(
-                                                                      fontSize:
-                                                                          11,
-                                                                      height:
-                                                                          1.35,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                      color: Colors
-                                                                          .grey
-                                                                          .shade900,
-                                                                    ),
+                                                                  child: Row(
+                                                                    children: [
+                                                                      if (locked) ...[
+                                                                        Icon(
+                                                                          Icons
+                                                                              .lock_outline,
+                                                                          size:
+                                                                              13,
+                                                                          color: Colors
+                                                                              .grey
+                                                                              .shade500,
+                                                                        ),
+                                                                        const SizedBox(
+                                                                            width:
+                                                                                5),
+                                                                      ],
+                                                                      Expanded(
+                                                                        child:
+                                                                            Text(
+                                                                          _captionStyleMenuLabel(
+                                                                              selectedItem),
+                                                                          maxLines:
+                                                                              1,
+                                                                          overflow:
+                                                                              TextOverflow
+                                                                                  .ellipsis,
+                                                                          style:
+                                                                              TextStyle(
+                                                                            fontSize:
+                                                                                11,
+                                                                            height:
+                                                                                1.35,
+                                                                            fontWeight:
+                                                                                FontWeight
+                                                                                    .w600,
+                                                                            color: locked
+                                                                                ? Colors.grey.shade600
+                                                                                : Colors.grey.shade900,
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ],
                                                                   ),
                                                                 );
                                                               },
@@ -4573,6 +4678,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                                   item,
                                                                   isSelected,
                                                                   onItemSelect) {
+                                                                final tokens =
+                                                                    _captionStyleDropdownTokens();
+                                                                final firstCustom =
+                                                                    CaptionStyleCatalog
+                                                                        .firstCustomTokenIndex(
+                                                                            tokens);
                                                                 return CaptionStyleDropdownListRow(
                                                                   label:
                                                                       _captionStyleMenuLabel(
@@ -4585,6 +4696,15 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                                   showSavedIcon:
                                                                       item.startsWith(
                                                                           'saved:'),
+                                                                  showLockIcon:
+                                                                      _tokenIsLockedCore(
+                                                                          item),
+                                                                  showDividerAbove:
+                                                                      firstCustom >=
+                                                                          0 &&
+                                                                      tokens.indexOf(
+                                                                              item) ==
+                                                                          firstCustom,
                                                                   onSelect:
                                                                       onItemSelect,
                                                                   onToggleFavorite: () =>
@@ -4723,10 +4843,17 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                                   WrapAlignment
                                                                       .end,
                                                               children: [
-                                                                Builder(
+                                                                if (!_coreStyleLocked)
+                                                                  Builder(
                                                                     builder: (_) {
                                                                   final mode =
                                                                       _currentRenameMode();
+                                                                  if (mode ==
+                                                                      _RenamePromptMode
+                                                                          .wireLabel) {
+                                                                    return const SizedBox
+                                                                        .shrink();
+                                                                  }
                                                                   String label;
                                                                   String tooltip;
                                                                   switch (mode) {
@@ -4743,9 +4870,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                                       label =
                                                                           'Rename';
                                                                       tooltip =
-                                                                          'Change how “${_factoryWireLabel(_selectedWire)}” is labelled in your '
-                                                                          'Caption Style menu (e.g. a shorter label than the default). '
-                                                                          'The layout itself is unchanged.';
+                                                                          '';
                                                                       break;
                                                                     case _RenamePromptMode
                                                                         .saveAsNewLibrary:
@@ -4799,9 +4924,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                                   );
                                                                 }),
                                                                 Tooltip(
-                                                                  message:
-                                                                      'Copy this layout as Custom so you can edit it '
-                                                                      'without changing your Getty USA, Imagn, or AP default.',
+                                                                  message: _coreStyleLocked
+                                                                      ? 'Duplicate this built-in style to create an editable custom caption.'
+                                                                      : 'Copy this layout as Custom so you can edit it '
+                                                                          'without changing built-in Getty, Imagn, AP, or CP.',
                                                                   child:
                                                                       TextButton(
                                                                     style: TextButton
@@ -4839,50 +4965,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                                 ),
                                                                 Tooltip(
                                                                   message:
-                                                                      'After you tune Getty USA / Imagn / AP / Getty International, '
-                                                                      'save all of them as your new defaults at once.',
-                                                                  child:
-                                                                      TextButton(
-                                                                    style: TextButton
-                                                                        .styleFrom(
-                                                                      padding:
-                                                                          const EdgeInsets
-                                                                              .symmetric(
-                                                                        horizontal:
-                                                                            6,
-                                                                        vertical:
-                                                                            2,
-                                                                      ),
-                                                                      minimumSize:
-                                                                          Size.zero,
-                                                                      tapTargetSize:
-                                                                          MaterialTapTargetSize
-                                                                              .shrinkWrap,
-                                                                    ),
-                                                                    onPressed:
-                                                                        _setAllStylesAsDefaults,
-                                                                    child: Text(
-                                                                      'Set all as defaults',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight
-                                                                                .w600,
-                                                                        color:
-                                                                            _captionLayoutBlue,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                Tooltip(
-                                                                  message:
                                                                       'Only your own saved caption styles can be removed '
-                                                                      '(entries at the bottom of the Caption Style menu). '
-                                                                      'Select one of those first. Built-in Getty USA / Getty International / Imagn / AP '
-                                                                      'cannot be deleted. Your current layout stays open; '
-                                                                      'use Save to update the active template.',
+                                                                      '(under Custom in the Caption Style menu). '
+                                                                      'Built-in Getty / Imagn / AP / CP cannot be deleted.',
                                                                   waitDuration:
                                                                       const Duration(
                                                                           milliseconds:
@@ -4934,68 +5019,175 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                               ],
                                                             ),
                                                           ),
-                                                        ],
-                                                        const SizedBox(
-                                                            height: 8),
-                                                        Align(
-                                                          alignment: Alignment
-                                                              .centerLeft,
-                                                          child: Row(
-                                                            mainAxisSize:
-                                                                MainAxisSize
-                                                                    .min,
-                                                            children: [
-                                                              Text(
-                                                                'Layout options',
-                                                                style:
-                                                                    _sectionTitleStyle
-                                                                        .copyWith(
-                                                                  fontSize: 12,
+                                                          if (_coreStyleLocked) ...[
+                                                            const SizedBox(
+                                                                height: 8),
+                                                            Container(
+                                                              width: double
+                                                                  .infinity,
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .fromLTRB(
+                                                                      8,
+                                                                      7,
+                                                                      8,
+                                                                      7),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: const Color(
+                                                                        0xFFF4F7FB),
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                            4),
+                                                                border: Border.all(
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade300),
+                                                              ),
+                                                              child: Row(
+                                                                children: [
+                                                                  Icon(
+                                                                    Icons
+                                                                        .lock_outline,
+                                                                    size: 14,
+                                                                    color: Colors
+                                                                        .grey
+                                                                        .shade700,
+                                                                  ),
+                                                                  const SizedBox(
+                                                                      width: 6),
+                                                                  Expanded(
+                                                                    child: Text(
+                                                                      'Built-in styles are read-only. Duplicate to create an editable custom caption.',
+                                                                      style:
+                                                                          TextStyle(
+                                                                        fontSize:
+                                                                            10,
+                                                                        height:
+                                                                            1.3,
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade800,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                ],
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ] else ...[
+                                                          const SizedBox(
+                                                              height: 2),
+                                                          Align(
+                                                            alignment: Alignment
+                                                                .centerRight,
+                                                            child: TextButton(
+                                                              style: TextButton
+                                                                  .styleFrom(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal: 6,
+                                                                  vertical: 2,
+                                                                ),
+                                                                minimumSize:
+                                                                    Size.zero,
+                                                                tapTargetSize:
+                                                                    MaterialTapTargetSize
+                                                                        .shrinkWrap,
+                                                              ),
+                                                              onPressed:
+                                                                  _setAllStylesAsDefaults,
+                                                              child: Text(
+                                                                'Set all as defaults',
+                                                                style: TextStyle(
+                                                                  fontSize: 10,
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .w600,
+                                                                  color:
+                                                                      _captionLayoutBlue,
                                                                 ),
                                                               ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                        _lockableEditorSurface(
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment
+                                                                    .stretch,
+                                                            children: [
                                                               const SizedBox(
-                                                                  width: 4),
-                                                              Tooltip(
-                                                                message:
-                                                                    'Turn optional fields on or off '
-                                                                    'while you edit.\n'
-                                                                    'Personality appears first, then Keywords, '
-                                                                    'in a column beside the caption.\n'
-                                                                    'Keywords sits below Personality in that column.',
-                                                                waitDuration:
-                                                                    const Duration(
-                                                                        milliseconds:
-                                                                            400),
-                                                                child: Icon(
-                                                                  Icons
-                                                                      .help_outline,
-                                                                  size: 14,
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade600,
+                                                                  height: 8),
+                                                              Align(
+                                                                alignment:
+                                                                    Alignment
+                                                                        .centerLeft,
+                                                                child: Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    Text(
+                                                                      'Layout options',
+                                                                      style:
+                                                                          _sectionTitleStyle
+                                                                              .copyWith(
+                                                                        fontSize:
+                                                                            12,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w600,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                        width:
+                                                                            4),
+                                                                    Tooltip(
+                                                                      message:
+                                                                          'Turn optional fields on or off '
+                                                                          'while you edit.\n'
+                                                                          'Personality appears first, then Keywords, '
+                                                                          'in a column beside the caption.\n'
+                                                                          'Keywords sits below Personality in that column.',
+                                                                      waitDuration:
+                                                                          const Duration(
+                                                                              milliseconds:
+                                                                                  400),
+                                                                      child:
+                                                                          Icon(
+                                                                        Icons
+                                                                            .help_outline,
+                                                                        size:
+                                                                            14,
+                                                                        color: Colors
+                                                                            .grey
+                                                                            .shade600,
+                                                                      ),
+                                                                    ),
+                                                                  ],
                                                                 ),
+                                                              ),
+                                                              _layoutOptionalFieldRow(
+                                                                label:
+                                                                    'Show Personality Field:',
+                                                                value: _template
+                                                                    .showPersonalityField,
+                                                                onSave:
+                                                                    _setShowPersonalityField,
+                                                              ),
+                                                              _layoutOptionalFieldRow(
+                                                                label:
+                                                                    'Show Keywords Field:',
+                                                                value: _template
+                                                                    .showKeywordsField,
+                                                                onSave:
+                                                                    _setShowKeywordsField,
                                                               ),
                                                             ],
                                                           ),
-                                                        ),
-                                                        _layoutOptionalFieldRow(
-                                                          label:
-                                                              'Show Personality Field:',
-                                                          value: _template
-                                                              .showPersonalityField,
-                                                          onSave:
-                                                              _setShowPersonalityField,
-                                                        ),
-                                                        _layoutOptionalFieldRow(
-                                                          label:
-                                                              'Show Keywords Field:',
-                                                          value: _template
-                                                              .showKeywordsField,
-                                                          onSave:
-                                                              _setShowKeywordsField,
                                                         ),
                                                       ],
                                                     ),
@@ -5024,11 +5216,13 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                             : preferred;
                                                         return SizedBox(
                                                           width: w,
-                                                          child: Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .start,
-                                                            children: [
+                                                          child:
+                                                              _lockableEditorSurface(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              children: [
                                                               const SizedBox(
                                                                   height: 8),
                                                               Text(
@@ -5304,6 +5498,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                               ),
                                                             ],
                                                           ),
+                                                        ),
                                                         );
                                                       },
                                                     ),
@@ -5386,7 +5581,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                                 ),
                                                               ),
                                                               const Spacer(),
-                                                              _addSnippetMenuButton(),
+                                                              _lockableEditorSurface(
+                                                                child:
+                                                                    _addSnippetMenuButton(),
+                                                              ),
                                                               const SizedBox(
                                                                   width: 4),
                                                               _shuffleCaptionButton(),
@@ -5442,29 +5640,33 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                               ),
                                                               const SizedBox(
                                                                   height: 10),
-                                                              LayoutBuilder(
-                                                                builder:
-                                                                    (context,
-                                                                            c) =>
-                                                                        Wrap(
-                                                                  spacing: 8,
-                                                                  runSpacing: 8,
-                                                                  crossAxisAlignment:
-                                                                      WrapCrossAlignment
-                                                                          .center,
-                                                                  children: [
-                                                                    for (final w
-                                                                        in previewWidgets)
-                                                                      ConstrainedBox(
-                                                                        constraints:
-                                                                            BoxConstraints(
-                                                                          maxWidth:
-                                                                              c.maxWidth,
+                                                              _lockableEditorSurface(
+                                                                child:
+                                                                    LayoutBuilder(
+                                                                  builder:
+                                                                      (context,
+                                                                              c) =>
+                                                                          Wrap(
+                                                                    spacing: 8,
+                                                                    runSpacing:
+                                                                        8,
+                                                                    crossAxisAlignment:
+                                                                        WrapCrossAlignment
+                                                                            .center,
+                                                                    children: [
+                                                                      for (final w
+                                                                          in previewWidgets)
+                                                                        ConstrainedBox(
+                                                                          constraints:
+                                                                              BoxConstraints(
+                                                                            maxWidth:
+                                                                                c.maxWidth,
+                                                                          ),
+                                                                          child:
+                                                                              w,
                                                                         ),
-                                                                        child:
-                                                                            w,
-                                                                      ),
-                                                                  ],
+                                                                    ],
+                                                                  ),
                                                                 ),
                                                               ),
                                                               if (_template
@@ -5493,13 +5695,14 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                           ],
                                         ),
                                       ),
-                                          if (_locationEditorOpen ||
+                                          if (!_coreStyleLocked &&
+                                          (_locationEditorOpen ||
                                           _dateEditorOpen ||
                                           _captionPreviewSelected ||
                                           _venuePreviewSelected ||
                                           _bylinePreviewSelected ||
                                           _customTextSnippetEditorOpen ||
-                                          _freeTextSnippetEditorOpen) ...[
+                                          _freeTextSnippetEditorOpen)) ...[
                                         const SizedBox(height: 8),
                                         Container(
                                           decoration: BoxDecoration(

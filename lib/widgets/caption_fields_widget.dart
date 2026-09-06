@@ -17410,6 +17410,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       game: gameInfo,
       sampleAgency: sampleAgency,
       captionOverride: captionBody,
+      sport: widget.sport,
     );
 
     if (captionTemplate.removeDiacritics) {
@@ -21020,7 +21021,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     // Build position labels (kept separate so team-before captions can place
     // position between team name and player name).
     final positionLabels = List<String?>.filled(playerNames.length, null);
-    if (template != null && template.includePlayerPosition) {
+    if (template != null && template.effectiveIncludePlayerPosition) {
       final sportName = widget.sport?.toLowerCase();
       for (var i = 0; i < playerNames.length; i++) {
         final raw = i < players.length ? players[i] : playerNames[i];
@@ -25033,7 +25034,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         (m) => ' (${m.group(1)})',
       );
     }
-    if (template == null || !template.includePlayerPosition) return normalized;
+    if (template == null || !template.effectiveIncludePlayerPosition) {
+      return normalized;
+    }
     final posRaw = _positionForDisplayName(t);
     if (posRaw == null || posRaw.trim().isEmpty) return normalized;
     final formattedPos = formatPositionLabelForCaption(

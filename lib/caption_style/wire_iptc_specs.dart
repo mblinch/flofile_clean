@@ -33,7 +33,6 @@ class WireIptcSpecs {
 
   static const List<WireStyle> builtInWires = [
     WireStyle.getty,
-    WireStyle.gettyInternational,
     WireStyle.imagn,
     WireStyle.ap,
     WireStyle.cp,
@@ -42,9 +41,8 @@ class WireIptcSpecs {
   static String factoryWireLabel(WireStyle wire) {
     switch (wire) {
       case WireStyle.getty:
-        return 'Getty USA';
       case WireStyle.gettyInternational:
-        return 'Getty International';
+        return 'Getty';
       case WireStyle.imagn:
         return 'Imagn';
       case WireStyle.ap:
@@ -58,7 +56,15 @@ class WireIptcSpecs {
 
   static String displayWireLabel(WireStyle wire, String? customLabel) {
     final trimmed = customLabel?.trim();
-    if (trimmed != null && trimmed.isNotEmpty) return trimmed;
+    if (trimmed != null && trimmed.isNotEmpty) {
+      final lower = trimmed.toLowerCase();
+      if (lower == 'getty usa' ||
+          lower == 'getty international' ||
+          lower == 'getty images') {
+        return factoryWireLabel(wire);
+      }
+      return trimmed;
+    }
     return factoryWireLabel(wire);
   }
 

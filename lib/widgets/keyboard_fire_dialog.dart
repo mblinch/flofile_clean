@@ -21,6 +21,9 @@ import 'app_compact_checkbox.dart';
 import 'card_container.dart';
 import 'caption_layout_builder_dialog.dart';
 
+/// Which Keyboard Fire column Tab currently targets (left → right).
+enum _KbShortcutPanel { home, verbs, away }
+
 /// Intents for global H/V firebar shortcut (only when not in a text field).
 class _FirebarHIntent extends Intent {
   const _FirebarHIntent();
@@ -214,6 +217,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   /// Personality field in the Caption card header.
   final FocusNode _personalityFieldFocus = FocusNode();
+
+  /// Column highlighted by Tab cycling (Home / Verbs / Visiting).
+  _KbShortcutPanel? _shortcutPanel;
   String _homeSummary = '';
   String _awaySummary = '';
   String _verbSummary = '';
@@ -1243,6 +1249,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     super.initState();
     _wireCaptionPinHooks();
     _personalityFieldFocus.addListener(_onPersonalityFieldFocusChanged);
+    _homeBarFocus.addListener(_syncShortcutPanelFromFocus);
+    _awayBarFocus.addListener(_syncShortcutPanelFromFocus);
+    _categoryBarFocus.addListener(_syncShortcutPanelFromFocus);
+    _captionFocus.addListener(_syncShortcutPanelFromFocus);
+    HardwareKeyboard.instance.addHandler(_handlePanelFocusKeys);
     HardwareKeyboard.instance.addHandler(_handlePlayerJerseyShortcut);
     _enableNativeJerseyShortcuts(true);
     if (widget.keywordModeEnabled) {
@@ -1281,10 +1292,130 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   @override
   void reassemble() {
     super.reassemble();
-    // Hot reload does not re-run initState; keep the jersey handler live.
+    // Hot reload does not re-run initState; keep handlers live.
+    HardwareKeyboard.instance.removeHandler(_handlePanelFocusKeys);
     HardwareKeyboard.instance.removeHandler(_handlePlayerJerseyShortcut);
+    HardwareKeyboard.instance.addHandler(_handlePanelFocusKeys);
     HardwareKeyboard.instance.addHandler(_handlePlayerJerseyShortcut);
     _enableNativeJerseyShortcuts(true);
+  }
+
+  /// Keep the column outline in sync when a search bar or the caption is focused.
+  /// Tab can highlight a column without focusing a bar — don't clear that when
+  /// focus is nowhere.
+  void _syncShortcutPanelFromFocus() {
+    if (!mounted) return;
+    final _KbShortcutPanel? next;
+    if (_homeBarFocus.hasFocus) {
+      next = _KbShortcutPanel.home;
+    } else if (_categoryBarFocus.hasFocus) {
+      next = _KbShortcutPanel.verbs;
+    } else if (_awayBarFocus.hasFocus) {
+      next = _KbShortcutPanel.away;
+    } else if (_captionFocus.hasFocus || _personalityFieldFocus.hasFocus) {
+      next = null;
+    } else {
+      return; // Leave Tab-only highlight alone.
+    }
+    if (next != _shortcutPanel) {
+      setState(() => _shortcutPanel = next);
+    }
+  }
+
+  FocusNode _focusNodeForPanel(_KbShortcutPanel panel) {
+    switch (panel) {
+      case _KbShortcutPanel.home:
+        return _homeBarFocus;
+      case _KbShortcutPanel.verbs:
+        return _categoryBarFocus;
+      case _KbShortcutPanel.away:
+        return _awayBarFocus;
+    }
+  }
+
+  /// Highlight a column. [focusBar] is for click; Tab uses highlight only.
+  void _selectShortcutPanel(_KbShortcutPanel panel, {bool focusBar = false}) {
+    if (_shortcutPanel != panel) {
+      setState(() => _shortcutPanel = panel);
+    }
+    if (focusBar) {
+      final node = _focusNodeForPanel(panel);
+      if (!node.hasFocus) node.requestFocus();
+    }
+  }
+
+  void _cycleShortcutPanel({required bool reverse}) {
+    const order = _KbShortcutPanel.values;
+    final current = _shortcutPanel;
+    final int nextIndex;
+    if (current == null) {
+      nextIndex = reverse ? order.length - 1 : 0;
+    } else {
+      final i = order.indexOf(current);
+      nextIndex = reverse
+          ? (i - 1 + order.length) % order.length
+          : (i + 1) % order.length;
+    }
+    // Leave any typing box so Tab doesn't park the caret in a search bar.
+    FocusManager.instance.primaryFocus?.unfocus();
+    _selectShortcutPanel(order[nextIndex], focusBar: false);
+  }
+
+  /// Esc leaves any typing box; Tab / Shift+Tab cycles Home → Verbs → Visiting.
+  bool _handlePanelFocusKeys(KeyEvent event) {
+    if (!mounted) return false;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return false;
+
+    final kb = HardwareKeyboard.instance;
+
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      final focus = FocusManager.instance.primaryFocus;
+      final hadFocus = focus != null && focus.hasFocus;
+      if (hadFocus) focus.unfocus();
+      if (_shortcutPanel != null) {
+        setState(() => _shortcutPanel = null);
+        return true;
+      }
+      return hadFocus;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.tab) {
+      // Leave ⌘Tab / ⌃Tab / ⌥Tab alone (system or other shortcuts).
+      if (kb.isMetaPressed || kb.isControlPressed || kb.isAltPressed) {
+        return false;
+      }
+      _cycleShortcutPanel(reverse: kb.isShiftPressed);
+      return true;
+    }
+
+    return false;
+  }
+
+  /// Accent outline around the Tab/click-targeted column.
+  /// Click selects the column highlight; the number bar only takes the caret
+  /// when you click the bar itself (so verb/roster taps aren't eaten by focus).
+  Widget _wrapShortcutPanelHighlight({
+    required _KbShortcutPanel panel,
+    required bool active,
+    required Widget child,
+  }) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _selectShortcutPanel(panel, focusBar: false),
+      child: AnimatedContainer(
+        duration: AppTokens.motionFast,
+        curve: AppTokens.motionCurve,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppTokens.radiusCard + 1),
+          border: Border.all(
+            color: active ? AppTokens.accent : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        padding: const EdgeInsets.all(1),
+        child: child,
+      ),
+    );
   }
 
   void _onKeyboardFireCaptionFieldVisibilityRevision() {
@@ -1468,6 +1599,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handlePanelFocusKeys);
     HardwareKeyboard.instance.removeHandler(_handlePlayerJerseyShortcut);
     _enableNativeJerseyShortcuts(false);
     _modJerseyTimer?.cancel();
@@ -1487,11 +1619,19 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     _verbsScrollController.dispose();
     _homeRosterScrollController.dispose();
     _awayRosterScrollController.dispose();
-    _homeBarFocus.dispose();
-    _awayBarFocus.dispose();
-    _categoryBarFocus.dispose();
+    _homeBarFocus
+      ..removeListener(_syncShortcutPanelFromFocus)
+      ..dispose();
+    _awayBarFocus
+      ..removeListener(_syncShortcutPanelFromFocus)
+      ..dispose();
+    _categoryBarFocus
+      ..removeListener(_syncShortcutPanelFromFocus)
+      ..dispose();
     _verbBarFocus.dispose();
-    _captionFocus.dispose();
+    _captionFocus
+      ..removeListener(_syncShortcutPanelFromFocus)
+      ..dispose();
     _personalityFieldFocus
       ..removeListener(_onPersonalityFieldFocusChanged)
       ..dispose();
@@ -3860,6 +4000,10 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                _shortcutHelpRow('Tab / ⇧Tab',
+                    'Cycle Home → Verbs → Visiting (highlight only; click bar to type)'),
+                _shortcutHelpRow('Esc',
+                    'Leave the current typing box / clear column highlight'),
                 _shortcutHelpRow('⇧⏎', 'Save caption & next image (also ⌘S)'),
                 _shortcutHelpRow('⇧⌘⏎',
                     'Save, FTP upload, next image (⇧Ctrl+Enter). Uses active FTP profile.'),
@@ -4908,15 +5052,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       final isDragging = _dragFromCatIndex == ci;
                       final isDragOver =
                           _dragToCatIndex == ci && _dragFromCatIndex != ci;
-                      // Mute other categories when one is expanded or a verb is active.
-                      final isFocusCat = isExpanded ||
-                          _pickedVerbCategory == catNum ||
-                          _pinnedVerbCategory == catNum;
-                      final hasCatFocus = _expandedCategoryIndex != null ||
-                          _pickedVerbCategory != null ||
-                          _pinnedVerbCategory != null ||
-                          _pinnedCustomVerb != null;
-                      final isCatDimmed = hasCatFocus && !isFocusCat;
                       return Listener(
                         behavior: HitTestBehavior.opaque,
                         onPointerDown: (e) {
@@ -5061,7 +5196,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     '$catNum',
                                     selected: false,
                                     onDark: isExpanded,
-                                    dimmed: isCatDimmed,
                                   ),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -5070,9 +5204,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       style: AppTokens.listBody.copyWith(
                                         color: isExpanded
                                             ? AppTokens.surface
-                                            : isCatDimmed
-                                                ? AppTokens.inkMuted
-                                                : AppTokens.ink,
+                                            : AppTokens.ink,
                                         fontWeight: isExpanded
                                             ? FontWeight.w600
                                             : FontWeight.w400,
@@ -5090,10 +5222,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                       size: 16,
                                       color: isExpanded
                                           ? AppTokens.surface
-                                          : isCatDimmed
-                                              ? AppTokens.inkMuted
-                                                  .withValues(alpha: 0.55)
-                                              : AppTokens.inkMuted,
+                                          : AppTokens.inkMuted,
                                     ),
                                   ),
                                 ],
@@ -5127,11 +5256,6 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           final isPinned = _pinnedVerbCategory == catNum &&
                               _pinnedVerbIndex == verbNum;
                           final isActive = isPicked || isPinned;
-                          // When a verb is picked/pinned, mute the rest of the list.
-                          final hasActiveVerb = _pickedVerbCategory != null ||
-                              _pinnedVerbCategory != null ||
-                              _pinnedCustomVerb != null;
-                          final isDimmed = hasActiveVerb && !isActive;
                           String kbSport = 'baseball';
                           try {
                             kbSport = (state as dynamic).currentSportName
@@ -5240,177 +5364,176 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     verbNum: verbNum,
                                     isPinned: isPinned);
                               },
-                              child: AnimatedContainer(
-                                key: allowVerbReorder
-                                    ? _verbRowKey(ci, vi)
-                                    : null,
-                                duration: AppTokens.motionFast,
-                                curve: AppTokens.motionCurve,
-                                padding: EdgeInsets.only(
-                                  left: 4,
-                                  right: 4,
-                                  top: (showRbiInline ||
-                                          showHomeRunInline ||
-                                          showBuntSubExtras)
-                                      ? 3
-                                      : 2,
-                                  bottom: (showRbiInline ||
-                                          showHomeRunInline ||
-                                          showBuntSubExtras)
-                                      ? 0
-                                      : 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isPicked
-                                      ? AppTokens.accentTint
-                                      : (isHovered
-                                          ? AppTokens.canvas
-                                          : AppTokens.surface),
-                                  borderRadius: (showRbiInline ||
-                                          showHomeRunInline)
-                                      ? const BorderRadius.vertical(
-                                          top: Radius.circular(
-                                            AppTokens.radiusControl,
-                                          ),
-                                        )
-                                      : ((showBuntSubExtras ||
-                                              showCeleOnlyMenu ||
-                                              showTagsMenu ||
-                                              showBaseMenu)
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTapDown: (TapDownDetails d) {
+                                    _verbRowTapConsumedByCmd = false;
+                                    if (HardwareKeyboard
+                                        .instance.isControlPressed) {
+                                      _verbRowTapConsumedByCmd = true;
+                                      _showVerbContextMenu(
+                                          context,
+                                          d.globalPosition,
+                                          verb,
+                                          isFavorite,
+                                          catNum: catNum,
+                                          verbNum: verbNum,
+                                          isPinned: isPinned);
+                                      return;
+                                    }
+                                    if (HardwareKeyboard
+                                        .instance.isMetaPressed) {
+                                      _verbRowTapConsumedByCmd = true;
+                                      _onVerbTapped(catNum, verbNum,
+                                          cmdHeld: true);
+                                      return;
+                                    }
+                                    if (isPicked || isPinned) {
+                                      _verbRowTapConsumedByCmd = true;
+                                      _onVerbTapped(catNum, verbNum);
+                                    }
+                                  },
+                                  onTap: () {
+                                    if (_suppressVerbTapAfterVerbDrag) {
+                                      _suppressVerbTapAfterVerbDrag = false;
+                                      return;
+                                    }
+                                    if (_verbRowTapConsumedByCmd) {
+                                      _verbRowTapConsumedByCmd = false;
+                                      return;
+                                    }
+                                    if (!HardwareKeyboard
+                                            .instance.isMetaPressed &&
+                                        !HardwareKeyboard
+                                            .instance.isControlPressed) {
+                                      _onVerbTapped(catNum, verbNum);
+                                    }
+                                  },
+                                  child: AnimatedContainer(
+                                    key: allowVerbReorder
+                                        ? _verbRowKey(ci, vi)
+                                        : null,
+                                    duration: AppTokens.motionFast,
+                                    curve: AppTokens.motionCurve,
+                                    width: double.infinity,
+                                    padding: EdgeInsets.only(
+                                      left: 12,
+                                      right: 4,
+                                      top: (showRbiInline ||
+                                              showHomeRunInline ||
+                                              showBuntSubExtras)
+                                          ? 3
+                                          : 2,
+                                      bottom: (showRbiInline ||
+                                              showHomeRunInline ||
+                                              showBuntSubExtras)
+                                          ? 0
+                                          : 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isPicked
+                                          ? AppTokens.accentTint
+                                          : (isHovered
+                                              ? AppTokens.canvas
+                                              : AppTokens.surface),
+                                      borderRadius: (showRbiInline ||
+                                              showHomeRunInline)
                                           ? const BorderRadius.vertical(
                                               top: Radius.circular(
                                                 AppTokens.radiusControl,
                                               ),
                                             )
-                                          : null),
-                                  border: Border(
-                                    top: isVerbDragOver
-                                        ? const BorderSide(
-                                            color: AppTokens.accent,
-                                            width: 2,
-                                          )
-                                        : BorderSide.none,
-                                    bottom: BorderSide.none,
-                                  ),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    _buildVerbKeycap(
-                                      '$verbNum',
-                                      selected: isPicked,
-                                      small: true,
-                                      dimmed: isDimmed,
+                                          : ((showBuntSubExtras ||
+                                                  showCeleOnlyMenu ||
+                                                  showTagsMenu ||
+                                                  showBaseMenu)
+                                              ? const BorderRadius.vertical(
+                                                  top: Radius.circular(
+                                                    AppTokens.radiusControl,
+                                                  ),
+                                                )
+                                              : null),
+                                      border: Border(
+                                        top: isVerbDragOver
+                                            ? const BorderSide(
+                                                color: AppTokens.accent,
+                                                width: 2,
+                                              )
+                                            : BorderSide.none,
+                                        bottom: BorderSide.none,
+                                      ),
                                     ),
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      fit: FlexFit.loose,
-                                      child: InkWell(
-                                        onTapDown: (TapDownDetails d) {
-                                          _verbRowTapConsumedByCmd = false;
-                                          if (HardwareKeyboard
-                                              .instance.isControlPressed) {
-                                            _verbRowTapConsumedByCmd = true;
-                                            _showVerbContextMenu(
-                                                context,
-                                                d.globalPosition,
-                                                verb,
-                                                isFavorite,
-                                                catNum: catNum,
-                                                verbNum: verbNum,
-                                                isPinned: isPinned);
-                                            return;
-                                          }
-                                          if (HardwareKeyboard
-                                              .instance.isMetaPressed) {
-                                            _verbRowTapConsumedByCmd = true;
-                                            _onVerbTapped(catNum, verbNum,
-                                                cmdHeld: true);
-                                            return;
-                                          }
-                                          if (isPicked || isPinned) {
-                                            _verbRowTapConsumedByCmd = true;
-                                            _onVerbTapped(catNum, verbNum);
-                                          }
-                                        },
-                                        onTap: () {
-                                          if (_suppressVerbTapAfterVerbDrag) {
-                                            _suppressVerbTapAfterVerbDrag =
-                                                false;
-                                            return;
-                                          }
-                                          if (_verbRowTapConsumedByCmd) {
-                                            _verbRowTapConsumedByCmd = false;
-                                            return;
-                                          }
-                                          if (!HardwareKeyboard
-                                                  .instance.isMetaPressed &&
-                                              !HardwareKeyboard
-                                                  .instance.isControlPressed) {
-                                            _onVerbTapped(catNum, verbNum);
-                                          }
-                                        },
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Flexible(
-                                              child: Text(
-                                                verb,
-                                                style: AppTokens.secondaryLabel
-                                                    .copyWith(
-                                                  height: 1.0,
-                                                  color: isPicked
-                                                      ? AppTokens.accentDeep
-                                                      : isDimmed
-                                                          ? AppTokens.inkMuted
-                                                          : AppTokens.ink,
-                                                  fontWeight: isPicked
-                                                      ? FontWeight.w600
-                                                      : FontWeight.w400,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                            if (isPinned)
-                                              const Padding(
-                                                padding:
-                                                    EdgeInsets.only(left: 4),
-                                                child: Icon(
-                                                  Icons.push_pin,
-                                                  size: 12,
-                                                  color: AppTokens.inkMuted,
-                                                ),
-                                              ),
-                                            if (isLastUsed && !isPinned)
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                  left: 4,
-                                                ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        _buildVerbKeycap(
+                                          '$verbNum',
+                                          selected: isPicked,
+                                          small: true,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Flexible(
                                                 child: Text(
-                                                  '← Last used',
-                                                  style: AppTokens.microLabel
+                                                  verb,
+                                                  style: AppTokens
+                                                      .secondaryLabel
                                                       .copyWith(
-                                                    color: isDimmed
-                                                        ? AppTokens.inkMuted
-                                                            .withValues(
-                                                                alpha: 0.55)
-                                                        : AppTokens.inkMuted,
-                                                    letterSpacing: 0,
+                                                    height: 1.0,
+                                                    color: isPicked
+                                                        ? AppTokens.accentDeep
+                                                        : AppTokens.ink,
+                                                    fontWeight: isPicked
+                                                        ? FontWeight.w600
+                                                        : FontWeight.w400,
+                                                  ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (isPinned)
+                                                const Padding(
+                                                  padding: EdgeInsets.only(
+                                                      left: 4),
+                                                  child: Icon(
+                                                    Icons.push_pin,
+                                                    size: 12,
+                                                    color: AppTokens.inkMuted,
                                                   ),
                                                 ),
-                                              ),
-                                          ],
+                                              if (isLastUsed && !isPinned)
+                                                Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                    left: 4,
+                                                  ),
+                                                  child: Text(
+                                                    '← Last used',
+                                                    style: AppTokens.microLabel
+                                                        .copyWith(
+                                                      color:
+                                                          AppTokens.inkMuted,
+                                                      letterSpacing: 0,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
+                                        if (showBuntMenu && state != null) ...[
+                                          const SizedBox(width: 6),
+                                          _buildBuntSingleChip(
+                                            state,
+                                            currentBuntSingle,
+                                          ),
+                                        ],
+                                      ],
                                     ),
-                                    if (showBuntMenu && state != null) ...[
-                                      const SizedBox(width: 6),
-                                      _buildBuntSingleChip(
-                                        state,
-                                        currentBuntSingle,
-                                      ),
-                                    ],
-                                  ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -8018,30 +8141,42 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             children: [
               // ── 1: Home roster (title, then box: number bar + list) ───────
               Expanded(
-                child: _buildRosterPanel(
-                  teamName: homeName,
-                  roster: _homeRosterView,
-                  isHomeTeam: true,
-                  searchController: _homeBarController,
-                  searchFocus: _homeBarFocus,
-                  onSearchSubmitted: _onHomeBarSubmit,
+                child: _wrapShortcutPanelHighlight(
+                  panel: _KbShortcutPanel.home,
+                  active: _shortcutPanel == _KbShortcutPanel.home,
+                  child: _buildRosterPanel(
+                    teamName: homeName,
+                    roster: _homeRosterView,
+                    isHomeTeam: true,
+                    searchController: _homeBarController,
+                    searchFocus: _homeBarFocus,
+                    onSearchSubmitted: _onHomeBarSubmit,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               // ── 2: Categories + verbs (one bar: 2 digits = cat + verb) ───
               Expanded(
-                child: _buildVerbsPanel(),
+                child: _wrapShortcutPanelHighlight(
+                  panel: _KbShortcutPanel.verbs,
+                  active: _shortcutPanel == _KbShortcutPanel.verbs,
+                  child: _buildVerbsPanel(),
+                ),
               ),
               const SizedBox(width: 8),
               // ── 3: Away roster (title, then box: number bar + list) ───────
               Expanded(
-                child: _buildRosterPanel(
-                  teamName: awayName,
-                  roster: _awayRosterView,
-                  isHomeTeam: false,
-                  searchController: _awayBarController,
-                  searchFocus: _awayBarFocus,
-                  onSearchSubmitted: _onAwayBarSubmit,
+                child: _wrapShortcutPanelHighlight(
+                  panel: _KbShortcutPanel.away,
+                  active: _shortcutPanel == _KbShortcutPanel.away,
+                  child: _buildRosterPanel(
+                    teamName: awayName,
+                    roster: _awayRosterView,
+                    isHomeTeam: false,
+                    searchController: _awayBarController,
+                    searchFocus: _awayBarFocus,
+                    onSearchSubmitted: _onAwayBarSubmit,
+                  ),
                 ),
               ),
               // Trailing sidebar injected from parent (e.g. save/ftp buttons)

@@ -8,6 +8,7 @@ import 'date_formula.dart';
 import 'game_info.dart';
 import 'position_labels.dart';
 import 'region_abbrev.dart';
+import 'sport_verb_categories.dart';
 
 /// Drives the sample credit line dropdown (preview branding).
 enum CreditSampleAgency { gettyImages, imagn, ap }
@@ -228,11 +229,24 @@ class CaptionFormulaRenderer {
   ///   whole line after assembly (kept for templates that haven't migrated).
   /// - When two geo chips render back-to-back with no literal between them,
   ///   a single space is inserted so fields never run together.
+  /// - When [LocationLineOptions.autoAdaptUsIntl] or [forceAutoAdaptUsIntl] is
+  ///   true: United States → City+State; everywhere else → City+Country.
   static String formatLocationLine(
     GameInfo g,
     LocationLineOptions options, {
     bool apStyleCaption = false,
+    bool forceAutoAdaptUsIntl = false,
+    int locationOccurrenceIndex = 0,
   }) {
+    if (options.autoAdaptUsIntl || forceAutoAdaptUsIntl) {
+      return _formatAutoAdaptUsIntlLocationLine(
+        g,
+        options,
+        apStyleCaption: apStyleCaption,
+        locationOccurrenceIndex: locationOccurrenceIndex,
+      );
+    }
+
     final b = StringBuffer();
     var lastEmittedWasGeo = false;
     final countryName = g.resolvedCountryName.trim().toLowerCase();
@@ -295,6 +309,154 @@ class CaptionFormulaRenderer {
     if (s.trim().isEmpty) return '—';
     if (options.uppercase) s = s.toUpperCase();
     return s;
+  }
+
+  /// True when [GameInfo] resolves to the United States.
+  ///
+  /// Prefer explicit Country / Country Code. When those are missing, a known
+  /// US state/territory in Province/State (or region code) implies US mode.
+  static bool isUnitedStatesGame(GameInfo g) {
+    final name = g.resolvedCountryName.trim().toLowerCase();
+    final code = g.resolvedCountryCode.trim().toLowerCase();
+    if (code == 'usa' || code == 'us' || code == '840') return true;
+    if (name == 'united states' ||
+        name == 'united states of america' ||
+        name == 'usa' ||
+        name == 'u.s.' ||
+        name == 'u.s.a.' ||
+        name == 'us') {
+      return true;
+    }
+    // Explicit other country → not US (even if a state-like region is present).
+    if (name.isNotEmpty || code.isNotEmpty) return false;
+    return isKnownUsStateOrTerritory(g.resolvedRegionName) ||
+        isKnownUsStateOrTerritory(g.regionCode);
+  }
+
+  /// Getty-style: `City, State` in the US; `City, Country` elsewhere.
+  /// Keeps only literals before the first geo chip and after the last geo chip
+  /// (e.g. closing `in `), not the `, ` separators between city/region/country.
+  static String _formatAutoAdaptUsIntlLocationLine(
+    GameInfo g,
+    LocationLineOptions options, {
+    bool apStyleCaption = false,
+    int locationOccurrenceIndex = 0,
+  }) {
+    final chips = options.chips;
+    var firstGeo = -1;
+    var lastGeo = -1;
+    for (var i = 0; i < chips.length; i++) {
+      final c = chips[i];
+      if (c.kind == LocationChipKind.literal) continue;
+      if (!c.enabled) continue;
+      if (firstGeo < 0) firstGeo = i;
+      lastGeo = i;
+    }
+
+    LocationChip? cityChip;
+    LocationChip? regionChip;
+    LocationChip? countryChip;
+    final leadingLiterals = StringBuffer();
+    final trailingLiterals = StringBuffer();
+    for (var i = 0; i < chips.length; i++) {
+      final c = chips[i];
+      if (c.kind == LocationChipKind.literal) {
+        if (firstGeo >= 0 && i < firstGeo) {
+          leadingLiterals.write(c.literal);
+        } else if (lastGeo >= 0 && i > lastGeo) {
+          trailingLiterals.write(c.literal);
+        }
+        continue;
+      }
+      if (!c.enabled) continue;
+      switch (c.kind) {
+        case LocationChipKind.city:
+          cityChip ??= c;
+          break;
+        case LocationChipKind.region:
+          regionChip ??= c;
+          break;
+        case LocationChipKind.country:
+          countryChip ??= c;
+          break;
+        case LocationChipKind.literal:
+          break;
+      }
+    }
+
+    final cityRaw = g.city.trim();
+    final isUs = isUnitedStatesGame(g);
+
+    String secondRaw = '';
+    var secondCaps = false;
+    if (isUs) {
+      final chip = regionChip;
+      if (chip != null &&
+          chip.regionVariant == LocationRegionVariant.apStyle) {
+        final full = g.resolvedRegionName.trim();
+        secondRaw = abbreviateUsStateApStyle(full);
+        if (secondRaw.isEmpty) secondRaw = full;
+      } else {
+        final useShort =
+            chip?.regionVariant == LocationRegionVariant.shortForm;
+        secondRaw = (useShort ? g.resolvedRegionShort : g.resolvedRegionName)
+            .trim();
+        if (secondRaw.isEmpty) {
+          secondRaw =
+              (useShort ? g.resolvedRegionName : g.resolvedRegionShort).trim();
+        }
+      }
+      secondCaps =
+          chip?.caps ?? countryChip?.caps ?? cityChip?.caps ?? false;
+    } else {
+      final chip = countryChip;
+      final useIso = chip?.countryVariant == LocationCountryVariant.isoCode;
+      secondRaw =
+          (useIso ? g.resolvedCountryCode : g.resolvedCountryName).trim();
+      if (secondRaw.isEmpty) {
+        secondRaw =
+            (useIso ? g.resolvedCountryName : g.resolvedCountryCode).trim();
+      }
+      secondCaps =
+          chip?.caps ?? regionChip?.caps ?? cityChip?.caps ?? false;
+    }
+
+    final cityCaps = cityChip?.caps ?? false;
+    final parts = <String>[];
+    if (cityRaw.isNotEmpty) {
+      parts.add(cityCaps || options.uppercase ? cityRaw.toUpperCase() : cityRaw);
+    }
+    if (secondRaw.isNotEmpty) {
+      parts.add(
+          secondCaps || options.uppercase ? secondRaw.toUpperCase() : secondRaw);
+    }
+
+    var body = parts.join(', ');
+    if (apStyleCaption) {
+      body = body.replaceFirst(RegExp(r'[,\s]+$'), '');
+    }
+    if (body.trim().isEmpty) return '—';
+    if (options.uppercase) body = body.toUpperCase();
+
+    var leading = leadingLiterals.toString();
+    // Closing Getty location (2nd+ occurrence) should read "in City, Country".
+    if (locationOccurrenceIndex >= 1) {
+      final leadTrim = leading.trimLeft().toLowerCase();
+      final hasIn = leadTrim == 'in' || leadTrim.startsWith('in ');
+      if (!hasIn) {
+        leading = leading.isEmpty ? 'in ' : '${leading}in ';
+      } else if (!leading.endsWith(' ') &&
+          !body.startsWith(' ') &&
+          body.isNotEmpty) {
+        leading = '$leading ';
+      }
+    }
+
+    // Never leave a dangling comma/space before the next formula punctuation.
+    var trailing = trailingLiterals.toString();
+    trailing = trailing.replaceFirst(RegExp(r'[,\s]+$'), '');
+
+    return '$leading$body$trailing';
   }
 
   /// How many times [kind] appears in [order] strictly before [segmentIndex].
@@ -611,7 +773,7 @@ class CaptionFormulaRenderer {
       teamName = CaptionTextNormalize.stripDiacritics(teamName);
     }
     final numText = _numberToken(template.numberFormat, player.number);
-    final position = template.includePlayerPosition
+    final position = template.effectiveIncludePlayerPosition
         ? ' ${formatPositionLabelForCaption(
             player.position,
             apStyle: template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp,
@@ -625,7 +787,7 @@ class CaptionFormulaRenderer {
       case CaptionTeamOrder.teamAfter:
         return '$playerName $numText of the $teamName$position';
       case CaptionTeamOrder.teamBefore:
-        if (template.includePlayerPosition) {
+        if (template.effectiveIncludePlayerPosition) {
           return '$teamName$position $playerName $numText';
         }
         return '$teamPossessive $playerName $numText';
@@ -733,6 +895,28 @@ class CaptionFormulaRenderer {
     }
   }
 
+  /// Getty NBA/WNBA trailer (second sentence). Injected for Getty wire only.
+  static const String gettyBasketballNoteToUser =
+      'NOTE TO USER: User expressly acknowledges and agrees that, by downloading '
+      'and/or using this Photograph, user is consenting to the terms and conditions '
+      'of the Getty Images License Agreement.';
+
+  /// Appends [gettyBasketballNoteToUser] for Getty + NBA/WNBA captions.
+  static String appendGettyBasketballNoteIfNeeded({
+    required String caption,
+    required CaptionTemplate template,
+    String? sport,
+  }) {
+    if (!SportVerbCategories.usesBasketballRules(sport ?? '')) return caption;
+    final getty = template.wireStyle == WireStyle.getty ||
+        template.wireStyle == WireStyle.gettyInternational;
+    if (!getty) return caption;
+    if (caption.contains('NOTE TO USER:')) return caption;
+    final trimmed = caption.trimRight();
+    if (trimmed.isEmpty) return gettyBasketballNoteToUser;
+    return '$trimmed $gettyBasketballNoteToUser';
+  }
+
   static String render({
     required CaptionTemplate template,
     required GameInfo game,
@@ -741,16 +925,18 @@ class CaptionFormulaRenderer {
     String? creditOverride,
     List<CaptionPreviewPlayer>? previewPlayers,
     List<String>? previewActions,
+    String? sport,
   }) {
     final cap = captionOverride ??
         sampleDynamicCaption(
           template,
           previewPlayers: previewPlayers,
           previewActions: previewActions,
+          sport: sport,
         );
     final venue = game.venue.trim().isEmpty ? 'Venue' : game.venue.trim();
 
-    return _renderFromSegments(
+    final joined = _renderFromSegments(
       template: template,
       game: game,
       sampleAgency: sampleAgency,
@@ -758,6 +944,11 @@ class CaptionFormulaRenderer {
       venue: venue,
       creditOverride: creditOverride,
       customSegmentPlaceholderIndex: null,
+    );
+    return appendGettyBasketballNoteIfNeeded(
+      caption: joined,
+      template: template,
+      sport: sport,
     );
   }
 
@@ -860,10 +1051,16 @@ class CaptionFormulaRenderer {
         case CaptionSegment.location:
           final occ = segmentOccurrenceIndex(
               template.segmentOrder, segmentIndex, CaptionSegment.location);
+          final locOpts = locationLineOptionsForOccurrence(template, occ);
+          final gettyWire = template.wireStyle == WireStyle.getty ||
+              template.wireStyle == WireStyle.gettyInternational;
           return formatLocationLine(
             game,
-            locationLineOptionsForOccurrence(template, occ),
-            apStyleCaption: template.wireStyle == WireStyle.ap || template.wireStyle == WireStyle.cp,
+            locOpts,
+            apStyleCaption: template.wireStyle == WireStyle.ap ||
+                template.wireStyle == WireStyle.cp,
+            forceAutoAdaptUsIntl: gettyWire,
+            locationOccurrenceIndex: occ,
           );
         case CaptionSegment.date:
           final occ = segmentOccurrenceIndex(
@@ -970,7 +1167,52 @@ class CaptionFormulaRenderer {
     if (suffix.isNotEmpty) {
       joined = joined.isEmpty ? suffix : _joinWithoutDuplicateOverlap(joined, suffix);
     }
-    return _cleanDuplicatePunctuation(joined);
+    joined = _cleanDuplicatePunctuation(joined);
+    if (_shouldApplyGettyCaptionCleanup(template) ||
+        joined.contains('(Photo by')) {
+      joined = _cleanGettyCaptionPunctuation(joined);
+    }
+    return joined;
+  }
+
+  /// Getty (and Getty-like custom) captions need the same glue cleanup.
+  static bool _shouldApplyGettyCaptionCleanup(CaptionTemplate template) {
+    if (template.wireStyle == WireStyle.getty ||
+        template.wireStyle == WireStyle.gettyInternational) {
+      return true;
+    }
+    if (template.locationOptions.autoAdaptUsIntl) return true;
+    final byOcc = template.locationOptionsByOccurrence;
+    if (byOcc != null && byOcc.any((o) => o.autoAdaptUsIntl)) return true;
+    final prefix = template.bylineOptions.prefix.toLowerCase();
+    return template.creditFormat == CreditFormat.photo_by &&
+        prefix.contains('photo by');
+  }
+
+  /// Getty wire cleanup for common formula glue mistakes around location lines.
+  static String _cleanGettyCaptionPunctuation(String s) {
+    var r = s;
+    // "TORONTO, CANADA, -" → "TORONTO, CANADA -"
+    r = r.replaceAll(RegExp(r',\s+-'), ' -');
+    // "in Toronto, Canada, ." → "in Toronto, Canada."
+    r = r.replaceAll(RegExp(r',\s+\.'), '.');
+    // "at Rogers Centre. on June 9" / "Stadium. on September 6"
+    r = r.replaceAll(RegExp(r'\.\s+on\s+', caseSensitive: false), ' on ');
+    // "2026in Miami" → "2026 in Miami"
+    r = r.replaceAllMapped(RegExp(r'(\d)in\s+'), (m) => '${m[1]} in ');
+    // "on June 9, 2026 Miami," → "on June 9, 2026 in Miami,"
+    r = r.replaceAllMapped(
+      RegExp(
+        r'\bon\s+([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})\s+(?!in\b)',
+        caseSensitive: false,
+      ),
+      (m) => 'on ${m[1]} ${m[2]}, ${m[3]} in ',
+    );
+    // "California(Photo" / "California (Photo" / "California. (Photo"
+    // → "California. (Photo"
+    r = r.replaceAll(RegExp(r'[\s.]*\(Photo'), '. (Photo');
+    r = r.replaceAll(RegExp(r'  +'), ' ');
+    return r;
   }
 
   /// Joins two adjacent caption parts, removing any duplicate punctuation at
@@ -1006,7 +1248,27 @@ class CaptionFormulaRenderer {
       }
     }
 
+    // Phase 3 — never glue word characters together ("2026" + "in Miami").
+    if (_endsWithWordChar(left) && _startsWithWordChar(right)) {
+      return '$left $right';
+    }
+
     return left + right;
+  }
+
+  static bool _isWordCharCode(int code) =>
+      (code >= 65 && code <= 90) ||
+      (code >= 97 && code <= 122) ||
+      (code >= 48 && code <= 57);
+
+  static bool _endsWithWordChar(String s) {
+    if (s.isEmpty) return false;
+    return _isWordCharCode(s.codeUnitAt(s.length - 1));
+  }
+
+  static bool _startsWithWordChar(String s) {
+    if (s.isEmpty) return false;
+    return _isWordCharCode(s.codeUnitAt(0));
   }
 
   /// Final-pass cleanup: collapse any duplicate punctuation that slipped
