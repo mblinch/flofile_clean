@@ -1,0 +1,10 @@
+{
+  "name": "quick_cap Flutter (Linux desktop)",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "flutter-app",
+      "command": "export PATH=\"/opt/flutter-sdk/bin:$PATH\"; export DISPLAY=${DISPLAY:-:1}; flutter run -d linux"
+    }
+  ]
+}
