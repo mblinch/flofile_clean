@@ -5,6 +5,7 @@ class MainFlutterWindow: NSWindow {
   private let enforcedMinContentSize = NSSize(width: 1280, height: 800)
   private static var jerseyChannel: FlutterMethodChannel?
   private var jerseyMonitor: Any?
+  private var windowControlChannel: FlutterMethodChannel?
   static var jerseyShortcutsEnabled = true
 
   override func awakeFromNib() {
@@ -44,6 +45,7 @@ class MainFlutterWindow: NSWindow {
 
     _installJerseyShortcutChannel(flutterViewController)
     _installJerseyEventMonitor()
+    _installWindowControlChannel(flutterViewController)
 
     super.awakeFromNib()
   }
@@ -69,6 +71,44 @@ class MainFlutterWindow: NSWindow {
     jerseyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
       if MainFlutterWindow.consumeOptionDigit(event) { return nil }
       return event
+    }
+  }
+
+  private func _installWindowControlChannel(_ flutterViewController: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "window_control",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    windowControlChannel = channel
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "setContentSize",
+            let args = call.arguments as? [String: Any],
+            let width = (args["width"] as? NSNumber)?.doubleValue,
+            let height = (args["height"] as? NSNumber)?.doubleValue else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let self else {
+        result(FlutterError(code: "window_unavailable", message: nil, details: nil))
+        return
+      }
+
+      let contentSize = NSSize(
+        width: max(width, self.enforcedMinContentSize.width),
+        height: max(height, self.enforcedMinContentSize.height)
+      )
+      let nextFrameSize = self.frameRect(
+        forContentRect: NSRect(origin: .zero, size: contentSize)
+      ).size
+      var nextFrame = self.frame
+      nextFrame.origin.x -= (nextFrameSize.width - nextFrame.width) / 2
+      nextFrame.origin.y -= (nextFrameSize.height - nextFrame.height) / 2
+      nextFrame.size = nextFrameSize
+      if let screen = self.screen {
+        nextFrame = self.constrainFrameRect(nextFrame, to: screen)
+      }
+      self.setFrame(nextFrame, display: true, animate: true)
+      result(nil)
     }
   }
 

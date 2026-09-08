@@ -39,14 +39,21 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
   void didUpdateWidget(covariant OrientedFilePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.path != widget.path ||
-        oldWidget.cacheWidth != widget.cacheWidth) {
+        _cacheWidthChanged(oldWidget.cacheWidth, widget.cacheWidth)) {
       _load();
     }
   }
 
+  bool _cacheWidthChanged(int? previous, int? next) {
+    if (previous == next) return false;
+    if (previous == null || next == null || previous <= 0 || next <= 0) {
+      return true;
+    }
+    return (next - previous).abs() / previous > 0.2;
+  }
+
   void _load() {
     final t = ++_token;
-    setState(() => _bytes = null);
     OrientedImageBytes.load(
       widget.path,
       maxWidth: widget.cacheWidth,

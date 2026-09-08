@@ -95,7 +95,17 @@ class UserPreferencesFirestoreService {
       final p = _pendingUploadPrefs;
       _pendingUploadPrefs = null;
       if (p == null) return;
-      unawaited(_uploadNow(p, _signedInUid!));
+      final uid = _signedInUid;
+      if (uid == null) return;
+      unawaited(() async {
+        try {
+          await _uploadNow(p, uid);
+        } catch (e, st) {
+          // Never let cloud sync take down the app (e.g. permission-denied).
+          print('UserPreferencesFirestoreService.upload failed: $e');
+          print(st);
+        }
+      }());
     });
   }
 

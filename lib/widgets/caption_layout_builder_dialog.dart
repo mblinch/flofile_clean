@@ -14,6 +14,7 @@ import '../caption_style/game_info.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/current_user_service.dart';
 import '../services/preferences_service.dart';
+import '../theme/app_tokens.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 import 'date_formula_editor.dart';
@@ -4466,11 +4467,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                         children: [
                           Text(
                             'Caption Layout',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                            style: AppTokens.title.copyWith(
                               color: Colors.grey.shade900,
-                              letterSpacing: -0.2,
                             ),
                           ),
                           const Spacer(),

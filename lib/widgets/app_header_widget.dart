@@ -389,8 +389,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
           Text(
             'FLO FILE',
             style: const TextStyle(
+              fontFamily: AppTokens.titleFontFamily,
+              fontFamilyFallback: AppTokens.titleFontFallback,
               fontSize: 11,
-              fontWeight: FontWeight.w400,
+              fontWeight: FontWeight.w600,
               color: AppTokens.onAccent,
               letterSpacing: 0.5,
               height: 1.0,

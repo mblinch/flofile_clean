@@ -7,7 +7,10 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'firebase_options.dart';
 import 'flo_layout_constants.dart';
 import 'theme/app_tokens.dart';
+import 'theme/ff_tokens.dart';
 import 'screens/caption_builder_screen.dart';
+import 'screens/caption_v2/caption_v2_flag.dart';
+import 'screens/caption_v2/caption_v2_screen.dart';
 import 'services/auth_service.dart';
 import 'widgets/app_auth_shell.dart';
 import 'widgets/preferences_dialog.dart';
@@ -173,6 +176,7 @@ class MyApp extends StatelessWidget {
           navigatorKey: appNavigatorKey,
           debugShowCheckedModeBanner: false,
           scrollBehavior: const FloScrollBehavior(),
+          themeMode: kUseCaptionV2 ? ThemeMode.dark : ThemeMode.light,
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
               seedColor: AppTokens.accent,
@@ -181,6 +185,7 @@ class MyApp extends StatelessWidget {
             scaffoldBackgroundColor: AppTokens.canvas,
             useMaterial3: true,
             fontFamily: 'Inter',
+            extensions: const <ThemeExtension<dynamic>>[FfTokens.light],
             scrollbarTheme: ScrollbarThemeData(
               thickness: const WidgetStatePropertyAll(kFloScrollbarThickness),
               radius: const Radius.circular(4),
@@ -203,8 +208,22 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
-          home: const AppAuthShell(
-            child: CaptionBuilderScreen(),
+          darkTheme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: FfTokens.dark.accent,
+              brightness: Brightness.dark,
+            ),
+            scaffoldBackgroundColor: FfTokens.dark.bg,
+            useMaterial3: true,
+            fontFamily: FfTokens.fontFamily,
+            extensions: const <ThemeExtension<dynamic>>[FfTokens.dark],
+            focusColor: FfTokens.dark.accent.withValues(alpha: 0.0),
+            splashFactory: NoSplash.splashFactory,
+          ),
+          home: AppAuthShell(
+            child: kUseCaptionV2
+                ? const CaptionV2Screen()
+                : const CaptionBuilderScreen(),
           ),
         ),
       ),

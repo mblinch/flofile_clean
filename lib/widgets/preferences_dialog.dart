@@ -7,6 +7,7 @@ import '../services/app_defaults_firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/camera_serial_service.dart';
 import '../services/preferences_service.dart';
+import '../theme/ff_tokens.dart';
 import '../utils/native_file_picker.dart';
 import 'camera_serial_dialog.dart';
 import 'app_compact_checkbox.dart';
@@ -30,12 +31,10 @@ enum _PrefsCategory {
   teamVerb,
 }
 
-/// Same blue as the FTP button in the app.
-const Color _prefsBlue = Color(0xFF0052CC);
-
 class _PreferencesDialogState extends State<PreferencesDialog> {
   late PreferencesService _preferencesService;
-  final TextEditingController _photoshopPathController = TextEditingController();
+  final TextEditingController _photoshopPathController =
+      TextEditingController();
   final TextEditingController _resolutionController = TextEditingController();
   final TextEditingController _mlbInningTzController = TextEditingController();
   String _sportForDefault = 'baseball';
@@ -45,6 +44,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   bool _isAdmin = false;
   bool _appDefaultsBusy = false;
   _PrefsCategory _selectedCategory = _PrefsCategory.application;
+  FfTokens get _t => Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
 
   @override
   void initState() {
@@ -76,8 +76,10 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     setState(() {
       _isAdmin = admin;
       _isLoading = false;
-      _photoshopPathController.text = _currentPreferences?['photoshopPath']?.toString() ?? '';
-      final res = _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
+      _photoshopPathController.text =
+          _currentPreferences?['photoshopPath']?.toString() ?? '';
+      final res =
+          _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
       _resolutionController.text = '$res';
       _mlbInningTzController.text =
           _currentPreferences?['mlbInningExifTimezone']?.toString() ??
@@ -97,39 +99,39 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         width: 860,
         height: 640,
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
+          color: _t.surface,
+          borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+          border: Border.all(color: _t.divider),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: _t.bg.withValues(alpha: 0.55),
               blurRadius: 20,
               offset: const Offset(0, 4),
             ),
           ],
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
           child: Column(
             children: [
               // Header
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: _t.surface,
                   border: Border(
-                    bottom: BorderSide(color: Colors.grey.shade200, width: 1),
+                    bottom: BorderSide(color: _t.divider, width: 1),
                   ),
                 ),
                 child: Row(
                   children: [
                     Text(
                       'Preferences',
-                      style: TextStyle(
+                      style: _t.labelStyle.copyWith(
                         fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.grey.shade900,
-                        letterSpacing: -0.2,
+                        color: _t.text,
                       ),
                     ),
                     const Spacer(),
@@ -140,7 +142,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                         borderRadius: BorderRadius.circular(4),
                         child: Padding(
                           padding: const EdgeInsets.all(4),
-                          child: Icon(Icons.close, size: 20, color: Colors.grey.shade600),
+                          child: Icon(
+                            Icons.close,
+                            size: 20,
+                            color: _t.textSecondary,
+                          ),
                         ),
                       ),
                     ),
@@ -148,54 +154,56 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 ),
               ),
 
-            // Sidebar + content
-            Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Left: category list
-                        Container(
-                          width: sidebarWidth,
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade50,
-                            border: Border(
-                              right: BorderSide(color: Colors.grey.shade200),
+              // Sidebar + content
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Left: category list
+                          Container(
+                            width: sidebarWidth,
+                            decoration: BoxDecoration(
+                              color: _t.sunken,
+                              border: Border(
+                                right: BorderSide(color: _t.divider),
+                              ),
+                            ),
+                            child: ListView(
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              children: [
+                                _buildSidebarTile(
+                                  _PrefsCategory.application,
+                                  'Application',
+                                ),
+                                Divider(
+                                    height: 1, thickness: 1, color: _t.divider),
+                                _buildSidebarTile(
+                                  _PrefsCategory.ftp,
+                                  'FTP',
+                                ),
+                                Divider(
+                                    height: 1, thickness: 1, color: _t.divider),
+                                _buildSidebarTile(
+                                  _PrefsCategory.teamVerb,
+                                  'Team & Verb',
+                                ),
+                              ],
                             ),
                           ),
-                          child: ListView(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            children: [
-                              _buildSidebarTile(
-                                _PrefsCategory.application,
-                                'Application',
-                              ),
-                              Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
-                              _buildSidebarTile(
-                                _PrefsCategory.ftp,
-                                'FTP',
-                              ),
-                              Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
-                              _buildSidebarTile(
-                                _PrefsCategory.teamVerb,
-                                'Team & Verb',
-                              ),
-                            ],
+                          // Right: selected category content
+                          Expanded(
+                            child: SingleChildScrollView(
+                              padding: const EdgeInsets.all(contentPadding),
+                              child: _buildCategoryContent(),
+                            ),
                           ),
-                        ),
-                        // Right: selected category content
-                        Expanded(
-                          child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(contentPadding),
-                            child: _buildCategoryContent(),
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ],
-        ),
+                        ],
+                      ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -207,7 +215,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   ) {
     final selected = _selectedCategory == category;
     return Material(
-      color: selected ? _prefsBlue.withOpacity(0.06) : Colors.transparent,
+      color: selected ? _t.selectedFill : Colors.transparent,
       child: InkWell(
         onTap: () => setState(() => _selectedCategory = category),
         child: Container(
@@ -215,7 +223,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           decoration: BoxDecoration(
             border: selected
                 ? Border(
-                    left: BorderSide(color: _prefsBlue, width: 2),
+                    left: BorderSide(color: _t.accent, width: 2),
                   )
                 : null,
           ),
@@ -225,7 +233,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? _prefsBlue : Colors.grey.shade700,
+              color: selected ? _t.accent : _t.textSecondary,
             ),
           ),
         ),
@@ -247,7 +255,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   Widget _buildApplicationContent() {
     final serialBylines = _currentPreferences?['serialNumberBylines'] == true;
     final burstOn = _currentPreferences?['burstDetectionEnabled'] == true;
-    final resolutionThreshold = _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
+    final resolutionThreshold =
+        _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
     final resolutionEnabled = resolutionThreshold > 0;
 
     return Column(
@@ -256,7 +265,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         if (AuthService.instance.isFirebaseReady) ...[
           _buildAccountSection(),
           const SizedBox(height: 20),
-          Divider(height: 1, color: Colors.grey.shade300),
+          Divider(height: 1, color: _t.divider),
           const SizedBox(height: 20),
         ],
         _buildInlineRow(
@@ -270,7 +279,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   children: [
                     AppCompactCheckbox(
                       value: serialBylines,
-                      accentColor: _prefsBlue,
+                      accentColor: _t.accent,
                       onChanged: (v) async {
                         await _preferencesService.saveSerialNumberBylines(v);
                         await _loadCurrentPreferences();
@@ -286,7 +295,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                         if (!context.mounted) return;
                         await showDialog<void>(
                           context: context,
-                          builder: (context) => CameraSerialDialog(cameraService: cameraService),
+                          builder: (context) =>
+                              CameraSerialDialog(cameraService: cameraService),
                         );
                       },
                     ),
@@ -295,7 +305,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 const SizedBox(height: 8),
                 Text(
                   'Write photographer name and bylines according to camera serial numbers.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 11, color: _t.textSecondary),
                 ),
               ],
             ),
@@ -303,7 +313,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+          child: Divider(height: 1, thickness: 1, color: _t.divider),
         ),
         _buildInlineRow(
           'Burst sequence detection',
@@ -316,7 +326,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   children: [
                     AppCompactCheckbox(
                       value: burstOn,
-                      accentColor: _prefsBlue,
+                      accentColor: _t.accent,
                       onChanged: (v) async {
                         await _preferencesService.saveBurstDetectionEnabled(v);
                         await _loadCurrentPreferences();
@@ -327,7 +337,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 const SizedBox(height: 8),
                 Text(
                   'When saving, detect rapid bursts only forward in time from the current photo (each following shot ≤1s after the previous; earlier frames are ignored) and offer to apply the same caption to those frames. Default is off.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 11, color: _t.textSecondary),
                 ),
               ],
             ),
@@ -335,133 +345,152 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+          child: Divider(height: 1, thickness: 1, color: _t.divider),
         ),
-        _buildInlineRow('Resolution (pixels)', child: Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+        _buildInlineRow('Resolution (pixels)',
+            child: Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  AppCompactCheckbox(
-                    value: resolutionEnabled,
-                    accentColor: _prefsBlue,
-                    onChanged: (v) async {
-                      if (v) {
-                        await _preferencesService
-                            .saveResolutionWarningThreshold(3000);
-                        _resolutionController.text = '3000';
-                      } else {
-                        await _preferencesService.saveResolutionWarningThreshold(0);
-                        _resolutionController.text = '0';
-                      }
-                      await _loadCurrentPreferences();
-                    },
-                  ),
-                  const SizedBox(width: 12),
-                  SizedBox(
-                    width: 100,
-                    child: TextField(
-                      controller: _resolutionController,
-                      enabled: resolutionEnabled,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-                      decoration: InputDecoration(
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        disabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                        hintText: 'e.g. 3000',
-                        hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                      ),
-                      onSubmitted: (text) async {
-                        if (!resolutionEnabled) return;
-                        final v = int.tryParse(text);
-                        if (v != null && v > 0) {
-                          await _preferencesService.saveResolutionWarningThreshold(v);
-                          await _loadCurrentPreferences();
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Threshold at which a warning is displayed if your picture is below a certain number of pixels on the longest side. Off or set 0 to disable.',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        )),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
-        ),
-        _buildInlineRow('Photoshop Path', child: Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 320,
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _photoshopPathController,
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(6),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                          hintText: 'Path to Photoshop.app',
-                          hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                        ),
-                        onSubmitted: (text) async {
-                          await _preferencesService.savePhotoshopPath(text.isEmpty ? null : text);
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      AppCompactCheckbox(
+                        value: resolutionEnabled,
+                        accentColor: _t.accent,
+                        onChanged: (v) async {
+                          if (v) {
+                            await _preferencesService
+                                .saveResolutionWarningThreshold(3000);
+                            _resolutionController.text = '3000';
+                          } else {
+                            await _preferencesService
+                                .saveResolutionWarningThreshold(0);
+                            _resolutionController.text = '0';
+                          }
                           await _loadCurrentPreferences();
                         },
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedGreyButton(
-                      label: 'Browse',
-                      fontSize: 11,
-                      onPressed: () async {
-                        final path = await NativeFilePicker.pickFile(allowedExtensions: ['app']);
-                        if (path == null || path.isEmpty || !mounted) return;
-                        _photoshopPathController.text = path;
-                        await _preferencesService.savePhotoshopPath(path);
-                        await _loadCurrentPreferences();
-                      },
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          controller: _resolutionController,
+                          enabled: resolutionEnabled,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly
+                          ],
+                          style: TextStyle(fontSize: 11, color: _t.text),
+                          decoration: InputDecoration(
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 10),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: BorderSide(color: _t.divider),
+                            ),
+                            disabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(6),
+                              borderSide: BorderSide(color: _t.divider),
+                            ),
+                            hintText: 'e.g. 3000',
+                            hintStyle: TextStyle(
+                              fontSize: 11,
+                              color: _t.textSecondary,
+                            ),
+                          ),
+                          onSubmitted: (text) async {
+                            if (!resolutionEnabled) return;
+                            final v = int.tryParse(text);
+                            if (v != null && v > 0) {
+                              await _preferencesService
+                                  .saveResolutionWarningThreshold(v);
+                              await _loadCurrentPreferences();
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Threshold at which a warning is displayed if your picture is below a certain number of pixels on the longest side. Off or set 0 to disable.',
+                    style: TextStyle(fontSize: 11, color: _t.textSecondary),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Path to your Photoshop application.',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        )),
+            )),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+          child: Divider(height: 1, thickness: 1, color: _t.divider),
+        ),
+        _buildInlineRow('Photoshop Path',
+            child: Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 320,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _photoshopPathController,
+                            style: TextStyle(fontSize: 11, color: _t.text),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                              border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(6)),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(6),
+                                borderSide: BorderSide(color: _t.divider),
+                              ),
+                              hintText: 'Path to Photoshop.app',
+                              hintStyle: TextStyle(
+                                fontSize: 11,
+                                color: _t.textSecondary,
+                              ),
+                            ),
+                            onSubmitted: (text) async {
+                              await _preferencesService.savePhotoshopPath(
+                                  text.isEmpty ? null : text);
+                              await _loadCurrentPreferences();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedGreyButton(
+                          label: 'Browse',
+                          fontSize: 11,
+                          onPressed: () async {
+                            final path = await NativeFilePicker.pickFile(
+                                allowedExtensions: ['app']);
+                            if (path == null || path.isEmpty || !mounted)
+                              return;
+                            _photoshopPathController.text = path;
+                            await _preferencesService.savePhotoshopPath(path);
+                            await _loadCurrentPreferences();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Path to your Photoshop application.',
+                    style: TextStyle(fontSize: 11, color: _t.textSecondary),
+                  ),
+                ],
+              ),
+            )),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: _t.divider),
         ),
         _buildInlineRow(
           'MLB inning (EXIF timezone)',
@@ -473,20 +502,20 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   width: 320,
                   child: TextField(
                     controller: _mlbInningTzController,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                    style: TextStyle(fontSize: 11, color: _t.text),
                     decoration: InputDecoration(
                       isDense: true,
-                      contentPadding:
-                          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(6)),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(6),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                        borderSide: BorderSide(color: _t.divider),
                       ),
                       hintText: 'e.g. America/New_York',
                       hintStyle:
-                          TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                          TextStyle(fontSize: 11, color: _t.textSecondary),
                     ),
                     onSubmitted: (text) async {
                       await _preferencesService.setMlbInningExifTimezone(text);
@@ -500,7 +529,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   'your account: EXIF time is read as local time in this zone, then '
                   'matched to MLB play-by-play (UTC). Examples: America/New_York, '
                   'America/Los_Angeles.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 11, color: _t.textSecondary),
                 ),
               ],
             ),
@@ -508,7 +537,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+          child: Divider(height: 1, thickness: 1, color: _t.divider),
         ),
         _buildInlineRow(
           'Caption fields',
@@ -537,7 +566,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 Text(
                   'Show or hide optional Personality and Keywords beside the main caption. '
                   'They stack in a column to the right; Keywords is the field after Personality.',
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  style: TextStyle(fontSize: 11, color: _t.textSecondary),
                 ),
                 const SizedBox(height: 10),
                 ElevatedGreyButton(
@@ -556,88 +585,98 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+          child: Divider(height: 1, thickness: 1, color: _t.divider),
         ),
-        _buildInlineRow('Sport Default', child: Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                width: 220,
-                child: DropdownFlutter<String>(
-                  hintText: 'Select sport',
-                  items: const ['None', 'Baseball', 'Hockey', 'Basketball', 'WNBA', 'Soccer'],
-                  initialItem: _sportForDefault.isEmpty
-                      ? 'None'
-                      : (_sportForDefault == 'wnba'
-                          ? 'WNBA'
-                          : _sportForDefault[0].toUpperCase() +
-                              _sportForDefault.substring(1)),
-                  closedHeaderPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  expandedHeaderPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  listItemPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: CustomDropdownDecoration(
-                    closedFillColor: Colors.grey.shade50,
-                    expandedFillColor: Colors.white,
-                    closedBorder: Border.all(color: Colors.grey.shade300),
-                    expandedBorder: Border.all(color: Colors.grey.shade300),
-                    closedBorderRadius: BorderRadius.circular(6),
-                    expandedBorderRadius: BorderRadius.circular(8),
-                    closedShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 4,
-                        offset: const Offset(0, 1),
+        _buildInlineRow('Sport Default',
+            child: Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 220,
+                    child: DropdownFlutter<String>(
+                      hintText: 'Select sport',
+                      items: const [
+                        'None',
+                        'Baseball',
+                        'Hockey',
+                        'Basketball',
+                        'WNBA',
+                        'Soccer'
+                      ],
+                      initialItem: _sportForDefault.isEmpty
+                          ? 'None'
+                          : (_sportForDefault == 'wnba'
+                              ? 'WNBA'
+                              : _sportForDefault[0].toUpperCase() +
+                                  _sportForDefault.substring(1)),
+                      closedHeaderPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      expandedHeaderPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
+                      listItemPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: CustomDropdownDecoration(
+                        closedFillColor: _t.sunken,
+                        expandedFillColor: _t.surface,
+                        closedBorder: Border.all(color: _t.divider),
+                        expandedBorder: Border.all(color: _t.divider),
+                        closedBorderRadius: BorderRadius.circular(6),
+                        expandedBorderRadius: BorderRadius.circular(8),
+                        closedShadow: [
+                          BoxShadow(
+                            color: _t.bg.withValues(alpha: 0.2),
+                            blurRadius: 4,
+                            offset: const Offset(0, 1),
+                          ),
+                        ],
+                        expandedShadow: [
+                          BoxShadow(
+                            color: _t.bg.withValues(alpha: 0.55),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                        hintStyle:
+                            TextStyle(fontSize: 11, color: _t.textSecondary),
+                        headerStyle: TextStyle(fontSize: 11, color: _t.text),
+                        listItemStyle: TextStyle(fontSize: 11, color: _t.text),
+                        listItemDecoration: ListItemDecoration(
+                          selectedColor: _t.selectedFill,
+                        ),
                       ),
-                    ],
-                    expandedShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.10),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                    hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                    headerStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-                    listItemStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-                    listItemDecoration: ListItemDecoration(
-                      selectedColor: Colors.grey.shade100,
+                      onChanged: (label) async {
+                        if (label == null) return;
+                        final map = {
+                          'None': '',
+                          'Baseball': 'baseball',
+                          'Hockey': 'hockey',
+                          'Basketball': 'basketball',
+                          'WNBA': 'wnba',
+                          'Soccer': 'soccer',
+                        };
+                        final v = map[label] ?? '';
+                        setState(() => _sportForDefault = v);
+                        try {
+                          if (v.isEmpty) {
+                            await _preferencesService.saveCurrentSport('');
+                          } else {
+                            await _preferencesService
+                                .setCurrentSportAsDefault(v);
+                          }
+                          await _loadCurrentPreferences();
+                        } catch (_) {}
+                      },
                     ),
                   ),
-                  onChanged: (label) async {
-                    if (label == null) return;
-                    final map = {
-                      'None': '',
-                      'Baseball': 'baseball',
-                      'Hockey': 'hockey',
-                      'Basketball': 'basketball',
-                      'WNBA': 'wnba',
-                      'Soccer': 'soccer',
-                    };
-                    final v = map[label] ?? '';
-                    setState(() => _sportForDefault = v);
-                    try {
-                      if (v.isEmpty) {
-                        await _preferencesService.saveCurrentSport('');
-                      } else {
-                        await _preferencesService.setCurrentSportAsDefault(v);
-                      }
-                      await _loadCurrentPreferences();
-                    } catch (_) {}
-                  },
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Select which sport is defaulted when you open the app.',
+                    style: TextStyle(fontSize: 11, color: _t.textSecondary),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Select which sport is defaulted when you open the app.',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-              ),
-            ],
-          ),
-        )),
+            )),
       ],
     );
   }
@@ -652,7 +691,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       children: [
         AppCompactCheckbox(
           value: isOn,
-          accentColor: _prefsBlue,
+          accentColor: _t.accent,
           onChanged: (v) => onChanged(v),
         ),
         const SizedBox(width: 6),
@@ -662,7 +701,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             onTap: () => onChanged(!isOn),
             child: Text(
               label,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+              style: TextStyle(fontSize: 11, color: _t.text),
             ),
           ),
         ),
@@ -682,7 +721,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 label,
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.grey.shade800),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: _t.text,
+                ),
               ),
             ),
           ),
@@ -699,7 +742,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       children: [
         _buildModernPreferenceItem(
           'Category Order',
-          (_currentPreferences?['categoryOrder'] as List?)?.join(', ') ?? 'Default',
+          (_currentPreferences?['categoryOrder'] as List?)?.join(', ') ??
+              'Default',
           icon: Icons.list,
         ),
         const SizedBox(height: 8),
@@ -720,21 +764,21 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: Colors.grey.shade900,
+            color: _t.text,
           ),
         ),
         const SizedBox(height: 8),
         Text(
           'Restore verb layouts and caption structures from the cloud catalog '
           'published by FloFile admins. Your FTP and caption library are not changed.',
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+          style: TextStyle(fontSize: 11, color: _t.textSecondary),
         ),
         if (AuthService.instance.isSignedIn) ...[
           const SizedBox(height: 8),
           Text(
             'While signed in, your personal settings (captions, verbs, FTP) '
             'sync to your account automatically.',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 11, color: _t.textSecondary),
           ),
         ],
         const SizedBox(height: 10),
@@ -751,21 +795,27 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade900,
+              color: _t.text,
             ),
           ),
           const SizedBox(height: 8),
           Text(
             'Saves your current verb arrangement to Firebase for all users '
             '(used on restore and first sign-in).',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+            style: TextStyle(fontSize: 11, color: _t.textSecondary),
           ),
           const SizedBox(height: 10),
           SizedBox(
             width: 220,
             child: DropdownFlutter<String>(
               hintText: 'Sport',
-              items: const ['Baseball', 'Hockey', 'Basketball', 'WNBA', 'Soccer'],
+              items: const [
+                'Baseball',
+                'Hockey',
+                'Basketball',
+                'WNBA',
+                'Soccer'
+              ],
               initialItem: _publishSport == 'wnba'
                   ? 'WNBA'
                   : _publishSport[0].toUpperCase() + _publishSport.substring(1),
@@ -776,15 +826,15 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               listItemPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: CustomDropdownDecoration(
-                closedFillColor: Colors.grey.shade50,
-                expandedFillColor: Colors.white,
-                closedBorder: Border.all(color: Colors.grey.shade300),
-                expandedBorder: Border.all(color: Colors.grey.shade300),
+                closedFillColor: _t.sunken,
+                expandedFillColor: _t.surface,
+                closedBorder: Border.all(color: _t.divider),
+                expandedBorder: Border.all(color: _t.divider),
                 closedBorderRadius: BorderRadius.circular(6),
                 expandedBorderRadius: BorderRadius.circular(8),
-                hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                headerStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-                listItemStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                hintStyle: TextStyle(fontSize: 11, color: _t.textSecondary),
+                headerStyle: TextStyle(fontSize: 11, color: _t.text),
+                listItemStyle: TextStyle(fontSize: 11, color: _t.text),
               ),
               onChanged: (label) {
                 if (label == null) return;
@@ -805,11 +855,15 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             runSpacing: 8,
             children: [
               ElevatedGreyButton(
-                label: _appDefaultsBusy ? 'Publishing…' : 'Publish verb defaults (sport)',
+                label: _appDefaultsBusy
+                    ? 'Publishing…'
+                    : 'Publish verb defaults (sport)',
                 fontSize: 11,
                 icon: Icons.cloud_upload_outlined,
                 isAdmin: true,
-                onPressed: _appDefaultsBusy ? null : () => _publishVerbsForSport(_publishSport),
+                onPressed: _appDefaultsBusy
+                    ? null
+                    : () => _publishVerbsForSport(_publishSport),
               ),
               ElevatedGreyButton(
                 label: _appDefaultsBusy ? 'Publishing…' : 'Publish all sports',
@@ -864,8 +918,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     final ok = await showAppConfirmDialog(
       context: context,
       title: 'Publish verb defaults?',
-      message:
-          'This updates app originals for $sport for all signed-in users '
+      message: 'This updates app originals for $sport for all signed-in users '
           '(on restore and new installs). Continue?',
       cancelLabel: 'Cancel',
       confirmLabel: 'Publish',
@@ -887,7 +940,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Publish failed: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Publish failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _appDefaultsBusy = false);
@@ -918,7 +972,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Publish failed: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Publish failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _appDefaultsBusy = false);
@@ -940,7 +995,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: Colors.grey.shade900,
+            color: _t.text,
           ),
         ),
         const SizedBox(height: 10),
@@ -998,10 +1053,10 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: Colors.black87,
+                    color: _t.text,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -1009,7 +1064,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   value,
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.grey.shade600,
+                    color: _t.textSecondary,
                   ),
                 ),
               ],
@@ -1019,7 +1074,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             Icon(
               Icons.chevron_right,
               size: 14,
-              color: Colors.grey.shade400,
+              color: _t.textSecondary,
             ),
         ],
       ),
@@ -1030,7 +1085,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         row,
-        Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+        Divider(height: 1, thickness: 1, color: _t.divider),
       ],
     );
 
@@ -1044,5 +1099,4 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
 
     return withDivider;
   }
-
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/preferences_service.dart';
 import 'package:dropdown_flutter/custom_dropdown.dart';
 
+import '../theme/ff_tokens.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 
@@ -11,8 +12,10 @@ import 'app_styled_dialogs.dart';
 class FtpSettingsPanel extends StatefulWidget {
   /// When true, panel is embedded (e.g. in Preferences); no Cancel/Save Settings buttons at bottom.
   final bool embedded;
+
   /// When in dialog mode, called when user taps Cancel or Save Settings.
   final VoidCallback? onClose;
+
   /// Called whenever profiles or current profile are saved (so parent can refresh).
   final VoidCallback? onProfilesChanged;
 
@@ -66,7 +69,9 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
         _host = p['host']?.toString() ?? '';
         _username = p['username']?.toString() ?? '';
         _password = p['password']?.toString() ?? '';
-        _port = (p['port'] is int) ? p['port'] as int : int.tryParse(p['port']?.toString() ?? '21') ?? 21;
+        _port = (p['port'] is int)
+            ? p['port'] as int
+            : int.tryParse(p['port']?.toString() ?? '21') ?? 21;
         _remotePath = p['remotePath']?.toString() ?? '';
         _passiveMode = p['passiveMode'] as bool? ?? true;
       }
@@ -92,7 +97,9 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
       _host = p['host']?.toString() ?? '';
       _username = p['username']?.toString() ?? '';
       _password = p['password']?.toString() ?? '';
-      _port = (p['port'] is int) ? p['port'] as int : int.tryParse(p['port']?.toString() ?? '21') ?? 21;
+      _port = (p['port'] is int)
+          ? p['port'] as int
+          : int.tryParse(p['port']?.toString() ?? '21') ?? 21;
       _remotePath = p['remotePath']?.toString() ?? '';
       _passiveMode = p['passiveMode'] as bool? ?? true;
       _hostController.text = _host;
@@ -162,7 +169,10 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
           autofocus: true,
         ),
         actions: [
-          ElevatedGreyButton(label: 'Cancel', fontSize: 11, onPressed: () => Navigator.pop(ctx)),
+          ElevatedGreyButton(
+              label: 'Cancel',
+              fontSize: 11,
+              onPressed: () => Navigator.pop(ctx)),
           const SizedBox(width: 8),
           ElevatedGreyButton(
             label: 'Create Profile',
@@ -184,11 +194,16 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
   void _showEditProfileDialog(String profileName) {
     final p = _profiles[profileName];
     if (p == null) return;
-    final hostController = TextEditingController(text: p['host']?.toString() ?? '');
-    final usernameController = TextEditingController(text: p['username']?.toString() ?? '');
-    final passwordController = TextEditingController(text: p['password']?.toString() ?? '');
-    final portController = TextEditingController(text: (p['port'] ?? 21).toString());
-    final remotePathController = TextEditingController(text: p['remotePath']?.toString() ?? '');
+    final hostController =
+        TextEditingController(text: p['host']?.toString() ?? '');
+    final usernameController =
+        TextEditingController(text: p['username']?.toString() ?? '');
+    final passwordController =
+        TextEditingController(text: p['password']?.toString() ?? '');
+    final portController =
+        TextEditingController(text: (p['port'] ?? 21).toString());
+    final remotePathController =
+        TextEditingController(text: p['remotePath']?.toString() ?? '');
     bool passiveMode = p['passiveMode'] as bool? ?? true;
 
     showDialog(
@@ -202,28 +217,54 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Edit Profile: $profileName', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade800)),
+                Text('Edit Profile: $profileName',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade800)),
                 const SizedBox(height: 12),
-                TextField(controller: hostController, decoration: const InputDecoration(labelText: 'FTP Host', border: OutlineInputBorder())),
+                TextField(
+                    controller: hostController,
+                    decoration: const InputDecoration(
+                        labelText: 'FTP Host', border: OutlineInputBorder())),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    Expanded(child: TextField(controller: usernameController, decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()))),
+                    Expanded(
+                        child: TextField(
+                            controller: usernameController,
+                            decoration: const InputDecoration(
+                                labelText: 'Username',
+                                border: OutlineInputBorder()))),
                     const SizedBox(width: 8),
-                    SizedBox(width: 80, child: TextField(controller: portController, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Port', border: OutlineInputBorder()))),
+                    SizedBox(
+                        width: 80,
+                        child: TextField(
+                            controller: portController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                                labelText: 'Port',
+                                border: OutlineInputBorder()))),
                   ],
                 ),
                 const SizedBox(height: 8),
-                TextField(controller: passwordController, obscureText: true, decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder())),
+                TextField(
+                    controller: passwordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                        labelText: 'Password', border: OutlineInputBorder())),
                 const SizedBox(height: 8),
-                TextField(controller: remotePathController, decoration: const InputDecoration(labelText: 'Remote Path (optional)', border: OutlineInputBorder())),
+                TextField(
+                    controller: remotePathController,
+                    decoration: const InputDecoration(
+                        labelText: 'Remote Path (optional)',
+                        border: OutlineInputBorder())),
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     AppCompactCheckbox(
                       value: passiveMode,
-                      onChanged: (v) =>
-                          setDialogState(() => passiveMode = v),
+                      onChanged: (v) => setDialogState(() => passiveMode = v),
                     ),
                     const SizedBox(width: 6),
                     const Text('Use Passive Mode'),
@@ -233,7 +274,10 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    ElevatedGreyButton(label: 'Cancel', fontSize: 11, onPressed: () => Navigator.pop(ctx)),
+                    ElevatedGreyButton(
+                        label: 'Cancel',
+                        fontSize: 11,
+                        onPressed: () => Navigator.pop(ctx)),
                     const SizedBox(width: 8),
                     ElevatedGreyButton(
                       label: 'Save',
@@ -249,7 +293,8 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                             'remotePath': remotePathController.text,
                             'passiveMode': passiveMode,
                           };
-                          if (_currentProfile == profileName) _loadProfile(profileName);
+                          if (_currentProfile == profileName)
+                            _loadProfile(profileName);
                         });
                         _saveProfiles();
                         Navigator.pop(ctx);
@@ -280,6 +325,7 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -288,27 +334,42 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
           // Header
           Row(
             children: [
-              Icon(Icons.settings, size: 16, color: Colors.grey.shade600),
+              Icon(Icons.settings, size: 16, color: t.textSecondary),
               const SizedBox(width: 6),
               Text(
                 'FTP Server Settings',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade800),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: t.text,
+                ),
               ),
               const Spacer(),
-              _buildPillButton(Icons.add, 'Create New Profile', onTap: _showCreateProfileDialog),
+              _buildPillButton(Icons.add, 'Create New Profile',
+                  onTap: _showCreateProfileDialog),
             ],
           ),
           const SizedBox(height: 12),
           if (_successMessage != null) ...[
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.green.shade300)),
+              decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.green.shade300)),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, size: 16, color: Colors.green.shade600),
+                  Icon(Icons.check_circle,
+                      size: 16, color: Colors.green.shade600),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(_successMessage!, style: TextStyle(fontSize: 11, color: Colors.green.shade700))),
-                  GestureDetector(onTap: () => setState(() => _successMessage = null), child: Icon(Icons.close, size: 14, color: Colors.green.shade600)),
+                  Expanded(
+                      child: Text(_successMessage!,
+                          style: TextStyle(
+                              fontSize: 11, color: Colors.green.shade700))),
+                  GestureDetector(
+                      onTap: () => setState(() => _successMessage = null),
+                      child: Icon(Icons.close,
+                          size: 14, color: Colors.green.shade600)),
                 ],
               ),
             ),
@@ -316,49 +377,68 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
           ],
           // Profile selection and options
           ...[
-            Text('Select Profile', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+            Text(
+              'Select Profile',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: t.text,
+              ),
+            ),
             const SizedBox(height: 4),
             Container(
               constraints: const BoxConstraints(maxWidth: 400),
               child: DropdownFlutter<String>(
                 hintText: 'Select profile',
                 items: _profiles.keys.toList(),
-                initialItem: _currentProfile != null && _profiles.containsKey(_currentProfile!)
+                initialItem: _currentProfile != null &&
+                        _profiles.containsKey(_currentProfile!)
                     ? _currentProfile
                     : (_profiles.isNotEmpty ? _profiles.keys.first : null),
                 overlayHeight: 260,
-                closedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                expandedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                listItemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                closedHeaderPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                expandedHeaderPadding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                listItemPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: CustomDropdownDecoration(
-                  closedFillColor: Colors.white,
-                  expandedFillColor: Colors.white,
-                  closedBorder: Border.all(color: Colors.grey.shade300),
-                  expandedBorder: Border.all(color: Colors.grey.shade300),
+                  closedFillColor: t.sunken,
+                  expandedFillColor: t.surface,
+                  closedBorder: Border.all(color: t.divider),
+                  expandedBorder: Border.all(color: t.divider),
                   closedBorderRadius: BorderRadius.circular(4),
                   expandedBorderRadius: BorderRadius.circular(8),
                   closedShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: t.bg.withValues(alpha: 0.2),
                       blurRadius: 3,
                       offset: const Offset(0, 1),
                     ),
                   ],
                   expandedShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.10),
+                      color: t.bg.withValues(alpha: 0.55),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
                   ],
-                  hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                  headerStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
-                  listItemStyle: TextStyle(fontSize: 11, color: Colors.grey.shade800),
+                  hintStyle: TextStyle(fontSize: 11, color: t.textSecondary),
+                  headerStyle: TextStyle(fontSize: 11, color: t.text),
+                  listItemStyle: TextStyle(fontSize: 11, color: t.text),
                   listItemDecoration: ListItemDecoration(
-                    selectedColor: Colors.grey.shade100,
+                    selectedColor: t.selectedFill,
                   ),
-                  closedSuffixIcon: Icon(Icons.arrow_drop_down, size: 16, color: Colors.grey.shade600),
-                  expandedSuffixIcon: Icon(Icons.arrow_drop_up, size: 16, color: Colors.grey.shade600),
+                  closedSuffixIcon: Icon(
+                    Icons.arrow_drop_down,
+                    size: 16,
+                    color: t.textSecondary,
+                  ),
+                  expandedSuffixIcon: Icon(
+                    Icons.arrow_drop_up,
+                    size: 16,
+                    color: t.textSecondary,
+                  ),
                 ),
                 listItemBuilder: (context, item, isSelected, onItemSelect) {
                   final name = item;
@@ -372,8 +452,10 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                             label,
                             style: TextStyle(
                               fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                              color: Colors.grey.shade800,
+                              fontWeight: isSelected
+                                  ? FontWeight.w600
+                                  : FontWeight.w500,
+                              color: t.text,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -385,7 +467,11 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                           },
                           child: Padding(
                             padding: const EdgeInsets.only(left: 6),
-                            child: Icon(Icons.settings, size: 14, color: Colors.grey.shade600),
+                            child: Icon(
+                              Icons.settings,
+                              size: 14,
+                              color: t.textSecondary,
+                            ),
                           ),
                         ),
                       ],
@@ -404,18 +490,21 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                 children: [
                   Text(
                     'Current profile: ',
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                    style: TextStyle(fontSize: 11, color: t.textSecondary),
                   ),
                   Expanded(
                     child: Text(
                       _currentProfile!,
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  _buildPillButton(Icons.edit, 'Edit', onTap: () => _showEditProfileDialog(_currentProfile!)),
+                  _buildPillButton(Icons.edit, 'Edit',
+                      onTap: () => _showEditProfileDialog(_currentProfile!)),
                   const SizedBox(width: 6),
-                  _buildPillButton(Icons.delete, 'Delete', onTap: () => _deleteProfile(_currentProfile!)),
+                  _buildPillButton(Icons.delete, 'Delete',
+                      onTap: () => _deleteProfile(_currentProfile!)),
                 ],
               ),
               const SizedBox(height: 12),
@@ -425,11 +514,22 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
             // Upload Options
             Container(
               padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade300)),
+              decoration: BoxDecoration(
+                color: t.sunken,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: t.divider),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Upload Options', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                  Text(
+                    'Upload Options',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: t.text,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _renameController,
@@ -437,9 +537,11 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                     decoration: InputDecoration(
                       labelText: 'Rename uploaded file as',
                       hintText: 'Enter custom filename (optional)',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4)),
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -449,9 +551,11 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                     decoration: InputDecoration(
                       labelText: 'Save a duplicate version in another folder',
                       hintText: 'Enter folder path (optional)',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4)),
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 8),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -462,7 +566,10 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                         onChanged: null,
                       ),
                       const SizedBox(width: 6),
-                      Text('Enable duplicate file saving', style: TextStyle(fontSize: 11, color: Colors.grey.shade700)),
+                      Text(
+                        'Enable duplicate file saving',
+                        style: TextStyle(fontSize: 11, color: t.textSecondary),
+                      ),
                     ],
                   ),
                 ],
@@ -474,14 +581,18 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                ElevatedGreyButton(label: 'Cancel', fontSize: 11, onPressed: () => widget.onClose?.call()),
+                ElevatedGreyButton(
+                    label: 'Cancel',
+                    fontSize: 11,
+                    onPressed: () => widget.onClose?.call()),
                 const SizedBox(width: 8),
                 ElevatedGreyButton(
                   label: 'Save Settings',
                   fontSize: 11,
                   isPrimary: true,
                   onPressed: () {
-                    if (_currentProfile != null) _saveCurrentAsProfile(_currentProfile!);
+                    if (_currentProfile != null)
+                      _saveCurrentAsProfile(_currentProfile!);
                     widget.onClose?.call();
                   },
                 ),
@@ -494,17 +605,29 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
   }
 
   Widget _buildPillButton(IconData icon, String label, {VoidCallback? onTap}) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.shade400)),
+        decoration: BoxDecoration(
+          color: t.badgeFill,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: t.divider),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 12, color: Colors.grey.shade600),
+            Icon(icon, size: 12, color: t.textSecondary),
             const SizedBox(width: 4),
-            Text(label, style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: t.text,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),

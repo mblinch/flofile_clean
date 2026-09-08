@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../flo_layout_constants.dart';
 import '../services/admin_service.dart';
 import '../theme/app_tokens.dart';
+import '../theme/ff_tokens.dart';
 import '../services/auth_service.dart';
 import 'admin_screen.dart';
 import 'app_styled_dialogs.dart';
@@ -16,6 +17,7 @@ class FloChromeHeader extends StatelessWidget {
     super.key,
     this.showSignOut = false,
     this.signOutTooltip,
+    this.accountOnly = false,
   });
 
   /// When true, shows the account menu (with Sign out) on the right.
@@ -24,77 +26,128 @@ class FloChromeHeader extends StatelessWidget {
   /// Kept for callers; account email is shown in the menu trigger.
   final String? signOutTooltip;
 
+  /// Slim bar: account menu (+ admin badge). No title, size, or restart.
+  final bool accountOnly;
+
   static const double toolbarHeight = kFloAppHeaderHeight;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: toolbarHeight,
-      decoration: const BoxDecoration(
+    final ff = Theme.of(context).extension<FfTokens>();
+    final useV2Chrome = accountOnly && ff != null;
+
+    final Decoration decoration;
+    if (useV2Chrome) {
+      decoration = BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [ff.surface, ff.bg],
+        ),
+        border: Border(bottom: BorderSide(color: ff.divider)),
+      );
+    } else {
+      decoration = const BoxDecoration(
         gradient: AppTokens.topBarGradient,
         border: Border(
           bottom: BorderSide(color: AppTokens.topBarBorder),
         ),
-      ),
+      );
+    }
+
+    final onBar = useV2Chrome ? ff.text : AppTokens.onAccent;
+    final onBarMuted = useV2Chrome ? ff.textSecondary : AppTokens.onAccentMuted;
+
+    return Container(
+      height: toolbarHeight,
+      decoration: decoration,
       child: Row(
         children: [
-          const SizedBox(width: 20),
-          const Text(
-            'FLO FILE',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
-              color: AppTokens.onAccent,
-              letterSpacing: 0.5,
-              height: 1.0,
+          if (!accountOnly) ...[
+            const SizedBox(width: 20),
+            const Text(
+              'FLO FILE',
+              style: TextStyle(
+                fontFamily: AppTokens.titleFontFamily,
+                fontFamilyFallback: AppTokens.titleFontFallback,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppTokens.onAccent,
+                letterSpacing: 0.5,
+                height: 1.0,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          _chromeBadge('Beta'),
-          if (AdminService.isCurrentUserAdminSync()) ...[
-            const SizedBox(width: 6),
-            AdminBadgeButton(
-              child: _chromeBadge('Admin', emphasized: true),
-            ),
-          ],
-          const Spacer(),
-          Builder(
-            builder: (context) {
-              final size = MediaQuery.sizeOf(context);
-              return Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Tooltip(
-                  message: 'App window size',
-                  child: Text(
-                    '${size.width.round()}×${size.height.round()}',
-                    style: AppTokens.mono.copyWith(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: AppTokens.onAccent,
-                      letterSpacing: 0.2,
-                      height: 1.0,
+            const SizedBox(width: 8),
+            _chromeBadge('Beta'),
+            if (AdminService.isCurrentUserAdminSync()) ...[
+              const SizedBox(width: 6),
+              AdminBadgeButton(
+                child: _chromeBadge('Admin', emphasized: true),
+              ),
+            ],
+            const Spacer(),
+            Builder(
+              builder: (context) {
+                final size = MediaQuery.sizeOf(context);
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Tooltip(
+                    message: 'App window size',
+                    child: Text(
+                      '${size.width.round()}×${size.height.round()}',
+                      style: AppTokens.mono.copyWith(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppTokens.onAccent,
+                        letterSpacing: 0.2,
+                        height: 1.0,
+                      ),
                     ),
                   ),
+                );
+              },
+            ),
+            const FloHeaderRestartButton(),
+          ] else ...[
+            if (AdminService.isCurrentUserAdminSync()) ...[
+              const SizedBox(width: 12),
+              AdminBadgeButton(
+                child: _chromeBadge(
+                  'Admin',
+                  emphasized: true,
+                  onDark: useV2Chrome,
                 ),
-              );
-            },
-          ),
-          const FloHeaderRestartButton(),
-          if (showSignOut) const FloHeaderSignedInAs(),
+              ),
+            ],
+            const Spacer(),
+          ],
+          if (showSignOut)
+            FloHeaderSignedInAs(
+              foreground: onBar,
+              foregroundMuted: onBarMuted,
+            ),
           const SizedBox(width: 4),
         ],
       ),
     );
   }
 
-  static Widget _chromeBadge(String label, {bool emphasized = false}) {
+  static Widget _chromeBadge(
+    String label, {
+    bool emphasized = false,
+    bool onDark = false,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: emphasized ? AppTokens.adminTint : AppTokens.topBarBadgeFill,
+        color: emphasized
+            ? AppTokens.adminTint
+            : (onDark ? const Color(0x26FFFFFF) : AppTokens.topBarBadgeFill),
         borderRadius: BorderRadius.circular(999),
         border: Border.all(
-          color: emphasized ? AppTokens.adminAccent : AppTokens.onAccentSubtle,
+          color: emphasized
+              ? AppTokens.adminAccent
+              : (onDark ? const Color(0x40FFFFFF) : AppTokens.onAccentSubtle),
         ),
       ),
       child: Text(
@@ -102,7 +155,9 @@ class FloChromeHeader extends StatelessWidget {
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w600,
-          color: AppTokens.onAccent,
+          color: emphasized
+              ? AppTokens.adminText
+              : (onDark ? const Color(0xFFE9E9ED) : AppTokens.onAccent),
           height: 1.0,
         ),
       ),
@@ -179,7 +234,20 @@ class FloHeaderRestartButton extends StatelessWidget {
 
 /// Account label that opens the app-styled context menu (Sign out).
 class FloHeaderSignedInAs extends StatefulWidget {
-  const FloHeaderSignedInAs();
+  const FloHeaderSignedInAs({
+    this.foreground,
+    this.foregroundMuted,
+    this.compact = false,
+  });
+
+  /// Account email / icon color. Defaults to [AppTokens.onAccent].
+  final Color? foreground;
+
+  /// Unused currently; reserved for secondary account chrome.
+  final Color? foregroundMuted;
+
+  /// Shows only the account icon and menu arrow in space-constrained chrome.
+  final bool compact;
 
   @override
   State<FloHeaderSignedInAs> createState() => _FloHeaderSignedInAsState();
@@ -250,6 +318,11 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
             ? user.displayName!.trim()
             : 'Account');
 
+    final fg = widget.foreground ?? AppTokens.onAccent;
+    final avatarFill = widget.foreground != null
+        ? fg.withValues(alpha: 0.18)
+        : AppTokens.accent;
+
     return Padding(
       padding: const EdgeInsets.only(right: 4),
       child: Tooltip(
@@ -271,35 +344,39 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
                     width: 18,
                     height: 18,
                     decoration: BoxDecoration(
-                      color: AppTokens.accent,
+                      color: avatarFill,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppTokens.onAccentSubtle),
+                      border: Border.all(
+                        color: fg.withValues(alpha: 0.35),
+                      ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.person,
-                      color: AppTokens.onAccent,
+                      color: fg,
                       size: 11,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 200),
-                    child: Text(
-                      account,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w400,
-                        color: AppTokens.onAccent,
-                        height: 1.0,
+                  if (!widget.compact) ...[
+                    const SizedBox(width: 4),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 200),
+                      child: Text(
+                        account,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w400,
+                          color: fg,
+                          height: 1.0,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                   const SizedBox(width: 2),
                   Icon(
                     Icons.arrow_drop_down,
                     key: _arrowKey,
-                    color: AppTokens.onAccent,
+                    color: fg,
                     size: 16,
                   ),
                 ],

@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,12 +11,32 @@ import '../services/color_managed_preview_channel.dart';
 class OrientedImageBytes {
   OrientedImageBytes._();
 
-  static final Map<String, Uint8List> _cache = {};
+  static final LinkedHashMap<String, Uint8List> _cache = LinkedHashMap();
+  static int _cacheBytes = 0;
 
   static const _cacheVersion = 'macos-ci-srgb-v2';
+  static const _maxCacheBytes = 32 * 1024 * 1024;
 
   static String _cacheKey(String path, int? maxWidth) =>
       '$_cacheVersion|$path|${maxWidth ?? 0}';
+
+  static Uint8List? _readCache(String key) {
+    final hit = _cache.remove(key);
+    if (hit == null) return null;
+    _cache[key] = hit;
+    return hit;
+  }
+
+  static void _writeCache(String key, Uint8List bytes) {
+    final old = _cache.remove(key);
+    if (old != null) _cacheBytes -= old.lengthInBytes;
+    _cache[key] = bytes;
+    _cacheBytes += bytes.lengthInBytes;
+    while (_cacheBytes > _maxCacheBytes && _cache.isNotEmpty) {
+      final evicted = _cache.remove(_cache.keys.first);
+      if (evicted != null) _cacheBytes -= evicted.lengthInBytes;
+    }
+  }
 
   /// PNG/JPEG bytes suitable for [Image.memory]; cached per [path] + [maxWidth] + mtime.
   static Future<Uint8List?> load(
@@ -26,7 +47,7 @@ class OrientedImageBytes {
     if (!await file.exists()) return null;
     final mod = await file.lastModified();
     final key = '${_cacheKey(path, maxWidth)}|${mod.millisecondsSinceEpoch}';
-    final hit = _cache[key];
+    final hit = _readCache(key);
     if (hit != null) return hit;
 
     final maxPx = maxWidth != null && maxWidth > 0 ? maxWidth : 4096;
@@ -38,7 +59,7 @@ class OrientedImageBytes {
           maxPixelDimension: maxPx,
         );
         if (png != null && png.isNotEmpty) {
-          _cache[key] = png;
+          _writeCache(key, png);
           return png;
         }
       } catch (_) {}
@@ -68,7 +89,7 @@ class OrientedImageBytes {
       final out = Uint8List.fromList(
         img.encodeJpg(oriented, quality: 88),
       );
-      _cache[key] = out;
+      _writeCache(key, out);
       return out;
     } catch (_) {
       return null;
@@ -76,6 +97,11 @@ class OrientedImageBytes {
   }
 
   static void evict(String path) {
-    _cache.removeWhere((k, _) => k.startsWith('$path|'));
+    final prefix = '$_cacheVersion|$path|';
+    _cache.removeWhere((key, value) {
+      if (!key.startsWith(prefix)) return false;
+      _cacheBytes -= value.lengthInBytes;
+      return true;
+    });
   }
 }

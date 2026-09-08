@@ -116,8 +116,27 @@ abstract class AppTokens {
   static const Curve motionCurve = Curves.easeOut;
 
   // ---------------------------------------------------------------------------
-  // Typography (family inherits Inter from ThemeData unless set explicitly)
+  // Typography (body inherits Inter from ThemeData unless set explicitly)
   // ---------------------------------------------------------------------------
+
+  /// Display/title face used on Sideline pricing headlines (SF Pro Display).
+  /// Private Apple name first; falls back to Inter when SF Pro isn't available.
+  static const String titleFontFamily = '.SF Pro Display';
+
+  static const List<String> titleFontFallback = [
+    'SF Pro Display',
+    'Inter',
+  ];
+
+  /// Shared title style for dialog headers, panel titles, and chrome labels.
+  static const TextStyle title = TextStyle(
+    fontFamily: titleFontFamily,
+    fontFamilyFallback: titleFontFallback,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    height: 1.35,
+    letterSpacing: -0.2,
+  );
 
   /// Main caption text.
   static const TextStyle captionBody = TextStyle(
@@ -128,6 +147,8 @@ abstract class AppTokens {
 
   /// Panel/card header row title.
   static const TextStyle panelHeading = TextStyle(
+    fontFamily: titleFontFamily,
+    fontFamilyFallback: titleFontFallback,
     fontSize: 14,
     fontWeight: FontWeight.w700,
   );

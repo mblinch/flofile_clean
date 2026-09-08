@@ -1,6 +1,8 @@
 import 'package:custom_checkbox_plus/custom_checkbox_plus.dart';
 import 'package:flutter/material.dart';
 
+import '../theme/ff_tokens.dart';
+
 /// Compact on/off control used app-wide (matches Keyboard Fire keyword toggles).
 class AppCompactCheckbox extends StatelessWidget {
   const AppCompactCheckbox({
@@ -14,6 +16,7 @@ class AppCompactCheckbox extends StatelessWidget {
   });
 
   final bool value;
+
   /// When null, the control is non-interactive (dimmed), e.g. placeholders.
   final ValueChanged<bool>? onChanged;
   final Color accentColor;
@@ -23,6 +26,7 @@ class AppCompactCheckbox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<FfTokens>();
     return CustomCheckBox(
       value: value,
       onChanged: onChanged,
@@ -33,9 +37,9 @@ class AppCompactCheckbox extends StatelessWidget {
       borderWidth: 1,
       padding: EdgeInsets.zero,
       margin: EdgeInsets.zero,
-      borderColor: Colors.grey.shade400,
+      borderColor: tokens?.divider ?? Colors.grey.shade400,
       activeBorderColor: accentColor,
-      fillColor: Colors.white,
+      fillColor: tokens?.sunken ?? Colors.white,
       activeFillColor: accentColor,
       iconColor: Colors.white,
     );

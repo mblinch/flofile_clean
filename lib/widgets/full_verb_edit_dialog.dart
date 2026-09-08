@@ -39,6 +39,7 @@ class FullVerbEditDialog extends StatefulWidget {
     this.isCustomVerb,
     this.onCreateCustomVerb,
     this.onUpdateCustomVerb,
+    this.createOnOpen = false,
   });
 
   final String initialVerb;
@@ -63,7 +64,8 @@ class FullVerbEditDialog extends StatefulWidget {
   }) onSave;
   final Future<void> Function(String verb) onReset;
   final Future<void> Function(String verb, bool isFavorite) onFavoriteChanged;
-  final Future<void> Function(List<String> categoryOrder)? onCategoryOrderChanged;
+  final Future<void> Function(List<String> categoryOrder)?
+      onCategoryOrderChanged;
   final Future<void> Function(Map<String, List<String>> verbsByCategory)?
       onVerbOrderChanged;
   final bool Function(String verb)? isCustomVerb;
@@ -90,6 +92,7 @@ class FullVerbEditDialog extends StatefulWidget {
     required String selectedCategory,
     required VerbSubOptions subOptions,
   })? onUpdateCustomVerb;
+  final bool createOnOpen;
   final bool Function(String verb) hasSavedDefault;
   final bool isAdmin;
   final String homeTeamName;
@@ -119,6 +122,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   late final TextEditingController _grandSlamPhrase;
   late final TextEditingController _reactionPhraseDraft;
   late bool _wantsOpponent;
+
   /// Preview-only: starts off when the dialog opens; toggling syncs [_wantsOpponent].
   bool _previewIncludeOpponent = false;
   late bool _usePluralPhrase;
@@ -126,8 +130,10 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   late bool _isFavorite;
   late VerbSubOptions _subOptions;
   late Set<String> _favorites;
+
   /// Categories currently expanded in the cascaded browser.
   late Set<String> _expandedCategories;
+
   /// Mutable browser order (matches app; Favorites excluded).
   late List<String> _categories;
   late Map<String, List<String>> _verbsByCategory;
@@ -136,6 +142,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   String _previewVariantId = 'no_opp';
   bool _isCreating = false;
   bool _editingCustom = false;
+
   /// Last auto-generated ing phrase — keep the field synced until the user edits it.
   String _lastAutoIng = '';
   bool _addingReactionPhrase = false;
@@ -167,6 +174,11 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _browseCategory = _resolveBrowseCategory(widget.initialVerb);
     _expandedCategories = {_browseCategory};
     _loadVerb(widget.initialVerb, markClean: true);
+    if (widget.createOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _startCreateVerb();
+      });
+    }
   }
 
   @override
@@ -445,8 +457,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _addingReactionPhrase = false;
 
     final inCurrentBrowse =
-        (_verbsByCategory[_browseCategory] ?? const <String>[])
-            .contains(verb);
+        (_verbsByCategory[_browseCategory] ?? const <String>[]).contains(verb);
     if (!keepBrowseCategory || !inCurrentBrowse) {
       _browseCategory = _resolveBrowseCategory(verb);
     }
@@ -571,7 +582,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       }
     }
     if (isHomeRun) {
-      variants.add(const _CaptionVariant(id: 'grand_slam', label: 'Grand Slam'));
+      variants
+          .add(const _CaptionVariant(id: 'grand_slam', label: 'Grand Slam'));
     }
     if (showCele && _liveSubOptions.celebrationEnabled) {
       if (isHit) {
@@ -711,7 +723,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   String _buildSelectedCaption() {
     final id = _resolvedPreviewVariantId;
     final players = id == 'plural' ? 2 : 1;
-    final base = '${_subjectForPlayers(players)} ${_actionPhraseForVariant(id)}';
+    final base =
+        '${_subjectForPlayers(players)} ${_actionPhraseForVariant(id)}';
     if (id == 'no_opp') return _withOpposingTeamOnly(base);
     return _withOpponent(base);
   }
@@ -925,7 +938,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         final create = widget.onCreateCustomVerb;
         if (create == null) return;
         // Prevent duplicate labels against existing browser verbs.
-        final exists = _verbsByCategory.values.any((list) => list.contains(newLabel));
+        final exists =
+            _verbsByCategory.values.any((list) => list.contains(newLabel));
         if (exists) {
           if (!mounted) return;
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1139,7 +1153,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 Expanded(
                   child: SingleChildScrollView(
                     key: ValueKey(
-                      _isCreating ? 'verb-editor-new' : 'verb-editor-$_currentVerb',
+                      _isCreating
+                          ? 'verb-editor-new'
+                          : 'verb-editor-$_currentVerb',
                     ),
                     clipBehavior: Clip.none,
                     child: _buildEditor(),
@@ -1348,6 +1364,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 buildDefaultDragHandles: false,
                 padding: const EdgeInsets.only(bottom: 8),
                 itemCount: _categories.length,
+                // ignore: deprecated_member_use
                 onReorder: (oldIndex, newIndex) {
                   _reorderCategories(oldIndex, newIndex);
                 },
@@ -1443,6 +1460,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
               physics: const NeverScrollableScrollPhysics(),
               buildDefaultDragHandles: false,
               itemCount: verbs.length,
+              // ignore: deprecated_member_use
               onReorder: (oldIndex, newIndex) {
                 _reorderVerbsInCategory(cat, oldIndex, newIndex);
               },
@@ -1510,9 +1528,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                     child: Icon(
                       fav ? Icons.star : Icons.star_border,
                       size: 14,
-                      color: fav
-                          ? Colors.amber.shade700
-                          : const Color(0xFFAAAAAA),
+                      color:
+                          fav ? Colors.amber.shade700 : const Color(0xFFAAAAAA),
                     ),
                   ),
                 ),
@@ -1703,8 +1720,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                       if (_currentVerb == 'Home Run' ||
                           _verbLabelForMods == 'Home Run')
                         AppDialogLabeledDropdown<HomeRunCaptionStyle>(
-                          label:
-                              'Style — default for all run situations',
+                          label: 'Style — default for all run situations',
                           value: _subOptions.homeRunStyle,
                           items: HomeRunCaptionStyle.values
                               .map(
@@ -1718,8 +1734,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                               ? (v) {
                                   if (v != null) {
                                     setState(
-                                      () => _subOptions = _subOptions
-                                          .copyWith(homeRunStyle: v),
+                                      () => _subOptions =
+                                          _subOptions.copyWith(homeRunStyle: v),
                                     );
                                   }
                                 }
@@ -1728,8 +1744,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                         )
                       else
                         AppDialogLabeledDropdown<RbiCaptionStyle>(
-                          label:
-                              'RBI style — default for all RBI situations',
+                          label: 'RBI style — default for all RBI situations',
                           value: _subOptions.rbiStyle,
                           items: RbiCaptionStyle.values
                               .map(

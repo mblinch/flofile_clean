@@ -20,7 +20,7 @@ const double kFloScrollbarGutter = 12.0;
 /// Visible scrollbar thickness (pairs with [kFloScrollbarGutter]).
 const double kFloScrollbarThickness = 8.0;
 
-/// Content padding that reserves [kFloScrollbarGutter] on the right.
+/// Optional content padding for scrollables that need additional trailing room.
 EdgeInsets floScrollPadding({
   double left = 0,
   double top = 0,
@@ -35,8 +35,8 @@ EdgeInsets floScrollPadding({
   );
 }
 
-/// App scrollbar — use with [floScrollPadding] / [kFloScrollbarGutter] on the
-/// scrollable's *content* padding so the thumb does not overlap list items.
+/// App scrollbar with a reserved trailing gutter so its thumb never overlaps
+/// the scrollable content.
 class FloScrollbar extends StatelessWidget {
   const FloScrollbar({
     super.key,
@@ -61,13 +61,18 @@ class FloScrollbar extends StatelessWidget {
       trackVisibility: trackVisibility,
       thickness: thickness,
       radius: const Radius.circular(4),
-      child: child,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.only(
+          end: kFloScrollbarGutter,
+        ),
+        child: child,
+      ),
     );
   }
 }
 
-/// Desktop scrollbars use [FloScrollbar]. Pair vertical scrollables with
-/// [floScrollPadding] so content clears [kFloScrollbarGutter].
+/// Desktop vertical scrollbars use [FloScrollbar], which reserves its own
+/// gutter outside the scrollable viewport.
 class FloScrollBehavior extends MaterialScrollBehavior {
   const FloScrollBehavior();
 

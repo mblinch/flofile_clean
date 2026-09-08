@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../flo_layout_constants.dart';
+import '../theme/app_tokens.dart';
 
 /// Matches [KeyboardFirePanel] FTP / burst primary actions (`keyboard_fire_dialog.dart`).
 const Color kAppDialogPrimaryBlue = Color(0xFF0052CC);
@@ -17,11 +18,13 @@ const double kVerbEditDialogBrowserWidth = 200.0;
 const double kVerbEditDialogSubOptionsWidth = 280.0;
 
 const TextStyle kAppDialogTitleStyle = TextStyle(
-  fontFamily: 'Inter',
+  fontFamily: AppTokens.titleFontFamily,
+  fontFamilyFallback: AppTokens.titleFontFallback,
   fontSize: 14,
   fontWeight: FontWeight.w600,
   color: Colors.black87,
   height: 1.35,
+  letterSpacing: -0.2,
 );
 
 /// Matches [kFloAppHeaderHeight] / [AppHeaderWidget] / [FloChromeHeader].
@@ -29,7 +32,8 @@ const double kAppDialogTitleBarHeight = kFloAppHeaderHeight;
 
 /// White title text for [AppDialogTealTitleBar] / chrome-style dialog headers.
 const TextStyle kAppDialogTealTitleStyle = TextStyle(
-  fontFamily: 'Inter',
+  fontFamily: AppTokens.titleFontFamily,
+  fontFamilyFallback: AppTokens.titleFontFallback,
   fontSize: 12,
   fontWeight: FontWeight.w600,
   color: Colors.white,
