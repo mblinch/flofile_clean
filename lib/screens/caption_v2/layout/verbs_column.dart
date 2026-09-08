@@ -27,6 +27,8 @@ class VerbsColumn extends StatefulWidget {
 
 class _VerbsColumnState extends State<VerbsColumn> {
   final _columnFocusNode = FocusNode(debugLabel: 'Verbs column');
+  final _customVerbFocusNode = FocusNode(debugLabel: 'Custom verb');
+  final _customVerbController = TextEditingController();
   final _categoryFocusNodes = List.generate(
     12,
     (i) => FocusNode(debugLabel: 'Verb category $i'),
@@ -167,6 +169,7 @@ class _VerbsColumnState extends State<VerbsColumn> {
   @override
   void initState() {
     super.initState();
+    _customVerbController.text = controller.customVerbPhrase;
     _expandedCategory = controller.verbCategory;
     _lastControllerCategory = controller.verbCategory;
     if (widget.focused) {
@@ -187,6 +190,8 @@ class _VerbsColumnState extends State<VerbsColumn> {
   @override
   void dispose() {
     _columnFocusNode.dispose();
+    _customVerbFocusNode.dispose();
+    _customVerbController.dispose();
     for (final node in _categoryFocusNodes) {
       node.dispose();
     }
@@ -195,6 +200,7 @@ class _VerbsColumnState extends State<VerbsColumn> {
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (_customVerbFocusNode.hasFocus) return KeyEventResult.ignored;
 
     final digit = _digitForKey(event.logicalKey);
     final keyboard = HardwareKeyboard.instance;
@@ -288,6 +294,15 @@ class _VerbsColumnState extends State<VerbsColumn> {
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final categories = _categories;
+    if (!_customVerbFocusNode.hasFocus &&
+        _customVerbController.text != controller.customVerbPhrase) {
+      _customVerbController.value = TextEditingValue(
+        text: controller.customVerbPhrase,
+        selection: TextSelection.collapsed(
+          offset: controller.customVerbPhrase.length,
+        ),
+      );
+    }
     if (controller.verbCategory != _lastControllerCategory) {
       _lastControllerCategory = controller.verbCategory;
       _expandedCategory = controller.verbCategory;
@@ -344,6 +359,19 @@ class _VerbsColumnState extends State<VerbsColumn> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(2, 4, 2, 2),
+                child: _CustomVerbField(
+                  textController: _customVerbController,
+                  focusNode: _customVerbFocusNode,
+                  tokens: t,
+                  pinned: controller.customVerbPinned,
+                  canUseLast: controller.lastCustomVerbPhrase.isNotEmpty,
+                  onChanged: controller.setCustomVerbPhrase,
+                  onTogglePin: controller.toggleCustomVerbPin,
+                  onUseLast: controller.useLastCustomVerb,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(2, 2, 2, 2),
                 child: _AddVerbButton(
                   tokens: t,
                   onTap: () {
@@ -603,6 +631,8 @@ class _VerbListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final selected = controller.selectedVerb == verb.key;
     final showRbi = selected && controller.verbNeedsRbi(verb.key);
+    final showCelebration =
+        selected && controller.verbNeedsCelebration(verb.key);
     return Column(
       children: [
         VerbTile(
@@ -630,7 +660,120 @@ class _VerbListItem extends StatelessWidget {
             ),
           ),
         ],
+        if (showCelebration) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: _CelebrationRow(
+              heading: VerbSubOptions.isHitVerb(verb.key)
+                  ? 'REACTION'
+                  : 'CELEBRATING',
+              options: controller.celebrationOptionsFor(verb.key),
+              selected: controller.celebrationType,
+              onChanged: controller.setCelebrationType,
+            ),
+          ),
+        ],
       ],
+    );
+  }
+}
+
+class _CelebrationRow extends StatelessWidget {
+  const _CelebrationRow({
+    required this.heading,
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final String heading;
+  final List<String> options;
+  final String? selected;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return Container(
+      height: 31,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: t.sunken,
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        border: Border.all(color: t.divider),
+      ),
+      child: Row(
+        children: [
+          Text(
+            heading,
+            style: t.microStyle.copyWith(fontSize: 8.5),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (var i = 0; i < options.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 4),
+                    _CelebrationChip(
+                      label: options[i],
+                      selected: selected == options[i],
+                      tokens: t,
+                      onTap: () => onChanged(options[i]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CelebrationChip extends StatelessWidget {
+  const _CelebrationChip({
+    required this.label,
+    required this.selected,
+    required this.tokens,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? tokens.selectedFill : tokens.badgeFill,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          height: 23,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 7),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: selected ? tokens.accent : tokens.divider,
+            ),
+          ),
+          child: Text(
+            label,
+            style: tokens.microStyle.copyWith(
+              color: selected ? tokens.accent : tokens.textSecondary,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -661,6 +804,122 @@ class _AddVerbButton extends StatelessWidget {
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomVerbField extends StatelessWidget {
+  const _CustomVerbField({
+    required this.textController,
+    required this.focusNode,
+    required this.tokens,
+    required this.pinned,
+    required this.canUseLast,
+    required this.onChanged,
+    required this.onTogglePin,
+    required this.onUseLast,
+  });
+
+  final TextEditingController textController;
+  final FocusNode focusNode;
+  final FfTokens tokens;
+  final bool pinned;
+  final bool canUseLast;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onTogglePin;
+  final VoidCallback onUseLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 28,
+      decoration: BoxDecoration(
+        color: tokens.badgeFill,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: pinned ? tokens.accent : tokens.divider,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: textController,
+              focusNode: focusNode,
+              readOnly: pinned,
+              onChanged: onChanged,
+              style: tokens.labelStyle.copyWith(
+                fontSize: 11.5,
+                color: tokens.text,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Custom verb',
+                hintStyle: tokens.labelStyle.copyWith(
+                  fontSize: 11.5,
+                  color: tokens.textSecondary,
+                ),
+                contentPadding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+          _CustomVerbAction(
+            icon: Icons.history,
+            tooltip: 'Use last custom verb',
+            tokens: tokens,
+            enabled: canUseLast,
+            onTap: onUseLast,
+          ),
+          _CustomVerbAction(
+            icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+            tooltip: pinned ? 'Unpin custom verb' : 'Pin custom verb',
+            tokens: tokens,
+            enabled: textController.text.trim().isNotEmpty,
+            selected: pinned,
+            onTap: onTogglePin,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CustomVerbAction extends StatelessWidget {
+  const _CustomVerbAction({
+    required this.icon,
+    required this.tooltip,
+    required this.tokens,
+    required this.enabled,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final FfTokens tokens;
+  final bool enabled;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: SizedBox(
+          width: 25,
+          height: 28,
+          child: Icon(
+            icon,
+            size: 14,
+            color: enabled
+                ? (selected ? tokens.accent : tokens.textSecondary)
+                : tokens.divider,
           ),
         ),
       ),

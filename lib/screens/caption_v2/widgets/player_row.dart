@@ -34,6 +34,8 @@ class PlayerRow extends StatelessWidget {
     final isMobile = MediaQuery.sizeOf(context).width < 1100;
     final rowHeight = height ?? (isMobile ? 44.0 : 28.0);
     final veryCompact = rowHeight < 24;
+    final nameFontSize =
+        (t.textSizeMeta + ((rowHeight - 24) / 4)).clamp(11.0, 16.0).toDouble();
 
     return Semantics(
       button: true,
@@ -77,6 +79,7 @@ class PlayerRow extends StatelessWidget {
                       name,
                       maxLines: 1,
                       style: t.metaStyle.copyWith(
+                        fontSize: nameFontSize,
                         color: t.text,
                         fontWeight: selected
                             ? FfTokens.weightMedium

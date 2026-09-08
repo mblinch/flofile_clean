@@ -49,4 +49,30 @@ void main() {
     expect(find.text('HEADLINE'), findsNothing);
     expect(find.text('KEYWORDS'), findsNothing);
   });
+
+  testWidgets('MLB timestamp loading state does not overflow', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CaptionStrip(
+            leading: '',
+            trailing: '',
+            chips: const [],
+            inningLabel: '1st',
+            onInningDecrement: () {},
+            onInningIncrement: () {},
+            onPreTap: () {},
+            onPostTap: () {},
+            mlbTimestampVisible: true,
+            mlbTimestampLoading: true,
+            onMlbTimestampTap: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('MLB TIME'), findsOneWidget);
+    final error = tester.takeException();
+    expect(error, isNull);
+  });
 }

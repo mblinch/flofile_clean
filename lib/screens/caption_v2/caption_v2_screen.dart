@@ -69,6 +69,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   void _onController() {
     if (!mounted) return;
+    if (_controller.searchQuery.isEmpty && _searchText.text.isNotEmpty) {
+      _searchText.clear();
+    }
     final status = _controller.statusMessage;
     if (status != _lastObservedStatus) {
       _lastObservedStatus = status;
@@ -161,6 +164,26 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   bool _handleHardwareKey(KeyEvent event) {
+    if (event is KeyDownEvent &&
+        _controller.searchOpen &&
+        _controller.searchGuided) {
+      final optionNumber = int.tryParse(event.character ?? '');
+      if (optionNumber != null &&
+          optionNumber > 0 &&
+          optionNumber <= _controller.topSearchHits().length) {
+        _handleDigit(optionNumber);
+        return true;
+      }
+    }
+    if (event is KeyDownEvent &&
+        _controller.searchOpen &&
+        _controller.guidedSearchPrompt == 'Save or FTP?' &&
+        (event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
+      final action = HardwareKeyboard.instance.isShiftPressed ? 'ftp' : 'save';
+      _controller.submitSearchCommand(action);
+      return true;
+    }
     if (event is! KeyUpEvent || _jerseyBuffer.isEmpty) return false;
     final key = event.logicalKey;
     final modifierReleased = key == LogicalKeyboardKey.controlLeft ||
@@ -680,6 +703,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           SizedBox(
             width: photoWidth,
             child: PhotoColumn(
+              key: const ValueKey('photo-column-preview-60'),
               controller: c,
               focused: c.columnFocus == 3,
               onSavePrevious: _saveAndPrevious,
@@ -700,7 +724,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
               children: [
                 _buildCaptionStrip(c),
                 const SizedBox(height: 8),
-                _buildSearchBlock(c, matchRosterColumnWidth: true),
+                _buildSearchBlock(c),
                 SizedBox(height: _gap),
                 Expanded(
                   child: _DesktopBody(
@@ -739,51 +763,35 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
   }
 
-  Widget _buildSearchBlock(
-    CaptionV2Controller c, {
-    bool matchRosterColumnWidth = false,
-  }) {
+  Widget _buildSearchBlock(CaptionV2Controller c) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final searchBar = CaptionV2SearchBar(
-              controller: c,
-              focusNode: _searchFocus,
-              textController: _searchText,
-            );
-            final searchWidth = (constraints.maxWidth - (_gap * 2)) / 3;
-            return SizedBox(
-              height: 32,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (matchRosterColumnWidth)
-                    SizedBox(width: searchWidth, child: searchBar)
-                  else
-                    Expanded(child: searchBar),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: CaptionV2ActionRow(
-                      onSavePrevious: _saveAndPrevious,
-                      onCopy: _copySelection,
-                      onPaste: _pasteSelection,
-                      onPastePrevious: _pastePreviousSelection,
-                      pasteEnabled: true,
-                      onSaveNext: _saveAndNext,
-                      onTransmit: c.transmitQueued,
-                      transmitEnabled:
-                          c.savedNotSentCount > 0 || c.currentPath != null,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
+        SizedBox(
+          height: 38,
+          child: CaptionV2SearchBar(
+            controller: c,
+            focusNode: _searchFocus,
+            textController: _searchText,
+          ),
         ),
         CaptionV2SearchResults(
           controller: c,
           onClose: _closeSearch,
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 32,
+          child: CaptionV2ActionRow(
+            onSavePrevious: _saveAndPrevious,
+            onCopy: _copySelection,
+            onPaste: _pasteSelection,
+            onPastePrevious: _pastePreviousSelection,
+            pasteEnabled: true,
+            onSaveNext: _saveAndNext,
+            onTransmit: c.transmitQueued,
+            transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
+          ),
         ),
       ],
     );
@@ -791,8 +799,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   Widget _buildCaptionStrip(CaptionV2Controller c) {
     final isBaseball = c.sport.toLowerCase() == 'baseball';
-    final selectionStarted =
-        c.selectedPlayers.isNotEmpty || c.selectedVerb != null;
+    final selectionStarted = c.captionSelectionStarted;
     return CaptionStrip(
       leading: c.captionLeading,
       chips: [
@@ -803,7 +810,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         ),
         CaptionChipData(
           id: 'verb',
-          label: c.selectedVerb == null ? null : c.verbChipLabel,
+          label: c.hasVerbSelection ? c.verbChipLabel : null,
           placeholder: 'verb',
         ),
         if (isBaseball)

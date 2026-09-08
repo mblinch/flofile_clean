@@ -217,6 +217,11 @@ class CaptionV2Controller extends ChangeNotifier {
   Player? selectedPlayer;
   bool selectedIsHome = true;
   String? selectedVerb;
+  String customVerbPhrase = '';
+  String lastCustomVerbPhrase = '';
+  bool customVerbPinned = false;
+  bool captionSelectionStarted = false;
+  String? celebrationType;
   String? pinnedVerb;
   String? verbCategory = 'Offense';
   String personality = '';
@@ -253,10 +258,14 @@ class CaptionV2Controller extends ChangeNotifier {
   bool searchOpen = false;
   String? guidedSearchPrompt;
   List<SearchHit> _guidedSearchHits = const [];
+  int? _pendingCommandInning;
   int columnFocus = 1; // 0 home, 1 verbs, 2 away, 3 thumbnails
   bool sortByNumber = true;
 
   bool get searchGuided => guidedSearchPrompt != null;
+  bool get searchHasJerseyAndVerb =>
+      RegExp(r'^(?:[hv]\s*)?#?\d+\s+\S', caseSensitive: false)
+          .hasMatch(searchQuery.trim());
 
   // --- Transmit ---
   String destinationLabel = 'Photoshelter · FTP';
@@ -403,10 +412,15 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   String get verbChipLabel {
+    final custom = customVerbPhrase.trim();
+    if (custom.isNotEmpty) return custom;
     final v = selectedVerb;
     if (v == null) return '';
     return verbDefinition(v)?.singularPhrase ?? _verbChip(v);
   }
+
+  bool get hasVerbSelection =>
+      selectedVerb != null || customVerbPhrase.trim().isNotEmpty;
 
   String get rbiChipLabel => rbi > 0 ? 'RBI $rbi' : '';
 
@@ -521,9 +535,11 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Player + action body that feeds [CaptionFormulaRenderer] (no location/credit).
   String buildCaptionBody() {
-    if (selectedPlayer == null || selectedVerb == null) return '';
+    if (selectedPlayer == null || !hasVerbSelection) return '';
     final lead = _playerLead(captionTemplate);
-    final action = _actionPhrase();
+    final action = customVerbPhrase.trim().isNotEmpty
+        ? _customActionPhrase()
+        : _actionPhrase();
     return '$lead $action'.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 
@@ -537,7 +553,7 @@ class CaptionV2Controller extends ChangeNotifier {
       final parts = <String>[
         captionLeading.trim(),
         if (selectedPlayer != null) playerChipLabel,
-        if (selectedVerb != null) verbChipLabel,
+        if (hasVerbSelection) verbChipLabel,
         if (rbi > 0) rbiChipLabel,
         captionTrailing.trim(),
       ];
@@ -635,7 +651,7 @@ class CaptionV2Controller extends ChangeNotifier {
     return caption;
   }
 
-  bool get hasCompleteCaption => selectedPlayer != null && selectedVerb != null;
+  bool get hasCompleteCaption => selectedPlayer != null && hasVerbSelection;
 
   Map<String, String> captionValues() {
     final caption = buildCaptionSentence();
@@ -703,6 +719,13 @@ class CaptionV2Controller extends ChangeNotifier {
       pluralPhrase: definition?.pluralPhrase,
       subOptions: definition?.subOptions,
     );
+    action = _withCelebrationType(
+      verb: verb,
+      action: action,
+      type: celebrationType,
+      plural: plural,
+      subOptions: definition?.subOptions,
+    );
 
     if (definition?.wantsOpponent ?? true) {
       action = CaptionV2CaptionDomain.withOpponent(
@@ -720,6 +743,75 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     if (preGame) return '$action prior to the game';
     return '$action $timingCaptionClause';
+  }
+
+  String _customActionPhrase() {
+    var action = customVerbPhrase.trim();
+    final lower = action.toLowerCase();
+    if (!lower.contains(' against ') && !lower.contains(' playing ')) {
+      final subjects = subjectPlayers;
+      final subjectIsHome =
+          subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
+      action = CaptionV2CaptionDomain.withOpponent(
+        verb: action,
+        action: action,
+        opponentTeam: subjectIsHome ? awayTeam : homeTeam,
+        opposingPlayers: opposingPlayers.isEmpty
+            ? null
+            : _formatPlayersWithTeam(opposingPlayers, captionTemplate),
+      );
+    }
+    if (preGame) return '$action prior to the game';
+    if (postGame) return '$action after the game';
+    return '$action $timingCaptionClause';
+  }
+
+  String _withCelebrationType({
+    required String verb,
+    required String action,
+    required String? type,
+    required bool plural,
+    required VerbSubOptions? subOptions,
+  }) {
+    final selected = type?.trim();
+    if (selected == null || selected.isEmpty) return action;
+    if (VerbSubOptions.isHitVerb(verb)) {
+      final options =
+          subOptions ?? VerbSubOptions.defaultsFor(verb, sport: sport);
+      var reaction = selected.toLowerCase();
+      if (reaction == 'celebration') {
+        reaction = options.primaryReactionPhrase;
+      }
+      if (plural) {
+        reaction = VerbCaptionWording.inferPluralFromSingular(reaction);
+      }
+      final hit = RegExp(r'^hits? a ', caseSensitive: false);
+      if (hit.hasMatch(action)) {
+        return '$reaction after hitting a ${action.replaceFirst(hit, '')}';
+      }
+      return '$reaction after '
+          '${VerbSubOptions.gerundPhraseFromSingular(action)}';
+    }
+    switch (selected) {
+      case 'Scoring':
+        return '$action scoring';
+      case 'Single':
+      case 'Double':
+      case 'Triple':
+        return '$action after hitting a ${selected.toLowerCase()}';
+      case 'Home Run':
+        return '$action after hitting a home run';
+      case 'Strikeout':
+        return '$action after a strikeout';
+      case 'Goal':
+        return '$action after a goal';
+      case 'Win':
+        return '$action after a win';
+      case 'With Teammates':
+        return '$action with teammates';
+      default:
+        return '$action after ${selected.toLowerCase()}';
+    }
   }
 
   String _formatPlayersWithTeam(
@@ -859,9 +951,14 @@ class CaptionV2Controller extends ChangeNotifier {
     this.countryCode = countryCode;
     this.burstDetectionEnabled = burstDetectionEnabled;
     pinnedVerb = null;
+    customVerbPhrase = '';
+    lastCustomVerbPhrase = '';
+    customVerbPinned = false;
+    captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
     selectedVerb = null;
+    celebrationType = null;
     personality = '';
     manualCaptionOverride = null;
     rbi = 0;
@@ -902,10 +999,14 @@ class CaptionV2Controller extends ChangeNotifier {
     selectedImagePaths.clear();
     homeRoster = const [];
     awayRoster = const [];
+    captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
     selectedVerb = null;
     pinnedVerb = null;
+    customVerbPhrase = '';
+    lastCustomVerbPhrase = '';
+    customVerbPinned = false;
     personality = '';
     manualCaptionOverride = null;
     notifyListeners();
@@ -1173,6 +1274,7 @@ class CaptionV2Controller extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   void selectPlayer(Player player, {required bool isHome}) {
+    captionSelectionStarted = true;
     final existingIndex = selectedPlayers.indexWhere(
       (row) => row.isHome == isHome && _samePlayer(row.player, player),
     );
@@ -1218,6 +1320,7 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void setSelectedPlayers(Iterable<RosterHit> players) {
+    captionSelectionStarted = true;
     selectedPlayers.clear();
     for (final row in players) {
       if (!isPlayerSelected(row.player, isHome: row.isHome)) {
@@ -1262,6 +1365,8 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void applyTransferredCaption(CaptionTransferPayload payload) {
+    customVerbPhrase = '';
+    customVerbPinned = false;
     manualCaptionOverride = payload.caption;
     personality = payload.personality;
     notifyListeners();
@@ -1275,9 +1380,13 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void resetCurrentCaption() {
+    captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
     selectedVerb = null;
+    customVerbPhrase = '';
+    lastCustomVerbPhrase = '';
+    customVerbPinned = false;
     rbi = 0;
     preGame = false;
     postGame = false;
@@ -1288,13 +1397,48 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void selectVerb(String verb) {
+    captionSelectionStarted = true;
+    if (selectedVerb != verb) celebrationType = null;
     selectedVerb = verb;
+    customVerbPhrase = '';
+    customVerbPinned = false;
     manualCaptionOverride = null;
     if (!_verbNeedsRbi(verb)) {
       rbi = 0;
     }
     _syncKeywords();
     notifyListeners();
+  }
+
+  void setCustomVerbPhrase(String value) {
+    customVerbPhrase = value;
+    final custom = value.trim();
+    if (custom.isNotEmpty) {
+      lastCustomVerbPhrase = custom;
+      captionSelectionStarted = true;
+      selectedVerb = null;
+      pinnedVerb = null;
+      celebrationType = null;
+      rbi = 0;
+      manualCaptionOverride = null;
+      _syncKeywords();
+    } else {
+      customVerbPinned = false;
+      captionSelectionStarted =
+          selectedPlayers.isNotEmpty || selectedVerb != null;
+    }
+    notifyListeners();
+  }
+
+  void toggleCustomVerbPin() {
+    if (customVerbPhrase.trim().isEmpty) return;
+    customVerbPinned = !customVerbPinned;
+    notifyListeners();
+  }
+
+  void useLastCustomVerb() {
+    if (lastCustomVerbPhrase.isEmpty) return;
+    setCustomVerbPhrase(lastCustomVerbPhrase);
   }
 
   void toggleVerbPin(String verb) {
@@ -1584,6 +1728,39 @@ class CaptionV2Controller extends ChangeNotifier {
 
   bool verbNeedsRbi(String verb) => _verbNeedsRbi(verb);
 
+  bool verbNeedsCelebration(String verb) {
+    final definition = verbDefinition(verb);
+    final options = definition?.subOptions ??
+        VerbSubOptions.defaultsFor(verb, sport: sport);
+    return VerbSubOptions.showCelebrationEditor(
+          verbLabel: verb,
+          value: options,
+          isCustom: definition?.isCustom ?? false,
+        ) &&
+        options.celebrationEnabled;
+  }
+
+  List<String> celebrationOptionsFor(String verb) {
+    final definition = verbDefinition(verb);
+    final options = definition?.subOptions ??
+        VerbSubOptions.defaultsFor(verb, sport: sport);
+    if (VerbSubOptions.isHitVerb(verb)) {
+      return options.reactionPhraseList
+          .map((value) => value.isEmpty
+              ? value
+              : '${value[0].toUpperCase()}${value.substring(1)}')
+          .toList();
+    }
+    return options.celebrationTypeList(sport: sport);
+  }
+
+  void setCelebrationType(String? value) {
+    celebrationType = celebrationType == value ? null : value;
+    manualCaptionOverride = null;
+    _syncKeywords();
+    notifyListeners();
+  }
+
   bool _verbNeedsRbi(String verb) {
     return const {
       'Single',
@@ -1792,11 +1969,30 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void setSearchOpen(bool open) {
+    if (open && !searchOpen) {
+      _pendingCommandInning = null;
+      captionSelectionStarted = false;
+      selectedPlayers.clear();
+      selectedPlayer = null;
+      selectedVerb = null;
+      customVerbPhrase = '';
+      customVerbPinned = false;
+      celebrationType = null;
+      rbi = 0;
+      manualCaptionOverride = null;
+      personality = '';
+      keywords = '';
+      _basePersonalityNames.clear();
+      _baseKeywordKeys.clear();
+      _managedKeywordKeys.clear();
+      metadataDirty = true;
+    }
     searchOpen = open;
     if (!open) {
       searchQuery = '';
       guidedSearchPrompt = null;
       _guidedSearchHits = const [];
+      _pendingCommandInning = null;
     }
     notifyListeners();
   }
@@ -1824,7 +2020,10 @@ class CaptionV2Controller extends ChangeNotifier {
   void applyLastUsed([LastUsedCombo? combo]) {
     final c = combo ?? (lastUsed.isEmpty ? null : lastUsed.first);
     if (c == null || !_verbCatalog.byKey.containsKey(c.verb)) return;
+    captionSelectionStarted = true;
     selectedVerb = c.verb;
+    customVerbPhrase = '';
+    customVerbPinned = false;
     rbi = c.rbi;
     final cat = _categoryForVerb(c.verb);
     if (cat != null) verbCategory = cat;
@@ -1846,6 +2045,11 @@ class CaptionV2Controller extends ChangeNotifier {
     if (imagePaths.isEmpty) return;
     currentIndex = index.clamp(0, imagePaths.length - 1);
     _clearCaptionSelection();
+    searchQuery = '';
+    searchOpen = false;
+    guidedSearchPrompt = null;
+    _guidedSearchHits = const [];
+    _pendingCommandInning = null;
     mlbTimestampMatchedPath = null;
     mlbTimestampLoading = false;
     _mlbTimestampToken++;
@@ -2195,7 +2399,7 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     final captionUnchanged = selectedPlayer == null &&
-        selectedVerb == null &&
+        !hasVerbSelection &&
         manualCaptionOverride == null;
     if (captionUnchanged && !metadataDirty && originalCaption.trim().isEmpty) {
       statusMessage = 'Select a player and verb first';
@@ -2206,8 +2410,8 @@ class CaptionV2Controller extends ChangeNotifier {
       );
     }
 
-    final generatedCaption = selectedPlayer != null && selectedVerb != null;
-    if (generatedCaption) rememberCombo();
+    final generatedCaption = selectedPlayer != null && hasVerbSelection;
+    if (generatedCaption && selectedVerb != null) rememberCombo();
     final manualCaption = manualCaptionOverride?.trim().isNotEmpty == true;
     final shouldWriteCaption = !captionUnchanged;
     final shouldWriteValues = shouldWriteCaption || metadataDirty;
@@ -2296,9 +2500,12 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void _clearCaptionSelection() {
+    captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
     selectedVerb = pinnedVerb;
+    if (!customVerbPinned) customVerbPhrase = '';
+    celebrationType = null;
     personality = '';
     manualCaptionOverride = null;
     rbi = 0;
@@ -2418,7 +2625,14 @@ class CaptionV2Controller extends ChangeNotifier {
     List<Player> roster, {
     required bool isHome,
   }) {
-    final q = searchQuery.trim().toLowerCase();
+    final rawQuery = searchQuery.trim().toLowerCase();
+    final command =
+        RegExp(r'^([hv])?\s*#?(\d+)(?:\s+.+)?$').firstMatch(rawQuery);
+    final side = command?.group(1);
+    if ((side == 'h' && !isHome) || (side == 'v' && isHome)) {
+      return const [];
+    }
+    final q = command?.group(2) ?? rawQuery;
     final numericQuery = RegExp(r'^\d+$').hasMatch(q);
     final list = roster.where((pl) {
       if (q.isEmpty) return true;
@@ -2433,7 +2647,10 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   List<String> get filteredVerbs {
-    final q = searchQuery.trim().toLowerCase();
+    final rawQuery = searchQuery.trim().toLowerCase();
+    final command = RegExp(r'^(?:[hv]\s*)?#?\d+\s+(.+)$').firstMatch(rawQuery);
+    final commandText = command?.group(1)?.trim() ?? rawQuery;
+    final q = commandText.replaceFirst(RegExp(r'\s+\d+$'), '').trim();
     final all = _verbCatalog.byKey.values;
     if (q.isEmpty) return verbsInCategory;
     return all
@@ -2470,10 +2687,18 @@ class CaptionV2Controller extends ChangeNotifier {
       return true;
     }
 
-    final match = RegExp(r'^\s*#?(\d+)\s+(.+?)\s*$').firstMatch(input);
+    final timedMatch = RegExp(r'^\s*([hv])?\s*#?(\d+)\s+(.+?)\s+(\d+)\s*$',
+            caseSensitive: false)
+        .firstMatch(input);
+    final match = timedMatch ??
+        RegExp(r'^\s*([hv])?\s*#?(\d+)\s+(.+?)\s*$', caseSensitive: false)
+            .firstMatch(input);
     if (match == null) return false;
-    final jersey = match.group(1)!;
-    final verbInput = match.group(2)!;
+    final side = match.group(1)?.toLowerCase();
+    final jersey = match.group(2)!;
+    final verbInput = match.group(3)!;
+    _pendingCommandInning =
+        timedMatch == null ? null : int.tryParse(timedMatch.group(4)!);
     final verb = _matchCommandVerb(verbInput);
     if (verb == null) {
       statusMessage = 'No verb matched “$verbInput”';
@@ -2483,10 +2708,10 @@ class CaptionV2Controller extends ChangeNotifier {
 
     final players = <RosterHit>[
       ...homeRoster
-          .where((p) => (p.jerseyNumber ?? '').trim() == jersey)
+          .where((p) => side != 'v' && (p.jerseyNumber ?? '').trim() == jersey)
           .map((p) => RosterHit(player: p, isHome: true)),
       ...awayRoster
-          .where((p) => (p.jerseyNumber ?? '').trim() == jersey)
+          .where((p) => side != 'h' && (p.jerseyNumber ?? '').trim() == jersey)
           .map((p) => RosterHit(player: p, isHome: false)),
     ];
     if (players.isEmpty) {
@@ -2627,11 +2852,14 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void _chooseCommandPlayer(RosterHit row, String verb) {
+    captionSelectionStarted = true;
     selectedPlayers
       ..clear()
       ..add(row);
     _syncPrimaryPlayer();
     selectedVerb = verb;
+    customVerbPhrase = '';
+    customVerbPinned = false;
     verbCategory = _categoryForVerb(verb) ?? verbCategory;
     rbi = 0;
 
@@ -2694,16 +2922,99 @@ class CaptionV2Controller extends ChangeNotifier {
   void _finishCommand({int? rbiValue, String? verbOverride}) {
     if (verbOverride != null) {
       selectedVerb = verbOverride;
+      customVerbPhrase = '';
+      customVerbPinned = false;
       verbCategory = _categoryForVerb(verbOverride) ?? verbCategory;
     }
     if (rbiValue != null) rbi = rbiValue;
     _syncKeywords();
-    guidedSearchPrompt = null;
-    _guidedSearchHits = const [];
+    final commandInning = _pendingCommandInning;
+    if (commandInning != null) {
+      _pendingCommandInning = null;
+      _completeCommandTiming(inningValue: commandInning);
+      return;
+    }
+    _promptForCommandInning();
+  }
+
+  void _promptForCommandInning() {
+    guidedSearchPrompt = 'What inning?';
+    _guidedSearchHits = [
+      SearchHit(
+        kind: 'option',
+        label: 'Pre-game',
+        aliases: const ['pre', 'pregame', 'before'],
+        apply: () => _completeCommandTiming(pre: true),
+      ),
+      for (var value = 1; value <= timingRegulationCount; value++)
+        SearchHit(
+          kind: 'option',
+          label: '${_ordinal(value)} inning',
+          aliases: ['$value', _ordinal(value), _ordinalWord(value)],
+          apply: () => _completeCommandTiming(inningValue: value),
+        ),
+      SearchHit(
+        kind: 'option',
+        label: 'Extra innings',
+        aliases: const ['extra', 'extras', 'extra innings'],
+        apply: () =>
+            _completeCommandTiming(inningValue: timingRegulationCount + 1),
+      ),
+      SearchHit(
+        kind: 'option',
+        label: 'Post-game',
+        aliases: const ['post', 'postgame', 'after'],
+        apply: () => _completeCommandTiming(post: true),
+      ),
+    ];
+    notifyListeners();
+  }
+
+  void _completeCommandTiming({
+    int? inningValue,
+    bool pre = false,
+    bool post = false,
+  }) {
+    if (inningValue != null) inning = inningValue;
+    preGame = pre;
+    postGame = post;
     statusMessage = selectedPlayer == null || selectedVerb == null
         ? null
         : '$playerChipLabel · ${_verbChip(selectedVerb!)}';
+    _promptForCommandDestination();
+  }
+
+  void _promptForCommandDestination() {
+    guidedSearchPrompt = 'Save or FTP?';
+    _guidedSearchHits = [
+      SearchHit(
+        kind: 'action',
+        label: 'Save · Enter',
+        aliases: const ['save'],
+        apply: () => unawaited(_finishCommandAction(transmit: false)),
+      ),
+      SearchHit(
+        kind: 'action',
+        label: 'FTP · Shift+Enter',
+        aliases: const ['ftp', 'send', 'transmit'],
+        apply: () => unawaited(_finishCommandAction(transmit: true)),
+      ),
+    ];
     notifyListeners();
+  }
+
+  Future<void> _finishCommandAction({required bool transmit}) async {
+    final path = currentPath;
+    guidedSearchPrompt = null;
+    _guidedSearchHits = const [];
+    searchQuery = '';
+    notifyListeners();
+    if (path == null) return;
+
+    final saved = await saveCurrent();
+    if (!saved) return;
+    if (transmit) await transmitPath(path);
+    if (currentPath == path) nextFrame();
   }
 
   List<SearchHit> topSearchHits() {
@@ -2725,7 +3036,17 @@ class CaptionV2Controller extends ChangeNotifier {
       hits.add(SearchHit(
         kind: 'verb',
         label: verbDefinition(verb)?.label ?? verb,
-        apply: () => selectVerb(verb),
+        apply: () {
+          final player = selectedPlayers.isEmpty ? null : selectedPlayers.first;
+          if (searchHasJerseyAndVerb && player != null) {
+            _pendingCommandInning = int.tryParse(
+              RegExp(r'\s+(\d+)\s*$').firstMatch(searchQuery)?.group(1) ?? '',
+            );
+            _chooseCommandPlayer(player, verb);
+          } else {
+            selectVerb(verb);
+          }
+        },
       ));
     }
     return hits;

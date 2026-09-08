@@ -137,7 +137,7 @@ class CaptionStrip extends StatelessWidget {
                     runSpacing: 6,
                     children: [
                       Text(leading, style: t.captionStyle),
-                      for (final chip in chips)
+                      for (final chip in chips.where((chip) => !chip.isEmpty))
                         _CaptionChip(
                           data: chip,
                           tokens: t,
@@ -151,6 +151,8 @@ class CaptionStrip extends StatelessWidget {
                   ),
                 if (onPersonalityChanged != null) ...[
                   const SizedBox(height: 10),
+                  Divider(height: 1, thickness: 1, color: t.divider),
+                  const SizedBox(height: 1),
                   _PersonalityBar(
                     value: personality ?? '',
                     tokens: t,
@@ -210,7 +212,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
   Widget build(BuildContext context) {
     final t = widget.tokens;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 3),
       decoration: BoxDecoration(
         color: t.bg,
         borderRadius: BorderRadius.circular(10),
@@ -240,7 +242,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                           Text(
                             'Caption',
                             style: FfTokens.captionTitle.copyWith(
-                              color: t.text,
+                              color: t.text.withValues(alpha: 0.72),
                               fontSize: 26,
                               letterSpacing: -0.78,
                             ),
@@ -270,6 +272,8 @@ class _CaptionPanelState extends State<_CaptionPanel> {
               ],
             ],
           ),
+          const SizedBox(height: 1),
+          Divider(height: 1, thickness: 1, color: t.divider),
           const SizedBox(height: 8),
           widget.child,
         ],
@@ -322,7 +326,6 @@ class _InningCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: t.bg,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: t.divider),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -369,7 +372,7 @@ class _InningCard extends StatelessWidget {
           if (mlbTimestampVisible) ...[
             const SizedBox(width: 6),
             SizedBox(
-              width: 94,
+              width: 132,
               height: 24,
               child: _MlbTimestampChip(
                 enabled: mlbTimestampEnabled,
@@ -516,17 +519,8 @@ class _PersonalityBarState extends State<_PersonalityBar> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: t.bg,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: _focusNode.hasFocus ? t.accent : t.divider,
-          width: _focusNode.hasFocus ? FfTokens.focusOutlineWidth : 1,
-        ),
-      ),
+    return SizedBox(
+      height: 28,
       child: Row(
         children: [
           Text(
@@ -739,13 +733,10 @@ class _MlbTimestampChip extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (loading)
-                  SizedBox(
-                    width: 11,
-                    height: 11,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 1.5,
-                      color: tokens.textSecondary,
-                    ),
+                  Icon(
+                    Icons.sync,
+                    size: 13,
+                    color: tokens.textSecondary,
                   )
                 else
                   Icon(
@@ -755,7 +746,7 @@ class _MlbTimestampChip extends StatelessWidget {
                   ),
                 const SizedBox(width: 6),
                 Text(
-                  loading ? 'MATCHING' : 'MLB TIME',
+                  'MLB TIME',
                   style: FfTokens.railLabel.copyWith(
                     color: matched ? tokens.accent : tokens.textSecondary,
                   ),

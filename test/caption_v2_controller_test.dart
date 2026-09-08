@@ -72,6 +72,188 @@ void main() {
     expect(body, contains('celebrate against'));
   });
 
+  test('uses an exact session-only custom verb phrase', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees';
+
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    controller.setCustomVerbPhrase('poses with the trophy');
+
+    expect(controller.selectedVerb, isNull);
+    expect(controller.hasVerbSelection, isTrue);
+    expect(controller.hasCompleteCaption, isTrue);
+    expect(controller.verbChipLabel, 'poses with the trophy');
+    expect(
+      controller.buildCaptionBody(),
+      contains('poses with the trophy against the New York Yankees'),
+    );
+  });
+
+  test('custom verb supports pin and last-used session actions', () {
+    final controller = CaptionV2Controller();
+
+    controller.setCustomVerbPhrase('signs autographs');
+    controller.toggleCustomVerbPin();
+    expect(controller.customVerbPinned, isTrue);
+
+    controller.setCustomVerbPhrase('');
+    expect(controller.customVerbPinned, isFalse);
+    controller.useLastCustomVerb();
+    expect(controller.customVerbPhrase, 'signs autographs');
+
+    controller.selectVerb('Celebrates');
+    expect(controller.customVerbPhrase, isEmpty);
+    expect(controller.customVerbPinned, isFalse);
+  });
+
+  test('celebration selector applies and toggles a celebration type', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees';
+
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    controller.selectVerb('Celebrates');
+
+    expect(controller.verbNeedsCelebration('Celebrates'), isTrue);
+    expect(controller.celebrationOptionsFor('Celebrates'), contains('Scoring'));
+
+    controller.setCelebrationType('Scoring');
+    expect(controller.buildCaptionBody(), contains('celebrates scoring'));
+
+    controller.setCelebrationType('Scoring');
+    expect(controller.celebrationType, isNull);
+  });
+
+  test('hit verbs expose the V1 reaction mechanic', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees';
+
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    controller.selectVerb('Double');
+
+    expect(controller.verbNeedsCelebration('Double'), isTrue);
+    expect(controller.celebrationOptionsFor('Double'), contains('Celebrates'));
+
+    controller.setCelebrationType('Celebrates');
+    expect(
+      controller.buildCaptionBody(),
+      contains('celebrates after hitting a double'),
+    );
+  });
+
+  test('compound live search keeps jersey and verb matches visible', () {
+    final controller = CaptionV2Controller()
+      ..homeRoster = [player('Vladimir Guerrero Jr.', '27')]
+      ..awayRoster = [player('Away Player', '27')];
+
+    controller.setSearchQuery('27 home run');
+
+    expect(controller.searchHasJerseyAndVerb, isTrue);
+    expect(controller.filteredHome.single.player.fullName,
+        'Vladimir Guerrero Jr.');
+    expect(controller.filteredAway.single.player.fullName, 'Away Player');
+    expect(controller.filteredVerbs, contains('Home Run'));
+    expect(
+      controller.topSearchHits().map((hit) => hit.kind),
+      containsAll(['player', 'verb']),
+    );
+  });
+
+  test('opening everything search clears the active caption fields', () {
+    final controller = CaptionV2Controller()
+      ..manualCaptionOverride = 'Existing caption'
+      ..personality = 'Existing Person'
+      ..keywords = 'existing, keywords'
+      ..selectedVerb = 'Double'
+      ..rbi = 2;
+    controller.selectedPlayers
+        .add(RosterHit(player: player('Existing Player', '7'), isHome: true));
+    controller.selectedPlayer = controller.selectedPlayers.first.player;
+
+    controller.setSearchOpen(true);
+
+    expect(controller.captionSelectionStarted, isFalse);
+    expect(controller.selectedPlayers, isEmpty);
+    expect(controller.selectedPlayer, isNull);
+    expect(controller.selectedVerb, isNull);
+    expect(controller.manualCaptionOverride, isNull);
+    expect(controller.personality, isEmpty);
+    expect(controller.keywords, isEmpty);
+    expect(controller.rbi, 0);
+  });
+
+  test('compound search asks for inning after player and verb', () {
+    final controller = CaptionV2Controller()
+      ..homeRoster = [player('Vladimir Guerrero Jr.', '27')]
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees';
+
+    controller.setSearchOpen(true);
+    controller.setSearchQuery('27 celebrates');
+    controller
+        .topSearchHits()
+        .firstWhere((hit) => hit.kind == 'player')
+        .apply();
+    controller.topSearchHits().firstWhere((hit) => hit.kind == 'verb').apply();
+
+    expect(controller.guidedSearchPrompt, 'What inning?');
+    controller
+        .topSearchHits()
+        .firstWhere((hit) => hit.label == '3rd inning')
+        .apply();
+    expect(controller.inning, 3);
+    expect(controller.guidedSearchPrompt, 'Save or FTP?');
+    expect(
+      controller.topSearchHits().map((hit) => hit.label),
+      containsAll(['Save · Enter', 'FTP · Shift+Enter']),
+    );
+  });
+
+  test('last command number sets the inning', () {
+    final controller = CaptionV2Controller()
+      ..homeRoster = [player('Vladimir Guerrero Jr.', '27')]
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees';
+
+    controller.setSearchOpen(true);
+    expect(controller.submitSearchCommand('27 celebrates 6'), isTrue);
+
+    expect(controller.selectedPlayer?.fullName, 'Vladimir Guerrero Jr.');
+    expect(controller.selectedVerb, 'Celebrates');
+    expect(controller.inning, 6);
+    expect(controller.guidedSearchPrompt, 'Save or FTP?');
+  });
+
+  test('h and v command prefixes choose the home or visiting player', () {
+    CaptionV2Controller buildController() => CaptionV2Controller()
+      ..homeRoster = [player('Home Player', '27')]
+      ..awayRoster = [player('Visiting Player', '27')];
+
+    final home = buildController()..setSearchOpen(true);
+    expect(home.submitSearchCommand('h 27 celebrates 6'), isTrue);
+    expect(home.selectedPlayer?.fullName, 'Home Player');
+
+    final visitor = buildController()..setSearchOpen(true);
+    expect(visitor.submitSearchCommand('v27 celebrates 6'), isTrue);
+    expect(visitor.selectedPlayer?.fullName, 'Visiting Player');
+  });
+
+  test('navigating to another frame clears the Firebar', () {
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg']
+      ..setSearchOpen(true)
+      ..setSearchQuery('27 celebrates 6');
+
+    controller.nextFrame();
+
+    expect(controller.currentIndex, 1);
+    expect(controller.searchQuery, isEmpty);
+    expect(controller.searchOpen, isFalse);
+    expect(controller.searchGuided, isFalse);
+  });
+
   test('first selected team stays subject and opposing picks keep order', () {
     final controller = CaptionV2Controller();
     final homeOne = player('Home One', '1');

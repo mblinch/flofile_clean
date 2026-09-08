@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 
 /// Global search accelerator (⌘K). Columns keep working when closed.
-class CaptionV2SearchBar extends StatelessWidget {
+class CaptionV2SearchBar extends StatefulWidget {
   const CaptionV2SearchBar({
     super.key,
     required this.controller,
@@ -17,7 +18,41 @@ class CaptionV2SearchBar extends StatelessWidget {
   final TextEditingController textController;
 
   @override
+  State<CaptionV2SearchBar> createState() => _CaptionV2SearchBarState();
+}
+
+class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_clearTextWhenSearchCloses);
+  }
+
+  @override
+  void didUpdateWidget(covariant CaptionV2SearchBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_clearTextWhenSearchCloses);
+      widget.controller.addListener(_clearTextWhenSearchCloses);
+    }
+  }
+
+  void _clearTextWhenSearchCloses() {
+    if (widget.controller.searchQuery.isEmpty &&
+        widget.textController.text.isNotEmpty) {
+      widget.textController.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_clearTextWhenSearchCloses);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = widget.controller;
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final hits = controller.topSearchHits();
     final players = hits.where((h) => h.kind == 'player').length;
@@ -29,33 +64,74 @@ class CaptionV2SearchBar extends StatelessWidget {
         color: t.sunken,
         borderRadius: BorderRadius.circular(FfTokens.radiusChip),
         border: Border.all(
-          color: focusNode.hasFocus ? t.accent : t.divider,
-          width: focusNode.hasFocus ? FfTokens.focusOutlineWidth : 1,
+          color: widget.focusNode.hasFocus ? t.accent : t.divider,
+          width: widget.focusNode.hasFocus ? FfTokens.focusOutlineWidth : 1,
         ),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       child: Row(
         children: [
-          Icon(Icons.search, size: 18, color: t.textSecondary),
+          const Icon(
+            Icons.local_fire_department,
+            size: 17,
+            color: Color(0xFFFF7A24),
+          ),
+          const SizedBox(width: 5),
+          ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [Color(0xFFFFB347), Color(0xFFFF5A1F)],
+            ).createShader(bounds),
+            child: Text(
+              'FIREBAR',
+              style: FfTokens.captionTitle.copyWith(
+                fontSize: 16,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+            decoration: BoxDecoration(
+              color: t.badgeFill,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              '⌘K',
+              style: t.keyHintStyle.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(width: 1, height: 16, color: t.divider),
           const SizedBox(width: 8),
           Expanded(
             child: TextField(
-              focusNode: focusNode,
-              controller: textController,
+              focusNode: widget.focusNode,
+              controller: widget.textController,
               style: t.bodyStyle,
               cursorColor: t.accent,
               decoration: InputDecoration(
                 border: InputBorder.none,
-                hintText: controller.guidedSearchPrompt ??
-                    'Try “27 home run” or search everything at once',
+                hintText: controller.guidedSearchPrompt,
                 hintStyle: t.secondaryLabelStyle,
                 isDense: true,
               ),
               onChanged: controller.setSearchQuery,
               onSubmitted: (value) {
-                final handled = controller.submitSearchCommand(value);
+                final finalAction =
+                    controller.guidedSearchPrompt == 'Save or FTP?';
+                final submittedValue = finalAction && value.trim().isEmpty
+                    ? (HardwareKeyboard.instance.isShiftPressed
+                        ? 'ftp'
+                        : 'save')
+                    : value;
+                final handled = controller.submitSearchCommand(submittedValue);
                 if (handled) {
-                  textController.clear();
+                  widget.textController.clear();
                   controller.setSearchQuery('');
                   if (!controller.searchGuided) {
                     controller.setSearchOpen(false);
@@ -65,7 +141,7 @@ class CaptionV2SearchBar extends StatelessWidget {
                 if (hits.isNotEmpty) {
                   hits.first.apply();
                   controller.setSearchOpen(false);
-                  textController.clear();
+                  widget.textController.clear();
                 }
               },
             ),
@@ -78,13 +154,13 @@ class CaptionV2SearchBar extends StatelessWidget {
               style: t.metaStyle,
             ),
           const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: t.badgeFill,
-              borderRadius: BorderRadius.circular(4),
+          Tooltip(
+            message: 'Type a jersey number and verb, for example: 27 home run',
+            child: Icon(
+              Icons.help_outline,
+              size: 15,
+              color: t.textSecondary,
             ),
-            child: Text('⌘K', style: t.keyHintStyle),
           ),
         ],
       ),
@@ -155,8 +231,11 @@ class CaptionV2SearchResults extends StatelessWidget {
               onTapDown: (_) {
                 final hit = hits[i];
                 final guided = controller.searchGuided;
+                final keepOpenForVerb = !guided &&
+                    hit.kind == 'player' &&
+                    controller.searchHasJerseyAndVerb;
                 hit.apply();
-                if (!guided) {
+                if (!keepOpenForVerb && !controller.searchGuided) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     onClose();
                   });
