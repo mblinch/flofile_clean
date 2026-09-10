@@ -54,7 +54,7 @@ class _PhotoColumnState extends State<PhotoColumn> {
         final availableHeight =
             (constraints.maxHeight - _handleHeight).clamp(0.0, double.infinity);
         final previewHeight =
-            availableHeight * _previewFraction.clamp(0.6, 0.8);
+            availableHeight * _previewFraction.clamp(0.05, 0.95);
         final windowSize = MediaQuery.sizeOf(context);
         final windowMaxColumns =
             windowSize.width >= 1600 && windowSize.height >= 1000 ? 8 : 6;
@@ -79,7 +79,7 @@ class _PhotoColumnState extends State<PhotoColumn> {
                 setState(() {
                   _previewFraction =
                       (_previewFraction + delta / availableHeight)
-                          .clamp(0.6, 0.8);
+                          .clamp(0.05, 0.95);
                 });
               },
               onReset: () => setState(() => _previewFraction = 0.6),

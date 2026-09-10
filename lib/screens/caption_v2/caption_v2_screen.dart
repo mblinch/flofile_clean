@@ -17,6 +17,7 @@ import 'data/caption_transfer_payload.dart';
 import 'data/caption_v2_controller.dart';
 import 'layout/caption_v2_search.dart';
 import 'layout/caption_v2_startup_screen.dart';
+import 'layout/desktop_drum_picker.dart';
 import 'layout/frame_review_route.dart';
 import 'layout/photo_column.dart';
 import 'layout/roster_column.dart';
@@ -164,26 +165,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   bool _handleHardwareKey(KeyEvent event) {
-    if (event is KeyDownEvent &&
-        _controller.searchOpen &&
-        _controller.searchGuided) {
-      final optionNumber = int.tryParse(event.character ?? '');
-      if (optionNumber != null &&
-          optionNumber > 0 &&
-          optionNumber <= _controller.topSearchHits().length) {
-        _handleDigit(optionNumber);
-        return true;
-      }
-    }
-    if (event is KeyDownEvent &&
-        _controller.searchOpen &&
-        _controller.guidedSearchPrompt == 'Save or FTP?' &&
-        (event.logicalKey == LogicalKeyboardKey.enter ||
-            event.logicalKey == LogicalKeyboardKey.numpadEnter)) {
-      final action = HardwareKeyboard.instance.isShiftPressed ? 'ftp' : 'save';
-      _controller.submitSearchCommand(action);
-      return true;
-    }
+    if (_controller.searchOpen) return false;
     if (event is! KeyUpEvent || _jerseyBuffer.isEmpty) return false;
     final key = event.logicalKey;
     final modifierReleased = key == LogicalKeyboardKey.controlLeft ||
@@ -242,6 +224,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       _controller.setRbi(number);
       return;
     }
+    if (selected != null &&
+        _controller.verbNeedsBase(selected) &&
+        number >= 1 &&
+        number <= 4) {
+      _controller.setSelectedBase(
+        const {1: '1B', 2: '2B', 3: '3B', 4: 'Home'}[number],
+      );
+      return;
+    }
     final verbs = _controller.verbsInCategory;
     if (number >= 1 && number <= verbs.length) {
       _controller.selectVerb(verbs[number - 1]);
@@ -262,7 +253,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   void _openSearch() {
     _controller.setSearchOpen(true);
-    _searchFocus.requestFocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _searchFocus.requestFocus();
+    });
   }
 
   void _closeSearch() {
@@ -282,6 +275,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       } else {
         _searchText.clear();
         _controller.setSearchQuery('');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _searchFocus.requestFocus();
+        });
       }
       return;
     }
@@ -579,9 +575,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       shortcuts: buildCaptionV2Shortcuts(),
       child: Actions(
         actions: <Type, Action<Intent>>{
-          OpenSearchIntent: CaptionV2GuardedAction<OpenSearchIntent>(
+          OpenSearchIntent: CallbackAction<OpenSearchIntent>(
             onInvoke: (_) {
-              _openSearch();
+              c.searchOpen ? _closeSearch() : _openSearch();
               return null;
             },
           ),
@@ -764,71 +760,33 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Widget _buildSearchBlock(CaptionV2Controller c) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        SizedBox(
-          height: 38,
-          child: CaptionV2SearchBar(
-            controller: c,
-            focusNode: _searchFocus,
-            textController: _searchText,
-          ),
-        ),
-        CaptionV2SearchResults(
-          controller: c,
-          onClose: _closeSearch,
-        ),
-        const SizedBox(height: 6),
-        SizedBox(
-          height: 32,
-          child: CaptionV2ActionRow(
-            onSavePrevious: _saveAndPrevious,
-            onCopy: _copySelection,
-            onPaste: _pasteSelection,
-            onPastePrevious: _pastePreviousSelection,
-            pasteEnabled: true,
-            onSaveNext: _saveAndNext,
-            onTransmit: c.transmitQueued,
-            transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
-          ),
-        ),
-      ],
+    return SizedBox(
+      height: 32,
+      child: CaptionV2ActionRow(
+        onSavePrevious: _saveAndPrevious,
+        onCopy: _copySelection,
+        onPaste: _pasteSelection,
+        onPastePrevious: _pastePreviousSelection,
+        pasteEnabled: true,
+        onSaveNext: _saveAndNext,
+        onTransmit: c.transmitQueued,
+        transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
+      ),
     );
   }
 
   Widget _buildCaptionStrip(CaptionV2Controller c) {
     final isBaseball = c.sport.toLowerCase() == 'baseball';
-    final selectionStarted = c.captionSelectionStarted;
     return CaptionStrip(
-      leading: c.captionLeading,
-      chips: [
-        CaptionChipData(
-          id: 'player',
-          label: c.selectedPlayer == null ? null : c.playerChipLabel,
-          placeholder: 'player',
-        ),
-        CaptionChipData(
-          id: 'verb',
-          label: c.hasVerbSelection ? c.verbChipLabel : null,
-          placeholder: 'verb',
-        ),
-        if (isBaseball)
-          CaptionChipData(
-            id: 'rbi',
-            label: c.rbi > 0 ? c.rbiChipLabel : null,
-            placeholder: 'RBI',
-          ),
-      ],
-      trailing: c.captionTrailing,
+      leading: '',
+      chips: const [],
+      trailing: '',
       fullCaption: c.manualCaptionOverride ??
-          (c.hasCompleteCaption
+          (c.selectedPlayer != null || c.hasVerbSelection
               ? c.buildCaptionSentence()
-              : selectionStarted
-                  ? null
-                  : (c.originalCaption.isEmpty
-                      ? 'No caption embedded in image.'
-                      : c.originalCaption)),
+              : (c.originalCaption.isEmpty
+                  ? 'No caption embedded in image.'
+                  : c.originalCaption)),
       personality: c.personality,
       onPersonalityChanged: c.showPersonalityField ? c.setPersonality : null,
       headline: c.headline,
@@ -836,20 +794,26 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       keywords: c.keywords,
       onKeywordsChanged: c.showKeywordsField ? c.setKeywords : null,
       onEditTap: () => _openCaptionStyleEditor(c),
+      footer: SizedBox(
+        height: c.searchOpen ? 80 : 38,
+        child: CaptionV2SearchBar(
+          controller: c,
+          focusNode: _searchFocus,
+          textController: _searchText,
+          onActivate: _openSearch,
+          onExit: _closeSearch,
+        ),
+      ),
       inningLabel: c.inningLabel,
+      inning: c.inning,
+      regulationCount: c.timingRegulationCount,
+      maxInning: c.timingMaxInning,
+      extraLabel: c.sport.toLowerCase() == 'soccer'
+          ? 'ET'
+          : (c.sport.toLowerCase() == 'baseball' ? 'X' : 'OT'),
+      onInningSelected: c.setInning,
       preSelected: c.preGame,
       postSelected: c.postGame,
-      onChipTap: (id) {
-        switch (id) {
-          case 'player':
-            _setColumnFocus(c.selectedIsHome ? 0 : 2);
-            break;
-          case 'verb':
-          case 'rbi':
-            _setColumnFocus(1);
-            break;
-        }
-      },
       onInningDecrement: () => c.bumpInning(-1),
       onInningIncrement: () => c.bumpInning(1),
       inningDisabled: c.preGame || c.postGame,
@@ -1298,7 +1262,7 @@ class _AdminWindowSizeDropdown extends StatelessWidget {
   }
 }
 
-class _DesktopBody extends StatelessWidget {
+class _DesktopBody extends StatefulWidget {
   const _DesktopBody({
     required this.controller,
     required this.gap,
@@ -1308,32 +1272,73 @@ class _DesktopBody extends StatelessWidget {
   final double gap;
 
   @override
+  State<_DesktopBody> createState() => _DesktopBodyState();
+}
+
+class _DesktopBodyState extends State<_DesktopBody> {
+  /// Default picker view (scroll list). Null returns to the classic columns.
+  DrumPickerMode? _drumMode = DrumPickerMode.scroll;
+
+  @override
   Widget build(BuildContext context) {
-    return Row(
+    final controller = widget.controller;
+    if (_drumMode != null && !controller.searchOpen) {
+      return DesktopDrumPicker(
+        controller: controller,
+        mode: _drumMode!,
+        onModeChanged: (mode) => setState(() => _drumMode = mode),
+        onExit: () => setState(() => _drumMode = null),
+      );
+    }
+
+    final laneRow = Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
+          flex: controller.searchOpen ? 4 : 1,
           child: RosterColumn(
             controller: controller,
             isHome: true,
             focused: controller.columnFocus == 0,
+            onDrumRequested: () =>
+                setState(() => _drumMode = DrumPickerMode.scroll),
+            onInfiniteRequested: () =>
+                setState(() => _drumMode = DrumPickerMode.infinite),
           ),
         ),
-        SizedBox(width: gap),
+        SizedBox(width: widget.gap),
         Expanded(
+          flex: controller.searchOpen ? 5 : 1,
           child: VerbsColumn(
             controller: controller,
             focused: controller.columnFocus == 1,
+            onDrumRequested: () =>
+                setState(() => _drumMode = DrumPickerMode.scroll),
+            onInfiniteRequested: () =>
+                setState(() => _drumMode = DrumPickerMode.infinite),
           ),
         ),
-        SizedBox(width: gap),
+        SizedBox(width: widget.gap),
         Expanded(
+          flex: controller.searchOpen ? 4 : 1,
           child: RosterColumn(
             controller: controller,
             isHome: false,
             focused: controller.columnFocus == 2,
+            onDrumRequested: () =>
+                setState(() => _drumMode = DrumPickerMode.scroll),
+            onInfiniteRequested: () =>
+                setState(() => _drumMode = DrumPickerMode.infinite),
           ),
         ),
+      ],
+    );
+    if (!controller.searchOpen) return laneRow;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(child: laneRow),
+        _FirebarMatchFooter(controller: controller),
       ],
     );
   }
@@ -1443,7 +1448,50 @@ class _MobileBody extends StatelessWidget {
               ),
           ],
         ),
+        if (controller.searchOpen) _FirebarMatchFooter(controller: controller),
       ],
+    );
+  }
+}
+
+class _FirebarMatchFooter extends StatelessWidget {
+  const _FirebarMatchFooter({required this.controller});
+
+  final CaptionV2Controller controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final query = controller.searchQuery.trim();
+    return Container(
+      height: 28,
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        border: Border(top: BorderSide(color: tokens.divider)),
+      ),
+      child: query.isEmpty
+          ? const SizedBox.shrink()
+          : Text.rich(
+              TextSpan(
+                style: tokens.metaStyle.copyWith(
+                  color: tokens.textSecondary,
+                  fontSize: 12,
+                ),
+                children: [
+                  const TextSpan(text: 'Matching '),
+                  TextSpan(
+                    text: query,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  TextSpan(
+                    text:
+                        ' — ${controller.firebarMatchedCount} of ${controller.firebarTotalCount}',
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }

@@ -32,6 +32,11 @@ class CaptionStrip extends StatelessWidget {
     this.fullCaption,
     this.onChipTap,
     this.inningLabel,
+    this.inning,
+    this.regulationCount = 9,
+    this.maxInning,
+    this.extraLabel = 'X',
+    this.onInningSelected,
     this.onInningDecrement,
     this.onInningIncrement,
     this.inningDisabled = false,
@@ -52,6 +57,7 @@ class CaptionStrip extends StatelessWidget {
     this.keywords,
     this.onKeywordsChanged,
     this.onEditTap,
+    this.footer,
   });
 
   /// Static text before the first chip (e.g. "Toronto Blue Jays ").
@@ -69,8 +75,16 @@ class CaptionStrip extends StatelessWidget {
 
   final ValueChanged<String>? onChipTap;
 
-  /// Current inning display (e.g. "2nd"). Null hides the stepper.
+  /// Current inning display (e.g. "2nd"). Null hides the inning controls.
   final String? inningLabel;
+  final int? inning;
+  final int regulationCount;
+
+  /// Highest selectable inning. When greater than [regulationCount] + 1
+  /// (baseball), squares page by nines with arrow controls up to this value.
+  final int? maxInning;
+  final String extraLabel;
+  final ValueChanged<int>? onInningSelected;
   final VoidCallback? onInningDecrement;
   final VoidCallback? onInningIncrement;
   final bool inningDisabled;
@@ -92,6 +106,7 @@ class CaptionStrip extends StatelessWidget {
   final String? keywords;
   final ValueChanged<String>? onKeywordsChanged;
   final VoidCallback? onEditTap;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -105,59 +120,73 @@ class CaptionStrip extends StatelessWidget {
           _CaptionPanel(
             tokens: t,
             onTap: onEditTap,
-            headerTrailing:
-                inningLabel != null || onPreTap != null || onPostTap != null
-                    ? _InningCard(
-                        inningLabel: inningLabel,
-                        onInningDecrement: onInningDecrement,
-                        onInningIncrement: onInningIncrement,
-                        inningDisabled: inningDisabled,
-                        onInningActivate: onInningActivate,
-                        preSelected: preSelected,
-                        postSelected: postSelected,
-                        onPreTap: onPreTap,
-                        onPostTap: onPostTap,
-                        mlbTimestampVisible: mlbTimestampVisible,
-                        mlbTimestampEnabled: mlbTimestampEnabled,
-                        mlbTimestampLoading: mlbTimestampLoading,
-                        mlbTimestampMatched: mlbTimestampMatched,
-                        onMlbTimestampTap: onMlbTimestampTap,
-                        tokens: t,
-                      )
-                    : null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (fullCaption != null && fullCaption!.trim().isNotEmpty)
-                  Text(fullCaption!, style: t.captionStyle)
-                else
-                  Wrap(
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 4,
-                    runSpacing: 6,
-                    children: [
-                      Text(leading, style: t.captionStyle),
-                      for (final chip in chips.where((chip) => !chip.isEmpty))
-                        _CaptionChip(
-                          data: chip,
-                          tokens: t,
-                          onTap: onChipTap == null
-                              ? null
-                              : () => onChipTap!(chip.id),
-                        ),
-                      if (trailing.isNotEmpty)
-                        Text(trailing, style: t.captionStyle),
-                    ],
-                  ),
-                if (onPersonalityChanged != null) ...[
-                  const SizedBox(height: 10),
-                  Divider(height: 1, thickness: 1, color: t.divider),
-                  const SizedBox(height: 1),
-                  _PersonalityBar(
+            headerTrailing: onPersonalityChanged == null
+                ? null
+                : _PersonalityBar(
                     value: personality ?? '',
                     tokens: t,
                     onChanged: onPersonalityChanged!,
                   ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: t.textSizeCaption * 1.45 * 3,
+                  ),
+                  child: fullCaption != null && fullCaption!.trim().isNotEmpty
+                      ? Text(fullCaption!, style: t.captionStyle)
+                      : Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 4,
+                          runSpacing: 6,
+                          children: [
+                            Text(leading, style: t.captionStyle),
+                            for (final chip
+                                in chips.where((chip) => !chip.isEmpty))
+                              _CaptionChip(
+                                data: chip,
+                                tokens: t,
+                                onTap: onChipTap == null
+                                    ? null
+                                    : () => onChipTap!(chip.id),
+                              ),
+                            if (trailing.isNotEmpty)
+                              Text(trailing, style: t.captionStyle),
+                          ],
+                        ),
+                ),
+                if (inningLabel != null ||
+                    onPreTap != null ||
+                    onPostTap != null) ...[
+                  const SizedBox(height: 8),
+                  _InningCard(
+                    inningLabel: inningLabel,
+                    inning: inning,
+                    regulationCount: regulationCount,
+                    extraLabel: extraLabel,
+                    maxInning: maxInning,
+                    onInningSelected: onInningSelected,
+                    onInningDecrement: onInningDecrement,
+                    onInningIncrement: onInningIncrement,
+                    inningDisabled: inningDisabled,
+                    onInningActivate: onInningActivate,
+                    preSelected: preSelected,
+                    postSelected: postSelected,
+                    onPreTap: onPreTap,
+                    onPostTap: onPostTap,
+                    mlbTimestampVisible: mlbTimestampVisible,
+                    mlbTimestampEnabled: mlbTimestampEnabled,
+                    mlbTimestampLoading: mlbTimestampLoading,
+                    mlbTimestampMatched: mlbTimestampMatched,
+                    onMlbTimestampTap: onMlbTimestampTap,
+                    tokens: t,
+                  ),
+                ],
+                if (footer != null) ...[
+                  const SizedBox(height: 6),
+                  footer!,
+                  const SizedBox(height: 8),
                 ],
               ],
             ),
@@ -212,7 +241,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
   Widget build(BuildContext context) {
     final t = widget.tokens;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 3),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
       decoration: BoxDecoration(
         color: t.bg,
         borderRadius: BorderRadius.circular(10),
@@ -268,7 +297,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                   color: t.divider,
                 ),
                 const SizedBox(width: 12),
-                widget.headerTrailing!,
+                Expanded(child: widget.headerTrailing!),
               ],
             ],
           ),
@@ -282,9 +311,14 @@ class _CaptionPanelState extends State<_CaptionPanel> {
   }
 }
 
-class _InningCard extends StatelessWidget {
+class _InningCard extends StatefulWidget {
   const _InningCard({
     required this.inningLabel,
+    required this.inning,
+    required this.regulationCount,
+    required this.maxInning,
+    required this.extraLabel,
+    required this.onInningSelected,
     required this.onInningDecrement,
     required this.onInningIncrement,
     required this.inningDisabled,
@@ -302,6 +336,11 @@ class _InningCard extends StatelessWidget {
   });
 
   final String? inningLabel;
+  final int? inning;
+  final int regulationCount;
+  final int? maxInning;
+  final String extraLabel;
+  final ValueChanged<int>? onInningSelected;
   final VoidCallback? onInningDecrement;
   final VoidCallback? onInningIncrement;
   final bool inningDisabled;
@@ -318,68 +357,148 @@ class _InningCard extends StatelessWidget {
   final FfTokens tokens;
 
   @override
+  State<_InningCard> createState() => _InningCardState();
+}
+
+class _InningCardState extends State<_InningCard> {
+  bool _useStepper = false;
+
+  @override
   Widget build(BuildContext context) {
-    final t = tokens;
+    final t = widget.tokens;
+    final canSquares =
+        widget.inningLabel != null && widget.onInningSelected != null;
+    final useSquares = canSquares && !_useStepper;
     return Container(
-      height: 36,
-      padding: const EdgeInsets.symmetric(horizontal: 6),
+      width: double.infinity,
+      height: 38,
+      padding: const EdgeInsets.fromLTRB(2, 0, 6, 0),
       decoration: BoxDecoration(
-        color: t.bg,
-        borderRadius: BorderRadius.circular(10),
+        color: t.surface,
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          if (onPreTap != null) ...[
+          SizedBox(
+            width: 132,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.chevron_right,
+                  size: 17,
+                  color: t.textSecondary,
+                ),
+                const SizedBox(width: 5),
+                SizedBox(
+                  width: 58,
+                  child: Text(
+                    'Inning',
+                    maxLines: 1,
+                    softWrap: false,
+                    style: FfTokens.captionTitle.copyWith(
+                      color: t.text,
+                      fontSize: 16,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                if (canSquares) ...[
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: _useStepper
+                        ? 'Switch to inning squares'
+                        : 'Switch to plus / minus',
+                    child: InkWell(
+                      onTap: () => setState(() => _useStepper = !_useStepper),
+                      borderRadius: BorderRadius.circular(5),
+                      child: Container(
+                        width: 40,
+                        height: 26,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: t.badgeFill,
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Icon(
+                          _useStepper
+                              ? Icons.grid_view_rounded
+                              : Icons.add_box_outlined,
+                          size: 16,
+                          color: t.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 6),
+              ],
+            ),
+          ),
+          Container(width: 1, height: 18, color: t.divider),
+          const SizedBox(width: 8),
+          if (widget.onPreTap != null) ...[
             SizedBox(
               width: 42,
               height: 24,
               child: _ToggleChip(
                 label: 'Pre',
-                selected: preSelected,
+                selected: widget.preSelected,
                 tokens: t,
-                onTap: onPreTap,
+                onTap: widget.onPreTap,
               ),
             ),
-            if (inningLabel != null) const SizedBox(width: 6),
+            if (widget.inningLabel != null) const SizedBox(width: 6),
           ],
-          if (inningLabel != null) ...[
+          if (useSquares)
+            Expanded(
+              child: _InningSquares(
+                selected: widget.inning ?? 1,
+                regulationCount: widget.regulationCount,
+                maxInning: widget.maxInning ?? (widget.regulationCount + 1),
+                extraLabel: widget.extraLabel,
+                tokens: t,
+                disabled: widget.inningDisabled,
+                onActivate: widget.onInningActivate,
+                onSelected: widget.onInningSelected!,
+              ),
+            )
+          else if (widget.inningLabel != null) ...[
             SizedBox(
               width: 108,
               child: _InningStepper(
-                label: '${inningLabel!} INN',
+                label: widget.inningLabel!,
                 tokens: t,
-                onDecrement: onInningDecrement,
-                onIncrement: onInningIncrement,
-                disabled: inningDisabled,
-                onActivate: onInningActivate,
+                onDecrement: widget.onInningDecrement,
+                onIncrement: widget.onInningIncrement,
+                disabled: widget.inningDisabled,
+                onActivate: widget.onInningActivate,
               ),
             ),
           ],
-          if (onPostTap != null) ...[
-            if (inningLabel != null) const SizedBox(width: 6),
+          if (widget.onPostTap != null) ...[
+            if (widget.inningLabel != null) const SizedBox(width: 6),
             SizedBox(
               width: 42,
               height: 24,
               child: _ToggleChip(
                 label: 'Post',
-                selected: postSelected,
+                selected: widget.postSelected,
                 tokens: t,
-                onTap: onPostTap,
+                onTap: widget.onPostTap,
               ),
             ),
           ],
-          if (mlbTimestampVisible) ...[
+          if (widget.mlbTimestampVisible) ...[
             const SizedBox(width: 6),
             SizedBox(
               width: 132,
               height: 24,
               child: _MlbTimestampChip(
-                enabled: mlbTimestampEnabled,
-                loading: mlbTimestampLoading,
-                matched: mlbTimestampMatched,
+                enabled: widget.mlbTimestampEnabled,
+                loading: widget.mlbTimestampLoading,
+                matched: widget.mlbTimestampMatched,
                 tokens: t,
-                onTap: onMlbTimestampTap,
+                onTap: widget.onMlbTimestampTap,
               ),
             ),
           ],
@@ -606,6 +725,251 @@ class _CaptionChip extends StatelessWidget {
           border: Border.all(color: tokens.divider),
         ),
         child: child,
+      ),
+    );
+  }
+}
+
+class _InningSquares extends StatefulWidget {
+  const _InningSquares({
+    required this.selected,
+    required this.regulationCount,
+    required this.maxInning,
+    required this.extraLabel,
+    required this.tokens,
+    required this.disabled,
+    required this.onActivate,
+    required this.onSelected,
+  });
+
+  final int selected;
+  final int regulationCount;
+  final int maxInning;
+  final String extraLabel;
+  final FfTokens tokens;
+  final bool disabled;
+  final VoidCallback? onActivate;
+  final ValueChanged<int> onSelected;
+
+  bool get pagesExtras => maxInning > regulationCount + 1;
+
+  @override
+  State<_InningSquares> createState() => _InningSquaresState();
+}
+
+class _InningSquaresState extends State<_InningSquares> {
+  late int _page;
+
+  int get _pageSize => widget.regulationCount;
+
+  int get _lastPage =>
+      ((_pageSize <= 0 ? 1 : widget.maxInning) - 1) ~/
+      (_pageSize <= 0 ? 1 : _pageSize);
+
+  int _pageForInning(int inning) =>
+      ((inning - 1) ~/ _pageSize).clamp(0, _lastPage);
+
+  @override
+  void initState() {
+    super.initState();
+    _page = widget.pagesExtras ? _pageForInning(widget.selected) : 0;
+  }
+
+  @override
+  void didUpdateWidget(covariant _InningSquares oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!widget.pagesExtras) {
+      _page = 0;
+      return;
+    }
+    if (oldWidget.selected != widget.selected ||
+        oldWidget.maxInning != widget.maxInning ||
+        oldWidget.regulationCount != widget.regulationCount) {
+      final needed = _pageForInning(widget.selected);
+      if (needed != _page) _page = needed;
+    }
+  }
+
+  void _setPage(int page) {
+    final next = page.clamp(0, _lastPage);
+    if (next == _page) return;
+    setState(() => _page = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final page = widget.pagesExtras ? _page.clamp(0, _lastPage) : 0;
+    final startInning = page * _pageSize + 1;
+    final innings = <int>[
+      for (var i = 0; i < _pageSize; i++)
+        if (startInning + i <= widget.maxInning) startInning + i,
+    ];
+    final showBack = widget.pagesExtras && page > 0;
+    final showForward = widget.pagesExtras && page < _lastPage;
+    final showExtraSlot = !widget.pagesExtras;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.disabled ? widget.onActivate : null,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 120),
+        opacity: widget.disabled ? 0.20 : 1,
+        child: IgnorePointer(
+          ignoring: widget.disabled,
+          child: Row(
+            children: [
+              if (showBack) ...[
+                Expanded(
+                  child: _InningNavSquare(
+                    icon: Icons.arrow_back,
+                    tokens: widget.tokens,
+                    onTap: () => _setPage(page - 1),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
+              for (var i = 0; i < innings.length; i++) ...[
+                if (i > 0) const SizedBox(width: 4),
+                Expanded(
+                  child: _InningSquare(
+                    label: '${innings[i]}',
+                    selected:
+                        !widget.disabled && widget.selected == innings[i],
+                    tokens: widget.tokens,
+                    onTap: () => widget.onSelected(innings[i]),
+                  ),
+                ),
+              ],
+              if (showForward) ...[
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _InningNavSquare(
+                    icon: Icons.arrow_forward,
+                    tokens: widget.tokens,
+                    onTap: () => _setPage(page + 1),
+                  ),
+                ),
+              ],
+              if (showExtraSlot) ...[
+                const SizedBox(width: 4),
+                Expanded(
+                  child: _InningSquare(
+                    label: widget.extraLabel,
+                    selected: !widget.disabled &&
+                        widget.selected == widget.regulationCount + 1,
+                    tokens: widget.tokens,
+                    onTap: () =>
+                        widget.onSelected(widget.regulationCount + 1),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InningSquare extends StatefulWidget {
+  const _InningSquare({
+    required this.label,
+    required this.selected,
+    required this.tokens,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+
+  @override
+  State<_InningSquare> createState() => _InningSquareState();
+}
+
+class _InningSquareState extends State<_InningSquare> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tokens;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: widget.selected
+                ? t.accent.withValues(alpha: 0.22)
+                : (_hovered ? t.text.withValues(alpha: 0.08) : t.sunken),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(
+              color: widget.selected ? t.accent : t.divider,
+            ),
+          ),
+          child: Text(
+            widget.label,
+            style: FfTokens.inningValue.copyWith(
+              color: widget.selected ? t.accent : t.text,
+              fontSize: widget.label.length > 2 ? 10 : 12,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InningNavSquare extends StatefulWidget {
+  const _InningNavSquare({
+    required this.icon,
+    required this.tokens,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+
+  @override
+  State<_InningNavSquare> createState() => _InningNavSquareState();
+}
+
+class _InningNavSquareState extends State<_InningNavSquare> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tokens;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _hovered ? t.text.withValues(alpha: 0.08) : t.sunken,
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: t.divider),
+          ),
+          child: Icon(
+            widget.icon,
+            size: 16,
+            color: t.text.withValues(alpha: 0.75),
+          ),
+        ),
       ),
     );
   }

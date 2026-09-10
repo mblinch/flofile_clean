@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 /// Access via `Theme.of(context).extension<FfTokens>()!`.
 @immutable
 class FfTokens extends ThemeExtension<FfTokens> {
+  static const firebar = Color(0xFFE8763A);
+
   const FfTokens({
     required this.bg,
     required this.surface,

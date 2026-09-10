@@ -111,6 +111,16 @@ flutter:
           weight: 500
     - family: InterTight
       fonts:
+        - asset: assets/fonts/InterTight-Variable.ttf
+          weight: 100
+        - asset: assets/fonts/InterTight-Variable.ttf
+          weight: 200
+        - asset: assets/fonts/InterTight-Variable.ttf
+          weight: 300
+        - asset: assets/fonts/InterTight-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/InterTight-Variable.ttf
+          weight: 500
         - asset: assets/fonts/InterTight-SemiBold.ttf
           weight: 600
         - asset: assets/fonts/InterTight-Bold.ttf

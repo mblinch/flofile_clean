@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../caption_style/caption_formula_renderer.dart';
+import '../../../caption_style/caption_session_context.dart';
 import '../../../caption_style/caption_style_catalog.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/caption_text_normalize.dart';
@@ -59,18 +60,66 @@ class SearchHit {
     required this.label,
     required this.apply,
     this.aliases = const [],
+    this.shortcutLabel,
   });
 
   final String kind;
   final String label;
   final VoidCallback apply;
   final List<String> aliases;
+  final String? shortcutLabel;
 }
 
 class RosterHit {
   const RosterHit({required this.player, required this.isHome});
   final Player player;
   final bool isHome;
+}
+
+enum FirebarResultKind { player, verb }
+
+enum FirebarOptionKind { homeRun, rbi, celebration, base }
+
+enum RosterSortMode { number, firstName, lastName }
+
+class FirebarOption {
+  const FirebarOption(
+    this.label, {
+    this.rbi,
+    this.verbOverride,
+    this.celebration,
+    this.base,
+  });
+
+  final String label;
+  final int? rbi;
+  final String? verbOverride;
+  final String? celebration;
+  final String? base;
+}
+
+class FirebarResult {
+  const FirebarResult.player({
+    required this.player,
+    required this.isHome,
+  })  : kind = FirebarResultKind.player,
+        verbKey = null;
+
+  const FirebarResult.verb(this.verbKey)
+      : kind = FirebarResultKind.verb,
+        player = null,
+        isHome = null;
+
+  final FirebarResultKind kind;
+  final Player? player;
+  final bool? isHome;
+  final String? verbKey;
+
+  String get key => kind == FirebarResultKind.player
+      ? 'player:${isHome == true ? 'home' : 'away'}:'
+          '${player?.playerId ?? ''}:${player?.jerseyNumber ?? ''}:'
+          '${player?.fullName ?? ''}'
+      : 'verb:$verbKey';
 }
 
 class CaptionSaveResult {
@@ -228,6 +277,8 @@ class CaptionV2Controller extends ChangeNotifier {
   String? manualCaptionOverride;
   CaptionTransferPayload? previousCaption;
   int rbi = 0;
+  /// Running-verb base: `1B`, `2B`, `3B`, `Home`, or null.
+  String? selectedBase;
   int inning = 2;
   bool preGame = false;
   bool postGame = false;
@@ -260,12 +311,193 @@ class CaptionV2Controller extends ChangeNotifier {
   List<SearchHit> _guidedSearchHits = const [];
   int? _pendingCommandInning;
   int columnFocus = 1; // 0 home, 1 verbs, 2 away, 3 thumbnails
-  bool sortByNumber = true;
+  RosterSortMode rosterSort = RosterSortMode.number;
+  bool rosterSortAscending = true;
+  int firebarSelectionIndex = -1;
+  final List<FirebarResult> _firebarCommitted = [];
+  String? firebarOptionPrompt;
+  FirebarOptionKind? _firebarOptionKind;
+  List<FirebarOption> firebarOptions = const [];
+  int firebarOptionIndex = 0;
 
   bool get searchGuided => guidedSearchPrompt != null;
   bool get searchHasJerseyAndVerb =>
       RegExp(r'^(?:[hv]\s*)?#?\d+\s+\S', caseSensitive: false)
           .hasMatch(searchQuery.trim());
+  bool get searchIsJerseyOnly =>
+      RegExp(r'^(?:[hv]\s*)?#?\d+$', caseSensitive: false)
+          .hasMatch(searchQuery.trim());
+  bool get searchIsTeamPrefixOnly =>
+      RegExp(r'^[hv]$', caseSensitive: false).hasMatch(searchQuery.trim());
+  bool get searchAwaitingVerb =>
+      searchOpen &&
+      !searchGuided &&
+      selectedPlayers.isNotEmpty &&
+      selectedVerb == null;
+
+  List<FirebarResult> get firebarHomeResults =>
+      _firebarRosterResults(homeRoster, isHome: true);
+
+  List<FirebarResult> get firebarAwayResults =>
+      _firebarRosterResults(awayRoster, isHome: false);
+
+  List<FirebarResult> get firebarVerbResults {
+    final query = _normalizedFirebarQuery;
+    if (RegExp(r'^(?:[hv])?\d+$').hasMatch(query)) return const [];
+    final seen = <String>{};
+    final results = <FirebarResult>[];
+    for (final category in verbCategories) {
+      if (category == 'Favorites') continue;
+      for (final verb
+          in verbDefinitionsByCategory[category] ?? const <EffectiveVerb>[]) {
+        if (!seen.add(verb.key)) continue;
+        if (query.isEmpty || _firebarVerbMatches(verb.label, query)) {
+          results.add(FirebarResult.verb(verb.key));
+        }
+      }
+    }
+    return results;
+  }
+
+  List<FirebarResult> get firebarOrderedResults {
+    final home = firebarHomeResults;
+    final away = firebarAwayResults;
+    return selectedIsHome
+        ? [...home, ...firebarVerbResults, ...away]
+        : [...away, ...firebarVerbResults, ...home];
+  }
+
+  FirebarResult? get firebarSelectedResult {
+    final results = firebarOrderedResults;
+    if (firebarSelectionIndex < 0 || firebarSelectionIndex >= results.length) {
+      return null;
+    }
+    return results[firebarSelectionIndex];
+  }
+
+  List<FirebarResult> get firebarCommitted =>
+      List.unmodifiable(_firebarCommitted);
+
+  List<FirebarOption> get filteredFirebarOptions {
+    final query = _normalizeFirebarText(searchQuery);
+    if (query.isEmpty) return firebarOptions;
+    return firebarOptions
+        .where(
+          (option) => _normalizeFirebarText(option.label).startsWith(query),
+        )
+        .toList(growable: false);
+  }
+
+  int get firebarVerbTotal {
+    final seen = <String>{};
+    for (final category in verbCategories) {
+      if (category == 'Favorites') continue;
+      for (final verb
+          in verbDefinitionsByCategory[category] ?? const <EffectiveVerb>[]) {
+        seen.add(verb.key);
+      }
+    }
+    return seen.length;
+  }
+
+  int get firebarTotalCount =>
+      homeRoster.length + firebarVerbTotal + awayRoster.length;
+
+  int get firebarMatchedCount =>
+      firebarHomeResults.length +
+      firebarVerbResults.length +
+      firebarAwayResults.length;
+
+  String get _normalizedFirebarQuery =>
+      firebarOptions.isNotEmpty ? '' : _normalizeFirebarText(searchQuery);
+
+  static String _normalizeFirebarText(String value) =>
+      CaptionTextNormalize.stripDiacritics(value).trim().toLowerCase();
+
+  static bool _firebarVerbMatches(String label, String query) {
+    final normalized = _normalizeFirebarText(label);
+    if (normalized.startsWith(query)) return true;
+    final initials = normalized
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((word) => word.isNotEmpty)
+        .map((word) => word[0])
+        .join();
+    return initials.startsWith(query);
+  }
+
+  List<FirebarResult> _firebarRosterResults(
+    List<Player> roster, {
+    required bool isHome,
+  }) {
+    final query = _normalizedFirebarQuery;
+    final jerseyMatch = RegExp(r'^([hv])?(\d+)$').firstMatch(query);
+    final requestedSide = jerseyMatch?.group(1);
+    final jerseyQuery = jerseyMatch?.group(2);
+    if ((requestedSide == 'h' && !isHome) || (requestedSide == 'v' && isHome)) {
+      return const [];
+    }
+    final matches = roster.where((player) {
+      if (query.isEmpty) return true;
+      if (jerseyQuery != null) {
+        return (player.jerseyNumber ?? '').trim().startsWith(jerseyQuery);
+      }
+      return _playerMatchScore(player, query) < 900;
+    }).toList();
+    if (query.isNotEmpty) {
+      matches.sort((a, b) {
+        final score = _playerMatchScore(a, query)
+            .compareTo(_playerMatchScore(b, query));
+        if (score != 0) return score;
+        return _comparePlayers(a, b);
+      });
+    }
+    return [
+      for (final player in matches)
+        FirebarResult.player(
+          player: player,
+          isHome: isHome,
+        ),
+    ];
+  }
+
+  /// Lower is better. 900+ means no match.
+  static int _playerMatchScore(Player player, String query) {
+    if (query.isEmpty) return 0;
+    final name = _normalizeFirebarText(player.fullName);
+    final first = _normalizeFirebarText(player.firstName);
+    final last = _normalizeFirebarText(playerLastName(player));
+    final jersey = (player.jerseyNumber ?? '').trim().toLowerCase();
+
+    if (jersey == query) return 0;
+    if (jersey.startsWith(query)) return 1;
+    if (last == query) return 2;
+    if (first == query) return 3;
+    if (name == query) return 4;
+    if (last.startsWith(query)) return 5;
+    if (first.startsWith(query)) return 6;
+    if (name.startsWith(query)) return 7;
+    if (last.contains(query)) return 8;
+    if (first.contains(query)) return 9;
+    if (name.contains(query)) return 10;
+    if (jersey.contains(query)) return 11;
+    return 900;
+  }
+
+  /// Filter a roster by query with best matches first (exact jersey, then
+  /// name prefix / contains). Empty query returns the roster as-is.
+  List<Player> filterAndRankPlayers(List<Player> roster, String query) {
+    final q = _normalizeFirebarText(query);
+    if (q.isEmpty) return List<Player>.from(roster);
+    final matches =
+        roster.where((player) => _playerMatchScore(player, q) < 900).toList();
+    matches.sort((a, b) {
+      final score =
+          _playerMatchScore(a, q).compareTo(_playerMatchScore(b, q));
+      if (score != 0) return score;
+      return _comparePlayers(a, b);
+    });
+    return matches;
+  }
 
   // --- Transmit ---
   String destinationLabel = 'Photoshelter · FTP';
@@ -424,6 +656,12 @@ class CaptionV2Controller extends ChangeNotifier {
 
   String get rbiChipLabel => rbi > 0 ? 'RBI $rbi' : '';
 
+  String get baseChipLabel {
+    final base = selectedBase?.trim();
+    if (base == null || base.isEmpty) return '';
+    return base;
+  }
+
   /// Regular regulation segments before OT/extra (classic inning bar counts).
   int get timingRegulationCount {
     switch (sport.toLowerCase()) {
@@ -437,6 +675,16 @@ class CaptionV2Controller extends ChangeNotifier {
       case 'baseball':
       default:
         return 9;
+    }
+  }
+
+  /// Highest selectable inning/period (baseball pages extras through 27).
+  int get timingMaxInning {
+    switch (sport.toLowerCase()) {
+      case 'baseball':
+        return 27;
+      default:
+        return timingRegulationCount + 1;
     }
   }
 
@@ -456,23 +704,24 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
-  /// Chip / stepper label (e.g. "2nd", "OT", "ET", "Extra").
+  /// Chip / stepper label (e.g. "2nd", "OT", "ET", "10th").
   String get inningLabel {
     final max = timingRegulationCount;
+    final s = sport.toLowerCase();
     if (inning > max) {
-      switch (sport.toLowerCase()) {
+      switch (s) {
         case 'soccer':
           return 'ET';
         case 'baseball':
-          return 'Extra';
+          return _ordinal(inning);
         default:
           return 'OT';
       }
     }
-    if (sport.toLowerCase() == 'soccer') {
+    if (s == 'soccer') {
       return inning == 1 ? '1H' : '2H';
     }
-    if (sport.toLowerCase() == 'basketball' || sport.toLowerCase() == 'wnba') {
+    if (s == 'basketball' || s == 'wnba') {
       return 'Q$inning';
     }
     return _ordinal(inning);
@@ -484,12 +733,10 @@ class CaptionV2Controller extends ChangeNotifier {
     if (postGame) return 'after the game';
     final max = timingRegulationCount;
     final s = sport.toLowerCase();
-    if (inning > max) {
+    if (inning > max && s != 'baseball') {
       switch (s) {
         case 'soccer':
           return 'during extra time';
-        case 'baseball':
-          return 'in extra innings';
         default:
           return 'during overtime';
       }
@@ -534,9 +781,18 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   /// Player + action body that feeds [CaptionFormulaRenderer] (no location/credit).
+  ///
+  /// Builds as soon as a player is selected (even before a verb), so the
+  /// configured caption style can still wrap date / venue / byline around a
+  /// partial body — matching V1.
   String buildCaptionBody() {
-    if (selectedPlayer == null || !hasVerbSelection) return '';
+    if (selectedPlayer == null) return '';
     final lead = _playerLead(captionTemplate);
+    if (!hasVerbSelection) {
+      return '$lead ${_incompleteContextPhrase()}'
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+    }
     final action = customVerbPhrase.trim().isNotEmpty
         ? _customActionPhrase()
         : _actionPhrase();
@@ -549,12 +805,12 @@ class CaptionV2Controller extends ChangeNotifier {
     if (manual != null) return manual;
     final body = buildCaptionBody();
     if (body.isEmpty) {
-      // Incomplete selection — keep chip-friendly fallback.
+      // No players yet — keep a light chip-friendly preview only.
       final parts = <String>[
         captionLeading.trim(),
-        if (selectedPlayer != null) playerChipLabel,
         if (hasVerbSelection) verbChipLabel,
         if (rbi > 0) rbiChipLabel,
+        if (baseChipLabel.isNotEmpty) baseChipLabel,
         captionTrailing.trim(),
       ];
       return parts.join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
@@ -638,6 +894,27 @@ class CaptionV2Controller extends ChangeNotifier {
         break;
     }
 
+    CaptionSessionContext.update(
+      captionBody: body,
+      gameInfo: game,
+      previewPlayers: [
+        for (final row in selectedPlayers)
+          CaptionPreviewPlayer(
+            row.isHome ? homeTeam : awayTeam,
+            row.player.position ?? '',
+            row.player.fullName,
+            int.tryParse(row.player.jerseyNumber ?? '') ?? 0,
+            row.isHome ? awayTeam : homeTeam,
+          ),
+      ],
+      previewActions: [
+        if (hasVerbSelection)
+          customVerbPhrase.trim().isNotEmpty
+              ? customVerbPhrase.trim()
+              : (selectedVerb ?? ''),
+      ],
+    );
+
     var caption = CaptionFormulaRenderer.render(
       template: captionTemplate,
       game: game,
@@ -649,6 +926,22 @@ class CaptionV2Controller extends ChangeNotifier {
       caption = CaptionTextNormalize.stripDiacritics(caption);
     }
     return caption;
+  }
+
+  /// Opponent + timing clause used when players are selected but no verb yet.
+  /// Venue / date / byline stay in the caption style renderer.
+  String _incompleteContextPhrase() {
+    final subjects = subjectPlayers;
+    final subjectIsHome =
+        subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
+    final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
+    final target = opposingPlayers.isEmpty
+        ? 'the ${opponentTeam.trim()}'
+        : _formatPlayersWithTeam(opposingPlayers, captionTemplate);
+
+    if (preGame) return 'ahead of playing against $target';
+    if (postGame) return 'after playing against $target';
+    return 'against $target $timingCaptionClause';
   }
 
   bool get hasCompleteCaption => selectedPlayer != null && hasVerbSelection;
@@ -715,6 +1008,7 @@ class CaptionV2Controller extends ChangeNotifier {
       sport: sport,
       plural: plural,
       rbi: rbi,
+      base: selectedBase,
       singularPhrase: definition?.singularPhrase,
       pluralPhrase: definition?.pluralPhrase,
       subOptions: definition?.subOptions,
@@ -775,15 +1069,24 @@ class CaptionV2Controller extends ChangeNotifier {
   }) {
     final selected = type?.trim();
     if (selected == null || selected.isEmpty) return action;
-    if (VerbSubOptions.isHitVerb(verb)) {
-      final options =
-          subOptions ?? VerbSubOptions.defaultsFor(verb, sport: sport);
+    final options =
+        subOptions ?? VerbSubOptions.defaultsFor(verb, sport: sport);
+    final isReaction = options.reactionPhraseList.any(
+          (phrase) => phrase.toLowerCase() == selected.toLowerCase(),
+        ) ||
+        selected.toLowerCase() == 'celebration';
+
+    if (VerbSubOptions.isHitVerb(verb) || isReaction) {
       var reaction = selected.toLowerCase();
       if (reaction == 'celebration') {
         reaction = options.primaryReactionPhrase;
       }
       if (plural) {
         reaction = VerbCaptionWording.inferPluralFromSingular(reaction);
+      }
+      if (!VerbSubOptions.isHitVerb(verb)) {
+        // Celebration verb + reaction phrase: lead with the reaction.
+        return reaction;
       }
       final hit = RegExp(r'^hits? a ', caseSensitive: false);
       if (hit.hasMatch(action)) {
@@ -962,6 +1265,7 @@ class CaptionV2Controller extends ChangeNotifier {
     personality = '';
     manualCaptionOverride = null;
     rbi = 0;
+    selectedBase = null;
     inning = 1;
     preGame = false;
     postGame = false;
@@ -1388,6 +1692,7 @@ class CaptionV2Controller extends ChangeNotifier {
     lastCustomVerbPhrase = '';
     customVerbPinned = false;
     rbi = 0;
+    selectedBase = null;
     preGame = false;
     postGame = false;
     manualCaptionOverride = null;
@@ -1406,6 +1711,29 @@ class CaptionV2Controller extends ChangeNotifier {
     if (!_verbNeedsRbi(verb)) {
       rbi = 0;
     }
+    if (!_verbNeedsBase(verb)) {
+      selectedBase = null;
+    }
+    _syncKeywords();
+    notifyListeners();
+  }
+
+  void clearSelectedVerb() {
+    if (selectedVerb == null &&
+        customVerbPhrase.trim().isEmpty &&
+        celebrationType == null &&
+        rbi == 0 &&
+        selectedBase == null) {
+      return;
+    }
+    selectedVerb = null;
+    customVerbPhrase = '';
+    customVerbPinned = false;
+    celebrationType = null;
+    rbi = 0;
+    selectedBase = null;
+    manualCaptionOverride = null;
+    captionSelectionStarted = selectedPlayers.isNotEmpty || pinnedVerb != null;
     _syncKeywords();
     notifyListeners();
   }
@@ -1420,6 +1748,7 @@ class CaptionV2Controller extends ChangeNotifier {
       pinnedVerb = null;
       celebrationType = null;
       rbi = 0;
+      selectedBase = null;
       manualCaptionOverride = null;
       _syncKeywords();
     } else {
@@ -1728,6 +2057,8 @@ class CaptionV2Controller extends ChangeNotifier {
 
   bool verbNeedsRbi(String verb) => _verbNeedsRbi(verb);
 
+  bool verbNeedsBase(String verb) => _verbNeedsBase(verb);
+
   bool verbNeedsCelebration(String verb) {
     final definition = verbDefinition(verb);
     final options = definition?.subOptions ??
@@ -1741,21 +2072,26 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   List<String> celebrationOptionsFor(String verb) {
+    if (VerbSubOptions.isHitVerb(verb)) {
+      return reactionOptionsFor(verb);
+    }
+    return celebrationTypeOptionsFor(verb);
+  }
+
+  List<String> reactionOptionsFor(String verb) {
+    return const ['Celebrates', 'Reacts'];
+  }
+
+  List<String> celebrationTypeOptionsFor(String verb) {
     final definition = verbDefinition(verb);
     final options = definition?.subOptions ??
         VerbSubOptions.defaultsFor(verb, sport: sport);
-    if (VerbSubOptions.isHitVerb(verb)) {
-      return options.reactionPhraseList
-          .map((value) => value.isEmpty
-              ? value
-              : '${value[0].toUpperCase()}${value.substring(1)}')
-          .toList();
-    }
     return options.celebrationTypeList(sport: sport);
   }
 
   void setCelebrationType(String? value) {
-    celebrationType = celebrationType == value ? null : value;
+    if (celebrationType == value) return;
+    celebrationType = value;
     manualCaptionOverride = null;
     _syncKeywords();
     notifyListeners();
@@ -1772,8 +2108,22 @@ class CaptionV2Controller extends ChangeNotifier {
     }.contains(verb);
   }
 
+  bool _verbNeedsBase(String verb) {
+    return CaptionV2CaptionDomain.runningVerbs.contains(verb);
+  }
+
   void setRbi(int value) {
     rbi = value.clamp(0, 4);
+    manualCaptionOverride = null;
+    _syncKeywords();
+    notifyListeners();
+  }
+
+  void setSelectedBase(String? value) {
+    final next = value?.trim();
+    final normalized = (next == null || next.isEmpty) ? null : next;
+    if (selectedBase == normalized) return;
+    selectedBase = normalized;
     manualCaptionOverride = null;
     _syncKeywords();
     notifyListeners();
@@ -1785,8 +2135,7 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void bumpInning(int delta) {
-    // Regulation count + one OT/extra/ET slot (classic pill strip).
-    final max = timingRegulationCount + 1;
+    final max = timingMaxInning;
     inning = (inning + delta).clamp(1, max);
     if (delta != 0) {
       manualCaptionOverride = null;
@@ -1794,6 +2143,21 @@ class CaptionV2Controller extends ChangeNotifier {
       postGame = false;
       mlbTimestampMatchedPath = null;
     }
+    notifyListeners();
+  }
+
+  void setInning(int value) {
+    final max = timingMaxInning;
+    final next = value.clamp(1, max);
+    if (next == inning && !preGame && !postGame) {
+      notifyListeners();
+      return;
+    }
+    inning = next;
+    manualCaptionOverride = null;
+    preGame = false;
+    postGame = false;
+    mlbTimestampMatchedPath = null;
     notifyListeners();
   }
 
@@ -1964,44 +2328,325 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void setSearchQuery(String q) {
+    final inningMatch =
+        RegExp(r'^(?:i(\d{1,2})|(\d{1,2})i)$', caseSensitive: false)
+            .firstMatch(q.trim());
+    final inningValue = int.tryParse(
+      inningMatch?.group(1) ?? inningMatch?.group(2) ?? '',
+    );
+    if (inningValue != null &&
+        inningValue >= 1 &&
+        inningValue <= timingMaxInning) {
+      inning = inningValue;
+      preGame = false;
+      postGame = false;
+      manualCaptionOverride = null;
+      mlbTimestampMatchedPath = null;
+      searchQuery = '';
+      firebarSelectionIndex = firebarOrderedResults.isEmpty ? -1 : 0;
+      notifyListeners();
+      return;
+    }
+    if (firebarOptions.isNotEmpty) {
+      searchQuery = q;
+      firebarOptionIndex = 0;
+      notifyListeners();
+      return;
+    }
+    final selectedKey = firebarSelectedResult?.key;
     searchQuery = q;
+    final results = firebarOrderedResults;
+    final retained = selectedKey == null
+        ? -1
+        : results.indexWhere((r) => r.key == selectedKey);
+    firebarSelectionIndex =
+        retained >= 0 ? retained : (results.isEmpty ? -1 : 0);
     notifyListeners();
   }
 
   void setSearchOpen(bool open) {
     if (open && !searchOpen) {
+      searchQuery = '';
+      guidedSearchPrompt = null;
+      _guidedSearchHits = const [];
       _pendingCommandInning = null;
-      captionSelectionStarted = false;
-      selectedPlayers.clear();
-      selectedPlayer = null;
-      selectedVerb = null;
-      customVerbPhrase = '';
-      customVerbPinned = false;
-      celebrationType = null;
-      rbi = 0;
-      manualCaptionOverride = null;
-      personality = '';
-      keywords = '';
-      _basePersonalityNames.clear();
-      _baseKeywordKeys.clear();
-      _managedKeywordKeys.clear();
-      metadataDirty = true;
+      _clearFirebarOptions();
+      _firebarCommitted
+        ..clear()
+        ..addAll(
+          selectedPlayers.map(
+            (row) => FirebarResult.player(
+              player: row.player,
+              isHome: row.isHome,
+            ),
+          ),
+        );
+      if (selectedVerb != null) {
+        _firebarCommitted.add(FirebarResult.verb(selectedVerb));
+      }
     }
     searchOpen = open;
+    firebarSelectionIndex = open && firebarOrderedResults.isNotEmpty ? 0 : -1;
     if (!open) {
       searchQuery = '';
       guidedSearchPrompt = null;
       _guidedSearchHits = const [];
       _pendingCommandInning = null;
+      _firebarCommitted.clear();
+      _clearFirebarOptions();
     }
     notifyListeners();
   }
 
+  void moveFirebarSelection(int delta) {
+    if (firebarOptions.isNotEmpty) {
+      final options = filteredFirebarOptions;
+      if (options.isEmpty || delta == 0) return;
+      firebarOptionIndex =
+          (firebarOptionIndex + delta).clamp(0, options.length - 1);
+      notifyListeners();
+      return;
+    }
+    final results = firebarOrderedResults;
+    if (!searchOpen || results.isEmpty || delta == 0) return;
+    final start = firebarSelectionIndex < 0 ? 0 : firebarSelectionIndex;
+    final next = (start + delta).clamp(0, results.length - 1);
+    if (next == firebarSelectionIndex) return;
+    firebarSelectionIndex = next;
+    notifyListeners();
+  }
+
+  void selectFirebarResult(FirebarResult result) {
+    final index = firebarOrderedResults
+        .indexWhere((candidate) => candidate.key == result.key);
+    if (index < 0 || index == firebarSelectionIndex) return;
+    firebarSelectionIndex = index;
+    notifyListeners();
+  }
+
+  void commitSelectedFirebarResult() {
+    if (firebarOptions.isNotEmpty) {
+      final options = filteredFirebarOptions;
+      if (options.isEmpty) return;
+      chooseFirebarOption(
+        options[firebarOptionIndex.clamp(0, options.length - 1)],
+      );
+      return;
+    }
+    final result = firebarSelectedResult;
+    if (result != null) commitFirebarResult(result);
+  }
+
+  void commitFirebarResult(FirebarResult result) {
+    captionSelectionStarted = true;
+    manualCaptionOverride = null;
+    if (result.kind == FirebarResultKind.player) {
+      final player = result.player!;
+      final isHome = result.isHome!;
+      if (!isPlayerSelected(player, isHome: isHome)) {
+        selectedPlayers.add(RosterHit(player: player, isHome: isHome));
+      }
+      _syncPrimaryPlayer();
+      _syncPersonality();
+    } else {
+      final verb = result.verbKey!;
+      selectedVerb = verb;
+      customVerbPhrase = '';
+      customVerbPinned = false;
+      celebrationType = null;
+      if (!_verbNeedsRbi(verb)) rbi = 0;
+      if (!_verbNeedsBase(verb)) selectedBase = null;
+      _firebarCommitted.removeWhere(
+        (item) => item.kind == FirebarResultKind.verb,
+      );
+      _prepareFirebarOptions(verb);
+    }
+    if (!_firebarCommitted.any((item) => item.key == result.key)) {
+      _firebarCommitted.add(result);
+    }
+    _syncKeywords();
+    searchQuery = '';
+    firebarSelectionIndex = firebarOrderedResults.isEmpty ? -1 : 0;
+    notifyListeners();
+  }
+
+  void removeFirebarChip(FirebarResult result) {
+    final removed = _firebarCommitted.any((item) => item.key == result.key);
+    if (!removed) return;
+    _firebarCommitted.removeWhere((item) => item.key == result.key);
+    if (result.kind == FirebarResultKind.player) {
+      selectedPlayers.removeWhere(
+        (row) =>
+            row.isHome == result.isHome &&
+            _samePlayer(row.player, result.player!),
+      );
+      _syncPrimaryPlayer();
+    } else if (selectedVerb == result.verbKey) {
+      selectedVerb = null;
+      celebrationType = null;
+      rbi = 0;
+      selectedBase = null;
+      _clearFirebarOptions();
+    }
+    if (_firebarCommitted.isEmpty) {
+      captionSelectionStarted = false;
+      manualCaptionOverride = null;
+    }
+    _syncKeywords();
+    firebarSelectionIndex = firebarOrderedResults.isEmpty ? -1 : 0;
+    notifyListeners();
+  }
+
+  void removeLastFirebarChip() {
+    if (_firebarCommitted.isEmpty) return;
+    removeFirebarChip(_firebarCommitted.last);
+  }
+
+  void _prepareFirebarOptions(String verb) {
+    if (verb == 'Home Run') {
+      firebarOptionPrompt = 'Home run type?';
+      _firebarOptionKind = FirebarOptionKind.homeRun;
+      firebarOptions = const [
+        FirebarOption('1R', rbi: 1),
+        FirebarOption('2R', rbi: 2),
+        FirebarOption('3R', rbi: 3),
+        FirebarOption('GS', rbi: 4, verbOverride: 'Grand Slam'),
+      ];
+    } else if (_verbNeedsRbi(verb)) {
+      firebarOptionPrompt = 'How many RBI?';
+      _firebarOptionKind = FirebarOptionKind.rbi;
+      firebarOptions = const [
+        FirebarOption('0 RBI', rbi: 0),
+        FirebarOption('1 RBI', rbi: 1),
+        FirebarOption('2 RBI', rbi: 2),
+        FirebarOption('3 RBI', rbi: 3),
+      ];
+    } else if (_verbNeedsBase(verb)) {
+      firebarOptionPrompt = 'Which base?';
+      _firebarOptionKind = FirebarOptionKind.base;
+      firebarOptions = const [
+        FirebarOption('1B', base: '1B'),
+        FirebarOption('2B', base: '2B'),
+        FirebarOption('3B', base: '3B'),
+        FirebarOption('Home', base: 'Home'),
+      ];
+    } else if (verbNeedsCelebration(verb)) {
+      _prepareFirebarCelebrationOptions(verb);
+    } else {
+      _clearFirebarOptions();
+    }
+    firebarOptionIndex = 0;
+  }
+
+  void _prepareFirebarCelebrationOptions(String verb) {
+    firebarOptionPrompt =
+        VerbSubOptions.isHitVerb(verb) ? 'Reaction?' : 'Celebration?';
+    _firebarOptionKind = FirebarOptionKind.celebration;
+    firebarOptions = [
+      const FirebarOption('None'),
+      ...celebrationOptionsFor(verb).map(
+        (value) => FirebarOption(value, celebration: value),
+      ),
+    ];
+    firebarOptionIndex = 0;
+  }
+
+  void chooseFirebarOption(FirebarOption option) {
+    final kind = _firebarOptionKind;
+    if (kind == null) return;
+    if (option.verbOverride != null) {
+      selectedVerb = option.verbOverride;
+      _firebarCommitted.removeWhere(
+        (item) => item.kind == FirebarResultKind.verb,
+      );
+      _firebarCommitted.add(FirebarResult.verb(option.verbOverride));
+    }
+    if (option.rbi != null) rbi = option.rbi!;
+    if (option.base != null) selectedBase = option.base;
+    if (kind == FirebarOptionKind.celebration) {
+      celebrationType = option.celebration;
+    }
+    final verb = selectedVerb;
+    searchQuery = '';
+    _clearFirebarOptions();
+    if (kind != FirebarOptionKind.celebration &&
+        verb != null &&
+        verbNeedsCelebration(verb)) {
+      _prepareFirebarCelebrationOptions(verb);
+    }
+    _syncKeywords();
+    notifyListeners();
+  }
+
+  void _clearFirebarOptions() {
+    firebarOptionPrompt = null;
+    _firebarOptionKind = null;
+    firebarOptions = const [];
+    firebarOptionIndex = 0;
+  }
+
   void toggleSort() {
-    sortByNumber = !sortByNumber;
+    cycleRosterSortField();
+  }
+
+  /// Cycles # → First → Last → # (direction unchanged).
+  void cycleRosterSortField() {
+    switch (rosterSort) {
+      case RosterSortMode.number:
+        rosterSort = RosterSortMode.firstName;
+        break;
+      case RosterSortMode.firstName:
+        rosterSort = RosterSortMode.lastName;
+        break;
+      case RosterSortMode.lastName:
+        rosterSort = RosterSortMode.number;
+        break;
+    }
     homeRoster = _sortPlayers(homeRoster);
     awayRoster = _sortPlayers(awayRoster);
     notifyListeners();
+  }
+
+  /// Toggles ascending ↔ descending without changing the sort field.
+  void toggleRosterSortDirection() {
+    rosterSortAscending = !rosterSortAscending;
+    homeRoster = _sortPlayers(homeRoster);
+    awayRoster = _sortPlayers(awayRoster);
+    notifyListeners();
+  }
+
+  String rosterSortFieldLabel() {
+    switch (rosterSort) {
+      case RosterSortMode.number:
+        return '#';
+      case RosterSortMode.firstName:
+        return 'First';
+      case RosterSortMode.lastName:
+        return 'Last';
+    }
+  }
+
+  String rosterSortDirectionLabel() => rosterSortAscending ? '↑' : '↓';
+
+  String rosterSortLabel() =>
+      '${rosterSortFieldLabel()}${rosterSortDirectionLabel()}';
+
+  String playerListName(Player player) {
+    switch (rosterSort) {
+      case RosterSortMode.lastName:
+        final last = playerLastName(player);
+        if (last == player.fullName.trim()) return player.fullName;
+        return '$last, ${player.firstName}';
+      case RosterSortMode.firstName:
+      case RosterSortMode.number:
+        return player.fullName;
+    }
+  }
+
+  static String playerLastName(Player player) {
+    final parts = player.fullName.trim().split(RegExp(r'\s+'));
+    if (parts.length <= 1) return player.fullName.trim();
+    return parts.sublist(1).join(' ');
   }
 
   void rememberCombo() {
@@ -2509,6 +3154,7 @@ class CaptionV2Controller extends ChangeNotifier {
     personality = '';
     manualCaptionOverride = null;
     rbi = 0;
+    selectedBase = null;
   }
 
   Future<void> enterComboSaveAdvance() async {
@@ -2626,6 +3272,7 @@ class CaptionV2Controller extends ChangeNotifier {
     required bool isHome,
   }) {
     final rawQuery = searchQuery.trim().toLowerCase();
+    if (searchIsTeamPrefixOnly) return const [];
     final command =
         RegExp(r'^([hv])?\s*#?(\d+)(?:\s+.+)?$').firstMatch(rawQuery);
     final side = command?.group(1);
@@ -2648,18 +3295,76 @@ class CaptionV2Controller extends ChangeNotifier {
 
   List<String> get filteredVerbs {
     final rawQuery = searchQuery.trim().toLowerCase();
+    if ((searchIsTeamPrefixOnly && !searchAwaitingVerb) || searchIsJerseyOnly) {
+      return const [];
+    }
     final command = RegExp(r'^(?:[hv]\s*)?#?\d+\s+(.+)$').firstMatch(rawQuery);
     final commandText = command?.group(1)?.trim() ?? rawQuery;
     final q = commandText.replaceFirst(RegExp(r'\s+\d+$'), '').trim();
-    final all = _verbCatalog.byKey.values;
+    final all = _verbCatalog.byKey.values.toList();
     if (q.isEmpty) return verbsInCategory;
-    return all
-        .where((verb) =>
-            verb.label.toLowerCase().contains(q) ||
-            verb.singularPhrase.toLowerCase().contains(q) ||
-            verb.keywords.any((keyword) => keyword.toLowerCase().contains(q)))
-        .map((verb) => verb.key)
-        .toList();
+    final exact =
+        all.where((verb) => _verbExactlyMatchesQuery(verb, q)).toList();
+    final matches = exact.isNotEmpty
+        ? exact
+        : all.where((verb) => _verbMatchesQuery(verb, q));
+    return matches.map((verb) => verb.key).toList();
+  }
+
+  bool _verbExactlyMatchesQuery(EffectiveVerb verb, String input) {
+    final query = _normalizeCommandText(input);
+    final compactQuery = query.replaceAll(' ', '');
+    return _verbSearchTerms(verb, includeKeywords: query.length >= 3).any(
+      (term) => term == query || term.replaceAll(' ', '') == compactQuery,
+    );
+  }
+
+  bool _verbMatchesQuery(EffectiveVerb verb, String input) {
+    final query = _normalizeCommandText(input);
+    if (query.isEmpty) return true;
+    final compactQuery = query.replaceAll(' ', '');
+    for (final term
+        in _verbSearchTerms(verb, includeKeywords: query.length >= 3)) {
+      if (term.startsWith(query) ||
+          term.replaceAll(' ', '').startsWith(compactQuery)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  Set<String> _verbSearchTerms(
+    EffectiveVerb verb, {
+    required bool includeKeywords,
+  }) {
+    final terms = <String>{
+      _normalizeCommandText(verb.key),
+      _normalizeCommandText(verb.label),
+    };
+    for (final value in [verb.key, verb.label]) {
+      final normalized = _normalizeCommandText(value);
+      final words = normalized.split(' ').where((word) => word.isNotEmpty);
+      if (words.length > 1) terms.add(words.map((word) => word[0]).join());
+    }
+    if (includeKeywords) {
+      terms.addAll(verb.keywords.map(_normalizeCommandText));
+    }
+    const aliases = <String, List<String>>{
+      'Home Run': ['hr', 'homer', 'homerun'],
+      'Single': ['1b'],
+      'Double': ['2b'],
+      'Triple': ['3b'],
+      'Walks': ['bb'],
+      'Strikeout': ['k'],
+      'Hit by Pitch': ['hbp', 'hitbypitch'],
+      'Steals': ['sb'],
+      'Double Play': ['dp'],
+      'Triple Play': ['tp'],
+      'Batting Practice': ['bp'],
+      'Fielding Practice': ['fp'],
+    };
+    terms.addAll(aliases[verb.key] ?? const []);
+    return terms;
   }
 
   /// Parses commands such as `27 home run`. Returns true when the input was
@@ -2732,7 +3437,8 @@ class CaptionV2Controller extends ChangeNotifier {
       final side = row.isHome ? 'Home' : 'Away';
       return SearchHit(
         kind: 'team',
-        label: '$side · $team · ${row.player.fullName}',
+        label: '$side · ${row.player.fullName}',
+        shortcutLabel: row.isHome ? 'H' : 'V',
         aliases: [
           side,
           team,
@@ -2752,8 +3458,21 @@ class CaptionV2Controller extends ChangeNotifier {
       'hr': 'Home Run',
       'homer': 'Home Run',
       'homers': 'Home Run',
+      'homerun': 'Home Run',
       'home run': 'Home Run',
       'grand slam': 'Grand Slam',
+      'hbp': 'Hit by Pitch',
+      'hitbypitch': 'Hit by Pitch',
+      '1b': 'Single',
+      '2b': 'Double',
+      '3b': 'Triple',
+      'bb': 'Walks',
+      'k': 'Strikeout',
+      'sb': 'Steals',
+      'dp': 'Double Play',
+      'tp': 'Triple Play',
+      'bp': 'Batting Practice',
+      'fp': 'Fielding Practice',
     };
     final aliased = aliases[normalized];
     if (aliased != null) return aliased;
@@ -2775,6 +3494,11 @@ class CaptionV2Controller extends ChangeNotifier {
         return verb;
       }
     }
+    final prefixMatches = _verbCatalog.byKey.values
+        .where((verb) => _verbMatchesQuery(verb, normalized))
+        .map((verb) => verb.key)
+        .toSet();
+    if (prefixMatches.length == 1) return prefixMatches.single;
     return null;
   }
 
@@ -2862,32 +3586,33 @@ class CaptionV2Controller extends ChangeNotifier {
     customVerbPinned = false;
     verbCategory = _categoryForVerb(verb) ?? verbCategory;
     rbi = 0;
+    selectedBase = null;
 
     if (verb == 'Home Run') {
-      guidedSearchPrompt = 'What kind of home run?';
+      guidedSearchPrompt = '';
       _guidedSearchHits = [
         SearchHit(
           kind: 'option',
-          label: 'Solo home run',
-          aliases: const ['solo', 'one run', '1 run'],
+          label: '1R',
+          aliases: const ['solo', '1r', 'one run', '1 run', '1'],
           apply: () => _finishCommand(rbiValue: 1),
         ),
         SearchHit(
           kind: 'option',
-          label: 'Two-run home run',
-          aliases: const ['two run', '2 run', '2'],
+          label: '2R',
+          aliases: const ['two run', '2 run', '2r', '2'],
           apply: () => _finishCommand(rbiValue: 2),
         ),
         SearchHit(
           kind: 'option',
-          label: 'Three-run home run',
-          aliases: const ['three run', '3 run', '3'],
+          label: '3R',
+          aliases: const ['three run', '3 run', '3r', '3'],
           apply: () => _finishCommand(rbiValue: 3),
         ),
         SearchHit(
           kind: 'option',
-          label: 'Grand slam',
-          aliases: const ['grand slam', 'four run', '4 run', '4'],
+          label: 'GS',
+          aliases: const ['grand slam', 'four run', '4 run', 'gs', '4'],
           apply: () => _finishCommand(verbOverride: 'Grand Slam'),
         ),
       ];
@@ -2895,19 +3620,21 @@ class CaptionV2Controller extends ChangeNotifier {
       return;
     }
 
-    if (_verbNeedsRbi(verb) && verb != 'Grand Slam') {
+    if (_verbNeedsRbi(verb) && verb != 'Grand Slam' && verb != 'Home Run') {
       guidedSearchPrompt = 'How many RBI?';
       _guidedSearchHits = [
         SearchHit(
           kind: 'option',
-          label: 'No RBI',
+          label: '0',
+          shortcutLabel: '0',
           aliases: const ['none', 'no', '0'],
           apply: () => _finishCommand(rbiValue: 0),
         ),
         for (var count = 1; count <= 3; count++)
           SearchHit(
             kind: 'option',
-            label: '$count RBI',
+            label: '$count',
+            shortcutLabel: '$count',
             aliases: ['$count'],
             apply: () => _finishCommand(rbiValue: count),
           ),
@@ -2916,10 +3643,42 @@ class CaptionV2Controller extends ChangeNotifier {
       return;
     }
 
+    if (_verbNeedsBase(verb)) {
+      guidedSearchPrompt = 'Which base?';
+      _guidedSearchHits = [
+        SearchHit(
+          kind: 'option',
+          label: '1B',
+          aliases: const ['1b', 'first', '1st', 'first base', '1'],
+          apply: () => _finishCommand(baseValue: '1B'),
+        ),
+        SearchHit(
+          kind: 'option',
+          label: '2B',
+          aliases: const ['2b', 'second', '2nd', 'second base', '2'],
+          apply: () => _finishCommand(baseValue: '2B'),
+        ),
+        SearchHit(
+          kind: 'option',
+          label: '3B',
+          aliases: const ['3b', 'third', '3rd', 'third base', '3'],
+          apply: () => _finishCommand(baseValue: '3B'),
+        ),
+        SearchHit(
+          kind: 'option',
+          label: 'Home',
+          aliases: const ['home', 'home plate', 'plate', '4'],
+          apply: () => _finishCommand(baseValue: 'Home'),
+        ),
+      ];
+      notifyListeners();
+      return;
+    }
+
     _finishCommand();
   }
 
-  void _finishCommand({int? rbiValue, String? verbOverride}) {
+  void _finishCommand({int? rbiValue, String? baseValue, String? verbOverride}) {
     if (verbOverride != null) {
       selectedVerb = verbOverride;
       customVerbPhrase = '';
@@ -2927,6 +3686,7 @@ class CaptionV2Controller extends ChangeNotifier {
       verbCategory = _categoryForVerb(verbOverride) ?? verbCategory;
     }
     if (rbiValue != null) rbi = rbiValue;
+    if (baseValue != null) selectedBase = baseValue;
     _syncKeywords();
     final commandInning = _pendingCommandInning;
     if (commandInning != null) {
@@ -2939,35 +3699,61 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void _promptForCommandInning() {
     guidedSearchPrompt = 'What inning?';
+    final isBaseball = sport.toLowerCase() == 'baseball';
+    final regulationEnd = timingRegulationCount;
     _guidedSearchHits = [
       SearchHit(
         kind: 'option',
-        label: 'Pre-game',
+        label: 'Pre',
         aliases: const ['pre', 'pregame', 'before'],
         apply: () => _completeCommandTiming(pre: true),
       ),
-      for (var value = 1; value <= timingRegulationCount; value++)
+      for (var value = 1; value <= (isBaseball ? timingMaxInning : regulationEnd);
+          value++)
         SearchHit(
           kind: 'option',
-          label: '${_ordinal(value)} inning',
-          aliases: ['$value', _ordinal(value), _ordinalWord(value)],
+          label: _ordinal(value),
+          aliases: [
+            '$value',
+            _ordinal(value),
+            _ordinalWord(value),
+            if (isBaseball && value == regulationEnd + 1) ...[
+              'extra',
+              'extras',
+              'extra innings',
+            ],
+          ],
           apply: () => _completeCommandTiming(inningValue: value),
+        ),
+      if (!isBaseball)
+        SearchHit(
+          kind: 'option',
+          label: 'Extras',
+          aliases: const ['extra', 'extras', 'extra innings'],
+          apply: () =>
+              _completeCommandTiming(inningValue: timingRegulationCount + 1),
         ),
       SearchHit(
         kind: 'option',
-        label: 'Extra innings',
-        aliases: const ['extra', 'extras', 'extra innings'],
-        apply: () =>
-            _completeCommandTiming(inningValue: timingRegulationCount + 1),
-      ),
-      SearchHit(
-        kind: 'option',
-        label: 'Post-game',
+        label: 'Post',
         aliases: const ['post', 'postgame', 'after'],
         apply: () => _completeCommandTiming(post: true),
       ),
     ];
     notifyListeners();
+  }
+
+  void previewCommandInning(int value) {
+    if (value < 1) return;
+    inning = value;
+    preGame = false;
+    postGame = false;
+    notifyListeners();
+  }
+
+  void completeCommandInning(int value) {
+    if (value < 1) return;
+    _completeCommandTiming(inningValue: value);
   }
 
   void _completeCommandTiming({
@@ -2989,13 +3775,13 @@ class CaptionV2Controller extends ChangeNotifier {
     _guidedSearchHits = [
       SearchHit(
         kind: 'action',
-        label: 'Save · Enter',
+        label: 'Save',
         aliases: const ['save'],
         apply: () => unawaited(_finishCommandAction(transmit: false)),
       ),
       SearchHit(
         kind: 'action',
-        label: 'FTP · Shift+Enter',
+        label: 'FTP',
         aliases: const ['ftp', 'send', 'transmit'],
         apply: () => unawaited(_finishCommandAction(transmit: true)),
       ),
@@ -3020,16 +3806,19 @@ class CaptionV2Controller extends ChangeNotifier {
   List<SearchHit> topSearchHits() {
     if (searchGuided) return _guidedSearchHits;
     final hits = <SearchHit>[];
-    for (final row in [...filteredHome, ...filteredAway]) {
-      if (hits.length >= 9) break;
-      final pl = row.player;
-      final jersey = pl.jerseyNumber ?? '';
-      final label = jersey.isEmpty ? pl.fullName : '$jersey ${pl.fullName}';
-      hits.add(SearchHit(
-        kind: 'player',
-        label: label,
-        apply: () => selectPlayer(pl, isHome: row.isHome),
-      ));
+    if (!searchAwaitingVerb) {
+      for (final row in [...filteredHome, ...filteredAway]) {
+        if (hits.length >= 9) break;
+        final pl = row.player;
+        final jersey = pl.jerseyNumber ?? '';
+        final label = jersey.isEmpty ? pl.fullName : '$jersey ${pl.fullName}';
+        hits.add(SearchHit(
+          kind: 'player',
+          label: label,
+          shortcutLabel: row.isHome ? 'H' : 'V',
+          apply: () => selectPlayer(pl, isHome: row.isHome),
+        ));
+      }
     }
     for (final verb in filteredVerbs) {
       if (hits.length >= 9) break;
@@ -3038,7 +3827,8 @@ class CaptionV2Controller extends ChangeNotifier {
         label: verbDefinition(verb)?.label ?? verb,
         apply: () {
           final player = selectedPlayers.isEmpty ? null : selectedPlayers.first;
-          if (searchHasJerseyAndVerb && player != null) {
+          if ((searchHasJerseyAndVerb || searchAwaitingVerb) &&
+              player != null) {
             _pendingCommandInning = int.tryParse(
               RegExp(r'\s+(\d+)\s*$').firstMatch(searchQuery)?.group(1) ?? '',
             );
@@ -3065,16 +3855,39 @@ class CaptionV2Controller extends ChangeNotifier {
 
   List<Player> _sortPlayers(List<Player> list) {
     final copy = List<Player>.from(list);
-    if (sortByNumber) {
-      copy.sort((a, b) {
+    copy.sort(_comparePlayers);
+    return copy;
+  }
+
+  int _comparePlayers(Player a, Player b) {
+    late final int cmp;
+    switch (rosterSort) {
+      case RosterSortMode.number:
         final na = int.tryParse(a.jerseyNumber ?? '') ?? 9999;
         final nb = int.tryParse(b.jerseyNumber ?? '') ?? 9999;
-        return na.compareTo(nb);
-      });
-    } else {
-      copy.sort((a, b) => a.fullName.compareTo(b.fullName));
+        final byNumber = na.compareTo(nb);
+        cmp = byNumber != 0 ? byNumber : a.fullName.compareTo(b.fullName);
+        break;
+      case RosterSortMode.firstName:
+        final byFirst = a.firstName
+            .toLowerCase()
+            .compareTo(b.firstName.toLowerCase());
+        cmp = byFirst != 0
+            ? byFirst
+            : playerLastName(a)
+                .toLowerCase()
+                .compareTo(playerLastName(b).toLowerCase());
+        break;
+      case RosterSortMode.lastName:
+        final byLast = playerLastName(a)
+            .toLowerCase()
+            .compareTo(playerLastName(b).toLowerCase());
+        cmp = byLast != 0
+            ? byLast
+            : a.firstName.toLowerCase().compareTo(b.firstName.toLowerCase());
+        break;
     }
-    return copy;
+    return rosterSortAscending ? cmp : -cmp;
   }
 
   String _shortName(String full) {

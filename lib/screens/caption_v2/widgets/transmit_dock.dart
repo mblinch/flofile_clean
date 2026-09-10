@@ -69,6 +69,7 @@ class CaptionV2ActionRow extends StatelessWidget {
       _UtilityButton(
         label: 'FTP',
         icon: Icons.send_outlined,
+        iconTrailing: true,
         tokens: t,
         enabled: transmitEnabled,
         emphasized: true,
@@ -333,9 +334,9 @@ class _UtilityButton extends StatelessWidget {
                   label,
                   maxLines: label.contains('\n') ? 2 : 1,
                   textAlign: TextAlign.center,
-                  style: tokens.labelStyle.copyWith(
+                  style: FfTokens.captionTitle.copyWith(
                     fontSize: 11.5,
-                    fontWeight: FfTokens.weightMedium,
+                    letterSpacing: -0.2,
                     color: emphasized ? tokens.inkOnAccent : tokens.text,
                     height: 1,
                   ),

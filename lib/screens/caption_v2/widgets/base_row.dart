@@ -2,36 +2,30 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/ff_tokens.dart';
 
-/// Segmented 0–1–2–3 RBI control in a sunken box.
-///
-/// Intended to sit directly under the selected [VerbTile], not in a dialog.
-class RbiRow extends StatelessWidget {
-  const RbiRow({
+/// Segmented base picker for running verbs (1B / 2B / 3B / Home).
+class BaseRow extends StatelessWidget {
+  const BaseRow({
     super.key,
     required this.value,
     required this.onChanged,
-    this.max = 3,
     this.compact = false,
-    this.homeRunStyle = false,
   });
 
-  /// Currently selected RBI count (0–[max]).
-  final int value;
+  /// Selected base key: `1B`, `2B`, `3B`, `Home`, or null/empty for none.
+  final String? value;
 
-  /// Called when the user picks a segment.
-  final ValueChanged<int> onChanged;
+  /// Called when the user picks a segment (null clears).
+  final ValueChanged<String?> onChanged;
 
-  /// Highest RBI option (inclusive). Default 3 → segments 0,1,2,3.
-  final int max;
   final bool compact;
-  final bool homeRunStyle;
+
+  static const optionKeys = ['1B', '2B', '3B', 'Home'];
+  static const optionLabels = ['1B', '2B', '3B', 'Home'];
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final options = homeRunStyle
-        ? const [1, 2, 3, 4]
-        : List<int>.generate(max, (i) => i + 1);
+    final selected = value?.trim();
 
     return Container(
       padding: EdgeInsets.all(compact ? 2 : 4),
@@ -41,36 +35,16 @@ class RbiRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (!homeRunStyle)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: SizedBox(
-                height: compact ? 20 : 32,
-                child: Align(
-                  alignment: Alignment.center,
-                  child: Text(
-                    'RBI',
-                    style: t.bodyStyle.copyWith(
-                      fontSize:
-                          compact ? t.textSizeMeta : t.textSizeBody,
-                      fontFamily: FfTokens.monoFamily,
-                      fontWeight: FfTokens.weightRegular,
-                      color: t.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          for (final n in options)
+          for (var i = 0; i < optionKeys.length; i++)
             Expanded(
-              child: _RbiSegment(
-                label: homeRunStyle
-                    ? const {1: '1R', 2: '2R', 3: '3R', 4: 'GS'}[n]!
-                    : '$n',
-                selected: value == n,
+              child: _BaseSegment(
+                label: optionLabels[i],
+                selected: selected == optionKeys[i],
                 tokens: t,
                 compact: compact,
-                onTap: () => onChanged(value == n ? 0 : n),
+                onTap: () => onChanged(
+                  selected == optionKeys[i] ? null : optionKeys[i],
+                ),
               ),
             ),
         ],
@@ -79,8 +53,8 @@ class RbiRow extends StatelessWidget {
   }
 }
 
-class _RbiSegment extends StatelessWidget {
-  const _RbiSegment({
+class _BaseSegment extends StatelessWidget {
+  const _BaseSegment({
     required this.label,
     required this.selected,
     required this.tokens,

@@ -9,11 +9,14 @@ import '../../../caption_style/verb_sub_options.dart';
 class CaptionV2CaptionDomain {
   CaptionV2CaptionDomain._();
 
+  static const runningVerbs = {'Steals', 'Slides', 'Runs', 'Rounds'};
+
   static String actionCore({
     required String verb,
     required String sport,
     required bool plural,
     required int rbi,
+    String? base,
     String? singularPhrase,
     String? pluralPhrase,
     VerbSubOptions? subOptions,
@@ -59,6 +62,10 @@ class CaptionV2CaptionDomain {
       return '$leadIn $hitNoun';
     }
 
+    if (runningVerbs.contains(verb)) {
+      return runningAction(verb: verb, plural: plural, base: base);
+    }
+
     final singular = singularPhrase?.trim().isNotEmpty == true
         ? singularPhrase!.trim()
         : _v1DefaultWording(verb, sport);
@@ -96,6 +103,59 @@ class CaptionV2CaptionDomain {
     return plural
         ? VerbCaptionWording.defaultPluralWording(verb, singular)
         : singular;
+  }
+
+  /// Noun for a selected base key (`1B` / `2B` / `3B` / `Home`).
+  static String? baseNoun(String? base, {required String verb}) {
+    switch (base?.trim()) {
+      case '1B':
+        return 'first base';
+      case '2B':
+        return 'second base';
+      case '3B':
+        return 'third base';
+      case 'Home':
+        return (verb == 'Steals' || verb == 'Runs') ? 'home' : 'home plate';
+      default:
+        return null;
+    }
+  }
+
+  static String runningAction({
+    required String verb,
+    required bool plural,
+    String? base,
+  }) {
+    final noun = baseNoun(base, verb: verb);
+    switch (verb) {
+      case 'Steals':
+        if (noun == 'home') {
+          return plural ? 'steal home' : 'steals home';
+        }
+        return plural
+            ? 'steal ${noun ?? 'a base'}'
+            : 'steals ${noun ?? 'a base'}';
+      case 'Slides':
+        return plural
+            ? 'slide into ${noun ?? 'a base'}'
+            : 'slides into ${noun ?? 'a base'}';
+      case 'Runs':
+        if (noun == 'home') {
+          return plural ? 'run home' : 'runs home';
+        }
+        return plural
+            ? 'run to ${noun ?? 'a base'}'
+            : 'runs to ${noun ?? 'a base'}';
+      case 'Rounds':
+        return plural
+            ? 'round ${noun ?? 'a base'}'
+            : 'rounds ${noun ?? 'a base'}';
+      default:
+        final singular = VerbCaptionWording.defaultWording(verb);
+        return plural
+            ? VerbCaptionWording.defaultPluralWording(verb, singular)
+            : singular;
+    }
   }
 
   /// Joins an action to a selected opponent or the opposing team.

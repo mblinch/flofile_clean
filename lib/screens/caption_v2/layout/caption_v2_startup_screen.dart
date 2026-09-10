@@ -73,6 +73,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool _useTank01 = false;
   bool _isAdmin = false;
   IptcApplyMode _iptcMode = IptcApplyMode.none;
+  IptcApplyMode _preferredWriteMode = IptcApplyMode.onSave;
   String _iptcStatus = "Don't write IPTC";
 
   static const _sports = <String>[
@@ -92,6 +93,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _awayTeam!.isNotEmpty &&
       _homeTeam != _awayTeam;
   bool get _canGo => _sportChosen && _folderChosen && _teamsChosen && !_going;
+
+  bool get _writeIptc => _iptcMode != IptcApplyMode.none;
 
   bool get _tank01Supported => _sport != null && tank01SupportsSport(_sport!);
 
@@ -127,6 +130,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _useTank01 = await _prefs!.getUseTank01Rosters();
       _isAdmin = await AdminService.isCurrentUserAdmin();
       _iptcMode = await _prefs!.getIptcApplyMode();
+      if (_iptcMode != IptcApplyMode.none) {
+        _preferredWriteMode = _iptcMode;
+      }
       _iptcStatus = await _iptcStatusFromPrefs();
       if (!mounted) return;
       setState(() {});
@@ -302,6 +308,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     setState(() => _useTank01 = enabled);
   }
 
+  Future<void> _setWriteIptc(bool enabled) async {
+    if (enabled == _writeIptc) return;
+    final mode = enabled ? _preferredWriteMode : IptcApplyMode.none;
+    await _prefs?.saveIptcApplyMode(mode);
+    final status = await _iptcStatusFromPrefs();
+    if (!mounted) return;
+    setState(() {
+      _iptcMode = mode;
+      _iptcStatus = status;
+    });
+  }
+
   Future<void> _openIptc() async {
     final summary = await showCaptionV2IptcDialog(
       context,
@@ -310,6 +328,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (!mounted || summary == null) return;
     setState(() {
       _iptcMode = summary.mode;
+      if (summary.mode != IptcApplyMode.none) {
+        _preferredWriteMode = summary.mode;
+      }
       _iptcStatus = summary.statusLine;
     });
   }
@@ -594,32 +615,42 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('IPTC', style: t.secondaryLabelStyle),
-                                const SizedBox(height: 4),
-                                Text(
-                                  _iptcStatus,
-                                  style: t.metaStyle.copyWith(
-                                    color: _iptcMode == IptcApplyMode.none
-                                        ? t.textSecondary
-                                        : t.text,
-                                  ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
+                          SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: Checkbox(
+                              value: _writeIptc,
+                              activeColor: t.accent,
+                              checkColor: t.inkOnAccent,
+                              side: BorderSide(color: t.textSecondary),
+                              onChanged: !_teamsChosen
+                                  ? null
+                                  : (v) => _setWriteIptc(v ?? false),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
+                          Text('Write IPTC', style: t.bodyStyle),
+                          const SizedBox(width: 10),
                           _OutlinedBtn(
                             label: 'IPTC…',
-                            onPressed: !_teamsChosen ? null : _openIptc,
+                            onPressed: !_teamsChosen || !_writeIptc
+                                ? null
+                                : _openIptc,
                           ),
                         ],
                       ),
+                      if (_writeIptc) ...[
+                        const SizedBox(height: 6),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 30),
+                          child: Text(
+                            _iptcStatus,
+                            style: t.metaStyle,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

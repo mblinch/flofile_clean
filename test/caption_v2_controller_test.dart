@@ -72,6 +72,46 @@ void main() {
     expect(body, contains('celebrate against'));
   });
 
+  test('player-only selection still uses styled caption with date and byline',
+      () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'Colorado Rockies'
+      ..city = 'Toronto'
+      ..country = 'Canada'
+      ..venue = 'Rogers Centre'
+      ..photographerName = 'Jane Doe'
+      ..agencyName = 'Getty Images';
+
+    controller.selectPlayer(player('Sean Keys', '20'), isHome: true);
+    controller.selectPlayer(player('Jesus Sanchez', '12'), isHome: true);
+    controller.selectPlayer(player('Nathan Lukes', '38'), isHome: true);
+    controller.selectPlayer(player('Zac Veen', '13'), isHome: false);
+
+    final body = controller.buildCaptionBody();
+    expect(body, contains('Sean Keys'));
+    expect(body, contains('Jesus Sanchez'));
+    expect(body, contains('Nathan Lukes'));
+    expect(body, contains('Zac Veen'));
+    expect(body, contains('of the Colorado Rockies'));
+    expect(body, isNot(contains('20 Keys +')));
+
+    final caption = controller.buildCaptionSentence();
+    expect(caption, isNot(contains('20 Keys +')));
+    expect(caption.toLowerCase(), contains('toronto'));
+    expect(caption, contains('Rogers Centre'));
+    expect(caption, contains('Jane Doe'));
+    expect(
+      caption,
+      anyOf(
+        contains(RegExp(r'\d{4}')),
+        contains(RegExp(
+          r'(January|February|March|April|May|June|July|August|September|October|November|December)',
+        )),
+      ),
+    );
+  });
+
   test('uses an exact session-only custom verb phrase', () {
     final controller = CaptionV2Controller()
       ..homeTeam = 'Toronto Blue Jays'
@@ -159,9 +199,56 @@ void main() {
       controller.topSearchHits().map((hit) => hit.kind),
       containsAll(['player', 'verb']),
     );
+    expect(
+      controller
+          .topSearchHits()
+          .where((hit) => hit.kind == 'player')
+          .map((hit) => hit.shortcutLabel),
+      ['H', 'V'],
+    );
   });
 
-  test('opening everything search clears the active caption fields', () {
+  test('standalone team prefix does not match players or verbs', () {
+    final controller = CaptionV2Controller()
+      ..homeRoster = [player('Home Player', '27')]
+      ..awayRoster = [player('Visiting Player', '27')]
+      ..setSearchQuery('H');
+
+    expect(controller.searchIsTeamPrefixOnly, isTrue);
+    expect(controller.filteredHome, isEmpty);
+    expect(controller.filteredAway, isEmpty);
+    expect(controller.filteredVerbs, isEmpty);
+  });
+
+  test('verb search uses shortest prefixes and multi-word initials', () {
+    final controller = CaptionV2Controller()
+      ..setSearchOpen(true)
+      ..selectPlayer(player('Home Player', '27'), isHome: true);
+
+    controller.setSearchQuery('h');
+    expect(controller.filteredVerbs, contains('Hit by Pitch'));
+    expect(controller.filteredVerbs, isNot(contains('Single')));
+
+    controller.setSearchQuery('hbp');
+    expect(controller.filteredVerbs, ['Hit by Pitch']);
+
+    controller.setSearchQuery('si');
+    expect(controller.filteredVerbs, ['Single']);
+  });
+
+  test('RBI choices use their value as the shortcut label', () {
+    final controller = CaptionV2Controller()
+      ..homeRoster = [player('Home Player', '27')];
+
+    expect(controller.submitSearchCommand('27 single'), isTrue);
+    expect(controller.guidedSearchPrompt, 'How many RBI?');
+    expect(
+      controller.topSearchHits().map((hit) => hit.shortcutLabel),
+      ['0', '1', '2', '3'],
+    );
+  });
+
+  test('opening Firebar preserves the active caption fields', () {
     final controller = CaptionV2Controller()
       ..manualCaptionOverride = 'Existing caption'
       ..personality = 'Existing Person'
@@ -175,13 +262,14 @@ void main() {
     controller.setSearchOpen(true);
 
     expect(controller.captionSelectionStarted, isFalse);
-    expect(controller.selectedPlayers, isEmpty);
-    expect(controller.selectedPlayer, isNull);
-    expect(controller.selectedVerb, isNull);
-    expect(controller.manualCaptionOverride, isNull);
-    expect(controller.personality, isEmpty);
-    expect(controller.keywords, isEmpty);
-    expect(controller.rbi, 0);
+    expect(controller.selectedPlayers, hasLength(1));
+    expect(controller.selectedPlayer?.fullName, 'Existing Player');
+    expect(controller.selectedVerb, 'Double');
+    expect(controller.manualCaptionOverride, 'Existing caption');
+    expect(controller.personality, 'Existing Person');
+    expect(controller.keywords, 'existing, keywords');
+    expect(controller.rbi, 2);
+    expect(controller.firebarCommitted, hasLength(2));
   });
 
   test('compound search asks for inning after player and verb', () {
@@ -199,16 +287,24 @@ void main() {
     controller.topSearchHits().firstWhere((hit) => hit.kind == 'verb').apply();
 
     expect(controller.guidedSearchPrompt, 'What inning?');
-    controller
-        .topSearchHits()
-        .firstWhere((hit) => hit.label == '3rd inning')
-        .apply();
+    controller.topSearchHits().firstWhere((hit) => hit.label == '3rd').apply();
     expect(controller.inning, 3);
     expect(controller.guidedSearchPrompt, 'Save or FTP?');
     expect(
       controller.topSearchHits().map((hit) => hit.label),
-      containsAll(['Save · Enter', 'FTP · Shift+Enter']),
+      containsAll(['Save', 'FTP']),
     );
+  });
+
+  test('typed inning previews immediately and completes without Enter', () {
+    final controller = CaptionV2Controller();
+
+    controller.previewCommandInning(1);
+    expect(controller.inning, 1);
+    controller.completeCommandInning(10);
+
+    expect(controller.inning, 10);
+    expect(controller.guidedSearchPrompt, 'Save or FTP?');
   });
 
   test('last command number sets the inning', () {
@@ -669,5 +765,186 @@ void main() {
     expect(controller.savedImages, isEmpty);
     expect(controller.captionedImages, isEmpty);
     expect(controller.statusMessage, 'Save failed for all 2 frames');
+  });
+
+  test('Firebar matching follows name, jersey, and verb rules', () {
+    final sanchez = player('Jesús Sánchez', '4');
+    final forty = player('Kazuma Okamoto', '40');
+    final straw = player('Myles Straw', '3');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [sanchez, forty]
+      ..awayRoster = [straw]
+      ..setSearchOpen(true);
+
+    controller.setSearchQuery('sanchez');
+    expect(controller.firebarHomeResults.single.player, same(sanchez));
+    expect(controller.firebarAwayResults, isEmpty);
+
+    controller.setSearchQuery('4');
+    expect(
+      controller.firebarHomeResults.map((result) => result.player),
+      [sanchez, forty],
+    );
+    expect(controller.firebarVerbResults, isEmpty);
+
+    controller.setSearchQuery('h4');
+    expect(
+      controller.firebarHomeResults.map((result) => result.player),
+      [sanchez, forty],
+    );
+    expect(controller.firebarAwayResults, isEmpty);
+
+    controller.setSearchQuery('v3');
+    expect(controller.firebarHomeResults, isEmpty);
+    expect(controller.firebarAwayResults.single.player, same(straw));
+
+    controller.setSearchQuery('st');
+    expect(controller.firebarAwayResults.single.player, same(straw));
+    expect(
+      controller.firebarVerbResults
+          .map((result) => controller.verbDefinition(result.verbKey!)?.label),
+      contains('Steals'),
+    );
+
+    controller.setSearchQuery('hr');
+    final hrLabels = controller.firebarVerbResults
+        .map((result) => controller.verbDefinition(result.verbKey!)?.label);
+    expect(hrLabels, contains('Home Run'));
+    expect(hrLabels, isNot(contains('Throws')));
+
+    controller.setSearchQuery('hbp');
+    expect(
+      controller.firebarVerbResults
+          .map((result) => controller.verbDefinition(result.verbKey!)?.label),
+      contains('Hit by Pitch'),
+    );
+  });
+
+  test('Firebar uses one bounded selection across all three lanes', () {
+    final active = player('Steven Home', '1');
+    final other = player('Myles Straw', '3');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [active]
+      ..awayRoster = [other]
+      ..setSearchOpen(true)
+      ..setSearchQuery('st');
+
+    expect(controller.firebarSelectedResult?.player, same(active));
+    controller.moveFirebarSelection(1);
+    expect(controller.firebarSelectedResult?.kind, FirebarResultKind.verb);
+
+    for (var i = 0; i < 100; i++) {
+      controller.moveFirebarSelection(1);
+    }
+    expect(controller.firebarSelectedResult?.player, same(other));
+    controller.moveFirebarSelection(1);
+    expect(controller.firebarSelectedResult?.player, same(other));
+  });
+
+  test('Firebar commits chips, clears query, and exits cleanly', () {
+    final first = player('Bo Bichette', '11');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [first]
+      ..setSearchOpen(true)
+      ..setSearchQuery('bo');
+
+    controller.commitSelectedFirebarResult();
+    expect(controller.selectedPlayers.single.player, same(first));
+    expect(controller.firebarCommitted.single.player, same(first));
+    expect(controller.searchQuery, isEmpty);
+
+    controller.removeLastFirebarChip();
+    expect(controller.selectedPlayers, isEmpty);
+    expect(controller.firebarCommitted, isEmpty);
+    expect(controller.captionSelectionStarted, isFalse);
+    expect(controller.manualCaptionOverride, isNull);
+
+    controller.setSearchQuery('single');
+    controller.setSearchOpen(false);
+    expect(controller.searchQuery, isEmpty);
+    expect(controller.firebarSelectedResult, isNull);
+    expect(controller.searchOpen, isFalse);
+  });
+
+  test('Firebar inning shorthand updates the inning selector', () {
+    final controller = CaptionV2Controller()
+      ..setSearchOpen(true)
+      ..setPre(true);
+
+    controller.setSearchQuery('i6');
+    expect(controller.inning, 6);
+    expect(controller.preGame, isFalse);
+    expect(controller.searchQuery, isEmpty);
+
+    controller.setSearchQuery('8i');
+    expect(controller.inning, 8);
+    expect(controller.searchQuery, isEmpty);
+  });
+
+  test('baseball extras select real innings through 27', () {
+    final controller = CaptionV2Controller();
+
+    expect(controller.timingMaxInning, 27);
+    controller.setInning(14);
+    expect(controller.inning, 14);
+    expect(controller.inningLabel, '14th');
+    expect(controller.timingCaptionClause, 'during the 14th inning');
+
+    controller.setInning(27);
+    expect(controller.inning, 27);
+    expect(controller.inningLabel, '27th');
+
+    controller.setInning(28);
+    expect(controller.inning, 27);
+
+    controller.setSearchOpen(true);
+    controller.setSearchQuery('i19');
+    expect(controller.inning, 19);
+  });
+
+  test('Firebar asks for verb sub-options before continuing', () {
+    final controller = CaptionV2Controller()
+      ..setSearchOpen(true)
+      ..setSearchQuery('hr');
+    final homeRun = controller.firebarVerbResults.singleWhere(
+      (result) => result.verbKey == 'Home Run',
+    );
+
+    controller.commitFirebarResult(homeRun);
+    expect(controller.selectedVerb, 'Home Run');
+    expect(
+      controller.firebarOptions.map((option) => option.label),
+      ['1R', '2R', '3R', 'GS'],
+    );
+    expect(controller.firebarOptionPrompt, 'Home run type?');
+
+    controller.setSearchQuery('2r');
+    controller.commitSelectedFirebarResult();
+    expect(controller.rbi, 2);
+    expect(controller.searchQuery, isEmpty);
+  });
+
+  test('running verbs accept a base and rewrite the caption action', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'Houston Astros'
+      ..homeRoster = [player('George Springer', '4')]
+      ..selectPlayer(player('George Springer', '4'), isHome: true)
+      ..selectVerb('Steals');
+    addTearDown(controller.dispose);
+
+    expect(controller.verbNeedsBase('Steals'), isTrue);
+    expect(controller.buildCaptionBody(), contains('steals a base'));
+
+    controller.setSelectedBase('2B');
+    expect(controller.selectedBase, '2B');
+    expect(controller.buildCaptionBody(), contains('steals second base'));
+
+    controller.setSelectedBase('Home');
+    expect(controller.buildCaptionBody(), contains('steals home'));
+
+    controller.selectVerb('Slides');
+    controller.setSelectedBase('Home');
+    expect(controller.buildCaptionBody(), contains('slides into home plate'));
   });
 }
