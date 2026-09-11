@@ -11,11 +11,9 @@
 # 2) GIDSignIn skips GTMAppAuth keychain read/write on macOS (Firebase Auth
 #    persists the signed-in user separately).
 # 3) Skip macOS data-protection keychain migration in GIDAuthStateMigration.
-# 4) FirebaseAuth uses the file-based login keychain on macOS instead of the Data
-#    Protection Keychain. This is the actual source of the "keychain error" dialog
-#    after Google sign-in: Firebase Auth (not Google Sign-In) persists the signed-in
-#    user, and on Developer ID builds without keychain-access-groups the Data
-#    Protection Keychain is inaccessible (errSecMissingEntitlement / errSecParam).
+# 4) FirebaseAuth avoids Data Protection Keychain flags that fail on Developer ID.
+# 5) FirebaseAuth storage on macOS is file-backed (Application Support) so users
+#    never see the login-keychain password dialog for firebase_auth_* items.
 #
 # Run before `flutter build macos`. Also invoked from sparkle_release.sh.
 #
@@ -33,12 +31,14 @@ if [ -f "$ROOT/macos/Pods/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHe
   GID_SIGNIN="$ROOT/macos/Pods/GoogleSignIn/GoogleSignIn/Sources/GIDSignIn.m"
   GID_MIGRATION="$ROOT/macos/Pods/GoogleSignIn/GoogleSignIn/Sources/GIDAuthStateMigration/Implementation/GIDAuthStateMigration.m"
   FIREBASE_AUTH_KEYCHAIN="$ROOT/macos/Pods/FirebaseAuth/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
+  FIREBASE_AUTH_STORAGE="$ROOT/macos/Pods/FirebaseAuth/FirebaseAuth/Sources/Swift/Storage/AuthKeychainStorageReal.swift"
   PATCH_SOURCE="CocoaPods"
 else
   KEYCHAIN_DIR="$ROOT/build/macos/SourcePackages/checkouts/GTMAppAuth/GTMAppAuth/Sources/KeychainStore"
   GID_SIGNIN="$ROOT/build/macos/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/GIDSignIn.m"
   GID_MIGRATION="$ROOT/build/macos/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/GIDAuthStateMigration/Implementation/GIDAuthStateMigration.m"
   FIREBASE_AUTH_KEYCHAIN="$ROOT/build/macos/SourcePackages/checkouts/firebase-ios-sdk/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
+  FIREBASE_AUTH_STORAGE="$ROOT/build/macos/SourcePackages/checkouts/firebase-ios-sdk/FirebaseAuth/Sources/Swift/Storage/AuthKeychainStorageReal.swift"
   PATCH_SOURCE="SPM SourcePackages"
 fi
 KEYCHAIN_HELPER="$KEYCHAIN_DIR/KeychainHelper.swift"
@@ -56,7 +56,7 @@ if [ ! -f "$GID_SIGNIN" ] || [ ! -f "$GID_MIGRATION" ]; then
   exit 1
 fi
 
-if [ ! -f "$FIREBASE_AUTH_KEYCHAIN" ]; then
+if [ ! -f "$FIREBASE_AUTH_KEYCHAIN" ] || [ ! -f "$FIREBASE_AUTH_STORAGE" ]; then
   echo "Error: FirebaseAuth not found at expected path." >&2
   echo "Run 'flutter build macos --release' once to resolve packages, then re-run." >&2
   exit 1
@@ -64,9 +64,9 @@ fi
 
 echo "Patching Google Sign-In keychain sources from $PATCH_SOURCE..."
 
-chmod u+w "$KEYCHAIN_HELPER" "$KEYCHAIN_STORE" "$GID_SIGNIN" "$GID_MIGRATION" "$FIREBASE_AUTH_KEYCHAIN" 2>/dev/null || true
+chmod u+w "$KEYCHAIN_HELPER" "$KEYCHAIN_STORE" "$GID_SIGNIN" "$GID_MIGRATION" "$FIREBASE_AUTH_KEYCHAIN" "$FIREBASE_AUTH_STORAGE" 2>/dev/null || true
 
-python3 - "$KEYCHAIN_HELPER" "$KEYCHAIN_STORE" "$GID_SIGNIN" "$GID_MIGRATION" "$FIREBASE_AUTH_KEYCHAIN" <<'PY'
+python3 - "$KEYCHAIN_HELPER" "$KEYCHAIN_STORE" "$GID_SIGNIN" "$GID_MIGRATION" "$FIREBASE_AUTH_KEYCHAIN" "$FIREBASE_AUTH_STORAGE" <<'PY'
 from pathlib import Path
 import sys
 
@@ -75,6 +75,7 @@ store_path = Path(sys.argv[2])
 gid_signin_path = Path(sys.argv[3])
 gid_migration_path = Path(sys.argv[4])
 firebase_auth_path = Path(sys.argv[5])
+firebase_storage_path = Path(sys.argv[6])
 
 changed = False
 
@@ -320,6 +321,160 @@ if "FloFile patch: kSecAttrAccessible is a data-protection-keychain attribute" n
     fb_changed = True
 if fb_changed:
     firebase_auth_path.write_text(firebase_text)
+    changed = True
+
+# --- Never call macOS SecItem* (eliminates login-keychain password prompts) ---
+file_backed_storage = r'''// Copyright 2023 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+import Foundation
+import Security
+
+/// FloFile patch: file-backed Auth storage on macOS.
+///
+/// Developer ID builds cannot silently use the login keychain without prompting
+/// the user for their password whenever the app signature changes. Persist
+/// Firebase Auth sessions under Application Support instead of SecItem*.
+final class AuthKeychainStorageReal: AuthKeychainStorage {
+  static let shared: AuthKeychainStorageReal = .init()
+
+  private let lock = NSLock()
+  private init() {}
+
+  #if os(macOS)
+    private func storeURL() -> URL {
+      let base = FileManager.default.urls(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask
+      ).first!
+      let dir = base.appendingPathComponent("FloFile/FirebaseAuthStore", isDirectory: true)
+      try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+      return dir.appendingPathComponent("items.json")
+    }
+
+    private func storageKey(from query: [String: Any]) -> String {
+      let account = query[kSecAttrAccount as String] as? String ?? ""
+      let service = query[kSecAttrService as String] as? String ?? ""
+      let group = query[kSecAttrAccessGroup as String] as? String ?? ""
+      return "\(group)|\(service)|\(account)"
+    }
+
+    private func loadMap() -> [String: Data] {
+      let url = storeURL()
+      guard let raw = try? Data(contentsOf: url),
+            let json = try? JSONSerialization.jsonObject(with: raw) as? [String: String]
+      else { return [:] }
+      var out: [String: Data] = [:]
+      for (key, b64) in json {
+        if let data = Data(base64Encoded: b64) {
+          out[key] = data
+        }
+      }
+      return out
+    }
+
+    private func saveMap(_ map: [String: Data]) {
+      var json: [String: String] = [:]
+      for (key, data) in map {
+        json[key] = data.base64EncodedString()
+      }
+      guard let raw = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted])
+      else { return }
+      try? raw.write(to: storeURL(), options: [.atomic])
+    }
+
+    func get(query: [String: Any], result: inout AnyObject?) -> OSStatus {
+      lock.lock()
+      defer { lock.unlock() }
+      let key = storageKey(from: query)
+      guard let data = loadMap()[key] else {
+        return errSecItemNotFound
+      }
+      let item: [String: Any] = [
+        kSecValueData as String: data,
+        kSecAttrAccount as String: (query[kSecAttrAccount as String] as? String) ?? "",
+        kSecAttrService as String: (query[kSecAttrService as String] as? String) ?? "",
+      ]
+      result = [item] as AnyObject
+      return noErr
+    }
+
+    func add(query: [String: Any]) -> OSStatus {
+      lock.lock()
+      defer { lock.unlock() }
+      guard let data = query[kSecValueData as String] as? Data else {
+        return errSecParam
+      }
+      let key = storageKey(from: query)
+      var map = loadMap()
+      if map[key] != nil {
+        return errSecDuplicateItem
+      }
+      map[key] = data
+      saveMap(map)
+      return noErr
+    }
+
+    func update(query: [String: Any], attributes: [String: Any]) -> OSStatus {
+      lock.lock()
+      defer { lock.unlock() }
+      let key = storageKey(from: query)
+      var map = loadMap()
+      guard map[key] != nil else {
+        return errSecItemNotFound
+      }
+      if let data = attributes[kSecValueData as String] as? Data {
+        map[key] = data
+      }
+      saveMap(map)
+      return noErr
+    }
+
+    @discardableResult func delete(query: [String: Any]) -> OSStatus {
+      lock.lock()
+      defer { lock.unlock() }
+      let key = storageKey(from: query)
+      var map = loadMap()
+      guard map.removeValue(forKey: key) != nil else {
+        return errSecItemNotFound
+      }
+      saveMap(map)
+      return noErr
+    }
+  #else
+    func get(query: [String: Any], result: inout AnyObject?) -> OSStatus {
+      return SecItemCopyMatching(query as CFDictionary, &result)
+    }
+
+    func add(query: [String: Any]) -> OSStatus {
+      return SecItemAdd(query as CFDictionary, nil)
+    }
+
+    func update(query: [String: Any], attributes: [String: Any]) -> OSStatus {
+      SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+    }
+
+    @discardableResult func delete(query: [String: Any]) -> OSStatus {
+      return SecItemDelete(query as CFDictionary)
+    }
+  #endif
+}
+'''
+
+storage_text = firebase_storage_path.read_text()
+if "FloFile patch: file-backed Auth storage on macOS" not in storage_text:
+    firebase_storage_path.write_text(file_backed_storage)
     changed = True
 
 if changed:

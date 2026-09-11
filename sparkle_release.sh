@@ -94,14 +94,20 @@ ensure_macos_keychain_patch() {
 keychain_patch_present() {
   local pods_helper="$SCRIPT_DIR/macos/Pods/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"
   local pods_firebase="$SCRIPT_DIR/macos/Pods/FirebaseAuth/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
+  local pods_storage="$SCRIPT_DIR/macos/Pods/FirebaseAuth/FirebaseAuth/Sources/Swift/Storage/AuthKeychainStorageReal.swift"
   local spm_helper="$SCRIPT_DIR/build/macos/SourcePackages/checkouts/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"
   local spm_firebase="$SCRIPT_DIR/build/macos/SourcePackages/checkouts/firebase-ios-sdk/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
-  if [ -f "$pods_helper" ] && [ -f "$pods_firebase" ]; then
-    grep -q 'FloFile patch' "$pods_helper" && grep -q 'FloFile patch' "$pods_firebase"
+  local spm_storage="$SCRIPT_DIR/build/macos/SourcePackages/checkouts/firebase-ios-sdk/FirebaseAuth/Sources/Swift/Storage/AuthKeychainStorageReal.swift"
+  if [ -f "$pods_helper" ] && [ -f "$pods_firebase" ] && [ -f "$pods_storage" ]; then
+    grep -q 'FloFile patch' "$pods_helper" &&
+      grep -q 'FloFile patch' "$pods_firebase" &&
+      grep -q 'FloFile patch: file-backed Auth storage' "$pods_storage"
     return $?
   fi
-  if [ -f "$spm_helper" ] && [ -f "$spm_firebase" ]; then
-    grep -q 'FloFile patch' "$spm_helper" && grep -q 'FloFile patch' "$spm_firebase"
+  if [ -f "$spm_helper" ] && [ -f "$spm_firebase" ] && [ -f "$spm_storage" ]; then
+    grep -q 'FloFile patch' "$spm_helper" &&
+      grep -q 'FloFile patch' "$spm_firebase" &&
+      grep -q 'FloFile patch: file-backed Auth storage' "$spm_storage"
     return $?
   fi
   return 1
