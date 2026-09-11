@@ -4,13 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../services/auth_service.dart';
-import '../theme/app_tokens.dart';
-import '../theme/auth_ui_constants.dart';
 import '../theme/ff_tokens.dart';
-import 'app_styled_dialogs.dart';
-import 'flo_chrome_header.dart';
 
 /// Full-screen sign-in gate: Google → Firebase Auth.
+///
+/// Styled to match Caption V2 (dark FfTokens), not the classic light chrome.
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key, this.onSkipSignIn});
 
@@ -24,6 +22,7 @@ class SignInScreen extends StatefulWidget {
 class _SignInScreenState extends State<SignInScreen> {
   bool _busy = false;
   String? _error;
+  bool _googleHovered = false;
 
   Future<void> _run(Future<void> Function() action) async {
     if (_busy) return;
@@ -62,106 +61,98 @@ class _SignInScreenState extends State<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final t = FfTokens.dark;
     final googleReady = AuthService.instance.isGoogleSignInConfigured;
-    final user = AuthService.instance.currentUser;
-    final signOutHint = user?.email?.trim().isNotEmpty == true
-        ? 'Signed in as ${user!.email} — sign out to switch accounts'
-        : 'Sign out';
+    final canGoogle = googleReady && !_busy;
 
     return Scaffold(
+      backgroundColor: t.bg,
       body: DecoratedBox(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFE8EEF2),
-              Color(0xFFF4F5F4),
-              Color(0xFFDDE7ED),
+              t.bg,
+              t.sunken,
+              t.bg,
             ],
-            stops: [0.0, 0.45, 1.0],
+            stops: const [0.0, 0.55, 1.0],
           ),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            FloChromeHeader(
-              showSignOut: AuthService.instance.isSignedIn,
-              signOutTooltip: signOutHint,
-            ),
-            Expanded(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Container(
-                      padding: const EdgeInsets.fromLTRB(36, 40, 36, 28),
+        child: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'FLO FILE',
+                      style: TextStyle(
+                        fontFamily: FfTokens.labelFamily,
+                        fontSize: 34,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 2.4,
+                        height: 1,
+                        color: t.text,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      'Caption workspace',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: 0.2,
+                        color: t.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(28, 28, 28, 22),
                       decoration: BoxDecoration(
-                        color: AuthUiColors.panel.withValues(alpha: 0.96),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AuthUiColors.brand.withValues(alpha: 0.12),
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AuthUiColors.brand.withValues(alpha: 0.10),
-                            blurRadius: 40,
-                            offset: const Offset(0, 18),
-                          ),
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.04),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+                        color: t.surface,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: t.divider),
                       ),
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text(
-                            'FLO FILE',
-                            style: TextStyle(
-                              fontFamily: FfTokens.labelFamily,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.2,
-                              height: 1,
-                              color: AuthUiColors.brand,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          const Text(
+                          Text(
                             'Sign in',
                             style: TextStyle(
                               fontFamily: FfTokens.labelFamily,
-                              fontSize: 18,
+                              fontSize: 20,
                               fontWeight: FontWeight.w600,
-                              letterSpacing: -0.3,
-                              color: AuthUiColors.title,
+                              letterSpacing: -0.35,
+                              color: t.text,
                             ),
                           ),
                           const SizedBox(height: 8),
-                          const Text(
+                          Text(
                             'Use your Google account to continue.',
-                            textAlign: TextAlign.center,
                             style: TextStyle(
                               fontFamily: FfTokens.fontFamily,
                               fontSize: 13,
-                              color: AuthUiColors.subtitle,
                               height: 1.45,
+                              color: t.textSecondary,
                             ),
                           ),
-                          const SizedBox(height: 28),
+                          const SizedBox(height: 24),
                           if (_error != null) ...[
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                              padding: const EdgeInsets.fromLTRB(12, 11, 12, 11),
                               decoration: BoxDecoration(
-                                color: AuthUiColors.errorFill,
-                                borderRadius: BorderRadius.circular(10),
+                                color: const Color(0xFF3A2228),
+                                borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                  color: AuthUiColors.errorBorder,
+                                  color: const Color(0xFF7A3A44),
                                 ),
                               ),
                               child: Text(
@@ -169,55 +160,95 @@ class _SignInScreenState extends State<SignInScreen> {
                                 style: const TextStyle(
                                   fontFamily: FfTokens.fontFamily,
                                   fontSize: 12,
-                                  color: AuthUiColors.errorText,
                                   height: 1.4,
+                                  color: Color(0xFFE8B4B8),
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 18),
+                            const SizedBox(height: 16),
                           ],
-                          SizedBox(
-                            width: double.infinity,
-                            height: 44,
-                            child: ElevatedGreyButton(
-                              label: 'Continue with Google',
-                              icon: Icons.g_mobiledata_rounded,
-                              fontSize: 14,
-                              fullWidth: true,
-                              isTealGradient: googleReady && !_busy,
-                              onPressed: googleReady && !_busy
+                          MouseRegion(
+                            cursor: canGoogle
+                                ? SystemMouseCursors.click
+                                : SystemMouseCursors.basic,
+                            onEnter: canGoogle
+                                ? (_) => setState(() => _googleHovered = true)
+                                : null,
+                            onExit: canGoogle
+                                ? (_) => setState(() => _googleHovered = false)
+                                : null,
+                            child: GestureDetector(
+                              onTap: canGoogle
                                   ? () => _run(
                                         AuthService.instance.signInWithGoogle,
                                       )
                                   : null,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 120),
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  color: !canGoogle
+                                      ? t.badgeFill
+                                      : (_googleHovered
+                                          ? t.text.withValues(alpha: 0.92)
+                                          : t.text),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.g_mobiledata_rounded,
+                                      size: 26,
+                                      color: !canGoogle
+                                          ? t.textSecondary
+                                          : t.bg,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Continue with Google',
+                                      style: TextStyle(
+                                        fontFamily: FfTokens.labelFamily,
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: -0.2,
+                                        color: !canGoogle
+                                            ? t.textSecondary
+                                            : t.bg,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
                           if (!googleReady) ...[
-                            const SizedBox(height: 10),
-                            const Text(
+                            const SizedBox(height: 12),
+                            Text(
                               'Google Sign-In is not configured on this build.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontFamily: FfTokens.fontFamily,
-                                fontSize: 11,
-                                color: AuthUiColors.subtitle,
-                                height: 1.35,
+                                fontSize: 11.5,
+                                color: t.textSecondary,
                               ),
                             ),
                           ],
                           if (_busy) ...[
-                            const SizedBox(height: 22),
-                            const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppTokens.midSlate,
+                            const SizedBox(height: 20),
+                            Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: t.accent,
+                                ),
                               ),
                             ),
                           ],
                           if (widget.onSkipSignIn != null) ...[
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 14),
                             TextButton(
                               onPressed: _busy
                                   ? null
@@ -225,18 +256,19 @@ class _SignInScreenState extends State<SignInScreen> {
                                       await widget.onSkipSignIn?.call();
                                     },
                               style: TextButton.styleFrom(
-                                foregroundColor: AuthUiColors.subtitle,
+                                foregroundColor: t.textSecondary,
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
                                   vertical: 10,
                                 ),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'Skip sign in',
                                 style: TextStyle(
                                   fontFamily: FfTokens.fontFamily,
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w500,
+                                  color: t.textSecondary,
                                 ),
                               ),
                             ),
@@ -244,11 +276,11 @@ class _SignInScreenState extends State<SignInScreen> {
                         ],
                       ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

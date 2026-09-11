@@ -3,8 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import '../theme/auth_ui_constants.dart';
-import 'flo_chrome_header.dart';
+import '../theme/ff_tokens.dart';
 import 'sign_in_screen.dart';
 
 /// Top-level auth gate: [StreamBuilder] on [FirebaseAuth.instance.authStateChanges].
@@ -28,6 +27,7 @@ class _AppAuthShellState extends State<AppAuthShell> {
     }
 
     final skipped = AuthService.instance.signInSkipped;
+    final t = FfTokens.dark;
 
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
@@ -35,25 +35,17 @@ class _AppAuthShellState extends State<AppAuthShell> {
         if (snapshot.connectionState == ConnectionState.waiting &&
             snapshot.data == null &&
             !skipped) {
-          return const Scaffold(
-            backgroundColor: AuthUiColors.scaffold,
-            body: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                FloChromeHeader(),
-                Expanded(
-                  child: Center(
-                    child: SizedBox(
-                      width: 28,
-                      height: 28,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFF4A7A96),
-                      ),
-                    ),
-                  ),
+          return Scaffold(
+            backgroundColor: t.bg,
+            body: Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: t.accent,
                 ),
-              ],
+              ),
             ),
           );
         }
