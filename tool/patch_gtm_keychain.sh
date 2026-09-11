@@ -26,30 +26,43 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-KEYCHAIN_DIR="$ROOT/build/macos/SourcePackages/checkouts/GTMAppAuth/GTMAppAuth/Sources/KeychainStore"
+# Prefer CocoaPods checkouts (current Flutter macOS integration). Fall back to
+# SPM SourcePackages used by older builds.
+if [ -f "$ROOT/macos/Pods/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift" ]; then
+  KEYCHAIN_DIR="$ROOT/macos/Pods/GTMAppAuth/GTMAppAuth/Sources/KeychainStore"
+  GID_SIGNIN="$ROOT/macos/Pods/GoogleSignIn/GoogleSignIn/Sources/GIDSignIn.m"
+  GID_MIGRATION="$ROOT/macos/Pods/GoogleSignIn/GoogleSignIn/Sources/GIDAuthStateMigration/Implementation/GIDAuthStateMigration.m"
+  FIREBASE_AUTH_KEYCHAIN="$ROOT/macos/Pods/FirebaseAuth/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
+  PATCH_SOURCE="CocoaPods"
+else
+  KEYCHAIN_DIR="$ROOT/build/macos/SourcePackages/checkouts/GTMAppAuth/GTMAppAuth/Sources/KeychainStore"
+  GID_SIGNIN="$ROOT/build/macos/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/GIDSignIn.m"
+  GID_MIGRATION="$ROOT/build/macos/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/GIDAuthStateMigration/Implementation/GIDAuthStateMigration.m"
+  FIREBASE_AUTH_KEYCHAIN="$ROOT/build/macos/SourcePackages/checkouts/firebase-ios-sdk/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
+  PATCH_SOURCE="SPM SourcePackages"
+fi
 KEYCHAIN_HELPER="$KEYCHAIN_DIR/KeychainHelper.swift"
 KEYCHAIN_STORE="$KEYCHAIN_DIR/KeychainStore.swift"
-GID_SIGNIN="$ROOT/build/macos/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/GIDSignIn.m"
-GID_MIGRATION="$ROOT/build/macos/SourcePackages/checkouts/GoogleSignIn-iOS/GoogleSignIn/Sources/GIDAuthStateMigration/Implementation/GIDAuthStateMigration.m"
-FIREBASE_AUTH_KEYCHAIN="$ROOT/build/macos/SourcePackages/checkouts/firebase-ios-sdk/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
 
 if [ ! -f "$KEYCHAIN_HELPER" ] || [ ! -f "$KEYCHAIN_STORE" ]; then
   echo "Error: GTMAppAuth not found at expected path." >&2
-  echo "Run 'flutter build macos --release' once to resolve SPM packages, then re-run." >&2
+  echo "Run 'flutter build macos --release' once to resolve packages, then re-run." >&2
   exit 1
 fi
 
 if [ ! -f "$GID_SIGNIN" ] || [ ! -f "$GID_MIGRATION" ]; then
-  echo "Error: GoogleSignIn-iOS not found at expected path." >&2
-  echo "Run 'flutter build macos --release' once to resolve SPM packages, then re-run." >&2
+  echo "Error: GoogleSignIn not found at expected path." >&2
+  echo "Run 'flutter build macos --release' once to resolve packages, then re-run." >&2
   exit 1
 fi
 
 if [ ! -f "$FIREBASE_AUTH_KEYCHAIN" ]; then
   echo "Error: FirebaseAuth not found at expected path." >&2
-  echo "Run 'flutter build macos --release' once to resolve SPM packages, then re-run." >&2
+  echo "Run 'flutter build macos --release' once to resolve packages, then re-run." >&2
   exit 1
 fi
+
+echo "Patching Google Sign-In keychain sources from $PATCH_SOURCE..."
 
 chmod u+w "$KEYCHAIN_HELPER" "$KEYCHAIN_STORE" "$GID_SIGNIN" "$GID_MIGRATION" "$FIREBASE_AUTH_KEYCHAIN" 2>/dev/null || true
 

@@ -65,14 +65,57 @@ fi
 touch "macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json" 2>/dev/null || true
 
 # 2) Build
-# Apply the GTMAppAuth keychain patch first so Google Sign-In works on macOS 26
-# Developer ID builds (file-based login keychain, no provisioning profile needed).
-# Must run BEFORE flutter build since the Swift packages compile during the build.
-if [ -f "$SCRIPT_DIR/tool/patch_gtm_keychain.sh" ]; then
-  "$SCRIPT_DIR/tool/patch_gtm_keychain.sh" || true
-fi
-echo "Building macOS app..."
+# Apply the GTMAppAuth / Firebase Auth keychain patch so Google Sign-In works on
+# macOS Developer ID builds (file-based login keychain, no provisioning profile).
+# Packages must already be resolved — patching before resolve is a no-op and was
+# why 2.0.0 shipped without the fix.
+ensure_macos_keychain_patch() {
+  local pods_helper="$SCRIPT_DIR/macos/Pods/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"
+  local spm_helper="$SCRIPT_DIR/build/macos/SourcePackages/checkouts/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"
+  if [ ! -f "$pods_helper" ] && [ ! -f "$spm_helper" ]; then
+    echo "Fetching macOS packages (first compile; keychain patch applied after)..."
+    flutter build macos --release \
+      --build-name="$SHORT_VERSION" \
+      --build-number="$SPARKLE_VERSION" || true
+  fi
+  if [ ! -f "$SCRIPT_DIR/tool/patch_gtm_keychain.sh" ]; then
+    echo "Error: tool/patch_gtm_keychain.sh missing." >&2
+    exit 1
+  fi
+  "$SCRIPT_DIR/tool/patch_gtm_keychain.sh"
+}
+
+keychain_patch_present() {
+  local pods_helper="$SCRIPT_DIR/macos/Pods/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"
+  local pods_firebase="$SCRIPT_DIR/macos/Pods/FirebaseAuth/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
+  local spm_helper="$SCRIPT_DIR/build/macos/SourcePackages/checkouts/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"
+  local spm_firebase="$SCRIPT_DIR/build/macos/SourcePackages/checkouts/firebase-ios-sdk/FirebaseAuth/Sources/Swift/Storage/AuthKeychainServices.swift"
+  if [ -f "$pods_helper" ] && [ -f "$pods_firebase" ]; then
+    grep -q 'FloFile patch' "$pods_helper" && grep -q 'FloFile patch' "$pods_firebase"
+    return $?
+  fi
+  if [ -f "$spm_helper" ] && [ -f "$spm_firebase" ]; then
+    grep -q 'FloFile patch' "$spm_helper" && grep -q 'FloFile patch' "$spm_firebase"
+    return $?
+  fi
+  return 1
+}
+
+ensure_macos_keychain_patch
+echo "Building macOS app with keychain patch..."
 flutter build macos --release --build-name="$SHORT_VERSION" --build-number="$SPARKLE_VERSION"
+
+# flutter build can refresh SPM checkouts; re-patch + rebuild once if needed.
+if ! keychain_patch_present; then
+  echo "Keychain patch missing after build — re-applying and rebuilding..."
+  ensure_macos_keychain_patch
+  flutter build macos --release --build-name="$SHORT_VERSION" --build-number="$SPARKLE_VERSION"
+fi
+if ! keychain_patch_present; then
+  echo "Error: keychain patch did not stick. Aborting release." >&2
+  exit 1
+fi
+echo "Keychain patch verified in SPM sources."
 
 # 3) ExifTool libs
 RES_DIR="$APP_PATH/Contents/Resources"
