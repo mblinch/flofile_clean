@@ -69,14 +69,20 @@ touch "macos/Runner/Assets.xcassets/AppIcon.appiconset/Contents.json" 2>/dev/nul
 # macOS Developer ID builds (file-based login keychain, no provisioning profile).
 # Packages must already be resolved — patching before resolve is a no-op and was
 # why 2.0.0 shipped without the fix.
+# FloFile 2.x ships Caption V2 by default (see caption_v2_flag.dart).
+FLUTTER_MACOS_RELEASE_ARGS=(
+  build macos --release
+  --build-name="$SHORT_VERSION"
+  --build-number="$SPARKLE_VERSION"
+  --dart-define=CAPTION_V2=true
+)
+
 ensure_macos_keychain_patch() {
   local pods_helper="$SCRIPT_DIR/macos/Pods/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"
   local spm_helper="$SCRIPT_DIR/build/macos/SourcePackages/checkouts/GTMAppAuth/GTMAppAuth/Sources/KeychainStore/KeychainHelper.swift"
   if [ ! -f "$pods_helper" ] && [ ! -f "$spm_helper" ]; then
     echo "Fetching macOS packages (first compile; keychain patch applied after)..."
-    flutter build macos --release \
-      --build-name="$SHORT_VERSION" \
-      --build-number="$SPARKLE_VERSION" || true
+    flutter "${FLUTTER_MACOS_RELEASE_ARGS[@]}" || true
   fi
   if [ ! -f "$SCRIPT_DIR/tool/patch_gtm_keychain.sh" ]; then
     echo "Error: tool/patch_gtm_keychain.sh missing." >&2
@@ -103,13 +109,13 @@ keychain_patch_present() {
 
 ensure_macos_keychain_patch
 echo "Building macOS app with keychain patch..."
-flutter build macos --release --build-name="$SHORT_VERSION" --build-number="$SPARKLE_VERSION"
+flutter "${FLUTTER_MACOS_RELEASE_ARGS[@]}"
 
 # flutter build can refresh SPM checkouts; re-patch + rebuild once if needed.
 if ! keychain_patch_present; then
   echo "Keychain patch missing after build — re-applying and rebuilding..."
   ensure_macos_keychain_patch
-  flutter build macos --release --build-name="$SHORT_VERSION" --build-number="$SPARKLE_VERSION"
+  flutter "${FLUTTER_MACOS_RELEASE_ARGS[@]}"
 fi
 if ! keychain_patch_present; then
   echo "Error: keychain patch did not stick. Aborting release." >&2
