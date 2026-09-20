@@ -91,13 +91,9 @@ class _SignInScreenState extends State<SignInScreen> {
                   children: [
                     Text(
                       'FLO FILE',
-                      style: TextStyle(
-                        fontFamily: FfTokens.labelFamily,
-                        fontSize: 34,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 2.4,
-                        height: 1,
+                      style: FfTokens.captionTitle.copyWith(
                         color: t.text,
+                        fontSize: 34,
                       ),
                     ),
                     const SizedBox(height: 14),

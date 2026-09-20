@@ -7,6 +7,7 @@ import '../data/effective_verb_catalog.dart';
 import '../widgets/base_row.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/celebration_dropdown.dart';
+import 'caption_v2_verb_editor.dart';
 
 /// Default no-scroll verb accordion (Favorites kept as a category).
 class DefaultVerbAccordion extends StatefulWidget {
@@ -22,11 +23,11 @@ class DefaultVerbAccordion extends StatefulWidget {
   final VoidCallback? onVerbArmed;
 
   static const headerH = 32.0;
-  static const verbRowH = 22.0;
+  static const verbRowH = 24.0;
   static const laneHeaderH = 28.0;
   static const categoryFontSize = 15.0;
-  static const verbFontSize = 12.0;
-  static const verbHoverFontSize = 14.0;
+  static const verbFontSize = 13.5;
+  static const verbHoverFontSize = 17.0;
 
   @override
   State<DefaultVerbAccordion> createState() => DefaultVerbAccordionState();
@@ -581,7 +582,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
     BuildContext context,
     TapDownDetails details,
   ) async {
-    final action = await showMenu<String>(
+    final action = await showCaptionV2PopupMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         details.globalPosition.dx,
@@ -598,8 +599,8 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
           value: 'pin',
           child: Text(
             controller.isVerbPinned(verb.key)
-                ? 'Unpin'
-                : 'Pin for session',
+                ? 'Unpin Verb'
+                : 'Pin Verb',
           ),
         ),
         const PopupMenuItem(value: 'edit', child: Text('Edit verb…')),
@@ -647,7 +648,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
               onSecondaryTapDown: (details) => _contextMenu(context, details),
               child: Container(
                 height: widget.rowHeight,
-                padding: const EdgeInsets.only(left: 12, right: 10),
+                padding: const EdgeInsets.only(left: 12, right: 4),
                 decoration: BoxDecoration(
                   border: armed
                       ? Border.symmetric(
@@ -690,13 +691,32 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                           color: tokens.accent,
                         ),
                       ),
+                    IconButton(
+                      onPressed: () => controller.toggleVerbPin(verb.key),
+                      tooltip: controller.isVerbPinned(verb.key)
+                          ? 'Unpin for next frames'
+                          : 'Pin for next frames',
+                      padding: EdgeInsets.zero,
+                      constraints:
+                          const BoxConstraints.tightFor(width: 28, height: 24),
+                      visualDensity: VisualDensity.compact,
+                      iconSize: 14,
+                      color: controller.isVerbPinned(verb.key)
+                          ? tokens.accent
+                          : tokens.textSecondary.withValues(alpha: 0.55),
+                      icon: Icon(
+                        controller.isVerbPinned(verb.key)
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
           ),
         ),
-        if (showRbi || showBase || showCelebration)
+        if (armed)
           VerbExtrasPanel(
             controller: controller,
             verbKey: verb.key,
@@ -710,7 +730,8 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
   }
 }
 
-/// Nested RUNNERS ON / BASE / REACTION panel under an armed verb.
+/// Nested RUNNERS ON / BASE / REACTION panel under an armed verb,
+/// ending with Save / FTP once the option rows are shown.
 class VerbExtrasPanel extends StatelessWidget {
   const VerbExtrasPanel({
     super.key,
@@ -729,11 +750,24 @@ class VerbExtrasPanel extends StatelessWidget {
   final bool showCelebration;
   final FfTokens tokens;
 
+  bool get _hasOptionRows => showRbi || showBase || showCelebration;
+
+  bool get _optionsComplete {
+    if (showRbi && verbKey == 'Home Run' && controller.rbi < 1) return false;
+    if (showBase &&
+        (controller.selectedBase == null ||
+            controller.selectedBase!.trim().isEmpty)) {
+      return false;
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final homeRun = verbKey == 'Home Run';
     final reactionChips = controller.reactionOptionsFor(verbKey);
     final celebrationTypes = controller.celebrationTypeOptionsFor(verbKey);
+    final showActions = !_hasOptionRows || _optionsComplete;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 10, 8),
@@ -795,7 +829,89 @@ class VerbExtrasPanel extends StatelessWidget {
                 selected: controller.celebrationType,
                 onChanged: controller.setCelebrationType,
               ),
+            if (showActions) ...[
+              if (_hasOptionRows) ...[
+                const SizedBox(height: 8),
+                Divider(height: 1, thickness: 1, color: tokens.divider),
+                const SizedBox(height: 8),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: _VerbActionButton(
+                      label: 'Save',
+                      tokens: tokens,
+                      emphasized: !controller.ftpModeEnabled,
+                      onTap: () => controller.saveOrTransmitFromVerbMenu(
+                        transmit: false,
+                      ),
+                    ),
+                  ),
+                  if (controller.ftpModeEnabled) ...[
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: _VerbActionButton(
+                        label: 'FTP',
+                        tokens: tokens,
+                        emphasized: true,
+                        onTap: () => controller.saveOrTransmitFromVerbMenu(
+                          transmit: true,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VerbActionButton extends StatelessWidget {
+  const _VerbActionButton({
+    required this.label,
+    required this.tokens,
+    required this.emphasized,
+    required this.onTap,
+  });
+
+  final String label;
+  final FfTokens tokens;
+  final bool emphasized;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: emphasized
+          ? tokens.accent.withValues(alpha: 0.22)
+          : tokens.selectedFill,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: emphasized
+                  ? tokens.accent.withValues(alpha: 0.65)
+                  : tokens.divider,
+            ),
+          ),
+          child: Text(
+            label,
+            style: tokens.labelStyle.copyWith(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: tokens.text,
+            ),
+          ),
         ),
       ),
     );

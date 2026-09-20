@@ -159,15 +159,17 @@ Future<void> showCaptionV2PhotoMenu({
         Icons.brush_outlined,
       ),
       const PopupMenuDivider(height: 1),
-      if (sent)
-        item(
-          _PhotoAction.clearFtp,
-          'Remove FTP Status',
-          Icons.cloud_done_outlined,
-        )
-      else
-        item(_PhotoAction.ftp, 'FTP Image', Icons.cloud_upload_outlined),
-      const PopupMenuDivider(height: 1),
+      if (controller.ftpModeEnabled) ...[
+        if (sent)
+          item(
+            _PhotoAction.clearFtp,
+            'Remove FTP Status',
+            Icons.cloud_done_outlined,
+          )
+        else
+          item(_PhotoAction.ftp, 'FTP Image', Icons.cloud_upload_outlined),
+        const PopupMenuDivider(height: 1),
+      ],
       item(_PhotoAction.reveal, 'Open in Finder', Icons.open_in_new_rounded),
       item(
         _PhotoAction.rename,

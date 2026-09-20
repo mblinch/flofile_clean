@@ -23,12 +23,13 @@ class VerbEditPluralPhraseField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = appDialogTokens(context);
     return AppDialogLabeledField(
       label: 'Plural phrase (2+ players)',
       bottomGap: bottomGap,
       labelLeading: AppCompactCheckbox(
         value: usePluralPhrase,
-        accentColor: kFloTealLight,
+        accentColor: t?.accent ?? kFloTealLight,
         onChanged: onUsePluralChanged,
         minTapTargetSize: 14,
       ),
@@ -37,14 +38,15 @@ class VerbEditPluralPhraseField extends StatelessWidget {
         child: TextField(
           controller: pluralController,
           enabled: usePluralPhrase,
-          style: kAppDialogFieldTextStyle.copyWith(
-            color: usePluralPhrase
-                ? kAppDialogFieldTextStyle.color
-                : const Color(0xFFB0B0B0),
+          style: appDialogFieldTextStyleOf(
+            context,
+            enabled: usePluralPhrase,
           ),
           onChanged: onPluralChanged,
           decoration: appDialogBareFieldDecoration(
             hintText: 'e.g., hit a single, skate, celebrate',
+          ).copyWith(
+            hintStyle: appDialogHintStyleOf(context),
           ),
         ),
       ),

@@ -2,12 +2,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../caption_style/verb_sub_options.dart';
 import '../../../theme/ff_tokens.dart';
-import '../../../widgets/full_verb_edit_dialog.dart';
+import '../../../services/mac_spell_check_service.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
 import '../widgets/verb_tile.dart';
+import 'caption_v2_verb_editor.dart';
 import 'roster_column.dart';
 import 'verb_accordion.dart';
 
@@ -51,122 +51,11 @@ class _VerbsColumnState extends State<VerbsColumn> {
     String initialVerb, {
     bool createOnOpen = false,
   }) async {
-    final categories =
-        _categories.where((category) => category != 'Favorites').toList();
-    if (categories.isEmpty) return;
-    final definitions = controller.verbDefinitionsByCategory;
-    await showDialog<void>(
-      context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.45),
-      builder: (context) => FullVerbEditDialog(
-        initialVerb: initialVerb,
-        createOnOpen: createOnOpen,
-        sport: controller.sport,
-        categories: categories,
-        verbsByCategory: {
-          for (final category in categories)
-            category: (definitions[category] ?? const <EffectiveVerb>[])
-                .map((verb) => verb.key)
-                .toList(),
-        },
-        favoriteVerbs: Set<String>.from(controller.verbCatalog.favoriteKeys),
-        loadInitialData: controller.verbEditorInitialData,
-        hasSavedDefault: (_) => false,
-        isAdmin: false,
-        homeTeamName: controller.homeTeam,
-        awayTeamName: controller.awayTeam,
-        homePlayer1Name: controller.homeRoster.isEmpty
-            ? null
-            : controller.homeRoster.first.fullName,
-        homePlayer1Jersey: controller.homeRoster.isEmpty
-            ? null
-            : controller.homeRoster.first.jerseyNumber,
-        awaySampleName: controller.awayRoster.isEmpty
-            ? null
-            : controller.awayRoster.first.fullName,
-        awaySampleJersey: controller.awayRoster.isEmpty
-            ? null
-            : controller.awayRoster.first.jerseyNumber,
-        isCustomVerb: (verb) =>
-            controller.verbDefinition(verb)?.isCustom == true,
-        onFavoriteChanged: (verb, _) => controller.toggleVerbFavorite(verb),
-        onCategoryOrderChanged: controller.saveCategoryOrder,
-        onVerbOrderChanged: controller.saveVerbOrder,
-        onReset: controller.resetBuiltInVerb,
-        onCreateCustomVerb: ({
-          required String label,
-          required String singular,
-          required String pluralText,
-          required String ingText,
-          required bool usePluralPhrase,
-          required List<String> keywords,
-          required bool wantsOpponent,
-          required String selectedCategory,
-          required VerbSubOptions subOptions,
-        }) =>
-            controller.createCustomVerb(
-          label: label,
-          singular: singular,
-          pluralText: pluralText,
-          ingText: ingText,
-          usePluralPhrase: usePluralPhrase,
-          keywords: keywords,
-          wantsOpponent: wantsOpponent,
-          category: selectedCategory,
-          subOptions: subOptions,
-        ),
-        onUpdateCustomVerb: ({
-          required String previousLabel,
-          required String label,
-          required String singular,
-          required String pluralText,
-          required String ingText,
-          required bool usePluralPhrase,
-          required List<String> keywords,
-          required bool wantsOpponent,
-          required String selectedCategory,
-          required VerbSubOptions subOptions,
-        }) =>
-            controller.updateCustomVerb(
-          previousLabel: previousLabel,
-          label: label,
-          singular: singular,
-          pluralText: pluralText,
-          ingText: ingText,
-          usePluralPhrase: usePluralPhrase,
-          keywords: keywords,
-          wantsOpponent: wantsOpponent,
-          category: selectedCategory,
-          subOptions: subOptions,
-        ),
-        onSave: ({
-          required String overrideKey,
-          required String newLabel,
-          required String newSingular,
-          required String pluralText,
-          required String ingText,
-          required bool usePluralPhrase,
-          required List<String> keywords,
-          required bool wantsOpponent,
-          required String selectedCategory,
-          required VerbSubOptions subOptions,
-          required bool asDefault,
-          required bool asAppDefault,
-        }) =>
-            controller.saveBuiltInVerb(
-          key: overrideKey,
-          label: newLabel,
-          singular: newSingular,
-          pluralText: pluralText,
-          ingText: ingText,
-          usePluralPhrase: usePluralPhrase,
-          keywords: keywords,
-          wantsOpponent: wantsOpponent,
-          category: selectedCategory,
-          subOptions: subOptions,
-          asDefault: asDefault,
-        ),
-      ),
+    await showCaptionV2VerbEditor(
+      context,
+      controller,
+      initialVerb,
+      createOnOpen: createOnOpen,
     );
     if (mounted) setState(() {});
   }
@@ -249,14 +138,22 @@ class _VerbsColumnState extends State<VerbsColumn> {
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final categories = _categories;
-    if (!_customVerbFocusNode.hasFocus &&
-        _customVerbController.text != controller.customVerbPhrase) {
-      _customVerbController.value = TextEditingValue(
-        text: controller.customVerbPhrase,
-        selection: TextSelection.collapsed(
-          offset: controller.customVerbPhrase.length,
-        ),
-      );
+    final displayCustom = controller.customVerbPinned &&
+            controller.customVerbPhrase.trim().isEmpty
+        ? controller.lastCustomVerbPhrase
+        : controller.customVerbPhrase;
+    if (_customVerbController.text != displayCustom) {
+      // Apply clears even while focused so save/navigation empty the box.
+      // When a custom verb is pinned but temporarily overridden by a catalog
+      // verb, keep showing the pinned phrase in the field.
+      if (!_customVerbFocusNode.hasFocus ||
+          displayCustom.isEmpty ||
+          controller.customVerbPinned) {
+        _customVerbController.value = TextEditingValue(
+          text: displayCustom,
+          selection: TextSelection.collapsed(offset: displayCustom.length),
+        );
+      }
     }
 
     return Focus(
@@ -320,6 +217,21 @@ class _VerbsColumnState extends State<VerbsColumn> {
                                 onVerbArmed: _columnFocusNode.requestFocus,
                               ),
                             ),
+                    ),
+                    Divider(height: 1, color: t.divider),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                      child: _CustomVerbField(
+                        textController: _customVerbController,
+                        focusNode: _customVerbFocusNode,
+                        tokens: t,
+                        pinned: controller.customVerbPinned,
+                        canUseLast:
+                            controller.lastCustomVerbPhrase.trim().isNotEmpty,
+                        onChanged: controller.setCustomVerbPhrase,
+                        onTogglePin: controller.toggleCustomVerbPin,
+                        onUseLast: controller.useLastCustomVerb,
+                      ),
                     ),
                   ],
                 ),
@@ -639,7 +551,7 @@ class _VerbWheelState extends State<_VerbWheel> {
                     physics: const FixedExtentScrollPhysics(),
                     overAndUnderCenterOpacity: 0.48,
                     useMagnifier: true,
-                    magnification: 1.3,
+                    magnification: 1.06,
                     onSelectedItemChanged: (index) {
                       setState(() => _centerIndex = index);
                     },
@@ -1035,7 +947,7 @@ class _VerbListItem extends StatelessWidget {
     TapDownDetails details,
   ) async {
     final controller = this.controller;
-    final action = await showMenu<String>(
+    final action = await showCaptionV2PopupMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         details.globalPosition.dx,
@@ -1047,8 +959,8 @@ class _VerbListItem extends StatelessWidget {
         PopupMenuItem(
             value: 'pin',
             child: Text(controller.isVerbPinned(verb.key)
-                ? 'Unpin'
-                : 'Pin for session')),
+                ? 'Unpin Verb'
+                : 'Pin Verb')),
         PopupMenuItem(
             value: 'favorite',
             child: Text(verb.isFavorite ? 'Remove favorite' : 'Add favorite')),
@@ -1123,9 +1035,10 @@ class _VerbListItem extends StatelessWidget {
             onVerbTap();
             controller.selectVerb(verb.key);
           },
+          onPinTap: () => controller.toggleVerbPin(verb.key),
           onSecondaryTapDown: (details) => _showContextMenu(context, details),
         ),
-        if (showRbi || showBase || showCelebration)
+        if (selected)
           VerbExtrasPanel(
             controller: controller,
             verbKey: verb.key,
@@ -1212,6 +1125,7 @@ class _CustomVerbField extends StatelessWidget {
               focusNode: focusNode,
               readOnly: pinned,
               onChanged: onChanged,
+              spellCheckConfiguration: floSpellCheckConfiguration(),
               style: tokens.labelStyle.copyWith(
                 fontSize: 11.5,
                 color: tokens.text,

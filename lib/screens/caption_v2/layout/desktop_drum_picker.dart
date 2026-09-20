@@ -3,36 +3,51 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../services/mlb_api_service.dart';
+import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
 import '../widgets/base_row.dart';
 import '../widgets/celebration_dropdown.dart';
 import '../widgets/rbi_row.dart';
+import 'caption_v2_verb_editor.dart';
 
 enum DrumLane { home, verbs, away }
 
 enum DrumPickerMode { scroll, infinite }
 
-class DesktopDrumPicker extends StatefulWidget {
-  const DesktopDrumPicker({
+/// Desktop shows all three lanes; mobile swipes one lane at a time.
+enum DrumLayout { sideBySide, paged }
+
+/// Shared drum UI for desktop (side-by-side) and mobile (paged swipe).
+class DrumPicker extends StatefulWidget {
+  const DrumPicker({
     super.key,
     required this.controller,
     this.mode = DrumPickerMode.scroll,
+    this.layout = DrumLayout.sideBySide,
     this.onModeChanged,
-    required this.onExit,
+    this.onExit,
+    this.pageController,
+    this.onPageChanged,
   });
 
   final CaptionV2Controller controller;
   final DrumPickerMode mode;
+  final DrumLayout layout;
   final ValueChanged<DrumPickerMode>? onModeChanged;
-  final VoidCallback onExit;
+  final VoidCallback? onExit;
+  final PageController? pageController;
+  final ValueChanged<int>? onPageChanged;
 
   @override
-  State<DesktopDrumPicker> createState() => _DesktopDrumPickerState();
+  State<DrumPicker> createState() => _DrumPickerState();
 }
 
-class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
+/// Back-compat alias for existing desktop call sites and tests.
+typedef DesktopDrumPicker = DrumPicker;
+
+class _DrumPickerState extends State<DrumPicker> {
   DrumLane _armedLane = DrumLane.verbs;
   int _homeIndex = 0;
   int _verbIndex = 0;
@@ -42,6 +57,8 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
   bool _verbAccordionCollapsed = false;
   final _homeFilter = TextEditingController();
   final _awayFilter = TextEditingController();
+  final _customVerbController = TextEditingController();
+  final _customVerbFocusNode = FocusNode(debugLabel: 'Drum custom verb');
 
   CaptionV2Controller get controller => widget.controller;
 
@@ -95,6 +112,7 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
   void initState() {
     super.initState();
     controller.addListener(_onController);
+    _customVerbController.text = controller.customVerbPhrase;
     _homeIndex = _selectedPlayerIndex(controller.homeRoster, true);
     _awayIndex = _selectedPlayerIndex(controller.awayRoster, false);
     _verbIndex = _selectedVerbIndex();
@@ -105,12 +123,33 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
     controller.removeListener(_onController);
     _homeFilter.dispose();
     _awayFilter.dispose();
+    _customVerbController.dispose();
+    _customVerbFocusNode.dispose();
     super.dispose();
   }
 
   void _onController() {
     if (!mounted) return;
+    _syncCustomVerbField();
     setState(() {});
+  }
+
+  void _syncCustomVerbField() {
+    final next = controller.customVerbPinned &&
+            controller.customVerbPhrase.trim().isEmpty
+        ? controller.lastCustomVerbPhrase
+        : controller.customVerbPhrase;
+    if (_customVerbController.text == next) return;
+    // Apply clears even while focused so save / next-frame empty the box.
+    // Keep pinned custom text visible while a catalog verb is selected.
+    if (!_customVerbFocusNode.hasFocus ||
+        next.isEmpty ||
+        controller.customVerbPinned) {
+      _customVerbController.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: next.length),
+      );
+    }
   }
 
   int _selectedPlayerIndex(List<Player> players, bool isHome) {
@@ -291,16 +330,34 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
     });
   }
 
-  void _arm(DrumLane lane) {
+  void _arm(DrumLane lane, {bool syncPage = true}) {
+    if (controller.singleTeamMode && lane == DrumLane.away) {
+      lane = DrumLane.verbs;
+    }
     if (_armedLane == lane) return;
     setState(() => _armedLane = lane);
     controller.setColumnFocus(lane.index);
+    if (syncPage &&
+        widget.layout == DrumLayout.paged &&
+        widget.pageController != null &&
+        widget.pageController!.hasClients &&
+        widget.pageController!.page?.round() != lane.index) {
+      widget.pageController!.animateToPage(
+        lane.index,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   void _moveGate(int delta) {
-    final next =
-        (_armedLane.index + delta).clamp(0, DrumLane.values.length - 1);
-    _arm(DrumLane.values[next]);
+    final lanes = controller.singleTeamMode
+        ? const [DrumLane.home, DrumLane.verbs]
+        : DrumLane.values;
+    var i = lanes.indexOf(_armedLane);
+    if (i < 0) i = 1;
+    final next = (i + delta).clamp(0, lanes.length - 1);
+    _arm(lanes[next]);
   }
 
   void _commit(DrumLane lane, [int? checkedIndex]) {
@@ -363,7 +420,7 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.escape) {
-      widget.onExit();
+      widget.onExit?.call();
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -389,64 +446,92 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
   }
 
   @override
-  void didUpdateWidget(covariant DesktopDrumPicker oldWidget) {
+  void didUpdateWidget(covariant DrumPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.mode != widget.mode) {
       _verbIndex = _selectedVerbIndex();
     }
   }
 
+  List<Widget> _laneChildren(FfTokens tokens) {
+    final lanes = <Widget>[
+      _columnShell(
+        tokens: tokens,
+        armed: _armedLane == DrumLane.home,
+        child: _rosterLane(
+          tokens: tokens,
+          lane: DrumLane.home,
+          title: controller.homeAbbr,
+          players: controller.homeRoster,
+          selectedIndex: _homeIndex,
+        ),
+      ),
+      _columnShell(
+        tokens: tokens,
+        armed: _armedLane == DrumLane.verbs,
+        child: _verbLane(tokens),
+      ),
+    ];
+    if (!controller.singleTeamMode) {
+      lanes.add(
+        _columnShell(
+          tokens: tokens,
+          armed: _armedLane == DrumLane.away,
+          child: _rosterLane(
+            tokens: tokens,
+            lane: DrumLane.away,
+            title: controller.awayAbbr,
+            players: controller.awayRoster,
+            selectedIndex: _awayIndex,
+          ),
+        ),
+      );
+    }
+    return lanes;
+  }
+
   @override
   Widget build(BuildContext context) {
     _repairIndices();
+    if (controller.singleTeamMode && _armedLane == DrumLane.away) {
+      _armedLane = DrumLane.verbs;
+    }
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final lanes = _laneChildren(tokens);
+    final body = widget.layout == DrumLayout.paged
+        ? PageView(
+            key: ValueKey(
+              controller.singleTeamMode
+                  ? 'paged-drum-picker-single'
+                  : 'paged-drum-picker',
+            ),
+            controller: widget.pageController,
+            onPageChanged: (index) {
+              final max = lanes.length - 1;
+              final lane = DrumLane.values[index.clamp(0, max)];
+              _arm(lane, syncPage: false);
+              widget.onPageChanged?.call(index);
+            },
+            children: lanes,
+          )
+        : Row(
+            key: ValueKey(
+              controller.singleTeamMode
+                  ? 'desktop-drum-picker-single'
+                  : 'desktop-drum-picker',
+            ),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < lanes.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(flex: 100, child: lanes[i]),
+              ],
+            ],
+          );
     return Focus(
-      autofocus: true,
+      autofocus: widget.layout == DrumLayout.sideBySide,
       onKeyEvent: _handleKey,
-      child: Row(
-        key: const ValueKey('desktop-drum-picker'),
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            flex: 100,
-            child: _columnShell(
-              tokens: tokens,
-              armed: _armedLane == DrumLane.home,
-              child: _rosterLane(
-                tokens: tokens,
-                lane: DrumLane.home,
-                title: controller.homeAbbr,
-                players: controller.homeRoster,
-                selectedIndex: _homeIndex,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 100,
-            child: _columnShell(
-              tokens: tokens,
-              armed: _armedLane == DrumLane.verbs,
-              child: _verbLane(tokens),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 100,
-            child: _columnShell(
-              tokens: tokens,
-              armed: _armedLane == DrumLane.away,
-              child: _rosterLane(
-                tokens: tokens,
-                lane: DrumLane.away,
-                title: controller.awayAbbr,
-                players: controller.awayRoster,
-                selectedIndex: _awayIndex,
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: body,
     );
   }
 
@@ -579,7 +664,9 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
               ),
             ),
           ],
-          if (lane == DrumLane.verbs) ...[
+          if (lane == DrumLane.verbs &&
+              widget.onModeChanged != null &&
+              widget.layout == DrumLayout.sideBySide) ...[
             Tooltip(
               message: 'Default',
               child: InkWell(
@@ -728,7 +815,7 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
     final scrubber = _RosterScrubber(
       players: players,
       activeIndex: selectedIndex,
-      onLeft: lane == DrumLane.home,
+      onLeft: true,
       activeLetter:
           widget.mode == DrumPickerMode.scroll ? (letterFilter ?? '#') : null,
       armed: _armedLane == lane,
@@ -737,9 +824,15 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
         if (widget.mode == DrumPickerMode.scroll) {
           setState(() {
             if (lane == DrumLane.home) {
-              _homeLetterFilter = letter == '#' ? null : letter;
+              _homeLetterFilter =
+                  (letter == '#' || _homeLetterFilter == letter)
+                      ? null
+                      : letter;
             } else {
-              _awayLetterFilter = letter == '#' ? null : letter;
+              _awayLetterFilter =
+                  (letter == '#' || _awayLetterFilter == letter)
+                      ? null
+                      : letter;
             }
           });
         }
@@ -753,9 +846,8 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
         Expanded(
           child: Row(
             children: [
-              if (lane == DrumLane.home) scrubber,
+              scrubber,
               playerList(),
-              if (lane == DrumLane.away) scrubber,
             ],
           ),
         ),
@@ -866,7 +958,138 @@ class _DesktopDrumPickerState extends State<DesktopDrumPicker> {
       children: [
         _header(tokens, DrumLane.verbs, 'VERBS'),
         Expanded(child: verbBody()),
+        Divider(height: 1, color: tokens.divider),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+          child: _DrumCustomVerbField(
+            textController: _customVerbController,
+            focusNode: _customVerbFocusNode,
+            tokens: tokens,
+            pinned: controller.customVerbPinned,
+            canUseLast: controller.lastCustomVerbPhrase.trim().isNotEmpty,
+            onChanged: controller.setCustomVerbPhrase,
+            onTogglePin: controller.toggleCustomVerbPin,
+            onUseLast: controller.useLastCustomVerb,
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _DrumCustomVerbField extends StatelessWidget {
+  const _DrumCustomVerbField({
+    required this.textController,
+    required this.focusNode,
+    required this.tokens,
+    required this.pinned,
+    required this.canUseLast,
+    required this.onChanged,
+    required this.onTogglePin,
+    required this.onUseLast,
+  });
+
+  final TextEditingController textController;
+  final FocusNode focusNode;
+  final FfTokens tokens;
+  final bool pinned;
+  final bool canUseLast;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onTogglePin;
+  final VoidCallback onUseLast;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 28,
+      decoration: BoxDecoration(
+        color: tokens.badgeFill,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: pinned ? tokens.accent : tokens.divider,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: textController,
+              focusNode: focusNode,
+              readOnly: pinned,
+              onChanged: onChanged,
+              spellCheckConfiguration: floSpellCheckConfiguration(),
+              style: tokens.labelStyle.copyWith(
+                fontSize: 11.5,
+                color: tokens.text,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'Custom verb',
+                hintStyle: tokens.labelStyle.copyWith(
+                  fontSize: 11.5,
+                  color: tokens.textSecondary,
+                ),
+                contentPadding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+                border: InputBorder.none,
+              ),
+            ),
+          ),
+          _DrumCustomVerbAction(
+            icon: Icons.history,
+            tooltip: 'Use last custom verb',
+            tokens: tokens,
+            enabled: canUseLast,
+            onTap: onUseLast,
+          ),
+          _DrumCustomVerbAction(
+            icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+            tooltip: pinned ? 'Unpin custom verb' : 'Pin custom verb',
+            tokens: tokens,
+            enabled: textController.text.trim().isNotEmpty,
+            selected: pinned,
+            onTap: onTogglePin,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DrumCustomVerbAction extends StatelessWidget {
+  const _DrumCustomVerbAction({
+    required this.icon,
+    required this.tooltip,
+    required this.tokens,
+    required this.enabled,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final FfTokens tokens;
+  final bool enabled;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: SizedBox(
+          width: 25,
+          height: 28,
+          child: Icon(
+            icon,
+            size: 14,
+            color: enabled
+                ? (selected ? tokens.accent : tokens.textSecondary)
+                : tokens.divider,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -889,10 +1112,11 @@ class _VerbAccordion extends StatelessWidget {
 
   static const preferredHeaderHeight = 34.0;
   static const minHeaderHeight = 28.0;
-  static const rowHeight = 20.0;
+  static const rowHeight = 24.0;
   static const rbiExtrasHeight = 32.0;
   static const baseExtrasHeight = 32.0;
   static const celebrationExtrasHeight = 32.0;
+  static const actionExtrasHeight = 36.0;
   static const extrasDividerHeight = 8.0;
 
   final CaptionV2Controller controller;
@@ -915,15 +1139,20 @@ class _VerbAccordion extends StatelessWidget {
 
   double _extrasHeightFor(String? key) {
     if (key == null) return 0;
-    var height = 0.0;
+    var height = extrasDividerHeight;
     final needsRbi = controller.verbNeedsRbi(key);
     final needsBase = controller.verbNeedsBase(key);
     final needsCelebration = controller.verbNeedsCelebration(key);
-    if (!needsRbi && !needsBase && !needsCelebration) return 0;
-    height += extrasDividerHeight;
     if (needsRbi) height += rbiExtrasHeight;
     if (needsBase) height += baseExtrasHeight;
     if (needsCelebration) height += celebrationExtrasHeight;
+    final optionsPending = (needsRbi &&
+            key == 'Home Run' &&
+            controller.rbi < 1) ||
+        (needsBase &&
+            (controller.selectedBase == null ||
+                controller.selectedBase!.trim().isEmpty));
+    if (!optionsPending) height += actionExtrasHeight;
     return height;
   }
 
@@ -1092,7 +1321,7 @@ class _VerbAccordionSection extends StatelessWidget {
                   armed: armed,
                   tokens: tokens,
                   leadingPadding: 34,
-                  fontSize: 12,
+                  fontSize: 13.5,
                   onVerbArmed: onVerbArmed,
                   onToggleFavorite: onToggleFavorite,
                 )
@@ -1115,7 +1344,7 @@ class _VerbRows extends StatefulWidget {
     required this.onVerbArmed,
     required this.onToggleFavorite,
     this.leadingPadding = 26,
-    this.fontSize = 12,
+    this.fontSize = 13.5,
     this.scrollable = false,
   });
 
@@ -1183,6 +1412,7 @@ class _VerbRowsState extends State<_VerbRows> {
 
     return _HoverVerbBlock(
       key: ValueKey('verb-hover-${verb.key}'),
+      controller: widget.controller,
       selected: selected,
       committed: committed,
       verb: verb,
@@ -1233,6 +1463,7 @@ class _VerbRowsState extends State<_VerbRows> {
 class _HoverVerbBlock extends StatefulWidget {
   const _HoverVerbBlock({
     super.key,
+    required this.controller,
     required this.verb,
     required this.selected,
     required this.committed,
@@ -1254,6 +1485,7 @@ class _HoverVerbBlock extends StatefulWidget {
     required this.onCelebrationChanged,
   });
 
+  final CaptionV2Controller controller;
   final EffectiveVerb verb;
   final bool selected;
   final bool committed;
@@ -1293,6 +1525,16 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
 
   @override
   Widget build(BuildContext context) {
+    final hasOptionRows =
+        widget.showRbi || widget.showBase || widget.showCelebration;
+    final optionsComplete = !(widget.showRbi &&
+            widget.verb.key == 'Home Run' &&
+            widget.rbi < 1) &&
+        !(widget.showBase &&
+            (widget.selectedBase == null ||
+                widget.selectedBase!.trim().isEmpty));
+    final showActions = widget.committed && (!hasOptionRows || optionsComplete);
+
     return MouseRegion(
       onEnter: (_) => _setHovered(true),
       onExit: (_) => _setHovered(false),
@@ -1301,6 +1543,7 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _VerbAccordionRow(
+            controller: widget.controller,
             verb: widget.verb,
             selected: widget.selected,
             committed: widget.committed,
@@ -1311,9 +1554,7 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
             onTap: widget.onTap,
             onToggleFavorite: widget.onToggleFavorite,
           ),
-          if (widget.showRbi ||
-              widget.showBase ||
-              widget.showCelebration) ...[
+          if (hasOptionRows || showActions) ...[
             Padding(
               padding: EdgeInsets.fromLTRB(widget.leadingPadding, 2, 8, 0),
               child: Divider(
@@ -1362,6 +1603,40 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
                   onChanged: widget.onCelebrationChanged,
                 ),
               ),
+            if (showActions)
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  widget.leadingPadding,
+                  hasOptionRows ? 4 : 3,
+                  8,
+                  2,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _DrumVerbActionButton(
+                        label: 'Save',
+                        tokens: widget.tokens,
+                        emphasized: !widget.controller.ftpModeEnabled,
+                        onTap: () => widget.controller
+                            .saveOrTransmitFromVerbMenu(transmit: false),
+                      ),
+                    ),
+                    if (widget.controller.ftpModeEnabled) ...[
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _DrumVerbActionButton(
+                          label: 'FTP',
+                          tokens: widget.tokens,
+                          emphasized: true,
+                          onTap: () => widget.controller
+                              .saveOrTransmitFromVerbMenu(transmit: true),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             Padding(
               padding: EdgeInsets.fromLTRB(widget.leadingPadding, 2, 8, 2),
               child: Divider(
@@ -1377,8 +1652,57 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
   }
 }
 
+class _DrumVerbActionButton extends StatelessWidget {
+  const _DrumVerbActionButton({
+    required this.label,
+    required this.tokens,
+    required this.emphasized,
+    required this.onTap,
+  });
+
+  final String label;
+  final FfTokens tokens;
+  final bool emphasized;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: emphasized
+          ? tokens.accent.withValues(alpha: 0.22)
+          : tokens.selectedFill,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          height: 26,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: emphasized
+                  ? tokens.accent.withValues(alpha: 0.65)
+                  : tokens.divider,
+            ),
+          ),
+          child: Text(
+            label,
+            style: tokens.labelStyle.copyWith(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: tokens.text,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _VerbAccordionRow extends StatelessWidget {
   const _VerbAccordionRow({
+    required this.controller,
     required this.verb,
     required this.selected,
     required this.committed,
@@ -1390,6 +1714,7 @@ class _VerbAccordionRow extends StatelessWidget {
     this.leadingPadding = 26,
   });
 
+  final CaptionV2Controller controller;
   final EffectiveVerb verb;
   final bool selected;
   final bool committed;
@@ -1418,7 +1743,7 @@ class _VerbAccordionRow extends StatelessWidget {
           hoverColor: Colors.transparent,
           child: Container(
             height: _VerbAccordion.rowHeight,
-            padding: EdgeInsets.only(left: leadingPadding, right: 10),
+            padding: EdgeInsets.only(left: leadingPadding, right: 4),
             child: Row(
               children: [
                 Expanded(
@@ -1427,7 +1752,7 @@ class _VerbAccordionRow extends StatelessWidget {
                     curve: Curves.easeOutCubic,
                     style: TextStyle(
                       fontFamily: FfTokens.labelFamily,
-                      fontSize: hovered ? 14.0 : fontSize,
+                      fontSize: hovered ? 17.0 : fontSize,
                       fontWeight: FontWeight.w500,
                       letterSpacing: bright ? -0.4 : 0,
                       color: bright
@@ -1442,13 +1767,32 @@ class _VerbAccordionRow extends StatelessWidget {
                   ),
                 ),
                 if (committed) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   Icon(
                     Icons.check,
                     size: 12,
                     color: tokens.accent,
                   ),
                 ],
+                IconButton(
+                  onPressed: () => controller.toggleVerbPin(verb.key),
+                  tooltip: controller.isVerbPinned(verb.key)
+                      ? 'Unpin for next frames'
+                      : 'Pin for next frames',
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints.tightFor(width: 28, height: 24),
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 14,
+                  color: controller.isVerbPinned(verb.key)
+                      ? tokens.accent
+                      : tokens.textSecondary.withValues(alpha: 0.55),
+                  icon: Icon(
+                    controller.isVerbPinned(verb.key)
+                        ? Icons.push_pin_rounded
+                        : Icons.push_pin_outlined,
+                  ),
+                ),
               ],
             ),
           ),
@@ -1461,7 +1805,7 @@ class _VerbAccordionRow extends StatelessWidget {
     BuildContext context,
     Offset globalPosition,
   ) async {
-    final action = await showMenu<String>(
+    final action = await showCaptionV2PopupMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
         globalPosition.dx,
@@ -1476,9 +1820,32 @@ class _VerbAccordionRow extends StatelessWidget {
             verb.isFavorite ? 'Remove favorite' : 'Add favorite',
           ),
         ),
+        PopupMenuItem(
+          value: 'pin',
+          child: Text(
+            controller.isVerbPinned(verb.key)
+                ? 'Unpin Verb'
+                : 'Pin Verb',
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'edit',
+          child: Text('Edit verb…'),
+        ),
       ],
     );
-    if (action == 'favorite') onToggleFavorite();
+    if (action == null) return;
+    switch (action) {
+      case 'favorite':
+        onToggleFavorite();
+        break;
+      case 'pin':
+        controller.toggleVerbPin(verb.key);
+        break;
+      case 'edit':
+        await showCaptionV2VerbEditor(context, controller, verb.key);
+        break;
+    }
   }
 }
 

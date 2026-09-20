@@ -21,18 +21,20 @@ class CaptionV2StartupResult {
     required this.folderPath,
     required this.homeTeam,
     required this.awayTeam,
-    required this.burstDetectionEnabled,
     this.homeRoster,
     this.awayRoster,
+    this.singleTeamMode = false,
   });
 
   final String sport;
   final String folderPath;
   final String homeTeam;
   final String awayTeam;
-  final bool burstDetectionEnabled;
   final List<Player>? homeRoster;
   final List<Player>? awayRoster;
+
+  /// When true, the session has one roster only ([homeTeam]); [awayTeam] is empty.
+  final bool singleTeamMode;
 }
 
 /// FloFile V2 initial screen — sport, folder, teams via API, then Go Time.
@@ -58,7 +60,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   String? _awayTeam;
   List<Player>? _homeRoster;
   List<Player>? _awayRoster;
-  bool _burstDetection = true;
+  bool _singleTeamMode = false;
 
   List<String> _teams = const [];
   bool _loadingTeams = false;
@@ -75,6 +77,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   IptcApplyMode _iptcMode = IptcApplyMode.none;
   IptcApplyMode _preferredWriteMode = IptcApplyMode.onSave;
   String _iptcStatus = "Don't write IPTC";
+  bool _ftpModeEnabled = true;
 
   static const _sports = <String>[
     'baseball',
@@ -86,12 +89,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   bool get _sportChosen => _sport != null && _sport!.isNotEmpty;
   bool get _folderChosen => _folderPath != null && _folderPath!.isNotEmpty;
-  bool get _teamsChosen =>
-      _homeTeam != null &&
-      _awayTeam != null &&
-      _homeTeam!.isNotEmpty &&
-      _awayTeam!.isNotEmpty &&
-      _homeTeam != _awayTeam;
+  bool get _teamsChosen {
+    final homeOk = _homeTeam != null && _homeTeam!.isNotEmpty;
+    if (!homeOk) return false;
+    if (_singleTeamMode) return true;
+    return _awayTeam != null &&
+        _awayTeam!.isNotEmpty &&
+        _homeTeam != _awayTeam;
+  }
+
   bool get _canGo => _sportChosen && _folderChosen && _teamsChosen && !_going;
 
   bool get _writeIptc => _iptcMode != IptcApplyMode.none;
@@ -126,7 +132,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   Future<void> _bootstrap() async {
     try {
       _prefs = await PreferencesService.getInstance();
-      _burstDetection = await _prefs!.getBurstDetectionEnabled();
       _useTank01 = await _prefs!.getUseTank01Rosters();
       _isAdmin = await AdminService.isCurrentUserAdmin();
       _iptcMode = await _prefs!.getIptcApplyMode();
@@ -134,6 +139,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _preferredWriteMode = _iptcMode;
       }
       _iptcStatus = await _iptcStatusFromPrefs();
+      _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
       if (!mounted) return;
       setState(() {});
     } catch (e) {
@@ -320,6 +326,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     });
   }
 
+  Future<void> _setFtpMode(bool enabled) async {
+    if (enabled == _ftpModeEnabled) return;
+    await _prefs?.saveFtpModeEnabled(enabled);
+    if (!mounted) return;
+    setState(() => _ftpModeEnabled = enabled);
+  }
+
   Future<void> _openIptc() async {
     final summary = await showCaptionV2IptcDialog(
       context,
@@ -358,10 +371,19 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     });
   }
 
+  void _setSingleTeamMode(bool enabled) {
+    setState(() {
+      _singleTeamMode = enabled;
+      if (enabled) {
+        _awayTeam = null;
+        _awayRoster = null;
+      }
+    });
+  }
+
   Future<void> _goTime() async {
     if (!_canGo) return;
     setState(() => _going = true);
-    await _prefs?.saveBurstDetectionEnabled(_burstDetection);
     await _prefs?.saveUseTank01Rosters(_useTank01);
     if (_sport != null) {
       try {
@@ -373,10 +395,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         sport: _sport!,
         folderPath: _folderPath!,
         homeTeam: _homeTeam!,
-        awayTeam: _awayTeam!,
-        burstDetectionEnabled: _burstDetection,
+        awayTeam: _singleTeamMode ? '' : _awayTeam!,
         homeRoster: _homeRoster,
-        awayRoster: _awayRoster,
+        awayRoster: _singleTeamMode ? null : _awayRoster,
+        singleTeamMode: _singleTeamMode,
       ),
     );
   }
@@ -493,7 +515,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 ),
                 const SizedBox(height: 10),
                 _Section(
-                  title: 'Teams',
+                  title: _singleTeamMode ? 'Team' : 'Teams',
                   unlocked: _sportChosen,
                   dimmed: _usingCustomRosters,
                   trailing: SizedBox(
@@ -525,49 +547,96 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                               )),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: _TeamPicker(
-                              label: 'Away',
-                              value: _awayTeam,
-                              teams: _teams,
-                              enabled: _sportChosen && !_loadingTeams,
-                              favorited: _awayTeam != null &&
-                                  _favoriteAway == _awayTeam,
-                              onChanged: (v) => setState(() {
-                                _usingCustomRosters = false;
-                                _awayTeam = v;
-                                _homeRoster = null;
-                                _awayRoster = null;
-                              }),
-                              onToggleFavorite: () =>
-                                  _toggleFavorite(isHome: false),
+                          SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: Checkbox(
+                              value: _singleTeamMode,
+                              activeColor: t.accent,
+                              checkColor: t.inkOnAccent,
+                              side: BorderSide(color: t.textSecondary),
+                              onChanged: !_sportChosen
+                                  ? null
+                                  : (v) => _setSingleTeamMode(v ?? false),
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
                           Expanded(
-                            child: _TeamPicker(
-                              label: 'Home',
-                              value: _homeTeam,
-                              teams: _teams,
-                              enabled: _sportChosen && !_loadingTeams,
-                              favorited: _homeTeam != null &&
-                                  _favoriteHome == _homeTeam,
-                              onChanged: (v) => setState(() {
-                                _usingCustomRosters = false;
-                                _homeTeam = v;
-                                _awayRoster = null;
-                                _homeRoster = null;
-                              }),
-                              onToggleFavorite: () =>
-                                  _toggleFavorite(isHome: true),
+                            child: Text(
+                              'Single team — one roster, no opponent',
+                              style: t.metaStyle.copyWith(
+                                color: t.text,
+                                height: 1.35,
+                              ),
                             ),
                           ),
                         ],
                       ),
+                      const SizedBox(height: 12),
+                      if (_singleTeamMode)
+                        _TeamPicker(
+                          label: 'Team',
+                          value: _homeTeam,
+                          teams: _teams,
+                          enabled: _sportChosen && !_loadingTeams,
+                          favorited: _homeTeam != null &&
+                              _favoriteHome == _homeTeam,
+                          onChanged: (v) => setState(() {
+                            _usingCustomRosters = false;
+                            _homeTeam = v;
+                            _homeRoster = null;
+                            _awayRoster = null;
+                          }),
+                          onToggleFavorite: () =>
+                              _toggleFavorite(isHome: true),
+                        )
+                      else
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: _TeamPicker(
+                                label: 'Away',
+                                value: _awayTeam,
+                                teams: _teams,
+                                enabled: _sportChosen && !_loadingTeams,
+                                favorited: _awayTeam != null &&
+                                    _favoriteAway == _awayTeam,
+                                onChanged: (v) => setState(() {
+                                  _usingCustomRosters = false;
+                                  _awayTeam = v;
+                                  _homeRoster = null;
+                                  _awayRoster = null;
+                                }),
+                                onToggleFavorite: () =>
+                                    _toggleFavorite(isHome: false),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _TeamPicker(
+                                label: 'Home',
+                                value: _homeTeam,
+                                teams: _teams,
+                                enabled: _sportChosen && !_loadingTeams,
+                                favorited: _homeTeam != null &&
+                                    _favoriteHome == _homeTeam,
+                                onChanged: (v) => setState(() {
+                                  _usingCustomRosters = false;
+                                  _homeTeam = v;
+                                  _awayRoster = null;
+                                  _homeRoster = null;
+                                }),
+                                onToggleFavorite: () =>
+                                    _toggleFavorite(isHome: true),
+                              ),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
@@ -591,28 +660,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: Checkbox(
-                              value: _burstDetection,
-                              activeColor: t.accent,
-                              checkColor: t.inkOnAccent,
-                              side: BorderSide(color: t.textSecondary),
-                              onChanged: !_teamsChosen
-                                  ? null
-                                  : (v) => setState(
-                                        () => _burstDetection = v ?? true,
-                                      ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text('Burst detection', style: t.bodyStyle),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
                       Row(
                         children: [
                           SizedBox(
@@ -651,6 +698,48 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: Checkbox(
+                              value: _ftpModeEnabled,
+                              activeColor: t.accent,
+                              checkColor: t.inkOnAccent,
+                              side: BorderSide(color: t.textSecondary),
+                              onChanged: !_teamsChosen
+                                  ? null
+                                  : (v) => _setFtpMode(v ?? false),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('FTP mode', style: t.bodyStyle),
+                          const SizedBox(width: 8),
+                          Text(
+                            _ftpModeEnabled ? 'On' : 'Off',
+                            style: t.metaStyle.copyWith(
+                              color: _ftpModeEnabled
+                                  ? t.accent
+                                  : t.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 30),
+                        child: Text(
+                          _ftpModeEnabled
+                              ? 'FTP buttons and shortcuts stay available so you can send captioned photos.'
+                              : "Hides FTP buttons and shortcuts so you won't send by accident on a caption-only day.",
+                          style: t.metaStyle,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                 ),

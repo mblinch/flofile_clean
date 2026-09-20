@@ -1,7 +1,7 @@
 name: quick_cap
 description: A Flutter app for generating Getty-style captions with IPTC metadata and code-replacement dropdowns.
 publish_to: "none"
-version: 2.0.4+204
+version: 2.0.5+205
 
 environment:
   sdk: ">=2.18.0 <4.0.0"
@@ -55,6 +55,7 @@ dependencies:
   
   # File picker for importing camera serial numbers
   file_picker: ^8.0.0+1
+  permission_handler: ^11.3.1
 
   # Native-style settings/preferences UI (sectioned lists)
   flutter_settings_ui: ^3.0.1

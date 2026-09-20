@@ -398,12 +398,12 @@ class _PlayerWheelState extends State<_PlayerWheel> {
     final distance = (index - position).abs();
     if (distance <= 1) {
       final eased = distance * distance * (3 - 2 * distance);
-      return 2 - 0.5 * eased;
+      return 1.08 - 0.06 * eased;
     }
     if (distance <= 2) {
       final progress = distance - 1;
       final eased = progress * progress * (3 - 2 * progress);
-      return 1.5 - 0.5 * eased;
+      return 1.02 - 0.02 * eased;
     }
     return 1;
   }
@@ -587,7 +587,7 @@ class _PlayerWheelState extends State<_PlayerWheel> {
                                                       ? t.text
                                                       : t.textSecondary,
                                                   fontSize:
-                                                      centered ? 15 : 10.5,
+                                                      centered ? 13.5 : 11.5,
                                                   letterSpacing: -0.25,
                                                 ),
                                                 child: Text(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +12,9 @@ import '../../theme/ff_tokens.dart';
 import '../../widgets/admin_screen.dart';
 import '../../widgets/caption_layout_builder_dialog.dart';
 import '../../widgets/flo_chrome_header.dart';
+import '../../widgets/oriented_file_preview.dart';
 import '../../widgets/preferences_dialog.dart';
+import 'caption_v2_flag.dart';
 import 'caption_v2_shortcuts.dart';
 import 'data/caption_transfer_payload.dart';
 import 'data/caption_v2_controller.dart';
@@ -46,6 +49,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   Timer? _jerseyBufferTimer;
   String _jerseyBuffer = '';
   bool? _jerseyBufferIsHome;
+  bool _burstSaveDialogOpen = false;
 
   static const double _desktopBreakpoint = 1100;
   static double get _gap => 8;
@@ -55,6 +59,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     super.initState();
     _pageController = PageController(initialPage: 1);
     _controller.addListener(_onController);
+    _controller.onSaveTransmit = ({required bool transmit}) async {
+      await _saveInDirection(next: true, transmit: transmit);
+    };
     _searchFocus.addListener(() {
       if (_searchFocus.hasFocus) {
         _controller.setSearchOpen(true);
@@ -112,9 +119,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       homeTeam: result.homeTeam,
       awayTeam: result.awayTeam,
       folderPath: result.folderPath,
-      burstDetectionEnabled: result.burstDetectionEnabled,
       homeRosterOverride: result.homeRoster,
       awayRosterOverride: result.awayRoster,
+      singleTeamMode: result.singleTeamMode,
     );
   }
 
@@ -125,6 +132,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     FocusManager.instance.removeListener(_syncNativeJerseyShortcuts);
     _jerseyShortcutChannel.setMethodCallHandler(null);
     unawaited(_setNativeJerseyShortcutsEnabled(true));
+    _controller.onSaveTransmit = null;
     _controller.removeListener(_onController);
     _controller.dispose();
     _searchFocus.dispose();
@@ -165,6 +173,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   bool _handleHardwareKey(KeyEvent event) {
+    if (_handleSaveShortcut(event)) return true;
+
     if (_controller.searchOpen) return false;
     if (event is! KeyUpEvent || _jerseyBuffer.isEmpty) return false;
     final key = event.logicalKey;
@@ -177,6 +187,46 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         key == LogicalKeyboardKey.altGraph;
     if (modifierReleased) _flushJerseyBuffer();
     return false;
+  }
+
+  /// Global ⌘S / Ctrl+S / Shift+Enter / ⌘⇧Enter — same reliability as V1.
+  ///
+  /// Flutter [Shortcuts] only fire when focus is inside that subtree; this
+  /// handler still works when focus is in a text field, drum lane, or lost.
+  bool _handleSaveShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (!_controller.sessionReady || _controller.sessionLoading) return false;
+
+    final keys = HardwareKeyboard.instance;
+    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.numpadEnter;
+    final isS = event.logicalKey == LogicalKeyboardKey.keyS;
+
+    final saveTransmit = isEnter &&
+        keys.isShiftPressed &&
+        (keys.isMetaPressed || keys.isControlPressed);
+    if (saveTransmit) {
+      if (_controller.ftpModeEnabled) {
+        unawaited(_saveTransmitAndNext());
+      } else {
+        unawaited(_saveAndNext());
+      }
+      return true;
+    }
+
+    final shiftEnter = isEnter &&
+        keys.isShiftPressed &&
+        !keys.isMetaPressed &&
+        !keys.isControlPressed &&
+        !keys.isAltPressed;
+    final cmdS = isS &&
+        (keys.isMetaPressed || keys.isControlPressed) &&
+        !keys.isShiftPressed &&
+        !keys.isAltPressed;
+    if (!shiftEnter && !cmdS) return false;
+
+    unawaited(_saveAndNext());
+    return true;
   }
 
   void _queueJerseyDigit(int digit, {required bool isHome}) {
@@ -304,8 +354,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   Future<void> _copySelection() async {
     final payload = CaptionTransferPayload(
-      caption: _controller.buildCaptionSentence(),
+      caption: _controller.displayedCaption,
       personality: _controller.personality,
+      headline: _controller.headline,
+      keywords: _controller.keywords,
     );
     await Clipboard.setData(ClipboardData(text: payload.encode()));
     if (!mounted) return;
@@ -325,6 +377,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       return;
     }
     _controller.applyTransferredCaption(payload);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Caption pasted')),
+    );
   }
 
   void _pastePreviousSelection() {
@@ -357,8 +413,41 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     required bool next,
     bool transmit = false,
   }) async {
+    // Avoid stacking another burst picker while one is already open
+    // (e.g. ⌘S while the dialog is visible).
+    if (_burstSaveDialogOpen) return;
+
     final selected = _controller.orderedSelectedImagePaths;
     if (selected.length >= 2) {
+      final burstGroup = _controller.burstGroupOverlapping(selected);
+      if (burstGroup != null) {
+        final decision = await _showBurstSaveDialog(
+          burstGroup,
+          initiallySelected: selected.toSet(),
+        );
+        if (!mounted || decision == null) return;
+        if (decision.currentOnly) {
+          final result = await _controller.savePaths(selected);
+          if (!mounted) return;
+          if (transmit) await _transmitSaved(result);
+          if (!mounted) return;
+          _controller.setSelectedImagePaths(result.failedPaths);
+          return;
+        }
+        final result = await _controller.savePaths(decision.paths);
+        if (!mounted) return;
+        if (transmit) await _transmitSaved(result);
+        if (!mounted) return;
+        _controller.setSelectedImagePaths(result.failedPaths);
+        if (result.anySucceeded) {
+          _controller.advanceAfterBurstSelection(
+            chain: burstGroup,
+            savedPaths: decision.paths,
+          );
+        }
+        return;
+      }
+
       final result = await _controller.savePaths(selected);
       if (!mounted) return;
       if (transmit) await _transmitSaved(result);
@@ -368,7 +457,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     }
 
     final chain = _controller.forwardBurstChain;
-    if (_controller.burstDetectionEnabled && chain.length > 1) {
+    if (chain.length > 1) {
       final decision = await _showBurstSaveDialog(chain);
       if (!mounted || decision == null) return;
       if (decision.currentOnly) {
@@ -383,7 +472,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       final result = await _controller.savePaths(decision.paths);
       if (transmit) await _transmitSaved(result);
       if (result.anySucceeded && mounted) {
-        _controller.advancePastHandledChain(chain);
+        _controller.advanceAfterBurstSelection(
+          chain: chain,
+          savedPaths: decision.paths,
+        );
       }
       return;
     }
@@ -401,120 +493,356 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Future<_BurstSaveDecision?> _showBurstSaveDialog(
-    List<String> chain,
-  ) {
-    final selected = <String>{...chain};
-    return showDialog<_BurstSaveDecision>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        final t =
-            Theme.of(dialogContext).extension<FfTokens>() ?? FfTokens.dark;
-        return StatefulBuilder(
-          builder: (context, setDialogState) => Dialog(
-            backgroundColor: t.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-              side: BorderSide(color: t.divider),
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                minWidth: 480,
-                maxWidth: 620,
-                maxHeight: 620,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(18),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Burst detected',
-                      style: t.labelStyle.copyWith(fontSize: 16),
+    List<String> chain, {
+    Set<String>? initiallySelected,
+  }) async {
+    final fromSelection = initiallySelected != null;
+    final selected = <String>{
+      ...(initiallySelected == null
+          ? chain
+          : chain.where(initiallySelected.contains)),
+    };
+    if (selected.isEmpty) selected.addAll(chain);
+
+    _burstSaveDialogOpen = true;
+    try {
+      return await showDialog<_BurstSaveDecision>(
+        context: context,
+        barrierDismissible: true,
+        useRootNavigator: true,
+        builder: (dialogContext) {
+          final t =
+              Theme.of(dialogContext).extension<FfTokens>() ?? FfTokens.dark;
+
+          void closeWith(_BurstSaveDecision? decision) {
+            Navigator.of(dialogContext, rootNavigator: true).pop(decision);
+          }
+
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              void saveSelected() {
+                if (selected.isEmpty) return;
+                closeWith(
+                  _BurstSaveDecision.burst(
+                    chain.where(selected.contains).toList(),
+                  ),
+                );
+              }
+
+              void saveCurrentOnly() {
+                closeWith(_BurstSaveDecision.current());
+              }
+
+              return Shortcuts(
+                shortcuts: <ShortcutActivator, Intent>{
+                  const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
+                      const SaveNextIntent(),
+                  const SingleActivator(LogicalKeyboardKey.keyS, control: true):
+                      const SaveNextIntent(),
+                  const SingleActivator(LogicalKeyboardKey.enter):
+                      const SaveNextIntent(),
+                },
+                child: Actions(
+                  actions: <Type, Action<Intent>>{
+                    SaveNextIntent: CallbackAction<SaveNextIntent>(
+                      onInvoke: (_) {
+                        saveSelected();
+                        return null;
+                      },
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Apply this caption to the current frame only, or choose '
-                      'frames from the forward burst?',
-                      style: t.secondaryLabelStyle,
-                    ),
-                    const SizedBox(height: 14),
-                    Flexible(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: t.sunken,
-                          borderRadius:
-                              BorderRadius.circular(FfTokens.radiusCard),
-                          border: Border.all(color: t.divider),
+                  },
+                  child: Focus(
+                    autofocus: true,
+                    child: Dialog(
+                      backgroundColor: t.surface,
+                      shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(FfTokens.radiusWindow),
+                        side: BorderSide(color: t.divider),
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minWidth: 480,
+                          maxWidth: math.min(
+                            720,
+                            MediaQuery.sizeOf(dialogContext).width * 0.92,
+                          ),
+                          maxHeight: math.min(
+                            640,
+                            MediaQuery.sizeOf(dialogContext).height * 0.85,
+                          ),
                         ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: chain.length,
-                          separatorBuilder: (_, __) =>
-                              Divider(height: 1, color: t.divider),
-                          itemBuilder: (context, index) {
-                            final path = chain[index];
-                            final checked = selected.contains(path);
-                            return CheckboxListTile(
-                              dense: true,
-                              value: checked,
-                              activeColor: t.accent,
-                              checkColor: t.bg,
-                              title: Text(
-                                p.basename(path),
-                                style: t.monoMetaStyle.copyWith(color: t.text),
+                        child: Padding(
+                          padding: const EdgeInsets.all(18),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Text(
+                                'Burst detected',
+                                style: t.labelStyle.copyWith(fontSize: 16),
                               ),
-                              subtitle: index == 0
-                                  ? Text('Current frame', style: t.metaStyle)
-                                  : null,
-                              onChanged: (value) => setDialogState(() {
-                                value == true
-                                    ? selected.add(path)
-                                    : selected.remove(path);
-                              }),
-                            );
-                          },
+                              const SizedBox(height: 6),
+                              Text(
+                                fromSelection
+                                    ? 'Your selection is part of a ${chain.length}-frame '
+                                        'burst. Save the selection only, or choose frames '
+                                        'from the full burst?'
+                                    : 'Apply this caption to the current frame only, or '
+                                        'choose frames from the forward burst?',
+                                style: t.secondaryLabelStyle,
+                              ),
+                              const SizedBox(height: 14),
+                              Flexible(
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: t.sunken,
+                                    borderRadius: BorderRadius.circular(
+                                      FfTokens.radiusCard,
+                                    ),
+                                    border: Border.all(color: t.divider),
+                                  ),
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      const spacing = 8.0;
+                                      final n = chain.length;
+                                      final cols = math
+                                          .min(
+                                            4,
+                                            math.max(1, math.sqrt(n).ceil()),
+                                          )
+                                          .toInt();
+                                      final cellW = (constraints.maxWidth -
+                                              (cols - 1) * spacing) /
+                                          cols;
+                                      final cacheW = (cellW *
+                                              MediaQuery.devicePixelRatioOf(
+                                                context,
+                                              ))
+                                          .round()
+                                          .clamp(96, 512);
+                                      return GridView.builder(
+                                        shrinkWrap: true,
+                                        itemCount: n,
+                                        gridDelegate:
+                                            SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: cols,
+                                          crossAxisSpacing: spacing,
+                                          mainAxisSpacing: spacing,
+                                          childAspectRatio: 1,
+                                        ),
+                                        itemBuilder: (context, index) {
+                                          final path = chain[index];
+                                          final checked =
+                                              selected.contains(path);
+                                          final isCurrent =
+                                              !fromSelection && index == 0;
+                                          return Tooltip(
+                                            message: isCurrent
+                                                ? '${p.basename(path)} — current frame'
+                                                : p.basename(path),
+                                            child: MouseRegion(
+                                              cursor: SystemMouseCursors.click,
+                                              child: GestureDetector(
+                                                onTap: () =>
+                                                    setDialogState(() {
+                                                  checked
+                                                      ? selected.remove(path)
+                                                      : selected.add(path);
+                                                }),
+                                                child: AnimatedContainer(
+                                                  duration: const Duration(
+                                                    milliseconds: 120,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: t.bg,
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      FfTokens.radiusTile,
+                                                    ),
+                                                    border: Border.all(
+                                                      color: checked
+                                                          ? (isCurrent
+                                                              ? t.accent
+                                                              : t.accent
+                                                                  .withValues(
+                                                                  alpha: 0.7,
+                                                                ))
+                                                          : t.divider,
+                                                      width: checked ||
+                                                              isCurrent
+                                                          ? 2
+                                                          : 1,
+                                                    ),
+                                                  ),
+                                                  child: ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      FfTokens.radiusTile - 1,
+                                                    ),
+                                                    child: Stack(
+                                                      fit: StackFit.expand,
+                                                      children: [
+                                                        ColoredBox(
+                                                          color: t.bg,
+                                                        ),
+                                                        OrientedFilePreview(
+                                                          path: path,
+                                                          fit: BoxFit.cover,
+                                                          cacheWidth: cacheW,
+                                                          filterQuality:
+                                                              FilterQuality
+                                                                  .medium,
+                                                        ),
+                                                        if (!checked)
+                                                          ColoredBox(
+                                                            color: Colors.black
+                                                                .withValues(
+                                                              alpha: 0.45,
+                                                            ),
+                                                          ),
+                                                        if (isCurrent)
+                                                          Positioned(
+                                                            left: 6,
+                                                            top: 6,
+                                                            child: Material(
+                                                              color: t.accent,
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                FfTokens
+                                                                    .radiusChip,
+                                                              ),
+                                                              child: InkWell(
+                                                                onTap:
+                                                                    saveCurrentOnly,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                  FfTokens
+                                                                      .radiusChip,
+                                                                ),
+                                                                child:
+                                                                    Padding(
+                                                                  padding:
+                                                                      const EdgeInsets
+                                                                          .symmetric(
+                                                                    horizontal:
+                                                                        5,
+                                                                    vertical:
+                                                                        2,
+                                                                  ),
+                                                                  child: Text(
+                                                                    'Current',
+                                                                    style: t
+                                                                        .metaStyle
+                                                                        .copyWith(
+                                                                      color:
+                                                                          t.bg,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w600,
+                                                                      fontSize:
+                                                                          10,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        Positioned(
+                                                          right: 6,
+                                                          bottom: 6,
+                                                          child: Container(
+                                                            width: 22,
+                                                            height: 22,
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: checked
+                                                                  ? t.accent
+                                                                  : t.surface
+                                                                      .withValues(
+                                                                      alpha:
+                                                                          0.9,
+                                                                    ),
+                                                              shape: BoxShape
+                                                                  .circle,
+                                                              border:
+                                                                  Border.all(
+                                                                color: checked
+                                                                    ? t.accent
+                                                                    : t.divider,
+                                                              ),
+                                                            ),
+                                                            child: Icon(
+                                                              checked
+                                                                  ? Icons.check
+                                                                  : Icons
+                                                                      .close,
+                                                              size: 14,
+                                                              color: checked
+                                                                  ? t.bg
+                                                                  : t
+                                                                      .textSecondary,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              Row(
+                                children: [
+                                  TextButton(
+                                    onPressed: () => closeWith(null),
+                                    child: const Text('Cancel'),
+                                  ),
+                                  const Spacer(),
+                                  OutlinedButton(
+                                    onPressed: saveCurrentOnly,
+                                    child: Text(
+                                      fromSelection
+                                          ? 'Selection only'
+                                          : 'Current only',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  FilledButton(
+                                    onPressed: selected.isEmpty
+                                        ? null
+                                        : saveSelected,
+                                    child: Text(
+                                      'Save selected (${selected.length})',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(dialogContext),
-                          child: const Text('Cancel'),
-                        ),
-                        const Spacer(),
-                        OutlinedButton(
-                          onPressed: () => Navigator.pop(
-                            dialogContext,
-                            _BurstSaveDecision.current(),
-                          ),
-                          child: const Text('Current only'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: selected.isEmpty
-                              ? null
-                              : () => Navigator.pop(
-                                    dialogContext,
-                                    _BurstSaveDecision.burst(
-                                      chain.where(selected.contains).toList(),
-                                    ),
-                                  ),
-                          child: Text('Save selected (${selected.length})'),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      _burstSaveDialogOpen = false;
+    }
   }
 
   Widget _withChrome(Widget body, {bool sessionActive = false}) {
@@ -587,15 +915,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
               return null;
             },
           ),
-          SaveNextIntent: CaptionV2GuardedAction<SaveNextIntent>(
+          // Save shortcuts stay active in text fields (like ⌘S in any editor).
+          SaveNextIntent: CallbackAction<SaveNextIntent>(
             onInvoke: (_) {
               unawaited(_saveAndNext());
               return null;
             },
           ),
-          SaveTransmitNextIntent:
-              CaptionV2GuardedAction<SaveTransmitNextIntent>(
+          SaveTransmitNextIntent: CallbackAction<SaveTransmitNextIntent>(
             onInvoke: (_) {
+              if (!c.ftpModeEnabled) return null;
               unawaited(_saveTransmitAndNext());
               return null;
             },
@@ -615,6 +944,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             },
           ),
           TransmitIntent: CaptionV2GuardedAction<TransmitIntent>(
+            enabledWhen: () => c.ftpModeEnabled,
             onInvoke: (_) {
               unawaited(c.transmitQueued());
               return null;
@@ -636,10 +966,20 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           ),
           CycleColumnIntent: CaptionV2GuardedAction<CycleColumnIntent>(
             onInvoke: (intent) {
-              const columns = 4;
-              _setColumnFocus(
-                (c.columnFocus + intent.delta + columns) % columns,
-              );
+              if (!c.singleTeamMode) {
+                const columns = 4;
+                _setColumnFocus(
+                  (c.columnFocus + intent.delta + columns) % columns,
+                );
+                return null;
+              }
+              // Home → verbs → thumbnails (skip away).
+              const order = [0, 1, 3];
+              var i = order.indexOf(c.columnFocus);
+              if (i < 0) i = 1;
+              final next =
+                  order[(i + intent.delta + order.length) % order.length];
+              _setColumnFocus(next);
               return null;
             },
           ),
@@ -651,6 +991,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           ),
           JerseyDigitIntent: CaptionV2GuardedAction<JerseyDigitIntent>(
             onInvoke: (intent) {
+              if (c.singleTeamMode && !intent.isHome) return null;
               _queueJerseyDigit(intent.digit, isHome: intent.isHome);
               return null;
             },
@@ -663,15 +1004,40 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             backgroundColor: t.bg,
             body: LayoutBuilder(
               builder: (context, constraints) {
-                if (constraints.maxWidth >= _desktopBreakpoint) {
+                final useMobile = kCaptionV2MobilePreview ||
+                    constraints.maxWidth < _desktopBreakpoint;
+                if (!useMobile) {
                   return _withChrome(
                     _buildDesktopWorkspace(c, t, constraints.maxWidth),
                     sessionActive: true,
                   );
                 }
-                return _withChrome(
+                final mobile = _withChrome(
                   _buildMobileWorkspace(c, t),
                   sessionActive: true,
+                );
+                if (!kCaptionV2MobilePreview) return mobile;
+                // Phone-width frame so desktop can preview the swipe layout.
+                return ColoredBox(
+                  color: t.bg,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: 390,
+                        maxHeight: 844,
+                      ),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          border: Border.all(color: t.divider),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: mobile,
+                        ),
+                      ),
+                    ),
+                  ),
                 );
               },
             ),
@@ -742,7 +1108,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildCaptionStrip(c),
+          MobileFrameBanner(
+            controller: c,
+            onOpen: _openFrameReview,
+          ),
+          const SizedBox(height: 8),
+          _buildCaptionStrip(c, inningStepperOnly: true),
           const SizedBox(height: 8),
           _buildSearchBlock(c),
           SizedBox(height: _gap),
@@ -750,7 +1121,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             child: _MobileBody(
               controller: c,
               pageController: _pageController!,
-              onOpenFrame: _openFrameReview,
               onPageChanged: (i) => c.setColumnFocus(i),
             ),
           ),
@@ -771,22 +1141,31 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         onSaveNext: _saveAndNext,
         onTransmit: c.transmitQueued,
         transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
+        showTransmit: c.ftpModeEnabled,
       ),
     );
   }
 
-  Widget _buildCaptionStrip(CaptionV2Controller c) {
+  Widget _buildCaptionStrip(
+    CaptionV2Controller c, {
+    bool inningStepperOnly = false,
+  }) {
     final isBaseball = c.sport.toLowerCase() == 'baseball';
+    final hasLiveCaption =
+        c.manualCaptionOverride != null ||
+        c.selectedPlayer != null ||
+        c.hasVerbSelection ||
+        c.originalCaption.trim().isNotEmpty;
+    final captionText = c.displayedCaption;
     return CaptionStrip(
       leading: '',
       chips: const [],
       trailing: '',
-      fullCaption: c.manualCaptionOverride ??
-          (c.selectedPlayer != null || c.hasVerbSelection
-              ? c.buildCaptionSentence()
-              : (c.originalCaption.isEmpty
-                  ? 'No caption embedded in image.'
-                  : c.originalCaption)),
+      fullCaption: captionText,
+      captionHint: hasLiveCaption
+          ? 'Caption will appear here as you add players and a verb.'
+          : 'No caption embedded in image.',
+      onCaptionChanged: c.setManualCaption,
       personality: c.personality,
       onPersonalityChanged: c.showPersonalityField ? c.setPersonality : null,
       headline: c.headline,
@@ -805,22 +1184,29 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         ),
       ),
       inningLabel: c.inningLabel,
+      timingUnitLabel: c.timingUnitTitle,
       inning: c.inning,
       regulationCount: c.timingRegulationCount,
       maxInning: c.timingMaxInning,
+      segmentPrefix: c.supportsTimingHalves ? 'Q' : null,
+      selectedHalf: c.timingHalf,
+      onHalfSelected:
+          inningStepperOnly || !c.supportsTimingHalves ? null : c.setTimingHalf,
       extraLabel: c.sport.toLowerCase() == 'soccer'
           ? 'ET'
           : (c.sport.toLowerCase() == 'baseball' ? 'X' : 'OT'),
-      onInningSelected: c.setInning,
+      onInningSelected: inningStepperOnly ? null : c.setInning,
       preSelected: c.preGame,
       postSelected: c.postGame,
       onInningDecrement: () => c.bumpInning(-1),
       onInningIncrement: () => c.bumpInning(1),
       inningDisabled: c.preGame || c.postGame,
       onInningActivate: c.activateInning,
-      onPreTap: () => c.setPre(!c.preGame),
-      onPostTap: () => c.setPost(!c.postGame),
-      mlbTimestampVisible: isBaseball && c.mlbTimestampAvailable,
+      onPreTap: inningStepperOnly ? null : () => c.setPre(!c.preGame),
+      onPostTap: inningStepperOnly ? null : () => c.setPost(!c.postGame),
+      inningStepperOnly: inningStepperOnly,
+      mlbTimestampVisible:
+          !inningStepperOnly && isBaseball && c.mlbTimestampAvailable,
       mlbTimestampEnabled: c.mlbTimestampEnabled,
       mlbTimestampLoading: c.mlbTimestampLoading,
       mlbTimestampMatched: c.mlbTimestampMatched,
@@ -947,6 +1333,14 @@ class _TopChrome extends StatelessWidget {
             ),
             const SizedBox(width: 4),
           ],
+          if (c != null) ...[
+            _FtpModeToggle(
+              enabled: c.ftpModeEnabled,
+              tokens: t,
+              onChanged: c.setFtpModeEnabled,
+            ),
+            const SizedBox(width: 4),
+          ],
           if (AdminService.isCurrentUserAdminSync()) ...[
             const AdminBadgeButton(child: _TopAdminBadge()),
             if (defaultTargetPlatform == TargetPlatform.macOS) ...[
@@ -977,6 +1371,57 @@ class _TopChrome extends StatelessWidget {
             constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FtpModeToggle extends StatelessWidget {
+  const _FtpModeToggle({
+    required this.enabled,
+    required this.tokens,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final FfTokens tokens;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = enabled ? 'FTP On' : 'FTP Off';
+    final color = enabled ? tokens.accent : tokens.textSecondary;
+    return Tooltip(
+      message: enabled
+          ? 'FTP mode on — FTP buttons and shortcuts are available'
+          : 'FTP mode off — FTP buttons and shortcuts are hidden',
+      waitDuration: const Duration(milliseconds: 400),
+      child: TextButton(
+        onPressed: () => onChanged(!enabled),
+        style: TextButton.styleFrom(
+          visualDensity: VisualDensity.compact,
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              enabled ? Icons.cloud_upload_outlined : Icons.cloud_off_outlined,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: tokens.metaStyle.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1283,8 +1728,9 @@ class _DesktopBodyState extends State<_DesktopBody> {
   Widget build(BuildContext context) {
     final controller = widget.controller;
     if (_drumMode != null && !controller.searchOpen) {
-      return DesktopDrumPicker(
+      return DrumPicker(
         controller: controller,
+        layout: DrumLayout.sideBySide,
         mode: _drumMode!,
         onModeChanged: (mode) => setState(() => _drumMode = mode),
         onExit: () => setState(() => _drumMode = null),
@@ -1318,19 +1764,21 @@ class _DesktopBodyState extends State<_DesktopBody> {
                 setState(() => _drumMode = DrumPickerMode.infinite),
           ),
         ),
-        SizedBox(width: widget.gap),
-        Expanded(
-          flex: controller.searchOpen ? 4 : 1,
-          child: RosterColumn(
-            controller: controller,
-            isHome: false,
-            focused: controller.columnFocus == 2,
-            onDrumRequested: () =>
-                setState(() => _drumMode = DrumPickerMode.scroll),
-            onInfiniteRequested: () =>
-                setState(() => _drumMode = DrumPickerMode.infinite),
+        if (!controller.singleTeamMode) ...[
+          SizedBox(width: widget.gap),
+          Expanded(
+            flex: controller.searchOpen ? 4 : 1,
+            child: RosterColumn(
+              controller: controller,
+              isHome: false,
+              focused: controller.columnFocus == 2,
+              onDrumRequested: () =>
+                  setState(() => _drumMode = DrumPickerMode.scroll),
+              onInfiniteRequested: () =>
+                  setState(() => _drumMode = DrumPickerMode.infinite),
+            ),
           ),
-        ),
+        ],
       ],
     );
     if (!controller.searchOpen) return laneRow;
@@ -1348,24 +1796,22 @@ class _MobileBody extends StatelessWidget {
   const _MobileBody({
     required this.controller,
     required this.pageController,
-    required this.onOpenFrame,
     required this.onPageChanged,
   });
 
   final CaptionV2Controller controller;
   final PageController pageController;
-  final VoidCallback onOpenFrame;
   final ValueChanged<int> onPageChanged;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final focus = controller.columnFocus;
+    final single = controller.singleTeamMode;
+    final focus = controller.columnFocus.clamp(0, 2);
+    final pageCount = single ? 2 : 3;
 
     return Column(
       children: [
-        MobileFrameThumb(controller: controller, onOpen: onOpenFrame),
-        const SizedBox(height: 10),
         Row(
           children: [
             _MobileTab(
@@ -1394,49 +1840,37 @@ class _MobileBody extends StatelessWidget {
                 );
               },
             ),
-            _MobileTab(
-              label: controller.awayAbbr,
-              selected: focus == 2,
-              tokens: t,
-              onTap: () {
-                onPageChanged(2);
-                pageController.animateToPage(
-                  2,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOut,
-                );
-              },
-            ),
+            if (!single)
+              _MobileTab(
+                label: controller.awayAbbr,
+                selected: focus == 2,
+                tokens: t,
+                onTap: () {
+                  onPageChanged(2);
+                  pageController.animateToPage(
+                    2,
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOut,
+                  );
+                },
+              ),
           ],
         ),
         const SizedBox(height: 10),
         Expanded(
-          child: PageView(
-            controller: pageController,
+          child: DrumPicker(
+            controller: controller,
+            layout: DrumLayout.paged,
+            mode: DrumPickerMode.infinite,
+            pageController: pageController,
             onPageChanged: onPageChanged,
-            children: [
-              RosterColumn(
-                controller: controller,
-                isHome: true,
-                focused: focus == 0,
-              ),
-              VerbsColumn(
-                controller: controller,
-                focused: focus == 1,
-              ),
-              RosterColumn(
-                controller: controller,
-                isHome: false,
-                focused: focus == 2,
-              ),
-            ],
           ),
         ),
         const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            for (var i = 0; i < 3; i++)
+            for (var i = 0; i < pageCount; i++)
               Container(
                 width: 7,
                 height: 7,

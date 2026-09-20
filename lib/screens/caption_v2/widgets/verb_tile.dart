@@ -18,6 +18,7 @@ class VerbTile extends StatelessWidget {
     this.firebarSelected = false,
     this.highlightQuery = '',
     this.onTap,
+    this.onPinTap,
     this.onSecondaryTapDown,
   });
 
@@ -30,6 +31,7 @@ class VerbTile extends StatelessWidget {
   final bool firebarSelected;
   final String highlightQuery;
   final VoidCallback? onTap;
+  final VoidCallback? onPinTap;
   final GestureTapDownCallback? onSecondaryTapDown;
 
   @override
@@ -119,7 +121,29 @@ class VerbTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (pinned) ...[
+                if (onPinTap != null)
+                  IconButton(
+                    onPressed: onPinTap,
+                    tooltip: pinned
+                        ? 'Unpin for next frames'
+                        : 'Pin for next frames',
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints.tightFor(
+                      width: veryCompact ? 24 : 28,
+                      height: veryCompact ? 20 : 24,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    iconSize: veryCompact ? 12 : 14,
+                    color: pinned
+                        ? t.accent
+                        : t.textSecondary.withValues(alpha: 0.55),
+                    icon: Icon(
+                      pinned
+                          ? Icons.push_pin_rounded
+                          : Icons.push_pin_outlined,
+                    ),
+                  )
+                else if (pinned) ...[
                   const SizedBox(width: 3),
                   Icon(Icons.push_pin_rounded, size: 13, color: t.accent),
                 ],

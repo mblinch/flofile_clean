@@ -57,13 +57,14 @@ class SportVerbCategories {
       'National Anthem',
       'Stretching',
       'Warm Ups',
-      '',
+      'Arrivals',
     ],
   };
 
   static const Map<String, List<String>> basketball = {
     'Offense': [
       'Drives',
+      'Goes to the Basket',
       'Dribbles',
       'Shoots',
       'Scores',
@@ -102,7 +103,7 @@ class SportVerbCategories {
       'National Anthem',
       'Stretching',
       'Bench',
-      '',
+      'Arrivals',
       '',
     ],
   };
@@ -151,6 +152,7 @@ class SportVerbCategories {
       'Looks On',
       'Warm Ups',
       'Walkout',
+      'Arrivals',
       'National Anthem',
       'Stretching',
       'Bench',
@@ -196,6 +198,7 @@ class SportVerbCategories {
     'Non Game-Action': [
       'Looks On',
       'Warm Ups',
+      'Arrivals',
       'Takes the Ice',
       'Walks to the Ice',
       'Comes Off the Ice',

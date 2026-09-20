@@ -69,6 +69,8 @@ class PreferencesService {
   /// Admin-only: load rosters from Tank01 RapidAPI instead of Firestore/live APIs
   /// for sports Tank01 supports (baseball, basketball, hockey, wnba). Soccer stays ESPN.
   static const String _keyUseTank01MlbRosters = 'use_tank01_mlb_rosters';
+  /// When false, caption V2 hides FTP buttons/shortcuts for the session.
+  static const String _keyFtpModeEnabled = 'ftp_mode_enabled';
   /// `none` | `on_import` | `on_save` — when startup IPTC template is applied.
   static const String _keyIptcApplyMode = 'iptc_apply_mode';
   static const String _keyApplyIptcOnImport = 'apply_iptc_on_import';
@@ -203,6 +205,18 @@ class PreferencesService {
 
   Future<void> saveUseTank01Rosters(bool enabled) =>
       saveUseTank01MlbRosters(enabled);
+
+  /// When true (default), FTP buttons and shortcuts are shown in caption V2.
+  Future<bool> getFtpModeEnabled() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyFtpModeEnabled) ?? true;
+  }
+
+  Future<void> saveFtpModeEnabled(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyFtpModeEnabled, enabled);
+    _afterLocalPreferencesChanged();
+  }
 
   Future<IptcApplyMode> getIptcApplyMode() async {
     final prefs = await _getPrefs();

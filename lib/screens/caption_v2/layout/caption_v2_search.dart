@@ -251,6 +251,8 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                                     controller.filteredFirebarOptions[index],
                                 selected:
                                     index == controller.firebarOptionIndex,
+                                isDestination: controller.firebarOptionPrompt ==
+                                    'Save or FTP?',
                                 controller: controller,
                                 tokens: tokens,
                               ),
@@ -372,15 +374,34 @@ class _FirebarOptionButton extends StatelessWidget {
     required this.selected,
     required this.controller,
     required this.tokens,
+    this.isDestination = false,
   });
 
   final FirebarOption option;
   final bool selected;
   final CaptionV2Controller controller;
   final FfTokens tokens;
+  final bool isDestination;
 
   @override
   Widget build(BuildContext context) {
+    final isFtp = isDestination && option.transmit == true;
+    final fill = isDestination
+        ? (isFtp
+            ? tokens.accent.withValues(alpha: selected ? 0.28 : 0.18)
+            : tokens.selectedFill)
+        : (selected
+            ? FfTokens.firebar.withValues(alpha: 0.16)
+            : tokens.badgeFill);
+    final border = isDestination
+        ? tokens.accent.withValues(alpha: selected ? 0.75 : 0.45)
+        : (selected
+            ? FfTokens.firebar.withValues(alpha: 0.42)
+            : tokens.divider);
+    final textColor = isDestination
+        ? tokens.text
+        : (selected ? FfTokens.firebar : tokens.text);
+
     return InkWell(
       canRequestFocus: false,
       onTap: () => controller.chooseFirebarOption(option),
@@ -388,24 +409,19 @@ class _FirebarOptionButton extends StatelessWidget {
       child: Container(
         height: 26,
         alignment: Alignment.center,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: selected
-              ? FfTokens.firebar.withValues(alpha: 0.16)
-              : tokens.badgeFill,
+          color: fill,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: selected
-                ? FfTokens.firebar.withValues(alpha: 0.42)
-                : tokens.divider,
-          ),
+          border: Border.all(color: border),
         ),
         child: Text(
           option.label,
           style: tokens.metaStyle.copyWith(
-            color: selected ? FfTokens.firebar : tokens.text,
+            color: textColor,
             fontSize: 12,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            fontWeight:
+                selected || isDestination ? FontWeight.w600 : FontWeight.w400,
           ),
         ),
       ),

@@ -79,6 +79,8 @@ class VerbCaptionWording {
         return 'celebrates a goal';
       case 'Goes to the Net':
         return 'goes to the net';
+      case 'Goes to the Basket':
+        return 'goes to the basket';
       case 'Guards the Net':
         return 'guards the net';
       case 'Walks to the Ice':
@@ -171,6 +173,8 @@ class VerbCaptionWording {
         return 'defends on a wall';
       case 'Walkout':
         return 'walks out';
+      case 'Arrivals':
+        return 'arrives';
       case 'Dejection':
         return 'reacts with dejection';
       case 'Post Game Win':
@@ -225,10 +229,13 @@ class VerbCaptionWording {
       'Post Game Win': 'celebrate',
       'Post Game Loss': 'react',
       'Goes to the Net': 'go to the net',
+      'Goes to the Basket': 'go to the basket',
       'Drives': 'drive',
       'Dribbles': 'dribble',
       'Dunks': 'dunk',
       'Kicks': 'kick',
+      'Arrivals': 'arrive',
+      'Walkout': 'walk out',
     };
     final explicit = byVerb[verb];
     if (explicit != null) return explicit;
@@ -271,10 +278,13 @@ class VerbCaptionWording {
       'Post Game Win': 'celebrating',
       'Post Game Loss': 'reacting',
       'Goes to the Net': 'going to the net',
+      'Goes to the Basket': 'going to the basket',
       'Drives': 'driving',
       'Dribbles': 'dribbling',
       'Dunks': 'dunking',
       'Kicks': 'kicking',
+      'Arrivals': 'arriving',
+      'Walkout': 'walking out',
     };
     final explicit = byVerb[verb];
     if (explicit != null) return explicit;
@@ -282,23 +292,29 @@ class VerbCaptionWording {
   }
 
   /// Rough third-person singular → base form for multi-player captions.
+  ///
+  /// Only strip `es` for sibilants (`watches` → `watch`) and a few irregulars
+  /// (`goes` / `does`). Silent-e verbs like `celebrates` / `scores` drop the
+  /// trailing `s` only (`celebrate` / `score`), never the stem `e`.
   static String inferPluralFromSingular(String singularPhrase) {
     final s = singularPhrase.trim();
     if (s.isEmpty) return s;
     final words = s.split(RegExp(r'\s+'));
     if (words.isEmpty) return s;
     var first = words.first;
-    if (first.endsWith('ies') && first.length > 3) {
+    final lower = first.toLowerCase();
+    if (lower.endsWith('ies') && first.length > 3) {
       first = '${first.substring(0, first.length - 3)}y';
-    } else if (first.endsWith('ches') ||
-        first.endsWith('shes') ||
-        first.endsWith('xes') ||
-        first.endsWith('zes')) {
+    } else if (lower.endsWith('ches') ||
+        lower.endsWith('shes') ||
+        lower.endsWith('xes') ||
+        lower.endsWith('zes') ||
+        lower.endsWith('sses')) {
       first = first.substring(0, first.length - 2);
-    } else if (first.endsWith('es') && first.length > 2) {
+    } else if (lower == 'goes' || lower == 'does') {
       first = first.substring(0, first.length - 2);
-    } else if (first.endsWith('s') &&
-        !first.endsWith('ss') &&
+    } else if (lower.endsWith('s') &&
+        !lower.endsWith('ss') &&
         first.length > 1) {
       first = first.substring(0, first.length - 1);
     }

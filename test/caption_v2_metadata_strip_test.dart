@@ -3,6 +3,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quick_cap/screens/caption_v2/widgets/caption_strip.dart';
 
 void main() {
+  testWidgets('editable caption field accepts cursor edits', (tester) async {
+    String? edited;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CaptionStrip(
+            leading: '',
+            trailing: '',
+            chips: const [],
+            fullCaption: 'Original caption text',
+            onCaptionChanged: (value) => edited = value,
+          ),
+        ),
+      ),
+    );
+
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    await tester.pump();
+    await tester.enterText(field, 'Hand edited caption');
+    expect(edited, 'Hand edited caption');
+  });
+
   testWidgets('shows enabled compact metadata fields', (tester) async {
     String? changedKeywords;
     await tester.pumpWidget(

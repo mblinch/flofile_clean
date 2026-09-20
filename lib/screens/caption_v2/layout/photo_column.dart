@@ -21,7 +21,10 @@ enum _BrowseSort {
   filenameDescending
 }
 
-/// Desktop photo preview + regular thumbnail grid (V1-style, no burst cards).
+/// Green tile fill used to mark frames that belong to a burst.
+const Color _kBurstAccent = Color(0xFF6EE7A8);
+
+/// Desktop photo preview + thumbnail grid with burst linking.
 class PhotoColumn extends StatefulWidget {
   const PhotoColumn({
     super.key,
@@ -341,7 +344,7 @@ class PhotoSaveArrow extends StatelessWidget {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final previous = direction == AxisDirection.left;
     return Tooltip(
-      message: previous ? 'Save & previous' : 'Save & next',
+      message: previous ? 'Save & previous' : 'Save & next (⌘S)',
       child: Material(
         color: t.surface.withValues(alpha: 0.82),
         elevation: 3,
@@ -779,6 +782,13 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
         .length;
     final sentCount =
         allPaths.where((path) => controller.sentImages.contains(path)).length;
+    final burstMembers = <String>{};
+    final burstLeaders = <String, int>{}; // first path -> group size
+    for (final group in controller.bursts) {
+      if (group.length < 2) continue;
+      burstMembers.addAll(group);
+      burstLeaders[group.first] = group.length;
+    }
     final maxColumns = widget.maxColumns;
     final columnCount = _columnCount.clamp(2, maxColumns);
     _scheduleRepairIfNeeded(paths);
@@ -868,10 +878,18 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                   final selected = _selectedPaths.isEmpty
                                       ? originalIndex == controller.currentIndex
                                       : _selectedPaths.contains(path);
+                                  final inBurst = burstMembers.contains(path);
+                                  final burstSize = burstLeaders[path];
                                   final captioned =
                                       controller.captionedImages.contains(path);
                                   final ftp =
                                       controller.sentImages.contains(path);
+                                  final borderColor = selected
+                                      ? tokens.accent
+                                      : tokens.divider;
+                                  final borderWidth = selected
+                                      ? FfTokens.focusOutlineWidth
+                                      : 1.0;
                                   return GestureDetector(
                                     key: ValueKey(path),
                                     onTap: () => _selectThumbnail(paths, i),
@@ -882,23 +900,25 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                       details.globalPosition,
                                     ),
                                     child: Tooltip(
-                                      message: p.basename(path),
+                                      message: inBurst
+                                          ? '${p.basename(path)} — burst'
+                                          : p.basename(path),
                                       child: Container(
                                         padding: const EdgeInsets.all(4),
                                         decoration: BoxDecoration(
                                           color: selected
                                               ? tokens.selectedFill
-                                              : tokens.surface,
+                                              : inBurst
+                                                  ? _kBurstAccent.withValues(
+                                                      alpha: 0.22,
+                                                    )
+                                                  : tokens.surface,
                                           borderRadius: BorderRadius.circular(
                                             FfTokens.radiusTile,
                                           ),
                                           border: Border.all(
-                                            color: selected
-                                                ? tokens.accent
-                                                : tokens.divider,
-                                            width: selected
-                                                ? FfTokens.focusOutlineWidth
-                                                : 1,
+                                            color: borderColor,
+                                            width: borderWidth,
                                           ),
                                           boxShadow: [
                                             BoxShadow(
@@ -928,6 +948,15 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                                           _thumbCacheWidth(
                                                               columns),
                                                     ),
+                                                    if (burstSize != null)
+                                                      Positioned(
+                                                        left: 4,
+                                                        top: 4,
+                                                        child: _BurstBadge(
+                                                          count: burstSize,
+                                                          tokens: tokens,
+                                                        ),
+                                                      ),
                                                     if (captioned || ftp)
                                                       Positioned(
                                                         top: 4,
@@ -1038,6 +1067,36 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
       maxLines: 1,
       textAlign: TextAlign.center,
       style: tokens.microStyle.copyWith(fontSize: 8.5),
+    );
+  }
+}
+
+class _BurstBadge extends StatelessWidget {
+  const _BurstBadge({required this.count, required this.tokens});
+
+  final int count;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: tokens.surface.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(
+          color: _kBurstAccent.withValues(alpha: 0.55),
+        ),
+      ),
+      child: Text(
+        'Burst · $count',
+        style: tokens.microStyle.copyWith(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w600,
+          color: tokens.text,
+          letterSpacing: 0.2,
+        ),
+      ),
     );
   }
 }
@@ -1954,7 +2013,7 @@ class MobileFrameThumb extends StatelessWidget {
                 Text(
                   path == null
                       ? 'Tap to open folder'
-                      : '${_stateLabel(controller.currentFrameState)} · ${controller.currentIndex + 1}/${controller.imagePaths.length}',
+                      : '${_mobileFrameStateLabel(controller.currentFrameState)} · ${controller.currentIndex + 1}/${controller.imagePaths.length}',
                   style: t.metaStyle,
                 ),
               ],
@@ -1964,15 +2023,87 @@ class MobileFrameThumb extends StatelessWidget {
       ),
     );
   }
+}
 
-  String _stateLabel(FrameState s) {
-    switch (s) {
-      case FrameState.todo:
-        return 'To do';
-      case FrameState.saved:
-        return 'Saved · not sent';
-      case FrameState.sent:
-        return 'Sent';
-    }
+/// Large top photo for the mobile stack (tap opens full-screen review).
+class MobileFrameBanner extends StatelessWidget {
+  const MobileFrameBanner({
+    super.key,
+    required this.controller,
+    required this.onOpen,
+  });
+
+  final CaptionV2Controller controller;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+        final paths = controller.imagePaths;
+        final path = paths.isEmpty
+            ? null
+            : paths[controller.currentIndex.clamp(0, paths.length - 1)];
+        return GestureDetector(
+          onTap: onOpen,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 10,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: t.sunken,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: t.divider),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: path == null
+                        ? Center(
+                            child: Icon(
+                              Icons.image_outlined,
+                              color: t.textSecondary,
+                              size: 36,
+                            ),
+                          )
+                        : OrientedFilePreview(
+                            key: ValueKey('mobile-banner-$path'),
+                            path: path,
+                            fit: BoxFit.cover,
+                            cacheWidth: 780,
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                path == null
+                    ? (controller.sessionReady
+                        ? 'No images in folder'
+                        : 'Tap to open folder')
+                    : '${controller.currentFileName} · ${_mobileFrameStateLabel(controller.currentFrameState)} · ${controller.currentIndex + 1}/${paths.length}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: t.metaStyle,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+String _mobileFrameStateLabel(FrameState s) {
+  switch (s) {
+    case FrameState.todo:
+      return 'To do';
+    case FrameState.saved:
+      return 'Saved · not sent';
+    case FrameState.sent:
+      return 'Sent';
   }
 }

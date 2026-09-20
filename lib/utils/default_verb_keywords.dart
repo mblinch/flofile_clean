@@ -82,6 +82,8 @@ final Map<String, List<String>> _defaults = {
   'Post Game Win': ['postgame', 'win', 'victory'],
   'Post Game Loss': ['postgame', 'loss', 'defeat'],
   'Dejection': ['dejection', 'defeat', 'reaction'],
+  'Arrivals': ['arrive', 'arrives', 'arriving', 'arrival'],
+  'Walkout': ['walkout', 'walk out', 'tunnel'],
   // Baseball — Offense
   'Single': ['single', 'singles', 'hit'],
   'Double': ['double', 'doubles', 'hit'],
@@ -115,6 +117,7 @@ final Map<String, List<String>> _defaults = {
   'Pitching Change': ['pitching change', 'reliever', 'bullpen', 'hook'],
   // Basketball — Offense
   'Drives': ['drive', 'drives', 'driving', 'penetration'],
+  'Goes to the Basket': ['basket', 'drive', 'penetration', 'paint'],
   'Dribbles': ['dribble', 'dribbles', 'dribbling', 'handles'],
   'Dunks': ['dunk', 'dunks', 'dunking', 'slam'],
   'Lays Up': ['layup', 'lay up', 'lay-in', 'finger roll'],

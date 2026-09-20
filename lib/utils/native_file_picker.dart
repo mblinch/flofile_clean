@@ -1,19 +1,93 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 class NativeFilePicker {
-  /// Pick a directory using macOS native dialog
+  /// Pick a directory. macOS keeps the AppleScript dialog; other platforms
+  /// use [file_picker] so Android/iOS work.
   static Future<String?> pickDirectory({String? initialDirectory}) async {
+    if (!kIsWeb && Platform.isMacOS) {
+      return _pickDirectoryMacOS(initialDirectory: initialDirectory);
+    }
+    try {
+      if (!await ensureMediaReadPermission()) {
+        print('Directory picker: media permission denied');
+        return null;
+      }
+      final path = await FilePicker.platform.getDirectoryPath(
+        dialogTitle: 'Choose images folder',
+        initialDirectory: initialDirectory,
+      );
+      if (path == null || path.isEmpty) return null;
+      return path;
+    } catch (e) {
+      print('Directory picker exception: $e');
+      return null;
+    }
+  }
+
+  /// Pick a file. macOS keeps AppleScript; other platforms use [file_picker].
+  static Future<String?> pickFile({
+    List<String>? allowedExtensions,
+    String? initialDirectory,
+  }) async {
+    if (!kIsWeb && Platform.isMacOS) {
+      return _pickFileMacOS(
+        allowedExtensions: allowedExtensions,
+        initialDirectory: initialDirectory,
+      );
+    }
+    try {
+      if (!await ensureMediaReadPermission()) {
+        print('File picker: media permission denied');
+        return null;
+      }
+      final result = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Choose file',
+        initialDirectory: initialDirectory,
+        type: allowedExtensions == null || allowedExtensions.isEmpty
+            ? FileType.any
+            : FileType.custom,
+        allowedExtensions: allowedExtensions,
+      );
+      if (result == null || result.files.isEmpty) return null;
+      return result.files.single.path;
+    } catch (e) {
+      print('File picker exception: $e');
+      return null;
+    }
+  }
+
+  /// Android/iOS need runtime photo access before Directory/File reads work.
+  static Future<bool> ensureMediaReadPermission() async {
+    if (kIsWeb) return true;
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+      return true;
+    }
+    if (Platform.isIOS) {
+      final status = await Permission.photos.request();
+      return status.isGranted || status.isLimited;
+    }
+    if (Platform.isAndroid) {
+      final photos = await Permission.photos.request();
+      if (photos.isGranted || photos.isLimited) return true;
+      final storage = await Permission.storage.request();
+      return storage.isGranted;
+    }
+    return true;
+  }
+
+  static Future<String?> _pickDirectoryMacOS({String? initialDirectory}) async {
     try {
       String script = 'set chosenFolder to choose folder';
 
       if (initialDirectory != null && initialDirectory.isNotEmpty) {
-        // Normalize the path to ensure it's a valid POSIX path
         String normalizedPath = _normalizePath(initialDirectory);
 
-        // Verify the path exists before using it
         if (Directory(normalizedPath).existsSync()) {
           final appleScriptPath = _appleScriptString(normalizedPath);
-          // Coerce to alias so macOS reliably honors the default location.
           script += ' default location (POSIX file $appleScriptPath as alias)';
         } else {
           print('Initial directory does not exist, ignoring: $normalizedPath');
@@ -37,9 +111,10 @@ class NativeFilePicker {
     }
   }
 
-  /// Pick a file using macOS native dialog
-  static Future<String?> pickFile(
-      {List<String>? allowedExtensions, String? initialDirectory}) async {
+  static Future<String?> _pickFileMacOS({
+    List<String>? allowedExtensions,
+    String? initialDirectory,
+  }) async {
     try {
       String script = 'set chosenFile to choose file';
 
@@ -49,13 +124,10 @@ class NativeFilePicker {
       }
 
       if (initialDirectory != null && initialDirectory.isNotEmpty) {
-        // Normalize the path to ensure it's a valid POSIX path
         String normalizedPath = _normalizePath(initialDirectory);
 
-        // Verify the path exists before using it
         if (Directory(normalizedPath).existsSync()) {
           final appleScriptPath = _appleScriptString(normalizedPath);
-          // Coerce to alias so macOS reliably honors the default location.
           script += ' default location (POSIX file $appleScriptPath as alias)';
         } else {
           print('Initial directory does not exist, ignoring: $normalizedPath');
@@ -82,21 +154,14 @@ class NativeFilePicker {
   /// Normalize a path to ensure it's a valid POSIX path
   /// Converts HFS+ style paths (colon-separated) to POSIX (slash-separated)
   static String _normalizePath(String path) {
-    // If the path contains colons and no slashes, it's likely an HFS+ path
     if (path.contains(':') && !path.contains('/')) {
-      // Convert HFS+ path to POSIX
-      // HFS+ format: "VolumeName:folder:subfolder:"
-      // POSIX format: "/Volumes/VolumeName/folder/subfolder/"
-
       List<String> parts = path.split(':');
       parts = parts.where((part) => part.isNotEmpty).toList();
 
       if (parts.isNotEmpty) {
-        // First part is the volume name
         String volumeName = parts[0];
         List<String> subdirs = parts.sublist(1);
 
-        // Construct POSIX path
         if (subdirs.isEmpty) {
           return '/Volumes/$volumeName';
         } else {
@@ -105,7 +170,6 @@ class NativeFilePicker {
       }
     }
 
-    // Already a POSIX path or empty, return as-is
     return path;
   }
 

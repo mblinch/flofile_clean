@@ -726,6 +726,7 @@ class VerbSubOptions {
       'Battles',
       'Faceoff',
       'Goes to the Net',
+      'Goes to the Basket',
       'Power Play',
       'Breakaway',
       'Blocks',

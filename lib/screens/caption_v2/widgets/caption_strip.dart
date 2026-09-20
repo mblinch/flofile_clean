@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
+import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
 
 /// One editable value chip inside [CaptionStrip].
@@ -32,10 +33,14 @@ class CaptionStrip extends StatelessWidget {
     this.fullCaption,
     this.onChipTap,
     this.inningLabel,
+    this.timingUnitLabel = 'Inning',
     this.inning,
     this.regulationCount = 9,
     this.maxInning,
     this.extraLabel = 'X',
+    this.segmentPrefix,
+    this.selectedHalf,
+    this.onHalfSelected,
     this.onInningSelected,
     this.onInningDecrement,
     this.onInningIncrement,
@@ -45,6 +50,7 @@ class CaptionStrip extends StatelessWidget {
     this.postSelected = false,
     this.onPreTap,
     this.onPostTap,
+    this.inningStepperOnly = false,
     this.mlbTimestampVisible = false,
     this.mlbTimestampEnabled = false,
     this.mlbTimestampLoading = false,
@@ -56,6 +62,9 @@ class CaptionStrip extends StatelessWidget {
     this.onHeadlineChanged,
     this.keywords,
     this.onKeywordsChanged,
+    this.onCaptionChanged,
+    this.captionHint =
+        'Caption will appear here as you add players and a verb.',
     this.onEditTap,
     this.footer,
   });
@@ -75,8 +84,15 @@ class CaptionStrip extends StatelessWidget {
 
   final ValueChanged<String>? onChipTap;
 
+  /// When set, [fullCaption] is shown in an editable field (mouse + keyboard).
+  final ValueChanged<String>? onCaptionChanged;
+  final String captionHint;
+
   /// Current inning display (e.g. "2nd"). Null hides the inning controls.
   final String? inningLabel;
+
+  /// Left label for the timing bar ("Inning", "Half/Quarter", …).
+  final String timingUnitLabel;
   final int? inning;
   final int regulationCount;
 
@@ -84,6 +100,13 @@ class CaptionStrip extends StatelessWidget {
   /// (baseball), squares page by nines with arrow controls up to this value.
   final int? maxInning;
   final String extraLabel;
+
+  /// When set (e.g. `Q`), regulation squares show `Q1`… instead of `1`….
+  final String? segmentPrefix;
+
+  /// Basketball/WNBA half selection (`1H` / `2H`).
+  final String? selectedHalf;
+  final ValueChanged<String>? onHalfSelected;
   final ValueChanged<int>? onInningSelected;
   final VoidCallback? onInningDecrement;
   final VoidCallback? onInningIncrement;
@@ -94,6 +117,9 @@ class CaptionStrip extends StatelessWidget {
   final bool postSelected;
   final VoidCallback? onPreTap;
   final VoidCallback? onPostTap;
+
+  /// Mobile compact mode: only the +/- stepper (no Pre/Post, squares, or clock).
+  final bool inningStepperOnly;
   final bool mlbTimestampVisible;
   final bool mlbTimestampEnabled;
   final bool mlbTimestampLoading;
@@ -134,27 +160,34 @@ class CaptionStrip extends StatelessWidget {
                   constraints: BoxConstraints(
                     minHeight: t.textSizeCaption * 1.45 * 3,
                   ),
-                  child: fullCaption != null && fullCaption!.trim().isNotEmpty
-                      ? Text(fullCaption!, style: t.captionStyle)
-                      : Wrap(
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          spacing: 4,
-                          runSpacing: 6,
-                          children: [
-                            Text(leading, style: t.captionStyle),
-                            for (final chip
-                                in chips.where((chip) => !chip.isEmpty))
-                              _CaptionChip(
-                                data: chip,
-                                tokens: t,
-                                onTap: onChipTap == null
-                                    ? null
-                                    : () => onChipTap!(chip.id),
-                              ),
-                            if (trailing.isNotEmpty)
-                              Text(trailing, style: t.captionStyle),
-                          ],
-                        ),
+                  child: onCaptionChanged != null
+                      ? _CaptionEditor(
+                          value: fullCaption ?? '',
+                          hintText: captionHint,
+                          tokens: t,
+                          onChanged: onCaptionChanged!,
+                        )
+                      : fullCaption != null && fullCaption!.trim().isNotEmpty
+                          ? Text(fullCaption!, style: t.captionStyle)
+                          : Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 4,
+                              runSpacing: 6,
+                              children: [
+                                Text(leading, style: t.captionStyle),
+                                for (final chip
+                                    in chips.where((chip) => !chip.isEmpty))
+                                  _CaptionChip(
+                                    data: chip,
+                                    tokens: t,
+                                    onTap: onChipTap == null
+                                        ? null
+                                        : () => onChipTap!(chip.id),
+                                  ),
+                                if (trailing.isNotEmpty)
+                                  Text(trailing, style: t.captionStyle),
+                              ],
+                            ),
                 ),
                 if (inningLabel != null ||
                     onPreTap != null ||
@@ -162,10 +195,15 @@ class CaptionStrip extends StatelessWidget {
                   const SizedBox(height: 8),
                   _InningCard(
                     inningLabel: inningLabel,
+                    timingUnitLabel: timingUnitLabel,
                     inning: inning,
                     regulationCount: regulationCount,
                     extraLabel: extraLabel,
                     maxInning: maxInning,
+                    segmentPrefix: segmentPrefix,
+                    selectedHalf: selectedHalf,
+                    onHalfSelected:
+                        inningStepperOnly ? null : onHalfSelected,
                     onInningSelected: onInningSelected,
                     onInningDecrement: onInningDecrement,
                     onInningIncrement: onInningIncrement,
@@ -173,13 +211,15 @@ class CaptionStrip extends StatelessWidget {
                     onInningActivate: onInningActivate,
                     preSelected: preSelected,
                     postSelected: postSelected,
-                    onPreTap: onPreTap,
-                    onPostTap: onPostTap,
-                    mlbTimestampVisible: mlbTimestampVisible,
+                    onPreTap: inningStepperOnly ? null : onPreTap,
+                    onPostTap: inningStepperOnly ? null : onPostTap,
+                    mlbTimestampVisible:
+                        inningStepperOnly ? false : mlbTimestampVisible,
                     mlbTimestampEnabled: mlbTimestampEnabled,
                     mlbTimestampLoading: mlbTimestampLoading,
                     mlbTimestampMatched: mlbTimestampMatched,
                     onMlbTimestampTap: onMlbTimestampTap,
+                    stepperOnly: inningStepperOnly,
                     tokens: t,
                   ),
                 ],
@@ -213,6 +253,79 @@ class CaptionStrip extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _CaptionEditor extends StatefulWidget {
+  const _CaptionEditor({
+    required this.value,
+    required this.hintText,
+    required this.tokens,
+    required this.onChanged,
+  });
+
+  final String value;
+  final String hintText;
+  final FfTokens tokens;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_CaptionEditor> createState() => _CaptionEditorState();
+}
+
+class _CaptionEditorState extends State<_CaptionEditor> {
+  late final TextEditingController _controller;
+  final _focusNode = FocusNode(debugLabel: 'Caption editor');
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.value);
+  }
+
+  @override
+  void didUpdateWidget(covariant _CaptionEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value && _controller.text != widget.value) {
+      _controller.value = TextEditingValue(
+        text: widget.value,
+        selection: TextSelection.collapsed(offset: widget.value.length),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tokens;
+    return TextField(
+      controller: _controller,
+      focusNode: _focusNode,
+      maxLines: null,
+      minLines: 3,
+      keyboardType: TextInputType.multiline,
+      textAlignVertical: TextAlignVertical.top,
+      style: t.captionStyle,
+      cursorColor: t.accent,
+      mouseCursor: SystemMouseCursors.text,
+      spellCheckConfiguration: floSpellCheckConfiguration(),
+      decoration: InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        contentPadding: EdgeInsets.zero,
+        hintText: widget.hintText,
+        hintStyle: t.captionStyle.copyWith(color: t.textSecondary),
+      ),
+      onChanged: widget.onChanged,
     );
   }
 }
@@ -314,10 +427,14 @@ class _CaptionPanelState extends State<_CaptionPanel> {
 class _InningCard extends StatefulWidget {
   const _InningCard({
     required this.inningLabel,
+    required this.timingUnitLabel,
     required this.inning,
     required this.regulationCount,
     required this.maxInning,
     required this.extraLabel,
+    required this.segmentPrefix,
+    required this.selectedHalf,
+    required this.onHalfSelected,
     required this.onInningSelected,
     required this.onInningDecrement,
     required this.onInningIncrement,
@@ -332,14 +449,19 @@ class _InningCard extends StatefulWidget {
     required this.mlbTimestampLoading,
     required this.mlbTimestampMatched,
     required this.onMlbTimestampTap,
+    this.stepperOnly = false,
     required this.tokens,
   });
 
   final String? inningLabel;
+  final String timingUnitLabel;
   final int? inning;
   final int regulationCount;
   final int? maxInning;
   final String extraLabel;
+  final String? segmentPrefix;
+  final String? selectedHalf;
+  final ValueChanged<String>? onHalfSelected;
   final ValueChanged<int>? onInningSelected;
   final VoidCallback? onInningDecrement;
   final VoidCallback? onInningIncrement;
@@ -354,6 +476,7 @@ class _InningCard extends StatefulWidget {
   final bool mlbTimestampLoading;
   final bool mlbTimestampMatched;
   final VoidCallback? onMlbTimestampTap;
+  final bool stepperOnly;
   final FfTokens tokens;
 
   @override
@@ -366,8 +489,9 @@ class _InningCardState extends State<_InningCard> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    final canSquares =
-        widget.inningLabel != null && widget.onInningSelected != null;
+    final canSquares = !widget.stepperOnly &&
+        widget.inningLabel != null &&
+        widget.onInningSelected != null;
     final useSquares = canSquares && !_useStepper;
     return Container(
       width: double.infinity,
@@ -380,7 +504,9 @@ class _InningCardState extends State<_InningCard> {
       child: Row(
         children: [
           SizedBox(
-            width: 132,
+            width: widget.stepperOnly
+                ? 78
+                : (widget.timingUnitLabel.length > 8 ? 148 : 132),
             child: Row(
               children: [
                 Icon(
@@ -389,15 +515,15 @@ class _InningCardState extends State<_InningCard> {
                   color: t.textSecondary,
                 ),
                 const SizedBox(width: 5),
-                SizedBox(
-                  width: 58,
+                Expanded(
                   child: Text(
-                    'Inning',
+                    widget.timingUnitLabel,
                     maxLines: 1,
                     softWrap: false,
+                    overflow: TextOverflow.ellipsis,
                     style: FfTokens.captionTitle.copyWith(
                       color: t.text,
-                      fontSize: 16,
+                      fontSize: widget.timingUnitLabel.length > 8 ? 13 : 16,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -406,7 +532,7 @@ class _InningCardState extends State<_InningCard> {
                   const SizedBox(width: 4),
                   Tooltip(
                     message: _useStepper
-                        ? 'Switch to inning squares'
+                        ? 'Switch to ${widget.timingUnitLabel.toLowerCase()} squares'
                         : 'Switch to plus / minus',
                     child: InkWell(
                       onTap: () => setState(() => _useStepper = !_useStepper),
@@ -451,15 +577,51 @@ class _InningCardState extends State<_InningCard> {
           ],
           if (useSquares)
             Expanded(
-              child: _InningSquares(
-                selected: widget.inning ?? 1,
-                regulationCount: widget.regulationCount,
-                maxInning: widget.maxInning ?? (widget.regulationCount + 1),
-                extraLabel: widget.extraLabel,
-                tokens: t,
-                disabled: widget.inningDisabled,
-                onActivate: widget.onInningActivate,
-                onSelected: widget.onInningSelected!,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: widget.onHalfSelected == null ? 1 : 5,
+                    child: _InningSquares(
+                      selected: widget.inning ?? 1,
+                      regulationCount: widget.regulationCount,
+                      maxInning:
+                          widget.maxInning ?? (widget.regulationCount + 1),
+                      extraLabel: widget.extraLabel,
+                      segmentPrefix: widget.segmentPrefix,
+                      quarterSelected: widget.selectedHalf == null,
+                      tokens: t,
+                      disabled: widget.inningDisabled,
+                      onActivate: widget.onInningActivate,
+                      onSelected: widget.onInningSelected!,
+                    ),
+                  ),
+                  if (widget.onHalfSelected != null) ...[
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      width: 42,
+                      height: 24,
+                      child: _ToggleChip(
+                        label: '1H',
+                        selected: !widget.inningDisabled &&
+                            widget.selectedHalf == '1H',
+                        tokens: t,
+                        onTap: () => widget.onHalfSelected!('1H'),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    SizedBox(
+                      width: 42,
+                      height: 24,
+                      child: _ToggleChip(
+                        label: '2H',
+                        selected: !widget.inningDisabled &&
+                            widget.selectedHalf == '2H',
+                        tokens: t,
+                        onTap: () => widget.onHalfSelected!('2H'),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             )
           else if (widget.inningLabel != null) ...[
@@ -470,7 +632,7 @@ class _InningCardState extends State<_InningCard> {
                 tokens: t,
                 onDecrement: widget.onInningDecrement,
                 onIncrement: widget.onInningIncrement,
-                disabled: widget.inningDisabled,
+                disabled: widget.stepperOnly ? false : widget.inningDisabled,
                 onActivate: widget.onInningActivate,
               ),
             ),
@@ -540,7 +702,7 @@ class _MetadataBarState extends State<_MetadataBar> {
   @override
   void didUpdateWidget(covariant _MetadataBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_focusNode.hasFocus && _controller.text != widget.value) {
+    if (oldWidget.value != widget.value && _controller.text != widget.value) {
       _controller.text = widget.value;
     }
   }
@@ -563,6 +725,7 @@ class _MetadataBarState extends State<_MetadataBar> {
         maxLines: 1,
         style: t.metaStyle.copyWith(color: t.text),
         cursorColor: t.accent,
+        spellCheckConfiguration: floSpellCheckConfiguration(),
         decoration: InputDecoration(
           prefixIcon: Padding(
             padding: const EdgeInsets.only(left: 8, right: 8),
@@ -622,7 +785,7 @@ class _PersonalityBarState extends State<_PersonalityBar> {
   @override
   void didUpdateWidget(covariant _PersonalityBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_focusNode.hasFocus && widget.value != _controller.text) {
+    if (oldWidget.value != widget.value && widget.value != _controller.text) {
       _controller.text = widget.value;
     }
   }
@@ -662,6 +825,7 @@ class _PersonalityBarState extends State<_PersonalityBar> {
                 color: t.text,
               ),
               cursorColor: t.accent,
+              spellCheckConfiguration: floSpellCheckConfiguration(),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 isDense: true,
@@ -736,6 +900,8 @@ class _InningSquares extends StatefulWidget {
     required this.regulationCount,
     required this.maxInning,
     required this.extraLabel,
+    required this.segmentPrefix,
+    required this.quarterSelected,
     required this.tokens,
     required this.disabled,
     required this.onActivate,
@@ -746,6 +912,8 @@ class _InningSquares extends StatefulWidget {
   final int regulationCount;
   final int maxInning;
   final String extraLabel;
+  final String? segmentPrefix;
+  final bool quarterSelected;
   final FfTokens tokens;
   final bool disabled;
   final VoidCallback? onActivate;
@@ -832,9 +1000,12 @@ class _InningSquaresState extends State<_InningSquares> {
                 if (i > 0) const SizedBox(width: 4),
                 Expanded(
                   child: _InningSquare(
-                    label: '${innings[i]}',
-                    selected:
-                        !widget.disabled && widget.selected == innings[i],
+                    label: widget.segmentPrefix == null
+                        ? '${innings[i]}'
+                        : '${widget.segmentPrefix}${innings[i]}',
+                    selected: widget.quarterSelected &&
+                        !widget.disabled &&
+                        widget.selected == innings[i],
                     tokens: widget.tokens,
                     onTap: () => widget.onSelected(innings[i]),
                   ),
@@ -855,7 +1026,8 @@ class _InningSquaresState extends State<_InningSquares> {
                 Expanded(
                   child: _InningSquare(
                     label: widget.extraLabel,
-                    selected: !widget.disabled &&
+                    selected: widget.quarterSelected &&
+                        !widget.disabled &&
                         widget.selected == widget.regulationCount + 1,
                     tokens: widget.tokens,
                     onTap: () =>

@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:quick_cap/caption_style/caption_template.dart';
 import 'package:quick_cap/screens/caption_v2/data/caption_transfer_payload.dart';
 import 'package:quick_cap/screens/caption_v2/data/caption_v2_controller.dart';
 import 'package:quick_cap/screens/caption_v2/data/iptc_caption_writer.dart';
@@ -70,6 +71,22 @@ void main() {
     expect(body, contains('Bo Bichette'));
     expect(body, contains('Vladimir Guerrero Jr.'));
     expect(body, contains('celebrate against'));
+  });
+
+  test('single team mode omits opponent clause from captions', () {
+    final controller = CaptionV2Controller()
+      ..singleTeamMode = true
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = '';
+
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    controller.selectVerb('Celebrates');
+
+    final body = controller.buildCaptionBody();
+    expect(body, contains('Bo Bichette'));
+    expect(body, contains('celebrates'));
+    expect(body.toLowerCase(), isNot(contains('against')));
+    expect(controller.hasOpponentTeam, isFalse);
   });
 
   test('player-only selection still uses styled caption with date and byline',
@@ -145,6 +162,22 @@ void main() {
     controller.selectVerb('Celebrates');
     expect(controller.customVerbPhrase, isEmpty);
     expect(controller.customVerbPinned, isFalse);
+  });
+
+  test('unpinned custom verb clears on frame change; pinned survives', () {
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg'];
+
+    controller.setCustomVerbPhrase('waves to fans');
+    controller.goToIndex(1);
+    expect(controller.customVerbPhrase, isEmpty);
+    expect(controller.customVerbPinned, isFalse);
+
+    controller.setCustomVerbPhrase('tips his cap');
+    controller.toggleCustomVerbPin();
+    controller.goToIndex(0);
+    expect(controller.customVerbPinned, isTrue);
+    expect(controller.customVerbPhrase, 'tips his cap');
   });
 
   test('celebration selector applies and toggles a celebration type', () {
@@ -293,6 +326,51 @@ void main() {
     expect(
       controller.topSearchHits().map((hit) => hit.label),
       containsAll(['Save', 'FTP']),
+    );
+  });
+
+  test('basketball half selection uses half caption wording', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'basketball'
+      ..homeTeam = 'Toronto Raptors'
+      ..awayTeam = 'New York Knicks';
+
+    expect(controller.timingUnitTitle, 'Half/Quarter');
+    controller.setTimingHalf('1H');
+    expect(controller.timingHalf, '1H');
+    expect(controller.timingCaptionClause, 'during the first half');
+
+    controller.setInning(3);
+    expect(controller.timingHalf, isNull);
+    expect(controller.timingCaptionClause, 'during the third quarter');
+  });
+
+  test('pre folds into in-their game identifier instead of stacking', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'wnba'
+      ..homeTeam = 'New York Liberty'
+      ..awayTeam = 'Las Vegas Aces'
+      ..captionTemplate = CaptionTemplate.getty().copyWith(
+        gameIdentifierText: 'in their WNBA game',
+      );
+
+    controller.selectPlayer(player('Breanna Stewart', '30'), isHome: true);
+    controller.selectVerb('Celebrates');
+    controller.setPre(true);
+
+    expect(controller.timingCaptionClause, isEmpty);
+    expect(controller.buildCaptionBody(), isNot(contains('before the game')));
+    expect(
+      controller.buildCaptionSentence(),
+      contains('ahead of their WNBA game'),
+    );
+    expect(
+      controller.buildCaptionSentence(),
+      isNot(contains('before the game')),
+    );
+    expect(
+      controller.buildCaptionSentence(),
+      isNot(contains('in their WNBA game')),
     );
   });
 
@@ -611,23 +689,6 @@ void main() {
     expect(controller.opposingPlayers, [home]);
   });
 
-  test('applies clipboard and previous captions exactly', () {
-    final controller = CaptionV2Controller();
-    const payload = CaptionTransferPayload(
-      caption: '  Exact edited caption  ',
-      personality: 'Player One;Player Two',
-    );
-
-    controller.applyTransferredCaption(payload);
-    expect(controller.buildCaptionSentence(), '  Exact edited caption  ');
-    expect(controller.personality, 'Player One;Player Two');
-
-    controller.previousCaption = payload;
-    controller.setManualCaption(null);
-    expect(controller.applyPreviousCaption(), isTrue);
-    expect(controller.buildCaptionSentence(), '  Exact edited caption  ');
-  });
-
   test('reset restores embedded caption state without ending session', () {
     final controller = CaptionV2Controller()
       ..sessionReady = true
@@ -685,6 +746,42 @@ void main() {
     expect(controller.currentPath, '/after.jpg');
   });
 
+  test('partial burst save advances to first unselected frame', () {
+    final start = DateTime(2026, 9, 7, 12);
+    final controller = CaptionV2Controller()
+      ..imagePaths = [
+        '/a.jpg',
+        '/b.jpg',
+        '/c.jpg',
+        '/d.jpg',
+        '/e.jpg',
+        '/after.jpg',
+      ]
+      ..currentIndex = 0
+      ..captureByPath.addAll({
+        '/a.jpg': start,
+        '/b.jpg': start.add(const Duration(milliseconds: 200)),
+        '/c.jpg': start.add(const Duration(milliseconds: 400)),
+        '/d.jpg': start.add(const Duration(milliseconds: 600)),
+        '/e.jpg': start.add(const Duration(milliseconds: 800)),
+        '/after.jpg': start.add(const Duration(seconds: 5)),
+      });
+
+    final chain = ['/a.jpg', '/b.jpg', '/c.jpg', '/d.jpg', '/e.jpg'];
+    controller.advanceAfterBurstSelection(
+      chain: chain,
+      savedPaths: ['/a.jpg', '/c.jpg'],
+    );
+    expect(controller.currentPath, '/b.jpg');
+
+    controller.currentIndex = 0;
+    controller.advanceAfterBurstSelection(
+      chain: chain,
+      savedPaths: chain,
+    );
+    expect(controller.currentPath, '/after.jpg');
+  });
+
   test('pinned verb survives frame navigation while unpinned verb clears', () {
     final controller = CaptionV2Controller()
       ..imagePaths = ['/one.jpg', '/two.jpg'];
@@ -702,6 +799,93 @@ void main() {
     controller.unpinVerb();
     controller.goToIndex(0);
     expect(controller.selectedVerb, isNull);
+  });
+
+  test('pinned catalog verb stays pinned after selecting another verb', () {
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg'];
+
+    controller.toggleVerbPin('Single');
+    expect(controller.pinnedVerb, 'Single');
+    expect(controller.selectedVerb, 'Single');
+
+    controller.selectVerb('Double');
+    expect(controller.pinnedVerb, 'Single');
+    expect(controller.selectedVerb, 'Double');
+
+    controller.goToIndex(1);
+    expect(controller.pinnedVerb, 'Single');
+    expect(controller.selectedVerb, 'Single');
+  });
+
+  test('custom verb does not unpin a catalog pin', () {
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg'];
+
+    controller.toggleVerbPin('Celebrates');
+    expect(controller.pinnedVerb, 'Celebrates');
+
+    controller.setCustomVerbPhrase('arrives');
+    expect(controller.pinnedVerb, 'Celebrates');
+    expect(controller.selectedVerb, isNull);
+    expect(controller.customVerbPhrase, 'arrives');
+
+    controller.goToIndex(1);
+    expect(controller.pinnedVerb, 'Celebrates');
+    expect(controller.selectedVerb, 'Celebrates');
+    expect(controller.customVerbPhrase, isEmpty);
+  });
+
+  test('pinned custom verb survives selecting a catalog verb', () {
+    final controller = CaptionV2Controller();
+
+    controller.setCustomVerbPhrase('arrives');
+    controller.toggleCustomVerbPin();
+    expect(controller.customVerbPinned, isTrue);
+    expect(controller.customVerbPhrase, 'arrives');
+
+    controller.selectVerb('Celebrates');
+    expect(controller.customVerbPinned, isTrue);
+    expect(controller.lastCustomVerbPhrase, 'arrives');
+    expect(controller.customVerbPhrase, isEmpty);
+    expect(controller.selectedVerb, 'Celebrates');
+
+    controller.imagePaths = ['/one.jpg', '/two.jpg'];
+    controller.goToIndex(1);
+    expect(controller.customVerbPinned, isTrue);
+    expect(controller.customVerbPhrase, 'arrives');
+    expect(controller.selectedVerb, isNull);
+  });
+
+  test('copy uses the same caption text shown in the strip', () {
+    final controller = CaptionV2Controller()
+      ..currentIptcMeta = {'IPTC:Description': 'Embedded caption'};
+
+    expect(controller.displayedCaption, 'Embedded caption');
+
+    controller.setManualCaption('Pasted caption');
+    expect(controller.displayedCaption, 'Pasted caption');
+  });
+
+  test('applies clipboard and previous captions exactly', () {
+    final controller = CaptionV2Controller();
+    const payload = CaptionTransferPayload(
+      caption: '  Exact edited caption  ',
+      personality: 'Player One;Player Two',
+      headline: 'Game story',
+      keywords: 'baseball, sports',
+    );
+
+    controller.applyTransferredCaption(payload);
+    expect(controller.buildCaptionSentence(), '  Exact edited caption  ');
+    expect(controller.personality, 'Player One;Player Two');
+    expect(controller.headline, 'Game story');
+    expect(controller.keywords, 'baseball, sports');
+
+    controller.previousCaption = payload;
+    controller.setManualCaption(null);
+    expect(controller.applyPreviousCaption(), isTrue);
+    expect(controller.buildCaptionSentence(), '  Exact edited caption  ');
   });
 
   test('bulk manual save marks only successful paths captioned', () async {

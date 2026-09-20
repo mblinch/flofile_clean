@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../caption_style/verb_caption_wording.dart';
 import '../caption_style/verb_sub_options.dart';
 import '../flo_layout_constants.dart';
+import '../theme/ff_tokens.dart';
 import '../utils/default_verb_keywords.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
@@ -40,6 +41,7 @@ class FullVerbEditDialog extends StatefulWidget {
     this.onCreateCustomVerb,
     this.onUpdateCustomVerb,
     this.createOnOpen = false,
+    this.useFfTokens = false,
   });
 
   final String initialVerb;
@@ -105,6 +107,9 @@ class FullVerbEditDialog extends StatefulWidget {
   final String? awaySampleJersey;
   final String? selectedAwayPlayerLabel;
 
+  /// When true, use Caption V2 dark [FfTokens] chrome instead of classic teal/white.
+  final bool useFfTokens;
+
   @override
   State<FullVerbEditDialog> createState() => _FullVerbEditDialogState();
 }
@@ -151,6 +156,16 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       _isCreating ||
       _editingCustom ||
       (widget.isCustomVerb?.call(_currentVerb) ?? false);
+
+  /// V2 tokens when [FullVerbEditDialog.useFfTokens] is set.
+  ///
+  /// Do not use [appDialogTokens] with [State.context] here — that context sits
+  /// *above* any [AppDialogFfStyle] wrapped inside [build], so lookups miss it
+  /// and fall back to the classic white/teal chrome.
+  FfTokens? get _v2 {
+    if (!widget.useFfTokens) return null;
+    return Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+  }
 
   @override
   void initState() {
@@ -233,23 +248,31 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
 
   Widget _buildReactionPhraseChips({required bool enabled}) {
     final phrases = _reactionPhrases;
+    final t = _v2;
+    final radius = t != null ? FfTokens.radiusChip : 6.0;
     return AppDialogLabeledField(
       label: 'Reaction phrases',
       bottomGap: 0,
       child: Material(
-        color: enabled ? Colors.white : const Color(0xFFF5F5F5),
-        elevation: enabled ? 2 : 0,
+        color: t != null
+            ? (enabled ? t.sunken : t.badgeFill)
+            : (enabled ? Colors.white : const Color(0xFFF5F5F5)),
+        elevation: t != null ? 0 : (enabled ? 2 : 0),
         shadowColor: const Color(0x33000000),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(radius),
         child: Container(
           width: double.infinity,
           height: kAppDialogControlHeight,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           alignment: Alignment.centerLeft,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(radius),
             border: Border.all(
-              color: enabled ? const Color(0xFFE4E4E4) : Colors.grey.shade300,
+              color: t != null
+                  ? t.divider
+                  : (enabled
+                      ? const Color(0xFFE4E4E4)
+                      : Colors.grey.shade300),
             ),
           ),
           child: SingleChildScrollView(
@@ -272,16 +295,16 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                     child: TextField(
                       controller: _reactionPhraseDraft,
                       autofocus: true,
-                      style: kAppDialogFieldTextStyle.copyWith(fontSize: 9),
+                      style: appDialogFieldTextStyleOf(context)
+                          .copyWith(fontSize: 9),
                       textInputAction: TextInputAction.done,
                       onSubmitted: (_) => _commitReactionPhraseDraft(),
                       onEditingComplete: _commitReactionPhraseDraft,
                       decoration: InputDecoration(
                         isDense: true,
                         hintText: 'add',
-                        hintStyle: kAppDialogFieldTextStyle.copyWith(
+                        hintStyle: appDialogHintStyleOf(context).copyWith(
                           fontSize: 9,
-                          color: const Color(0xFFB0B0B0),
                         ),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 5,
@@ -290,19 +313,21 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(9),
                           borderSide: BorderSide(
-                            color: kFloTealLight.withValues(alpha: 0.55),
+                            color: (t?.accent ?? kFloTealLight)
+                                .withValues(alpha: 0.55),
                           ),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(9),
                           borderSide: BorderSide(
-                            color: kFloTealLight.withValues(alpha: 0.55),
+                            color: (t?.accent ?? kFloTealLight)
+                                .withValues(alpha: 0.55),
                           ),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(9),
-                          borderSide: const BorderSide(
-                            color: kFloTealLight,
+                          borderSide: BorderSide(
+                            color: t?.accent ?? kFloTealLight,
                             width: 1.2,
                           ),
                         ),
@@ -313,23 +338,24 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                   Tooltip(
                     message: 'Add reaction phrase',
                     child: Material(
-                      color: Colors.white,
+                      color: t?.surface ?? Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(9),
                         side: BorderSide(
-                          color: kFloTealLight.withValues(alpha: 0.55),
+                          color: (t?.accent ?? kFloTealLight)
+                              .withValues(alpha: 0.55),
                         ),
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(9),
                         onTap: _startAddingReactionPhrase,
-                        child: const SizedBox(
+                        child: SizedBox(
                           width: 18,
                           height: 18,
                           child: Icon(
                             Icons.add,
                             size: 12,
-                            color: kFloTealDark,
+                            color: t?.accent ?? kFloTealDark,
                           ),
                         ),
                       ),
@@ -348,16 +374,20 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     required bool enabled,
     VoidCallback? onDelete,
   }) {
+    final t = _v2;
     return Container(
       height: 18,
       padding: EdgeInsets.only(left: 5, right: onDelete != null ? 1 : 5),
       decoration: BoxDecoration(
-        color: enabled ? kFloTealSelectedFill : const Color(0xFFF0F0F0),
+        color: enabled
+            ? (t?.selectedFill ?? kFloTealSelectedFill)
+            : (t?.badgeFill ?? const Color(0xFFF0F0F0)),
         borderRadius: BorderRadius.circular(9),
         border: Border.all(
           color: enabled
-              ? kFloTealLight.withValues(alpha: 0.45)
-              : Colors.grey.shade300,
+              ? (t?.selectedBorder ??
+                  kFloTealLight.withValues(alpha: 0.45))
+              : (t?.divider ?? Colors.grey.shade300),
         ),
       ),
       child: Row(
@@ -365,10 +395,12 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         children: [
           Text(
             phrase,
-            style: kAppDialogFieldTextStyle.copyWith(
+            style: appDialogFieldTextStyleOf(context).copyWith(
               fontSize: 9,
               height: 1.0,
-              color: enabled ? kFloTealDark : const Color(0xFFB0B0B0),
+              color: enabled
+                  ? (t?.accent ?? kFloTealDark)
+                  : (t?.textSecondary ?? const Color(0xFFB0B0B0)),
             ),
           ),
           if (onDelete != null)
@@ -380,7 +412,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 child: Icon(
                   Icons.close,
                   size: 11,
-                  color: enabled ? kFloTealMid : const Color(0xFFB0B0B0),
+                  color: enabled
+                      ? (t?.accent ?? kFloTealMid)
+                      : (t?.textSecondary ?? const Color(0xFFB0B0B0)),
                 ),
               ),
             ),
@@ -732,27 +766,32 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   Widget _buildCaptionPreview() {
     final variants = _previewVariants();
     final selectedId = _resolvedPreviewVariantId;
+    final t = _v2;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           width: double.infinity,
           constraints: const BoxConstraints(minHeight: 48),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: const Color(0xFFFAFAFA),
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFFE4E4E4)),
+            color: t?.sunken ?? const Color(0xFFFAFAFA),
+            borderRadius: BorderRadius.circular(
+              t != null ? FfTokens.radiusChip : 6,
+            ),
+            border: Border.all(color: t?.divider ?? const Color(0xFFE4E4E4)),
           ),
           alignment: Alignment.topLeft,
           child: Text(
             _buildSelectedCaption(),
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 11,
-              color: Color(0xFF444444),
-              height: 1.35,
-            ),
+            style: t != null
+                ? t.bodyStyle
+                : const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 11,
+                    color: Color(0xFF444444),
+                    height: 1.35,
+                  ),
           ),
         ),
         const SizedBox(height: 8),
@@ -763,11 +802,13 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           children: [
             Text(
               'Preview example options:',
-              style: kAppDialogFieldTextStyle.copyWith(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF666666),
-              ),
+              style: t != null
+                  ? t.metaStyle
+                  : kAppDialogFieldTextStyle.copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF666666),
+                    ),
             ),
             for (final v in variants)
               _variantChip(
@@ -786,27 +827,38 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     required bool selected,
     required VoidCallback onTap,
   }) {
+    final t = _v2;
+    final radius = t != null ? FfTokens.radiusChip : 6.0;
     return Material(
-      color: selected ? kFloTealSelectedFill : Colors.white,
+      color: selected
+          ? (t?.selectedFill ?? kFloTealSelectedFill)
+          : (t?.badgeFill ?? Colors.white),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(radius),
         side: BorderSide(
-          color: selected ? kFloTealDark : const Color(0xFFE0E0E0),
+          color: selected
+              ? (t?.selectedBorder ?? kFloTealDark)
+              : (t?.divider ?? const Color(0xFFE0E0E0)),
           width: selected ? 1.2 : 1,
         ),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(radius),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           child: Text(
             label,
-            style: kAppDialogFieldTextStyle.copyWith(
-              fontSize: 10,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? kFloTealDark : const Color(0xFF555555),
-            ),
+            style: t != null
+                ? t.chipStyle.copyWith(
+                    color: selected ? t.text : t.textSecondary,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                  )
+                : kAppDialogFieldTextStyle.copyWith(
+                    fontSize: 10,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: selected ? kFloTealDark : const Color(0xFF555555),
+                  ),
           ),
         ),
       ),
@@ -1108,121 +1160,271 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final screenH = MediaQuery.sizeOf(context).height;
-    // Leave room for teal title + action row inside the AlertDialog.
-    final contentH = (screenH * 0.92) - 96;
+    final screen = MediaQuery.sizeOf(context);
+    // Leave room for title + action row inside the classic AlertDialog.
+    final contentH = (screen.height * 0.92) - 96;
     final hasSavedDefault = widget.hasSavedDefault(_currentVerb);
+    final useV2 = widget.useFfTokens;
+    final t = useV2
+        ? (Theme.of(context).extension<FfTokens>() ?? FfTokens.dark)
+        : null;
+    final title = _isCreating
+        ? 'Create Verb'
+        : (_isCustomContext ? 'Edit Custom Verb' : 'Edit Verb');
 
-    return Center(
-      child: SizedBox(
-        width: kVerbEditDialogWidth,
-        child: AlertDialog(
-          shape: kAppDialogShape,
-          backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent,
-          elevation: 8,
-          shadowColor: Colors.black.withValues(alpha: 0.18),
-          clipBehavior: Clip.antiAlias,
-          titlePadding: EdgeInsets.zero,
-          contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
-          title: AppDialogTealTitleBar(
-            title: _isCreating
-                ? 'Create Verb'
-                : (_isCustomContext ? 'Edit Custom Verb' : 'Edit Verb'),
-            trailing: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: _busy ? null : _onCancel,
-                borderRadius: BorderRadius.circular(4),
-                child: const Padding(
-                  padding: EdgeInsets.all(4),
-                  child: Icon(Icons.close, size: 16, color: Colors.white70),
+    Widget editorBody({required bool expand}) {
+      final row = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildBrowser(),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SingleChildScrollView(
+              key: ValueKey(
+                _isCreating
+                    ? 'verb-editor-new'
+                    : 'verb-editor-$_currentVerb',
+              ),
+              clipBehavior: Clip.hardEdge,
+              child: _buildEditor(),
+            ),
+          ),
+        ],
+      );
+      if (expand) return row;
+      return SizedBox(
+        width: kVerbEditDialogWidth - 32,
+        height: contentH,
+        child: row,
+      );
+    }
+
+    final actions = useV2
+        ? Row(
+            children: [
+              if (!_isCustomContext)
+                Tooltip(
+                  message: hasSavedDefault
+                      ? 'Restore this verb to your saved default for ${widget.sport}'
+                      : 'Restore this verb to the built-in factory wording',
+                  child: TextButton(
+                    onPressed: _busy ? null : _reset,
+                    child: Text(
+                      'Reset to Default',
+                      style: t!.metaStyle.copyWith(color: t.textSecondary),
+                    ),
+                  ),
+                ),
+              const Spacer(),
+              TextButton(
+                onPressed: _busy ? null : _onCancel,
+                child: Text(
+                  'Cancel',
+                  style: t!.metaStyle.copyWith(color: t.textSecondary),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton(
+                onPressed: _busy
+                    ? null
+                    : () => _save(asDefault: false, closeAfter: false),
+                style: FilledButton.styleFrom(
+                  backgroundColor: t.accent,
+                  foregroundColor: t.inkOnAccent,
+                ),
+                child: Text(_isCreating ? 'Create' : 'Save'),
+              ),
+              if (widget.isAdmin && !_isCustomContext) ...[
+                const SizedBox(width: 8),
+                Tooltip(
+                  message:
+                      'Admin: publish this wording into app originals for '
+                      '${widget.sport}. Other users keep personal defaults '
+                      'until restore / first seed.',
+                  child: OutlinedButton(
+                    onPressed: _busy
+                        ? null
+                        : () => _save(
+                              asDefault: false,
+                              asAppDefault: true,
+                              closeAfter: false,
+                            ),
+                    child: const Text('Set as App Default · Admin'),
+                  ),
+                ),
+              ],
+            ],
+          )
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!_isCustomContext)
+                Tooltip(
+                  message: hasSavedDefault
+                      ? 'Restore this verb to your saved default for ${widget.sport}'
+                      : 'Restore this verb to the built-in factory wording',
+                  child: ElevatedGreyButton(
+                    label: 'Reset to Default',
+                    fontSize: 11,
+                    onPressed: _busy ? null : _reset,
+                  ),
+                ),
+              if (!_isCustomContext) const SizedBox(width: 8),
+              ElevatedGreyButton(
+                label: 'Cancel',
+                fontSize: 11,
+                onPressed: _busy ? null : _onCancel,
+              ),
+              const SizedBox(width: 8),
+              ElevatedGreyButton(
+                label: _isCreating ? 'Create' : 'Save',
+                fontSize: 11,
+                isPrimary: true,
+                onPressed: _busy
+                    ? null
+                    : () => _save(asDefault: false, closeAfter: false),
+              ),
+              if (widget.isAdmin && !_isCustomContext) ...[
+                const SizedBox(width: 8),
+                Tooltip(
+                  message:
+                      'Admin: publish this wording into app originals for '
+                      '${widget.sport}. Other users keep personal defaults '
+                      'until restore / first seed.',
+                  child: ElevatedGreyButton(
+                    label: 'Set as App Default · Admin',
+                    fontSize: 11,
+                    isAdmin: true,
+                    onPressed: _busy
+                        ? null
+                        : () => _save(
+                              asDefault: false,
+                              asAppDefault: true,
+                              closeAfter: false,
+                            ),
+                  ),
+                ),
+              ],
+            ],
+          );
+
+    // insetPadding vertical 28*2 — keep dialog inside the window.
+    final maxDialogH = (screen.height - 56).clamp(420.0, 900.0);
+
+    final dialogChild = useV2
+        ? SizedBox(
+            width: kVerbEditDialogWidth,
+            height: maxDialogH,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 12, 8, 0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: t!.labelStyle.copyWith(fontSize: 16),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: _busy ? null : _onCancel,
+                        icon: Icon(Icons.close, color: t.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+                    child: editorBody(expand: true),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 18, 14),
+                  child: actions,
+                ),
+              ],
+            ),
+          )
+        : null;
+
+    final dialog = useV2
+        ? Dialog(
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
+            backgroundColor: t!.surface,
+            surfaceTintColor: Colors.transparent,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+              side: BorderSide(color: t.divider),
+            ),
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                textButtonTheme: TextButtonThemeData(
+                  style: TextButton.styleFrom(
+                    foregroundColor: t.textSecondary,
+                    textStyle: t.metaStyle,
+                  ),
+                ),
+                outlinedButtonTheme: OutlinedButtonThemeData(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: t.text,
+                    side: BorderSide(color: t.divider),
+                    textStyle: t.metaStyle,
+                  ),
+                ),
+                filledButtonTheme: FilledButtonThemeData(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: t.accent,
+                    foregroundColor: t.inkOnAccent,
+                    textStyle: t.metaStyle.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: t.inkOnAccent,
+                    ),
+                  ),
+                ),
+              ),
+              child: dialogChild!,
+            ),
+          )
+        : AlertDialog(
+            shape: kAppDialogShape,
+            backgroundColor: Colors.white,
+            surfaceTintColor: Colors.transparent,
+            elevation: 8,
+            shadowColor: Colors.black.withValues(alpha: 0.18),
+            clipBehavior: Clip.antiAlias,
+            titlePadding: EdgeInsets.zero,
+            contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
+            title: AppDialogTealTitleBar(
+              title: title,
+              trailing: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _busy ? null : _onCancel,
+                  borderRadius: BorderRadius.circular(4),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.close, size: 16, color: Colors.white70),
+                  ),
                 ),
               ),
             ),
-          ),
-          content: SizedBox(
-            width: kVerbEditDialogWidth - 32,
-            height: contentH,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildBrowser(),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SingleChildScrollView(
-                    key: ValueKey(
-                      _isCreating
-                          ? 'verb-editor-new'
-                          : 'verb-editor-$_currentVerb',
-                    ),
-                    clipBehavior: Clip.none,
-                    child: _buildEditor(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actionsAlignment: MainAxisAlignment.end,
-          actionsOverflowAlignment: OverflowBarAlignment.end,
-          actionsOverflowButtonSpacing: 8,
-          actions: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!_isCustomContext)
-                  Tooltip(
-                    message: hasSavedDefault
-                        ? 'Restore this verb to your saved default for ${widget.sport}'
-                        : 'Restore this verb to the built-in factory wording',
-                    child: ElevatedGreyButton(
-                      label: 'Reset to Default',
-                      fontSize: 11,
-                      onPressed: _busy ? null : _reset,
-                    ),
-                  ),
-                if (!_isCustomContext) const SizedBox(width: 8),
-                ElevatedGreyButton(
-                  label: 'Cancel',
-                  fontSize: 11,
-                  onPressed: _busy ? null : _onCancel,
-                ),
-                const SizedBox(width: 8),
-                ElevatedGreyButton(
-                  label: _isCreating ? 'Create' : 'Save',
-                  fontSize: 11,
-                  isPrimary: true,
-                  onPressed: _busy
-                      ? null
-                      : () => _save(asDefault: false, closeAfter: false),
-                ),
-                if (widget.isAdmin && !_isCustomContext) ...[
-                  const SizedBox(width: 8),
-                  Tooltip(
-                    message:
-                        'Admin: publish this wording into app originals for '
-                        '${widget.sport}. Other users keep personal defaults '
-                        'until restore / first seed.',
-                    child: ElevatedGreyButton(
-                      label: 'Set as App Default · Admin',
-                      fontSize: 11,
-                      isAdmin: true,
-                      onPressed: _busy
-                          ? null
-                          : () => _save(
-                                asDefault: false,
-                                asAppDefault: true,
-                                closeAfter: false,
-                              ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ],
-        ),
-      ),
+            content: editorBody(expand: false),
+            actionsAlignment: MainAxisAlignment.end,
+            actionsOverflowAlignment: OverflowBarAlignment.end,
+            actionsOverflowButtonSpacing: 8,
+            actions: [actions],
+          );
+
+    return AppDialogFfStyle(
+      enabled: useV2,
+      child: dialog,
     );
   }
 
@@ -1305,55 +1507,88 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   }
 
   Widget _buildBrowser() {
+    final t = _v2;
     return SizedBox(
       width: kVerbEditDialogBrowserWidth,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: const Color(0xFFF7F8F9),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: const Color(0xFFE4E4E4)),
+          color: t?.sunken ?? const Color(0xFFF7F8F9),
+          borderRadius: BorderRadius.circular(
+            t != null ? FfTokens.radiusCard : 6,
+          ),
+          border: Border.all(color: t?.divider ?? const Color(0xFFE4E4E4)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
               child: _sectionHeader('Verbs'),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 6),
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SizedBox(
-                    height: 28,
-                    child: OutlinedButton.icon(
-                      onPressed: _busy ? null : _startCreateVerb,
-                      icon: const Icon(Icons.add, size: 14),
-                      label: const Text(
-                        'Create verb',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: kFloTealDark,
-                        side: const BorderSide(color: kFloTealLight),
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                      ),
-                    ),
+                    height: 30,
+                    child: t != null
+                        ? Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: _busy ? null : _startCreateVerb,
+                              icon: Icon(
+                                Icons.add,
+                                size: 15,
+                                color: t.text,
+                              ),
+                              label: Text(
+                                'Create verb',
+                                style: t.metaStyle.copyWith(
+                                  color: t.text,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                foregroundColor: t.text,
+                              ),
+                            ),
+                          )
+                        : OutlinedButton.icon(
+                            onPressed: _busy ? null : _startCreateVerb,
+                            icon: const Icon(Icons.add, size: 14),
+                            label: const Text(
+                              'Create verb',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: kFloTealDark,
+                              side: const BorderSide(color: kFloTealLight),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                            ),
+                          ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Drag ≡ to reorder. Change Category to move a verb.',
-                    style: kAppDialogFieldTextStyle.copyWith(
-                      fontSize: 9.5,
-                      color: const Color(0xFF888888),
-                      height: 1.25,
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Text(
+                      'Drag ≡ to reorder. Change Category to move a verb.',
+                      style: t != null
+                          ? t.microStyle
+                          : kAppDialogFieldTextStyle.copyWith(
+                              fontSize: 9.5,
+                              color: const Color(0xFF888888),
+                              height: 1.25,
+                            ),
                     ),
                   ),
                 ],
@@ -1386,6 +1621,13 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         .where((v) => v.trim().isNotEmpty)
         .toList();
     final categorySelected = cat == _browseCategory;
+    final t = _v2;
+    final selectedFill = t?.selectedFill ?? kFloTealSelectedFill;
+    final accent = t?.accent ?? kFloTealDark;
+    final text = t?.text ?? const Color(0xFF333333);
+    final muted = t?.textSecondary ?? const Color(0xFF666666);
+    final dim = t?.textSecondary ?? const Color(0xFF888888);
+    final drag = t?.textSecondary ?? const Color(0xFFAAAAAA);
     return Material(
       key: ValueKey('verb-edit-cat-$cat'),
       color: Colors.transparent,
@@ -1394,7 +1636,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         children: [
           Material(
             color: categorySelected && expanded
-                ? kFloTealSelectedFill
+                ? selectedFill
                 : Colors.transparent,
             child: InkWell(
               onTap: () => _selectBrowseCategory(cat),
@@ -1404,7 +1646,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                   border: Border(
                     left: BorderSide(
                       color:
-                          categorySelected ? kFloTealDark : Colors.transparent,
+                          categorySelected ? accent : Colors.transparent,
                       width: 3,
                     ),
                   ),
@@ -1413,39 +1655,35 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                   children: [
                     ReorderableDragStartListener(
                       index: categoryIndex,
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 2),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
                         child: Icon(
                           Icons.drag_indicator,
                           size: 16,
-                          color: Color(0xFFAAAAAA),
+                          color: drag,
                         ),
                       ),
                     ),
                     Icon(
                       expanded ? Icons.expand_more : Icons.chevron_right,
                       size: 16,
-                      color: categorySelected
-                          ? kFloTealDark
-                          : const Color(0xFF666666),
+                      color: categorySelected ? accent : muted,
                     ),
                     const SizedBox(width: 2),
                     Expanded(
                       child: Text(
                         cat,
-                        style: kAppDialogFieldTextStyle.copyWith(
+                        style: appDialogFieldTextStyleOf(context).copyWith(
                           fontWeight: FontWeight.w600,
-                          color: categorySelected
-                              ? kFloTealDark
-                              : const Color(0xFF333333),
+                          color: categorySelected ? accent : text,
                         ),
                       ),
                     ),
                     Text(
                       '${verbs.length}',
-                      style: kAppDialogFieldTextStyle.copyWith(
+                      style: appDialogFieldTextStyleOf(context).copyWith(
                         fontSize: 10,
-                        color: const Color(0xFF888888),
+                        color: dim,
                       ),
                     ),
                     const SizedBox(width: 4),
@@ -1477,9 +1715,15 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   Widget _buildCascadedVerbRow(String verb, int verbIndex) {
     final selected = verb == _currentVerb;
     final fav = _favorites.contains(verb);
+    final t = _v2;
+    final selectedFill = t?.selectedFill ?? kFloTealSelectedFill;
+    final accent = t?.accent ?? kFloTealDark;
+    final text = t?.text ?? const Color(0xFF333333);
+    final drag = t?.textSecondary ?? const Color(0xFFBBBBBB);
+    final starOff = t?.textSecondary ?? const Color(0xFFAAAAAA);
     return Material(
       key: ValueKey('verb-edit-verb-$verb'),
-      color: selected ? kFloTealSelectedFill : Colors.transparent,
+      color: selected ? selectedFill : Colors.transparent,
       child: InkWell(
         onTap: () {
           _selectVerb(verb);
@@ -1489,7 +1733,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: selected ? kFloTealDark : Colors.transparent,
+                color: selected ? accent : Colors.transparent,
                 width: 3,
               ),
             ),
@@ -1498,12 +1742,12 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
             children: [
               ReorderableDragStartListener(
                 index: verbIndex,
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 2),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
                   child: Icon(
                     Icons.drag_indicator,
                     size: 14,
-                    color: Color(0xFFBBBBBB),
+                    color: drag,
                   ),
                 ),
               ),
@@ -1512,9 +1756,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                   verb,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: kAppDialogFieldTextStyle.copyWith(
+                  style: appDialogFieldTextStyleOf(context).copyWith(
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                    color: selected ? kFloTealDark : const Color(0xFF333333),
+                    color: selected ? accent : text,
                   ),
                 ),
               ),
@@ -1528,8 +1772,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                     child: Icon(
                       fav ? Icons.star : Icons.star_border,
                       size: 14,
-                      color:
-                          fav ? Colors.amber.shade700 : const Color(0xFFAAAAAA),
+                      color: fav ? FfTokens.firebar : starOff,
                     ),
                   ),
                 ),
@@ -1623,8 +1866,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                             _isFavorite ? Icons.star : Icons.star_border,
                             size: 20,
                             color: _isFavorite
-                                ? Colors.amber.shade700
-                                : const Color(0xFF888888),
+                                ? FfTokens.firebar
+                                : (_v2?.textSecondary ??
+                                    const Color(0xFF888888)),
                           ),
                         ),
                       ),
@@ -1709,7 +1953,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                           label: 'On',
                           compact: true,
                           checkboxOnRight: true,
-                          textColor: Colors.white,
+                          textColor: _v2?.textSecondary ??
+                              Colors.white,
                           onChanged: (v) => setState(
                             () => _subOptions =
                                 _subOptions.copyWith(rbiEnabled: v),
@@ -1782,7 +2027,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                         label: 'On',
                         compact: true,
                         checkboxOnRight: true,
-                        textColor: Colors.white,
+                        textColor: _v2?.textSecondary ??
+                            Colors.white,
                         onChanged: (v) => setState(() {
                           _subOptions = _subOptions.copyWith(
                             celebrationEnabled: v,
@@ -1813,9 +2059,10 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                         'Used after the reaction verb — e.g. "celebrates after '
                         'hitting a double." Without it, reaction captions can\'t '
                         'name the play.',
-                        style: kAppDialogFieldTextStyle.copyWith(
+                        style: appDialogFieldTextStyleOf(context).copyWith(
                           fontSize: 9.5,
-                          color: const Color(0xFF888888),
+                          color: _v2?.textSecondary ??
+                              const Color(0xFF888888),
                           height: 1.3,
                         ),
                       ),
@@ -1853,7 +2100,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                   _wantsOpponent = v;
                 }),
                 compact: true,
-                textColor: Colors.white,
+                textColor: _v2?.textSecondary ??
+                    Colors.white,
               ),
             ],
           ),
@@ -1863,36 +2111,48 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         _sectionDivider(),
         _sectionHeader('Keywords'),
         const SizedBox(height: 8),
-        Material(
-          color: Colors.white,
-          elevation: 2,
-          shadowColor: const Color(0x33000000),
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFE4E4E4)),
-            ),
-            child: TextField(
-              controller: _keywords,
-              style: kAppDialogFieldTextStyle,
-              maxLines: 2,
-              onChanged: (_) => setState(() {}),
-              decoration: appDialogBareFieldDecoration(
-                hintText: 'comma-separated',
+        Builder(
+          builder: (context) {
+            final t = _v2;
+            final radius = t != null ? FfTokens.radiusChip : 6.0;
+            return Material(
+              color: t?.sunken ?? Colors.white,
+              elevation: t != null ? 0 : 2,
+              shadowColor: const Color(0x33000000),
+              borderRadius: BorderRadius.circular(radius),
+              child: Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(radius),
+                  border: Border.all(
+                    color: t?.divider ?? const Color(0xFFE4E4E4),
+                  ),
+                ),
+                child: TextField(
+                  controller: _keywords,
+                  style: appDialogFieldTextStyleOf(context),
+                  maxLines: 2,
+                  onChanged: (_) => setState(() {}),
+                  decoration: appDialogBareFieldDecoration(
+                    hintText: 'comma-separated',
+                  ).copyWith(
+                    hintStyle: appDialogHintStyleOf(context),
+                  ),
+                ),
               ),
-            ),
-          ),
+            );
+          },
         ),
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
             'Only written into keywords, not captions. Keywording mode must be enabled.',
-            style: kAppDialogFieldTextStyle.copyWith(
+            style: appDialogFieldTextStyleOf(context).copyWith(
               fontSize: 9.5,
-              color: const Color(0xFF888888),
+              color: _v2?.textSecondary ??
+                  const Color(0xFF888888),
               height: 1.3,
             ),
           ),
@@ -1902,24 +2162,51 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   }
 
   Widget _sectionDivider() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 14),
-      child: Divider(height: 1, thickness: 1, color: Color(0xFFE8E8E8)),
+    final t = _v2;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: t != null ? 12 : 14),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: t?.divider ?? const Color(0xFFE8E8E8),
+      ),
     );
   }
 
   Widget _columnDivider() {
-    return const Padding(
-      padding: EdgeInsets.only(top: 36),
+    final t = _v2;
+    return Padding(
+      padding: const EdgeInsets.only(top: 36),
       child: VerticalDivider(
         width: 25,
         thickness: 1,
-        color: Color(0xFFE8E8E8),
+        color: t?.divider ?? const Color(0xFFE8E8E8),
       ),
     );
   }
 
   Widget _sectionHeader(String title, {Widget? trailing}) {
+    final t = _v2;
+    if (t != null) {
+      return SizedBox(
+        height: 26,
+        child: Row(
+          children: [
+            Text(
+              title.toUpperCase(),
+              style: t.microStyle.copyWith(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.7,
+              ),
+            ),
+            if (trailing != null) ...[
+              const Spacer(),
+              trailing,
+            ],
+          ],
+        ),
+      );
+    }
     return Container(
       height: 28,
       width: double.infinity,
@@ -1957,9 +2244,10 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     bool checkboxOnRight = false,
     Color? textColor,
   }) {
+    final t = _v2;
     final text = Text(
       label,
-      style: kAppDialogFieldTextStyle.copyWith(
+      style: appDialogFieldTextStyleOf(context).copyWith(
         color: textColor,
       ),
       maxLines: 1,
@@ -1967,7 +2255,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     );
     final box = AppCompactCheckbox(
       value: value,
-      accentColor: kFloTealDark,
+      accentColor: t?.accent ?? kFloTealDark,
       onChanged: onChanged,
     );
     final children = checkboxOnRight

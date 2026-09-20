@@ -94,34 +94,8 @@ Map<ShortcutActivator, Intent> buildCaptionV2Shortcuts() {
         const OpenSearchIntent(),
     const SingleActivator(LogicalKeyboardKey.keyK, control: true):
         const OpenSearchIntent(),
-    const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
-        const SaveNextIntent(),
-    const SingleActivator(LogicalKeyboardKey.keyS, control: true):
-        const SaveNextIntent(),
-    const SingleActivator(LogicalKeyboardKey.enter, shift: true):
-        const SaveNextIntent(),
-    const SingleActivator(LogicalKeyboardKey.numpadEnter, shift: true):
-        const SaveNextIntent(),
-    const SingleActivator(
-      LogicalKeyboardKey.enter,
-      meta: true,
-      shift: true,
-    ): const SaveTransmitNextIntent(),
-    const SingleActivator(
-      LogicalKeyboardKey.enter,
-      control: true,
-      shift: true,
-    ): const SaveTransmitNextIntent(),
-    const SingleActivator(
-      LogicalKeyboardKey.numpadEnter,
-      meta: true,
-      shift: true,
-    ): const SaveTransmitNextIntent(),
-    const SingleActivator(
-      LogicalKeyboardKey.numpadEnter,
-      control: true,
-      shift: true,
-    ): const SaveTransmitNextIntent(),
+    // ⌘S / Shift+Enter / ⌘⇧Enter are handled by CaptionV2Screen's hardware
+    // key handler so they still work when focus is outside the Shortcuts tree.
     const SingleActivator(
       LogicalKeyboardKey.keyV,
       meta: true,

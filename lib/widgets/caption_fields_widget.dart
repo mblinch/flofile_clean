@@ -17126,7 +17126,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Checks', 'Defends', 'Blocks', 'Clears', 'Guards the Net', 'Saves',
       'Passes', 'Power Play', 'Breakaway',
       // Basketball (all embed opponent in their action phrase)
-      'Drives', 'Dribbles', 'Dunks', 'Lays Up',
+      'Drives', 'Goes to the Basket', 'Dribbles', 'Dunks', 'Lays Up',
       'Three-Pointer', 'Free Throw', 'Steals the Ball', 'Contests', 'Rebounds',
       'Takes the Court',
     };
@@ -17630,6 +17630,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Dejection',
       'Post Game Win',
       'Post Game Loss',
+      // Basketball
+      'Drives',
+      'Goes to the Basket',
+      'Dribbles',
+      'Dunks',
+      'Lays Up',
+      'Three-Pointer',
+      'Free Throw',
+      'Steals the Ball',
+      'Contests',
+      'Rebounds',
       // Baseball: structured switch / sub-options (not plain _popupCustomVerb)
       'Tags',
       'Catches',
@@ -17750,6 +17761,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Dejection',
       'Post Game Win',
       'Post Game Loss',
+      // Basketball
+      'Drives',
+      'Goes to the Basket',
+      'Dribbles',
+      'Dunks',
+      'Lays Up',
+      'Three-Pointer',
+      'Free Throw',
+      'Steals the Ball',
+      'Contests',
+      'Rebounds',
       // Baseball: structured switch / sub-options (not plain _popupCustomVerb)
       'Tags',
       'Catches',
@@ -21496,6 +21518,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         originalVerb == 'Blocks' ||
         // Basketball opponent verbs
         originalVerb == 'Drives' ||
+        originalVerb == 'Goes to the Basket' ||
         originalVerb == 'Dribbles' ||
         originalVerb == 'Dunks' ||
         originalVerb == 'Lays Up' ||
@@ -22600,6 +22623,20 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return '$drivesPhrase$drivesAgainst ${_formatPlayersWithTeam(drivesOpp)}';
         }
         return '$drivesPhrase$drivesAgainst the ${_getOpposingTeamName()}';
+
+      case 'Goes to the Basket':
+        final basketOpp = _getOpposingPlayers();
+        final basketPhrase = overriddenPhrase ??
+            (hasResolvedVerbPhrase
+                ? resolvedVerbPhrase
+                : (activePlayerCount >= 2
+                    ? 'go to the basket'
+                    : 'goes to the basket'));
+        const basketAgainst = ' against';
+        if (basketOpp.isNotEmpty) {
+          return '$basketPhrase$basketAgainst ${_formatPlayersWithTeam(basketOpp)}';
+        }
+        return '$basketPhrase$basketAgainst the ${_getOpposingTeamName()}';
 
       case 'Dunks':
         final dunksOpp = _getOpposingPlayers();

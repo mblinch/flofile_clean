@@ -119,6 +119,44 @@ void main() {
     expect(searchHit, 4);
   });
 
+  testWidgets('save shortcut works while editable text is focused',
+      (tester) async {
+    var saves = 0;
+    final text = TextEditingController();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Shortcuts(
+          shortcuts: buildCaptionV2Shortcuts(),
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              SaveNextIntent: CallbackAction<SaveNextIntent>(
+                onInvoke: (_) {
+                  saves++;
+                  return null;
+                },
+              ),
+            },
+            child: Scaffold(
+              body: TextField(
+                controller: text,
+                autofocus: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(captionV2FocusIsEditable(), isTrue);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+
+    expect(saves, 1);
+  });
+
   testWidgets('editable text suppresses global printable and arrow actions',
       (tester) async {
     var searchHits = 0;

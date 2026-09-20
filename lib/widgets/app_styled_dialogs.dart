@@ -4,6 +4,76 @@ import 'package:flutter/material.dart';
 
 import '../flo_layout_constants.dart';
 import '../theme/app_tokens.dart';
+import '../theme/ff_tokens.dart';
+
+/// When enabled, shared dialog controls use Caption V2 [FfTokens] instead of
+/// the classic white/teal chrome.
+class AppDialogFfStyle extends InheritedWidget {
+  const AppDialogFfStyle({
+    super.key,
+    required this.enabled,
+    required super.child,
+  });
+
+  final bool enabled;
+
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppDialogFfStyle>()?.enabled ??
+      false;
+
+  @override
+  bool updateShouldNotify(AppDialogFfStyle oldWidget) =>
+      enabled != oldWidget.enabled;
+}
+
+/// Caption V2 tokens when [AppDialogFfStyle] is enabled; otherwise null.
+FfTokens? appDialogTokens(BuildContext context) {
+  if (!AppDialogFfStyle.of(context)) return null;
+  return Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+}
+
+TextStyle appDialogFieldTextStyleOf(
+  BuildContext context, {
+  bool enabled = true,
+}) {
+  final t = appDialogTokens(context);
+  if (t != null) {
+    return t.metaStyle.copyWith(
+      fontSize: 11,
+      color: enabled ? t.text : t.textSecondary,
+      height: 1.25,
+    );
+  }
+  return kAppDialogFieldTextStyle.copyWith(
+    color: enabled
+        ? kAppDialogFieldTextStyle.color
+        : const Color(0xFFB0B0B0),
+  );
+}
+
+TextStyle appDialogFieldLabelStyleOf(BuildContext context) {
+  final t = appDialogTokens(context);
+  if (t != null) {
+    return t.microStyle.copyWith(
+      fontWeight: FontWeight.w500,
+      letterSpacing: -0.2,
+      height: 1.2,
+    );
+  }
+  return kAppDialogFieldLabelStyle;
+}
+
+TextStyle appDialogHintStyleOf(BuildContext context) {
+  final t = appDialogTokens(context);
+  if (t != null) {
+    return t.metaStyle.copyWith(fontSize: 11, color: t.textSecondary);
+  }
+  return const TextStyle(
+    fontFamily: 'Inter',
+    fontSize: 11,
+    color: Color(0xFFB0B0B0),
+  );
+}
 
 /// Matches [KeyboardFirePanel] FTP / burst primary actions (`keyboard_fire_dialog.dart`).
 const Color kAppDialogPrimaryBlue = Color(0xFF0052CC);
@@ -215,21 +285,27 @@ class AppDialogControlShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = appDialogTokens(context);
+    final fill = t != null
+        ? (enabled ? t.sunken : t.badgeFill)
+        : (enabled ? Colors.white : const Color(0xFFF5F5F5));
+    final border = t != null
+        ? t.divider
+        : (enabled ? const Color(0xFFE4E4E4) : Colors.grey.shade300);
+    final radius = t != null ? FfTokens.radiusChip : 6.0;
     final box = Material(
-      color: enabled ? Colors.white : const Color(0xFFF5F5F5),
-      elevation: enabled ? 2 : 0,
+      color: fill,
+      elevation: t != null ? 0 : (enabled ? 2 : 0),
       shadowColor: const Color(0x33000000),
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(radius),
       child: Container(
         height: kAppDialogControlHeight,
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: enabled ? const Color(0xFFE4E4E4) : Colors.grey.shade300,
-          ),
+          borderRadius: BorderRadius.circular(radius),
+          border: Border.all(color: border),
         ),
         child: child,
       ),
@@ -239,7 +315,7 @@ class AppDialogControlShell extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(radius),
         child: box,
       ),
     );
@@ -286,7 +362,7 @@ class AppDialogLabeledField extends StatelessWidget {
                 Expanded(
                   child: Text(
                     label,
-                    style: kAppDialogFieldLabelStyle,
+                    style: appDialogFieldLabelStyleOf(context),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -327,39 +403,44 @@ class AppDialogLabeledTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = appDialogTokens(context);
+    final hint = appDialogHintStyleOf(context);
     final field = TextField(
       controller: controller,
       enabled: enabled,
       autofocus: autofocus,
       maxLines: maxLines,
-      style: kAppDialogFieldTextStyle.copyWith(
-        color: enabled
-            ? kAppDialogFieldTextStyle.color
-            : const Color(0xFFB0B0B0),
-      ),
+      style: appDialogFieldTextStyleOf(context, enabled: enabled),
       onChanged: onChanged,
-      decoration: appDialogBareFieldDecoration(hintText: hintText),
+      decoration: appDialogBareFieldDecoration(hintText: hintText).copyWith(
+        hintStyle: hint.copyWith(fontSize: hint.fontSize ?? 11),
+      ),
     );
+    final radius = t != null ? FfTokens.radiusChip : 6.0;
     return AppDialogLabeledField(
       label: label,
       bottomGap: bottomGap,
       child: maxLines == 1
           ? AppDialogControlShell(enabled: enabled, child: field)
           : Material(
-              color: enabled ? Colors.white : const Color(0xFFF5F5F5),
-              elevation: enabled ? 2 : 0,
+              color: t != null
+                  ? (enabled ? t.sunken : t.badgeFill)
+                  : (enabled ? Colors.white : const Color(0xFFF5F5F5)),
+              elevation: t != null ? 0 : (enabled ? 2 : 0),
               shadowColor: const Color(0x33000000),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(radius),
               child: Container(
                 width: double.infinity,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(radius),
                   border: Border.all(
-                    color: enabled
-                        ? const Color(0xFFE4E4E4)
-                        : Colors.grey.shade300,
+                    color: t != null
+                        ? t.divider
+                        : (enabled
+                            ? const Color(0xFFE4E4E4)
+                            : Colors.grey.shade300),
                   ),
                 ),
                 child: field,
@@ -401,12 +482,20 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
     if (box == null || !box.hasSize) return;
     final origin = box.localToGlobal(Offset.zero);
     final size = box.size;
+    final t = appDialogTokens(context);
+    final textStyle = appDialogFieldTextStyleOf(context);
     final selected = await showMenu<T>(
       context: context,
-      color: Colors.white,
-      elevation: 4,
+      color: t?.surface ?? Colors.white,
+      surfaceTintColor: Colors.transparent,
+      elevation: t != null ? 12 : 4,
       shadowColor: Colors.black.withValues(alpha: 0.18),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(
+          t != null ? FfTokens.radiusChip : 6,
+        ),
+        side: t != null ? BorderSide(color: t.divider) : BorderSide.none,
+      ),
       constraints: BoxConstraints(
         minWidth: size.width,
         maxWidth: size.width,
@@ -429,15 +518,15 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
               children: [
                 Expanded(
                   child: DefaultTextStyle(
-                    style: kAppDialogFieldTextStyle,
+                    style: textStyle,
                     child: item.child,
                   ),
                 ),
                 if (item.value == value)
-                  const Icon(
+                  Icon(
                     Icons.check,
                     size: 16,
-                    color: Color(0xFF333333),
+                    color: t?.text ?? const Color(0xFF333333),
                   ),
               ],
             ),
@@ -450,6 +539,7 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onChanged != null;
+    final t = appDialogTokens(context);
     return AppDialogLabeledField(
       label: label,
       bottomGap: bottomGap,
@@ -462,11 +552,7 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
               children: [
                 Expanded(
                   child: DefaultTextStyle(
-                    style: kAppDialogFieldTextStyle.copyWith(
-                      color: enabled
-                          ? kAppDialogFieldTextStyle.color
-                          : const Color(0xFFB0B0B0),
-                    ),
+                    style: appDialogFieldTextStyleOf(context, enabled: enabled),
                     child: _selectedChild(),
                   ),
                 ),
@@ -474,8 +560,8 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
                   Icons.arrow_drop_down,
                   size: 18,
                   color: enabled
-                      ? const Color(0xFF666666)
-                      : const Color(0xFFB0B0B0),
+                      ? (t?.textSecondary ?? const Color(0xFF666666))
+                      : (t?.textSecondary ?? const Color(0xFFB0B0B0)),
                 ),
               ],
             ),

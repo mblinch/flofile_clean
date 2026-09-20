@@ -222,6 +222,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           keywords: defaultKeywordsForVerbLabel('Looks On')),
       VerbOption('Warm Ups', 'warms up prior to play',
           keywords: defaultKeywordsForVerbLabel('Warm Ups')),
+      VerbOption('Arrivals', 'arrives',
+          keywords: defaultKeywordsForVerbLabel('Arrivals')),
       VerbOption('Takes the Ice', 'takes the ice prior to play',
           keywords: defaultKeywordsForVerbLabel('Takes the Ice')),
       VerbOption('Walks to the Ice', 'walks to the ice',

@@ -199,6 +199,8 @@ class CaptionV2CaptionDomain {
         return 'tags';
       case 'Drives':
         return 'drives to the basket';
+      case 'Goes to the Basket':
+        return 'goes to the basket';
       case 'Three-Pointer':
         return 'makes a three-pointer';
       case 'Steals the Ball':

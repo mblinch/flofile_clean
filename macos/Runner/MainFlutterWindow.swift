@@ -42,6 +42,8 @@ class MainFlutterWindow: NSWindow {
 
     ColorManagedPreviewPlugin.register(
       with: flutterViewController.registrar(forPlugin: "ColorManagedPreviewPlugin"))
+    MacSpellCheckPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "MacSpellCheckPlugin"))
 
     _installJerseyShortcutChannel(flutterViewController)
     _installJerseyEventMonitor()

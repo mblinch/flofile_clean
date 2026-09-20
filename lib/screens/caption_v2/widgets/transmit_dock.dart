@@ -16,6 +16,7 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.pasteEnabled = true,
     this.saveNextEnabled = true,
     this.transmitEnabled = true,
+    this.showTransmit = true,
   });
 
   final VoidCallback? onSavePrevious;
@@ -27,6 +28,7 @@ class CaptionV2ActionRow extends StatelessWidget {
   final bool pasteEnabled;
   final bool saveNextEnabled;
   final bool transmitEnabled;
+  final bool showTransmit;
 
   @override
   Widget build(BuildContext context) {
@@ -60,21 +62,23 @@ class CaptionV2ActionRow extends StatelessWidget {
       ),
       _UtilityButton(
         label: 'Save',
+        hint: '⌘S',
         icon: Icons.chevron_right,
         iconTrailing: true,
         tokens: t,
         enabled: saveNextEnabled,
         onPressed: onSaveNext,
       ),
-      _UtilityButton(
-        label: 'FTP',
-        icon: Icons.send_outlined,
-        iconTrailing: true,
-        tokens: t,
-        enabled: transmitEnabled,
-        emphasized: true,
-        onPressed: onTransmit,
-      ),
+      if (showTransmit)
+        _UtilityButton(
+          label: 'FTP',
+          icon: Icons.send_outlined,
+          iconTrailing: true,
+          tokens: t,
+          enabled: transmitEnabled,
+          emphasized: true,
+          onPressed: onTransmit,
+        ),
     ];
 
     return SizedBox(
@@ -226,6 +230,7 @@ class TransmitDock extends StatelessWidget {
           ],
           _OutlinedActionButton(
             label: 'Save & next',
+            hint: '⌘S',
             trailingIcon: Icons.chevron_right,
             tokens: t,
             minHeight: btnMinH,
@@ -254,6 +259,7 @@ class _UtilityButton extends StatelessWidget {
     required this.icon,
     required this.tokens,
     required this.onPressed,
+    this.hint,
     this.enabled = true,
     this.iconTrailing = false,
     this.dimWhenDisabled = true,
@@ -264,6 +270,7 @@ class _UtilityButton extends StatelessWidget {
   final IconData icon;
   final FfTokens tokens;
   final VoidCallback? onPressed;
+  final String? hint;
   final bool enabled;
   final bool iconTrailing;
   final bool dimWhenDisabled;
@@ -343,6 +350,18 @@ class _UtilityButton extends StatelessWidget {
                 ),
               ),
             ),
+            if (hint != null) ...[
+              const SizedBox(width: 4),
+              Text(
+                hint!,
+                style: tokens.keyHintStyle.copyWith(
+                  fontSize: 10,
+                  color: emphasized
+                      ? tokens.inkOnAccent.withValues(alpha: 0.85)
+                      : tokens.textSecondary,
+                ),
+              ),
+            ],
             if (iconTrailing) ...[
               const SizedBox(width: 5),
               Icon(icon, size: 15),

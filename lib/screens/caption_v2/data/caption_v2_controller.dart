@@ -78,7 +78,7 @@ class RosterHit {
 
 enum FirebarResultKind { player, verb }
 
-enum FirebarOptionKind { homeRun, rbi, celebration, base }
+enum FirebarOptionKind { homeRun, rbi, celebration, base, destination }
 
 enum RosterSortMode { number, firstName, lastName }
 
@@ -89,6 +89,7 @@ class FirebarOption {
     this.verbOverride,
     this.celebration,
     this.base,
+    this.transmit,
   });
 
   final String label;
@@ -96,6 +97,9 @@ class FirebarOption {
   final String? verbOverride;
   final String? celebration;
   final String? base;
+
+  /// Destination actions only: `false` = Save, `true` = FTP.
+  final bool? transmit;
 }
 
 class FirebarResult {
@@ -210,6 +214,13 @@ class CaptionV2Controller extends ChangeNotifier {
   // --- Game / teams ---
   String homeTeam = '';
   String awayTeam = '';
+
+  /// Session has one roster only ([homeTeam]); captions omit opponent clauses.
+  bool singleTeamMode = false;
+
+  bool get hasOpponentTeam =>
+      !singleTeamMode && awayTeam.trim().isNotEmpty;
+
   String venue = '';
   String sport = 'baseball';
   String city = '';
@@ -282,6 +293,10 @@ class CaptionV2Controller extends ChangeNotifier {
   int inning = 2;
   bool preGame = false;
   bool postGame = false;
+
+  /// Basketball/WNBA half selection (`1H` / `2H`); null = use quarter/OT via [inning].
+  String? timingHalf;
+
   bool mlbTimestampAvailable = false;
   bool mlbTimestampEnabled = true;
   bool mlbTimestampLoading = false;
@@ -303,6 +318,8 @@ class CaptionV2Controller extends ChangeNotifier {
   final Set<String> selectedImagePaths = {};
   bool burstDetectionEnabled = true;
   bool loadingImages = false;
+  /// When false, FTP buttons/shortcuts/menu items are hidden.
+  bool ftpModeEnabled = true;
 
   // --- Search / focus ---
   String searchQuery = '';
@@ -319,6 +336,9 @@ class CaptionV2Controller extends ChangeNotifier {
   FirebarOptionKind? _firebarOptionKind;
   List<FirebarOption> firebarOptions = const [];
   int firebarOptionIndex = 0;
+
+  /// Screen-provided save path so verb-menu / Firebar Save/FTP can show burst alerts.
+  Future<void> Function({required bool transmit})? onSaveTransmit;
 
   bool get searchGuided => guidedSearchPrompt != null;
   bool get searchHasJerseyAndVerb =>
@@ -554,6 +574,9 @@ class CaptionV2Controller extends ChangeNotifier {
   List<List<String>> get bursts =>
       groupFramesIntoBursts(imagePaths, captureByPath);
 
+  /// True when the loaded folder contains at least one multi-frame burst.
+  bool get hasDetectedBursts => bursts.any((group) => group.length > 1);
+
   List<String> get currentBurst {
     final path = currentPath;
     if (path == null) return const [];
@@ -570,6 +593,21 @@ class CaptionV2Controller extends ChangeNotifier {
     final path = currentPath;
     if (path == null) return const [];
     return burstChainFromAnchor(imagePaths, path, captureByPath);
+  }
+
+  /// Returns the multi-frame burst that overlaps [paths] with 2+ frames, if any.
+  List<String>? burstGroupOverlapping(Iterable<String> paths) {
+    final selected = paths.toSet();
+    if (selected.length < 2) return null;
+    for (final group in bursts) {
+      if (group.length < 2) continue;
+      var overlap = 0;
+      for (final path in group) {
+        if (selected.contains(path)) overlap++;
+        if (overlap >= 2) return group;
+      }
+    }
+    return null;
   }
 
   void setSelectedImagePaths(Iterable<String> paths) {
@@ -704,8 +742,30 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
-  /// Chip / stepper label (e.g. "2nd", "OT", "ET", "10th").
+  /// Strip title (basketball offers halves + quarters).
+  String get timingUnitTitle {
+    switch (sport.toLowerCase()) {
+      case 'basketball':
+      case 'wnba':
+        return 'Half/Quarter';
+      case 'hockey':
+        return 'Period';
+      case 'soccer':
+        return 'Half';
+      case 'baseball':
+      default:
+        return 'Inning';
+    }
+  }
+
+  bool get supportsTimingHalves {
+    final s = sport.toLowerCase();
+    return s == 'basketball' || s == 'wnba';
+  }
+
+  /// Chip / stepper label (e.g. "2nd", "OT", "ET", "10th", "1H").
   String get inningLabel {
+    if (timingHalf == '1H' || timingHalf == '2H') return timingHalf!;
     final max = timingRegulationCount;
     final s = sport.toLowerCase();
     if (inning > max) {
@@ -727,10 +787,40 @@ class CaptionV2Controller extends ChangeNotifier {
     return _ordinal(inning);
   }
 
+  static final RegExp _inTheirGameId =
+      RegExp(r'^in their\b', caseSensitive: false);
+
+  /// When Pre/Post is on and the style uses an "in their … game/match"
+  /// identifier, fold timing into that phrase ("ahead of their WNBA game")
+  /// instead of stacking "before the game in their WNBA game".
+  bool get _canFoldPrePostIntoGameIdentifier {
+    if (!preGame && !postGame) return false;
+    return _inTheirGameId
+        .hasMatch(captionTemplate.gameIdentifierText.trim());
+  }
+
+  String? get _foldedGameIdentifierText {
+    if (!_canFoldPrePostIntoGameIdentifier) return null;
+    final id = captionTemplate.gameIdentifierText.trim();
+    if (preGame) {
+      return id.replaceFirst(_inTheirGameId, 'ahead of their');
+    }
+    if (postGame) {
+      return id.replaceFirst(_inTheirGameId, 'following their');
+    }
+    return null;
+  }
+
   /// Caption clause for the current timing selection (matches classic wording).
   String get timingCaptionClause {
-    if (preGame) return 'prior to the game';
-    if (postGame) return 'after the game';
+    if (preGame) {
+      return _canFoldPrePostIntoGameIdentifier ? '' : 'before the game';
+    }
+    if (postGame) {
+      return _canFoldPrePostIntoGameIdentifier ? '' : 'following the game';
+    }
+    if (timingHalf == '1H') return 'during the first half';
+    if (timingHalf == '2H') return 'during the second half';
     final max = timingRegulationCount;
     final s = sport.toLowerCase();
     if (inning > max && s != 'baseball') {
@@ -764,9 +854,6 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   String get captionTrailing {
-    final subjectIsHome =
-        selectedPlayers.isEmpty ? selectedIsHome : selectedPlayers.first.isHome;
-    final opp = subjectIsHome ? awayTeam : homeTeam;
     final venueText = venue.trim().isNotEmpty
         ? venue
         : (_metaFirst(const [
@@ -777,6 +864,12 @@ class CaptionV2Controller extends ChangeNotifier {
             ]) ??
             '');
     final venueBit = venueText.isEmpty ? '' : ' at $venueText';
+    if (!hasOpponentTeam) {
+      return ' $timingCaptionClause$venueBit.'.replaceAll(RegExp(r'\s+'), ' ');
+    }
+    final subjectIsHome =
+        selectedPlayers.isEmpty ? selectedIsHome : selectedPlayers.first.isHome;
+    final opp = subjectIsHome ? awayTeam : homeTeam;
     return ' against the $opp $timingCaptionClause$venueBit.';
   }
 
@@ -915,8 +1008,13 @@ class CaptionV2Controller extends ChangeNotifier {
       ],
     );
 
+    final foldedGid = _foldedGameIdentifierText;
+    final templateForRender = foldedGid == null
+        ? captionTemplate
+        : captionTemplate.copyWith(gameIdentifierText: foldedGid);
+
     var caption = CaptionFormulaRenderer.render(
-      template: captionTemplate,
+      template: templateForRender,
       game: game,
       sampleAgency: agency,
       captionOverride: body,
@@ -931,6 +1029,15 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Opponent + timing clause used when players are selected but no verb yet.
   /// Venue / date / byline stay in the caption style renderer.
   String _incompleteContextPhrase() {
+    if (!hasOpponentTeam) {
+      if (preGame) {
+        return _canFoldPrePostIntoGameIdentifier ? '' : 'ahead of the game';
+      }
+      if (postGame) {
+        return _canFoldPrePostIntoGameIdentifier ? '' : 'following the game';
+      }
+      return timingCaptionClause;
+    }
     final subjects = subjectPlayers;
     final subjectIsHome =
         subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
@@ -940,7 +1047,7 @@ class CaptionV2Controller extends ChangeNotifier {
         : _formatPlayersWithTeam(opposingPlayers, captionTemplate);
 
     if (preGame) return 'ahead of playing against $target';
-    if (postGame) return 'after playing against $target';
+    if (postGame) return 'following the game against $target';
     return 'against $target $timingCaptionClause';
   }
 
@@ -1021,7 +1128,7 @@ class CaptionV2Controller extends ChangeNotifier {
       subOptions: definition?.subOptions,
     );
 
-    if (definition?.wantsOpponent ?? true) {
+    if ((definition?.wantsOpponent ?? true) && hasOpponentTeam) {
       action = CaptionV2CaptionDomain.withOpponent(
         verb: verb,
         action: action,
@@ -1033,16 +1140,24 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     if (verb == 'Post Game Win' || verb == 'Post Game Loss') {
-      return '$action after the game';
+      return _canFoldPrePostIntoGameIdentifier
+          ? action
+          : '$action following the game';
     }
-    if (preGame) return '$action prior to the game';
-    return '$action $timingCaptionClause';
+    if (preGame) {
+      return _canFoldPrePostIntoGameIdentifier
+          ? action
+          : '$action before the game';
+    }
+    return '$action $timingCaptionClause'.trim();
   }
 
   String _customActionPhrase() {
     var action = customVerbPhrase.trim();
     final lower = action.toLowerCase();
-    if (!lower.contains(' against ') && !lower.contains(' playing ')) {
+    if (hasOpponentTeam &&
+        !lower.contains(' against ') &&
+        !lower.contains(' playing ')) {
       final subjects = subjectPlayers;
       final subjectIsHome =
           subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
@@ -1055,9 +1170,17 @@ class CaptionV2Controller extends ChangeNotifier {
             : _formatPlayersWithTeam(opposingPlayers, captionTemplate),
       );
     }
-    if (preGame) return '$action prior to the game';
-    if (postGame) return '$action after the game';
-    return '$action $timingCaptionClause';
+    if (preGame) {
+      return _canFoldPrePostIntoGameIdentifier
+          ? action
+          : '$action before the game';
+    }
+    if (postGame) {
+      return _canFoldPrePostIntoGameIdentifier
+          ? action
+          : '$action following the game';
+    }
+    return '$action $timingCaptionClause'.trim();
   }
 
   String _withCelebrationType({
@@ -1157,13 +1280,15 @@ class CaptionV2Controller extends ChangeNotifier {
     _verbRepository = EffectiveVerbRepository(_prefs!);
     sport = await _prefs!.getCurrentSport();
     await _loadVerbCatalog();
-    burstDetectionEnabled = await _prefs!.getBurstDetectionEnabled();
+    // V2 always auto-detects bursts from capture times; no session toggle.
+    burstDetectionEnabled = true;
     captionTemplate = await _prefs!.getCaptionTemplate();
     mlbTimestampEnabled = await _prefs!.getMlbInningFromClockEnabled();
     showKeywordsField = await _prefs!.getShowKeywordsField();
     showPersonalityField = await _prefs!.getShowPersonalityField();
     applyVerbKeywords = await _prefs!.getApplyVerbKeywords();
     applyPlayerNamesToKeywords = await _prefs!.getApplyPlayerNamesToKeywords();
+    ftpModeEnabled = await _prefs!.getFtpModeEnabled();
     _prefs!.captionFieldVisibilityRevision.addListener(
       _onCaptionFieldVisibilityChanged,
     );
@@ -1228,15 +1353,23 @@ class CaptionV2Controller extends ChangeNotifier {
     await prefs.saveCaptionTemplate(captionTemplate);
   }
 
+  Future<void> setFtpModeEnabled(bool enabled) async {
+    if (enabled == ftpModeEnabled) return;
+    ftpModeEnabled = enabled;
+    notifyListeners();
+    await _prefs?.saveFtpModeEnabled(enabled);
+  }
+
   /// Apply startup choices, then load rosters via API and images from folder.
+  /// Burst grouping is always detected from capture times in the loaded folder.
   Future<void> applyStartup({
     required String sport,
     required String homeTeam,
     required String awayTeam,
     required String folderPath,
-    required bool burstDetectionEnabled,
     List<Player>? homeRosterOverride,
     List<Player>? awayRosterOverride,
+    bool singleTeamMode = false,
     String venue = '',
     String city = '',
     String region = '',
@@ -1246,13 +1379,14 @@ class CaptionV2Controller extends ChangeNotifier {
     sessionGeneration++;
     this.sport = sport;
     this.homeTeam = homeTeam;
-    this.awayTeam = awayTeam;
+    this.singleTeamMode = singleTeamMode;
+    this.awayTeam = singleTeamMode ? '' : awayTeam;
     this.venue = venue;
     this.city = city;
     this.region = region;
     this.country = country;
     this.countryCode = countryCode;
-    this.burstDetectionEnabled = burstDetectionEnabled;
+    burstDetectionEnabled = true;
     pinnedVerb = null;
     customVerbPhrase = '';
     lastCustomVerbPhrase = '';
@@ -1260,6 +1394,7 @@ class CaptionV2Controller extends ChangeNotifier {
     captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
+    selectedIsHome = true;
     selectedVerb = null;
     celebrationType = null;
     personality = '';
@@ -1267,6 +1402,7 @@ class CaptionV2Controller extends ChangeNotifier {
     rbi = 0;
     selectedBase = null;
     inning = 1;
+    timingHalf = null;
     preGame = false;
     postGame = false;
     sessionLoading = true;
@@ -1276,13 +1412,13 @@ class CaptionV2Controller extends ChangeNotifier {
 
     _api.setSport(sport);
     await _prefs?.saveCurrentSport(sport);
-    await _prefs?.saveBurstDetectionEnabled(burstDetectionEnabled);
+    ftpModeEnabled = await _prefs?.getFtpModeEnabled() ?? true;
     await _loadVerbCatalog();
     await _loadCaptionStyleCatalog();
 
     await loadRosters(
       homeOverride: homeRosterOverride,
-      awayOverride: awayRosterOverride,
+      awayOverride: singleTeamMode ? const <Player>[] : awayRosterOverride,
     );
     sessionLoadingLabel = 'Loading images…';
     notifyListeners();
@@ -1303,6 +1439,7 @@ class CaptionV2Controller extends ChangeNotifier {
     selectedImagePaths.clear();
     homeRoster = const [];
     awayRoster = const [];
+    singleTeamMode = false;
     captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
@@ -1329,30 +1466,42 @@ class CaptionV2Controller extends ChangeNotifier {
       final useTank01 = tank01SupportsSport(sport) &&
           (await _prefs?.getUseTank01Rosters() ?? false);
       final apiSource = _rosterSourceFor(sport, useTank01);
-      rosterSourceLabel = homeOverride != null && awayOverride != null
-          ? 'Pasted rosters'
-          : homeOverride != null || awayOverride != null
-              ? '$apiSource + pasted roster'
-              : apiSource;
-      final results = await Future.wait([
-        homeOverride == null
-            ? _api.fetchTeamRoster(homeTeam)
-            : Future.value(homeOverride),
-        awayOverride == null
-            ? _api.fetchTeamRoster(awayTeam)
-            : Future.value(awayOverride),
-      ]);
-      homeRoster = _sortPlayers(results[0]);
-      awayRoster = _sortPlayers(results[1]);
+      if (singleTeamMode || !hasOpponentTeam) {
+        rosterSourceLabel =
+            homeOverride != null ? 'Pasted roster' : apiSource;
+        final home = homeOverride ?? await _api.fetchTeamRoster(homeTeam);
+        homeRoster = _sortPlayers(home);
+        awayRoster = const [];
+      } else {
+        rosterSourceLabel = homeOverride != null && awayOverride != null
+            ? 'Pasted rosters'
+            : homeOverride != null || awayOverride != null
+                ? '$apiSource + pasted roster'
+                : apiSource;
+        final results = await Future.wait([
+          homeOverride == null
+              ? _api.fetchTeamRoster(homeTeam)
+              : Future.value(homeOverride),
+          awayOverride == null
+              ? _api.fetchTeamRoster(awayTeam)
+              : Future.value(awayOverride),
+        ]);
+        homeRoster = _sortPlayers(results[0]);
+        awayRoster = _sortPlayers(results[1]);
+      }
     } catch (e) {
       rosterError = e.toString();
       // Fallback demo roster so UI remains reviewable offline.
       homeRoster = homeOverride == null
           ? _demoRoster(homeTeam)
           : _sortPlayers(homeOverride);
-      awayRoster = awayOverride == null
-          ? _demoRoster(awayTeam)
-          : _sortPlayers(awayOverride);
+      if (singleTeamMode || !hasOpponentTeam) {
+        awayRoster = const [];
+      } else {
+        awayRoster = awayOverride == null
+            ? _demoRoster(awayTeam)
+            : _sortPlayers(awayOverride);
+      }
     } finally {
       rostersLoading = false;
       notifyListeners();
@@ -1386,7 +1535,13 @@ class CaptionV2Controller extends ChangeNotifier {
     loadingImages = true;
     notifyListeners();
     try {
+      await NativeFilePicker.ensureMediaReadPermission();
       final dir = Directory(dirPath);
+      if (!await dir.exists()) {
+        imagePaths = [];
+        currentIndex = 0;
+        return;
+      }
       final files = await dir
           .list()
           .where((e) => e is File)
@@ -1669,10 +1824,22 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void applyTransferredCaption(CaptionTransferPayload payload) {
-    customVerbPhrase = '';
-    customVerbPinned = false;
+    // Paste replaces the live caption as a manual override; keep roster/verb
+    // pins so the next frame can restore them after save.
     manualCaptionOverride = payload.caption;
     personality = payload.personality;
+    if (payload.headline.isNotEmpty || showHeadlineField) {
+      headline = payload.headline;
+    }
+    if (payload.keywords.isNotEmpty || showKeywordsField) {
+      keywords = payload.keywords;
+      _baseKeywordKeys
+        ..clear()
+        ..addAll(_parseMetadataList(keywords).map((e) => e.toLowerCase()));
+      _managedKeywordKeys.clear();
+    }
+    metadataDirty = true;
+    captionSelectionStarted = true;
     notifyListeners();
   }
 
@@ -1705,8 +1872,10 @@ class CaptionV2Controller extends ChangeNotifier {
     captionSelectionStarted = true;
     if (selectedVerb != verb) celebrationType = null;
     selectedVerb = verb;
+    // Selecting a catalog verb for this frame must not drop a pinned custom
+    // verb — stash the phrase and restore it after save / frame advance.
+    _stashCustomVerbIfNeeded();
     customVerbPhrase = '';
-    customVerbPinned = false;
     manualCaptionOverride = null;
     if (!_verbNeedsRbi(verb)) {
       rbi = 0;
@@ -1727,13 +1896,16 @@ class CaptionV2Controller extends ChangeNotifier {
       return;
     }
     selectedVerb = null;
-    customVerbPhrase = '';
-    customVerbPinned = false;
+    if (!customVerbPinned) {
+      customVerbPhrase = '';
+    }
     celebrationType = null;
     rbi = 0;
     selectedBase = null;
     manualCaptionOverride = null;
-    captionSelectionStarted = selectedPlayers.isNotEmpty || pinnedVerb != null;
+    captionSelectionStarted = selectedPlayers.isNotEmpty ||
+        pinnedVerb != null ||
+        customVerbPinned;
     _syncKeywords();
     notifyListeners();
   }
@@ -1745,23 +1917,43 @@ class CaptionV2Controller extends ChangeNotifier {
       lastCustomVerbPhrase = custom;
       captionSelectionStarted = true;
       selectedVerb = null;
-      pinnedVerb = null;
+      // Keep [pinnedVerb] — a one-off custom phrase is for this frame only;
+      // the pinned catalog verb returns on the next picture.
       celebrationType = null;
       rbi = 0;
       selectedBase = null;
       manualCaptionOverride = null;
       _syncKeywords();
     } else {
+      // Explicit clear of the custom field drops the custom pin; selectVerb
+      // stashes the phrase without going through this setter so pins survive.
       customVerbPinned = false;
-      captionSelectionStarted =
-          selectedPlayers.isNotEmpty || selectedVerb != null;
+      if (selectedVerb == null && pinnedVerb != null) {
+        selectedVerb = pinnedVerb;
+      }
+      captionSelectionStarted = selectedPlayers.isNotEmpty ||
+          selectedVerb != null ||
+          pinnedVerb != null;
     }
     notifyListeners();
   }
 
   void toggleCustomVerbPin() {
-    if (customVerbPhrase.trim().isEmpty) return;
+    if (customVerbPhrase.trim().isEmpty && lastCustomVerbPhrase.isEmpty) {
+      return;
+    }
+    if (customVerbPhrase.trim().isEmpty && lastCustomVerbPhrase.isNotEmpty) {
+      customVerbPhrase = lastCustomVerbPhrase;
+    }
     customVerbPinned = !customVerbPinned;
+    if (customVerbPinned) {
+      pinnedVerb = null;
+      selectedVerb = null;
+      lastCustomVerbPhrase = customVerbPhrase.trim();
+      captionSelectionStarted = true;
+      manualCaptionOverride = null;
+      _syncKeywords();
+    }
     notifyListeners();
   }
 
@@ -1771,15 +1963,47 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void toggleVerbPin(String verb) {
-    pinnedVerb = pinnedVerb == verb ? null : verb;
-    if (pinnedVerb != null) selectVerb(verb);
-    notifyListeners();
+    if (pinnedVerb == verb) {
+      pinnedVerb = null;
+      notifyListeners();
+      return;
+    }
+    pinnedVerb = verb;
+    // Catalog pin replaces a custom pin; keep the custom text for "last used".
+    if (customVerbPhrase.trim().isNotEmpty) {
+      lastCustomVerbPhrase = customVerbPhrase.trim();
+    }
+    customVerbPinned = false;
+    customVerbPhrase = '';
+    // Pinning also selects that verb for the current frame, but selecting a
+    // *different* verb later must leave [pinnedVerb] untouched.
+    if (selectedVerb != verb) {
+      selectVerb(verb);
+    } else {
+      notifyListeners();
+    }
   }
 
   void unpinVerb() {
     if (pinnedVerb == null) return;
     pinnedVerb = null;
     notifyListeners();
+  }
+
+  void _stashCustomVerbIfNeeded() {
+    final custom = customVerbPhrase.trim();
+    if (custom.isNotEmpty) {
+      lastCustomVerbPhrase = custom;
+    }
+  }
+
+  /// Caption text shown in the strip / used by Copy.
+  String get displayedCaption {
+    if (manualCaptionOverride != null) return manualCaptionOverride!;
+    if (selectedPlayer != null || hasVerbSelection) {
+      return buildCaptionSentence();
+    }
+    return originalCaption;
   }
 
   Future<void> toggleVerbFavorite(String verb) async {
@@ -2090,8 +2314,7 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void setCelebrationType(String? value) {
-    if (celebrationType == value) return;
-    celebrationType = value;
+    celebrationType = celebrationType == value ? null : value;
     manualCaptionOverride = null;
     _syncKeywords();
     notifyListeners();
@@ -2138,6 +2361,7 @@ class CaptionV2Controller extends ChangeNotifier {
     final max = timingMaxInning;
     inning = (inning + delta).clamp(1, max);
     if (delta != 0) {
+      timingHalf = null;
       manualCaptionOverride = null;
       preGame = false;
       postGame = false;
@@ -2149,11 +2373,29 @@ class CaptionV2Controller extends ChangeNotifier {
   void setInning(int value) {
     final max = timingMaxInning;
     final next = value.clamp(1, max);
-    if (next == inning && !preGame && !postGame) {
+    if (next == inning && timingHalf == null && !preGame && !postGame) {
       notifyListeners();
       return;
     }
     inning = next;
+    timingHalf = null;
+    manualCaptionOverride = null;
+    preGame = false;
+    postGame = false;
+    mlbTimestampMatchedPath = null;
+    notifyListeners();
+  }
+
+  void setTimingHalf(String half) {
+    if (!supportsTimingHalves) return;
+    final normalized = half.trim().toUpperCase();
+    if (normalized != '1H' && normalized != '2H') return;
+    if (timingHalf == normalized && !preGame && !postGame) {
+      notifyListeners();
+      return;
+    }
+    timingHalf = normalized;
+    inning = normalized == '1H' ? 1 : 2;
     manualCaptionOverride = null;
     preGame = false;
     postGame = false;
@@ -2164,7 +2406,10 @@ class CaptionV2Controller extends ChangeNotifier {
   void setPre(bool v) {
     preGame = v;
     manualCaptionOverride = null;
-    if (v) postGame = false;
+    if (v) {
+      postGame = false;
+      timingHalf = null;
+    }
     mlbTimestampMatchedPath = null;
     notifyListeners();
   }
@@ -2172,7 +2417,10 @@ class CaptionV2Controller extends ChangeNotifier {
   void setPost(bool v) {
     postGame = v;
     manualCaptionOverride = null;
-    if (v) preGame = false;
+    if (v) {
+      preGame = false;
+      timingHalf = null;
+    }
     mlbTimestampMatchedPath = null;
     notifyListeners();
   }
@@ -2214,6 +2462,13 @@ class CaptionV2Controller extends ChangeNotifier {
     if (sport.toLowerCase() != 'baseball') {
       _mlbTimestampFailure(
         'Switch to baseball to use MLB timestamp.',
+        userInitiated,
+      );
+      return;
+    }
+    if (!hasOpponentTeam) {
+      _mlbTimestampFailure(
+        'MLB timestamp needs home and away teams.',
         userInitiated,
       );
       return;
@@ -2295,6 +2550,7 @@ class CaptionV2Controller extends ChangeNotifier {
             return;
           }
           inning = matchedInning;
+          timingHalf = null;
           preGame = false;
           postGame = false;
           break;
@@ -2451,8 +2707,8 @@ class CaptionV2Controller extends ChangeNotifier {
     } else {
       final verb = result.verbKey!;
       selectedVerb = verb;
+      _stashCustomVerbIfNeeded();
       customVerbPhrase = '';
-      customVerbPinned = false;
       celebrationType = null;
       if (!_verbNeedsRbi(verb)) rbi = 0;
       if (!_verbNeedsBase(verb)) selectedBase = null;
@@ -2533,7 +2789,7 @@ class CaptionV2Controller extends ChangeNotifier {
     } else if (verbNeedsCelebration(verb)) {
       _prepareFirebarCelebrationOptions(verb);
     } else {
-      _clearFirebarOptions();
+      _prepareFirebarDestinationOptions();
     }
     firebarOptionIndex = 0;
   }
@@ -2551,9 +2807,32 @@ class CaptionV2Controller extends ChangeNotifier {
     firebarOptionIndex = 0;
   }
 
+  void _prepareFirebarDestinationOptions() {
+    firebarOptionPrompt = ftpModeEnabled ? 'Save or FTP?' : 'Save?';
+    _firebarOptionKind = FirebarOptionKind.destination;
+    firebarOptions = ftpModeEnabled
+        ? const [
+            FirebarOption('Save', transmit: false),
+            FirebarOption('FTP', transmit: true),
+          ]
+        : const [
+            FirebarOption('Save', transmit: false),
+          ];
+    firebarOptionIndex = 0;
+  }
+
   void chooseFirebarOption(FirebarOption option) {
     final kind = _firebarOptionKind;
     if (kind == null) return;
+
+    if (kind == FirebarOptionKind.destination) {
+      searchQuery = '';
+      _clearFirebarOptions();
+      notifyListeners();
+      unawaited(_finishFirebarAction(transmit: option.transmit == true));
+      return;
+    }
+
     if (option.verbOverride != null) {
       selectedVerb = option.verbOverride;
       _firebarCommitted.removeWhere(
@@ -2573,9 +2852,29 @@ class CaptionV2Controller extends ChangeNotifier {
         verb != null &&
         verbNeedsCelebration(verb)) {
       _prepareFirebarCelebrationOptions(verb);
+    } else {
+      _prepareFirebarDestinationOptions();
     }
     _syncKeywords();
     notifyListeners();
+  }
+
+  Future<void> _finishFirebarAction({required bool transmit}) async {
+    final handler = onSaveTransmit;
+    if (handler != null) {
+      await handler(transmit: transmit);
+      return;
+    }
+    final path = currentPath;
+    if (path == null) return;
+    final saved = await saveCurrent();
+    if (!saved) return;
+    if (transmit) await transmitPath(path);
+    if (currentPath == path) nextFrame();
+  }
+
+  Future<void> saveOrTransmitFromVerbMenu({required bool transmit}) async {
+    await _finishFirebarAction(transmit: transmit);
   }
 
   void _clearFirebarOptions() {
@@ -2667,8 +2966,8 @@ class CaptionV2Controller extends ChangeNotifier {
     if (c == null || !_verbCatalog.byKey.containsKey(c.verb)) return;
     captionSelectionStarted = true;
     selectedVerb = c.verb;
+    _stashCustomVerbIfNeeded();
     customVerbPhrase = '';
-    customVerbPinned = false;
     rbi = c.rbi;
     final cat = _categoryForVerb(c.verb);
     if (cat != null) verbCategory = cat;
@@ -3010,6 +3309,8 @@ class CaptionV2Controller extends ChangeNotifier {
     final payload = CaptionTransferPayload(
       caption: caption,
       personality: personality,
+      headline: headline,
+      keywords: keywords,
     );
     previousCaption = payload;
     await _prefs?.saveLastSavedMetadata(payload.toJson());
@@ -3098,6 +3399,11 @@ class CaptionV2Controller extends ChangeNotifier {
             ? values['XMP-getty:Personality'] ?? ''
             : personality,
       );
+      // Drop unpinned custom verbs after a successful save so the next frame
+      // starts clean (pinned custom verbs intentionally survive).
+      if (!customVerbPinned && customVerbPhrase.isNotEmpty) {
+        customVerbPhrase = '';
+      }
     }
 
     final result = CaptionSaveResult(
@@ -3135,6 +3441,25 @@ class CaptionV2Controller extends ChangeNotifier {
     goToIndex((lastIndex + 1).clamp(0, imagePaths.length - 1));
   }
 
+  /// After saving a subset of a burst, land on the first frame in [chain]
+  /// that was not among [savedPaths]. If every frame was saved (or none of
+  /// the unsaved frames remain in the folder), advance past the chain.
+  void advanceAfterBurstSelection({
+    required List<String> chain,
+    required Iterable<String> savedPaths,
+  }) {
+    final saved = savedPaths.toSet();
+    for (final path in chain) {
+      if (saved.contains(path)) continue;
+      final index = imagePaths.indexOf(path);
+      if (index >= 0) {
+        goToIndex(index);
+        return;
+      }
+    }
+    advancePastHandledChain(chain);
+  }
+
   Future<bool> saveAndNext() async {
     final saved = await saveCurrent(advance: true);
     if (saved) {
@@ -3145,16 +3470,48 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void _clearCaptionSelection() {
-    captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
-    selectedVerb = pinnedVerb;
-    if (!customVerbPinned) customVerbPhrase = '';
+    // Pinned catalog verb always comes back on the next frame, even if the
+    // user picked a different verb for the frame they just saved.
+    if (pinnedVerb != null) {
+      selectedVerb = pinnedVerb;
+      if (!customVerbPinned) {
+        customVerbPhrase = '';
+      }
+    } else if (customVerbPinned && lastCustomVerbPhrase.isNotEmpty) {
+      customVerbPhrase = lastCustomVerbPhrase;
+      selectedVerb = null;
+    } else {
+      selectedVerb = null;
+      customVerbPhrase = '';
+    }
     celebrationType = null;
     personality = '';
     manualCaptionOverride = null;
     rbi = 0;
     selectedBase = null;
+    captionSelectionStarted =
+        selectedVerb != null || customVerbPhrase.trim().isNotEmpty;
+    _firebarCommitted
+        .removeWhere((item) => item.kind == FirebarResultKind.player);
+    if (pinnedVerb != null) {
+      _firebarCommitted
+          .removeWhere((item) => item.kind == FirebarResultKind.verb);
+      if (!_firebarCommitted.any((item) => item.verbKey == pinnedVerb)) {
+        _firebarCommitted.add(FirebarResult.verb(pinnedVerb));
+      }
+      final category = _categoryForVerb(pinnedVerb!);
+      if (category != null) verbCategory = category;
+    } else if (customVerbPinned && customVerbPhrase.trim().isNotEmpty) {
+      _firebarCommitted
+          .removeWhere((item) => item.kind == FirebarResultKind.verb);
+    } else {
+      _firebarCommitted
+          .removeWhere((item) => item.kind == FirebarResultKind.verb);
+    }
+    _clearFirebarOptions();
+    _syncKeywords();
   }
 
   Future<void> enterComboSaveAdvance() async {
@@ -3163,6 +3520,11 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> transmitQueued() async {
+    if (!ftpModeEnabled) {
+      statusMessage = 'FTP mode is off';
+      notifyListeners();
+      return;
+    }
     final toSend =
         imagePaths.where((p) => frameStateFor(p) == FrameState.saved).toList();
     if (toSend.isEmpty) {
@@ -3174,6 +3536,11 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> transmitCurrent() async {
+    if (!ftpModeEnabled) {
+      statusMessage = 'FTP mode is off';
+      notifyListeners();
+      return;
+    }
     final path = currentPath;
     if (path == null) return;
     // Ensure saved first.
@@ -3185,6 +3552,11 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> _transmitPaths(List<String> paths) async {
+    if (!ftpModeEnabled) {
+      statusMessage = 'FTP mode is off';
+      notifyListeners();
+      return;
+    }
     transmitting = true;
     queuedCount = paths.length;
     notifyListeners();
@@ -3582,8 +3954,8 @@ class CaptionV2Controller extends ChangeNotifier {
       ..add(row);
     _syncPrimaryPlayer();
     selectedVerb = verb;
+    _stashCustomVerbIfNeeded();
     customVerbPhrase = '';
-    customVerbPinned = false;
     verbCategory = _categoryForVerb(verb) ?? verbCategory;
     rbi = 0;
     selectedBase = null;
@@ -3681,8 +4053,8 @@ class CaptionV2Controller extends ChangeNotifier {
   void _finishCommand({int? rbiValue, String? baseValue, String? verbOverride}) {
     if (verbOverride != null) {
       selectedVerb = verbOverride;
+      _stashCustomVerbIfNeeded();
       customVerbPhrase = '';
-      customVerbPinned = false;
       verbCategory = _categoryForVerb(verbOverride) ?? verbCategory;
     }
     if (rbiValue != null) rbi = rbiValue;
@@ -3698,8 +4070,9 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void _promptForCommandInning() {
-    guidedSearchPrompt = 'What inning?';
+    guidedSearchPrompt = 'What $timingUnitNoun?';
     final isBaseball = sport.toLowerCase() == 'baseball';
+    final isBasketball = supportsTimingHalves;
     final regulationEnd = timingRegulationCount;
     _guidedSearchHits = [
       SearchHit(
@@ -3708,31 +4081,70 @@ class CaptionV2Controller extends ChangeNotifier {
         aliases: const ['pre', 'pregame', 'before'],
         apply: () => _completeCommandTiming(pre: true),
       ),
-      for (var value = 1; value <= (isBaseball ? timingMaxInning : regulationEnd);
-          value++)
-        SearchHit(
-          kind: 'option',
-          label: _ordinal(value),
-          aliases: [
-            '$value',
-            _ordinal(value),
-            _ordinalWord(value),
-            if (isBaseball && value == regulationEnd + 1) ...[
-              'extra',
-              'extras',
-              'extra innings',
+      if (isBasketball) ...[
+        for (var value = 1; value <= regulationEnd; value++)
+          SearchHit(
+            kind: 'option',
+            label: 'Q$value',
+            aliases: [
+              '$value',
+              'q$value',
+              'Q$value',
+              _ordinal(value),
+              _ordinalWord(value),
+              'quarter $value',
             ],
-          ],
-          apply: () => _completeCommandTiming(inningValue: value),
-        ),
-      if (!isBaseball)
+            apply: () => _completeCommandTiming(inningValue: value),
+          ),
         SearchHit(
           kind: 'option',
-          label: 'Extras',
-          aliases: const ['extra', 'extras', 'extra innings'],
+          label: '1H',
+          aliases: const ['1h', 'first half', '1st half', 'half 1'],
+          apply: () => _completeCommandTiming(half: '1H'),
+        ),
+        SearchHit(
+          kind: 'option',
+          label: '2H',
+          aliases: const ['2h', 'second half', '2nd half', 'half 2'],
+          apply: () => _completeCommandTiming(half: '2H'),
+        ),
+        SearchHit(
+          kind: 'option',
+          label: 'OT',
+          aliases: const ['ot', 'overtime', 'extra', 'extras'],
           apply: () =>
               _completeCommandTiming(inningValue: timingRegulationCount + 1),
         ),
+      ] else ...[
+        for (var value = 1;
+            value <= (isBaseball ? timingMaxInning : regulationEnd);
+            value++)
+          SearchHit(
+            kind: 'option',
+            label: _ordinal(value),
+            aliases: [
+              '$value',
+              _ordinal(value),
+              _ordinalWord(value),
+              if (isBaseball && value == regulationEnd + 1) ...[
+                'extra',
+                'extras',
+                'extra innings',
+              ],
+            ],
+            apply: () => _completeCommandTiming(inningValue: value),
+          ),
+        if (!isBaseball)
+          SearchHit(
+            kind: 'option',
+            label: sport.toLowerCase() == 'soccer' ? 'ET' : 'OT',
+            aliases: sport.toLowerCase() == 'soccer'
+                ? const ['et', 'extra', 'extras', 'extra time']
+                : const ['ot', 'overtime', 'extra', 'extras'],
+            apply: () =>
+                _completeCommandTiming(inningValue: timingRegulationCount + 1),
+          ),
+      ],
       SearchHit(
         kind: 'option',
         label: 'Post',
@@ -3746,6 +4158,7 @@ class CaptionV2Controller extends ChangeNotifier {
   void previewCommandInning(int value) {
     if (value < 1) return;
     inning = value;
+    timingHalf = null;
     preGame = false;
     postGame = false;
     notifyListeners();
@@ -3758,12 +4171,20 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void _completeCommandTiming({
     int? inningValue,
+    String? half,
     bool pre = false,
     bool post = false,
   }) {
-    if (inningValue != null) inning = inningValue;
+    if (half != null) {
+      timingHalf = half;
+      inning = half == '1H' ? 1 : 2;
+    } else if (inningValue != null) {
+      inning = inningValue;
+      timingHalf = null;
+    }
     preGame = pre;
     postGame = post;
+    if (pre || post) timingHalf = null;
     statusMessage = selectedPlayer == null || selectedVerb == null
         ? null
         : '$playerChipLabel · ${_verbChip(selectedVerb!)}';
@@ -3771,6 +4192,10 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void _promptForCommandDestination() {
+    if (!ftpModeEnabled) {
+      unawaited(_finishCommandAction(transmit: false));
+      return;
+    }
     guidedSearchPrompt = 'Save or FTP?';
     _guidedSearchHits = [
       SearchHit(

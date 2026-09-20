@@ -41,7 +41,7 @@ class AppCompactCheckbox extends StatelessWidget {
       activeBorderColor: accentColor,
       fillColor: tokens?.sunken ?? Colors.white,
       activeFillColor: accentColor,
-      iconColor: Colors.white,
+      iconColor: tokens?.inkOnAccent ?? Colors.white,
     );
   }
 }

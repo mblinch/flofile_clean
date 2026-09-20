@@ -33,6 +33,7 @@
 		C32F821B2F5F320C00255E49 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C32F821A2F5F320C00255E49 /* Sparkle */; };
 		D750E2F25FADA92A7C2064A4 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AAD5A9AA778FC6C740BCD8B0 /* Pods_Runner.framework */; };
 		E8D4C2B22F5F650100255E4B /* ColorManagedPreviewPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8D4C2B12F5F650100255E4A /* ColorManagedPreviewPlugin.swift */; };
+		E8D4C2B42F6A010100255E4C /* MacSpellCheckPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8D4C2B32F6A010100255E4C /* MacSpellCheckPlugin.swift */; };
 		EXIFTOOL_BUILD /* exiftool in Resources */ = {isa = PBXBuildFile; fileRef = EXIFTOOL_REF /* exiftool */; };
 /* End PBXBuildFile section */
 
@@ -96,6 +97,7 @@
 		CD58EBDF969DA04EBBDE256E /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; name = "GoogleService-Info.plist"; path = "Runner/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		E22AC21BCBBFAC032D501DC6 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		E8D4C2B12F5F650100255E4A /* ColorManagedPreviewPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorManagedPreviewPlugin.swift; sourceTree = "<group>"; };
+		E8D4C2B32F6A010100255E4C /* MacSpellCheckPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacSpellCheckPlugin.swift; sourceTree = "<group>"; };
 		EXIFTOOL_REF /* exiftool */ = {isa = PBXFileReference; lastKnownFileType = text.script; name = exiftool; path = Runner/Resources/exiftool; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -192,6 +194,7 @@
 				33CC10F02044A3C60003C045 /* AppDelegate.swift */,
 				33CC11122044BFA00003C045 /* MainFlutterWindow.swift */,
 				E8D4C2B12F5F650100255E4A /* ColorManagedPreviewPlugin.swift */,
+				E8D4C2B32F6A010100255E4C /* MacSpellCheckPlugin.swift */,
 				33E51913231747F40026EE4D /* DebugProfile.entitlements */,
 				33E51914231749380026EE4D /* Release.entitlements */,
 				33CC11242044D66E0003C045 /* Resources */,
@@ -503,6 +506,7 @@
 			files = (
 				33CC11132044BFA00003C045 /* MainFlutterWindow.swift in Sources */,
 				E8D4C2B22F5F650100255E4B /* ColorManagedPreviewPlugin.swift in Sources */,
+				E8D4C2B42F6A010100255E4C /* MacSpellCheckPlugin.swift in Sources */,
 				33CC10F12044A3C60003C045 /* AppDelegate.swift in Sources */,
 				335BBD1B22A9A15E00E9071D /* GeneratedPluginRegistrant.swift in Sources */,
 			);
