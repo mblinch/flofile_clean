@@ -140,7 +140,27 @@ class FtpClientService {
         throw Exception('Local file does not exist: $localFilePath');
       }
 
-      final fileName = remoteFilePath.split('/').last;
+      final normalizedRemote = remoteFilePath.replaceAll('\\', '/');
+      final slash = normalizedRemote.lastIndexOf('/');
+      final remoteDir =
+          slash > 0 ? normalizedRemote.substring(0, slash) : '';
+      final fileName = slash >= 0
+          ? normalizedRemote.substring(slash + 1)
+          : normalizedRemote;
+      if (fileName.isEmpty) {
+        throw Exception('Remote file name is empty: $remoteFilePath');
+      }
+
+      // Change into the destination folder when a path was provided.
+      if (remoteDir.isNotEmpty && remoteDir != '.') {
+        controlSocket.write('CWD $remoteDir\r\n');
+        response = await getNextResponse();
+        print('FTP: CWD $remoteDir → $response');
+        if (!response.startsWith('250')) {
+          throw Exception('Could not open remote folder "$remoteDir": $response');
+        }
+      }
+
       final fileSize = await localFile.length();
       print('FTP: Uploading $localFilePath as $fileName ($fileSize bytes)');
 
@@ -149,7 +169,7 @@ class FtpClientService {
       response = await getNextResponse();
       print('FTP: STOR response: $response');
 
-      if (!response.startsWith('150')) {
+      if (!response.startsWith('150') && !response.startsWith('125')) {
         throw Exception('STOR command failed: $response');
       }
 

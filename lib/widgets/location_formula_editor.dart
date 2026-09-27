@@ -328,7 +328,15 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
 
   Widget _fieldChip(int index) {
     final f = _fields[index];
-    final sample = _sampleValueFor(f);
+    final sampleRaw = _sampleValueFor(f);
+    final sample = CaptionFormulaRenderer.applyLocationChipCaps(
+      sampleRaw,
+      caps: f.caps,
+      isIsoCode: (f.kind == LocationChipKind.country &&
+              f.countryVariant == LocationCountryVariant.isoCode) ||
+          (f.kind == LocationChipKind.region &&
+              f.regionVariant == LocationRegionVariant.shortForm),
+    );
     final enabled = f.enabled;
 
     // Body content of the chip excluding the drag handle. Built as a builder

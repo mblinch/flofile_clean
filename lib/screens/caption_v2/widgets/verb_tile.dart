@@ -1,7 +1,77 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../caption_style/caption_text_normalize.dart';
 import '../../../theme/ff_tokens.dart';
+
+/// Tap target that runs [onCmdTap] for Cmd-click and [onTap] otherwise.
+///
+/// Cmd is read on pointer-down. By the time [onTap] fires the key is often
+/// already up, so that later tap is skipped when the down event pinned.
+class CmdClick extends StatefulWidget {
+  const CmdClick({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.onCmdTap,
+    this.onSecondaryTapDown,
+    this.useInkWell = false,
+  });
+
+  final Widget child;
+  final VoidCallback? onTap;
+  final VoidCallback? onCmdTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
+  final bool useInkWell;
+
+  @override
+  State<CmdClick> createState() => _CmdClickState();
+}
+
+class _CmdClickState extends State<CmdClick> {
+  bool _handledByCmd = false;
+
+  void _onTapDown(TapDownDetails _) {
+    _handledByCmd =
+        HardwareKeyboard.instance.isMetaPressed && widget.onCmdTap != null;
+  }
+
+  void _onTapCancel() {
+    _handledByCmd = false;
+  }
+
+  void _onTap() {
+    if (_handledByCmd) {
+      _handledByCmd = false;
+      widget.onCmdTap!();
+      return;
+    }
+    widget.onTap?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.useInkWell) {
+      return InkWell(
+        onTapDown: _onTapDown,
+        onTap: _onTap,
+        onTapCancel: _onTapCancel,
+        onSecondaryTapDown: widget.onSecondaryTapDown,
+        mouseCursor: SystemMouseCursors.click,
+        hoverColor: Colors.transparent,
+        child: widget.child,
+      );
+    }
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: _onTapDown,
+      onTap: _onTap,
+      onTapCancel: _onTapCancel,
+      onSecondaryTapDown: widget.onSecondaryTapDown,
+      child: widget.child,
+    );
+  }
+}
 
 /// Verb list tile: monospace code + label.
 ///
@@ -15,6 +85,7 @@ class VerbTile extends StatelessWidget {
     this.height,
     this.focused = false,
     this.pinned = false,
+    this.dimmed = false,
     this.firebarSelected = false,
     this.highlightQuery = '',
     this.onTap,
@@ -28,6 +99,7 @@ class VerbTile extends StatelessWidget {
   final double? height;
   final bool focused;
   final bool pinned;
+  final bool dimmed;
   final bool firebarSelected;
   final String highlightQuery;
   final VoidCallback? onTap;
@@ -42,15 +114,16 @@ class VerbTile extends StatelessWidget {
     final veryCompact = tileHeight < 24;
     final labelFontSize =
         (t.textSizeMeta + ((tileHeight - 24) / 4)).clamp(11.0, 16.0).toDouble();
+    final labelColor = dimmed ? t.text.withValues(alpha: 0.38) : t.text;
 
     return Semantics(
       button: true,
       selected: selected,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        child: CmdClick(
           onTap: onTap,
+          onCmdTap: onPinTap,
           onSecondaryTapDown: onSecondaryTapDown,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
@@ -111,7 +184,7 @@ class VerbTile extends StatelessWidget {
                         highlightQuery,
                         normal: t.metaStyle.copyWith(
                           fontSize: labelFontSize,
-                          color: t.text,
+                          color: labelColor,
                           fontWeight: selected
                               ? FfTokens.weightMedium
                               : FfTokens.weightRegular,
@@ -135,17 +208,19 @@ class VerbTile extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     iconSize: veryCompact ? 12 : 14,
                     color: pinned
-                        ? t.accent
+                        ? (dimmed ? t.text.withValues(alpha: 0.38) : t.accent)
                         : t.textSecondary.withValues(alpha: 0.55),
                     icon: Icon(
-                      pinned
-                          ? Icons.push_pin_rounded
-                          : Icons.push_pin_outlined,
+                      pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
                     ),
                   )
                 else if (pinned) ...[
                   const SizedBox(width: 3),
-                  Icon(Icons.push_pin_rounded, size: 13, color: t.accent),
+                  Icon(
+                    Icons.push_pin_rounded,
+                    size: 13,
+                    color: dimmed ? t.text.withValues(alpha: 0.38) : t.accent,
+                  ),
                 ],
               ],
             ),

@@ -184,6 +184,8 @@ class _CaptionV2ThumbnailOverviewState
                                       borderRadius: BorderRadius.circular(7),
                                       child: OrientedFilePreview(
                                         path: path,
+                                        version: widget.controller
+                                            .imageContentStamp(path),
                                         fit: BoxFit.contain,
                                         cacheWidth: _cacheWidth,
                                       ),

@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../config/tank01_config.dart';
-import 'mlb_api_service.dart' show Player;
+import 'mlb_api_service.dart' show Player, TeamInfo;
 
 /// Tank01 roster lookups via RapidAPI for MLB / NBA / NHL / WNBA.
 class Tank01ApiService {
@@ -120,6 +120,19 @@ class Tank01ApiService {
       return a.fullName.compareTo(b.fullName);
     });
     return players;
+  }
+
+  /// All Tank01 teams for this league (`id` = teamAbv).
+  Future<List<TeamInfo>> fetchTeams() async {
+    final teams = await _getTeams();
+    return [
+      for (final t in teams)
+        TeamInfo(
+          id: t.abv,
+          name: '${t.city} ${t.name}'.trim(),
+          locationName: t.city,
+        ),
+    ];
   }
 
   Future<List<_Tank01Team>> _getTeams() async {

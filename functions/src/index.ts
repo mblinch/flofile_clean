@@ -4,11 +4,23 @@
  * - `nightlyRosterSync`: scheduled daily at 06:00 America/New_York (DST-safe).
  * - `runRosterSyncNow`: callable trigger for manual runs from `firebase functions:shell`
  *    or the Firebase console. Requires an authenticated caller (admin-only by default).
+ * - `tank01RosterSync`: Tank01 → sports_tank01, 2×/day (06:00 / 16:00 ET); emails
+ *    `dev@flofilecaptions.com` (same Resend setup as nightly roster sync).
+ * - `runTank01RosterSyncNow`: admin callable for a manual Tank01 mirror run.
  *
  * Firestore config (doc `roster_sync/config`):
  *   enabled?: boolean    default true
  *   syncAllMlb?: boolean if true, runs every MLB team from statsapi.mlb.com
  *   items?: Array<{ sportId, teamId }>  used when syncAllMlb is not true
+ *   emailSummaryEnabled / emailSummaryTo / emailSummaryFrom / resendApiKey
+ *
+ * Firestore config (doc `tank01_sync/config`):
+ *   enabled?: boolean           default true
+ *   rapidApiKey?: string        Tank01 RapidAPI key (required unless env set)
+ *   emailSummaryEnabled?: bool  default true
+ *   emailSummaryTo?: string     default `dev@flofilecaptions.com`
+ *   emailSummaryFrom?: string   falls back to roster_sync/config
+ *   resendApiKey?: string       falls back to roster_sync/config
  */
 
 import { initializeApp } from "firebase-admin/app";
@@ -24,6 +36,10 @@ import {
   fetchMlbAllTeamJobs,
   syncJobs,
 } from "./roster-sync";
+import {
+  syncAllTank01Rosters,
+  Tank01SyncTotals,
+} from "./tank01-roster-sync";
 
 initializeApp();
 
@@ -38,8 +54,18 @@ interface RosterSyncConfig {
   resendApiKey?: string;
 }
 
+interface Tank01SyncConfig {
+  enabled?: boolean;
+  rapidApiKey?: string;
+  emailSummaryEnabled?: boolean;
+  emailSummaryTo?: string;
+  emailSummaryFrom?: string;
+  resendApiKey?: string;
+}
+
 type SyncTrigger = "scheduled" | "manual";
 const MAX_CHANGED_PLAYERS_IN_EMAIL = 120;
+const TANK01_EMAIL_DEFAULT_TO = "dev@flofilecaptions.com";
 
 function formatDurationHuman(ms: number): string {
   const totalSeconds = Math.max(0, Math.round(ms / 1000));
@@ -84,6 +110,16 @@ interface SyncRunSummary {
   durationMs: number;
 }
 
+interface Tank01RunSummary {
+  ok: boolean;
+  reason: string;
+  trigger: SyncTrigger;
+  totals: Tank01SyncTotals | null;
+  startedAtIso: string;
+  finishedAtIso: string;
+  durationMs: number;
+}
+
 async function writeRunSummary(summary: SyncRunSummary): Promise<void> {
   const db = getFirestore();
   const runId = summary.startedAtIso.replace(/[:.]/g, "-");
@@ -101,6 +137,77 @@ async function writeRunSummary(summary: SyncRunSummary): Promise<void> {
   ]);
 }
 
+async function writeTank01RunSummary(summary: Tank01RunSummary): Promise<void> {
+  const db = getFirestore();
+  const runId = summary.startedAtIso.replace(/[:.]/g, "-");
+  const payload = {
+    ...summary,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+
+  await Promise.all([
+    db.doc("tank01_sync/status").set(payload, { merge: true }),
+    db.collection("tank01_sync_runs").doc(runId).set({
+      ...payload,
+      createdAt: FieldValue.serverTimestamp(),
+    }),
+  ]);
+}
+
+/** Resend account owner — only allowed recipient while using onboarding@resend.dev. */
+const RESEND_ONBOARDING_FALLBACK_TO = "dev@flofilecaptions.com";
+
+async function sendResendEmail(args: {
+  apiKey: string;
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<void> {
+  const sendOnce = async (to: string, subject: string, text: string) => {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${args.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: args.from,
+        to: [to],
+        subject,
+        text,
+      }),
+    });
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(`Resend email failed (${res.status}): ${errorText}`);
+    }
+  };
+
+  try {
+    await sendOnce(args.to, args.subject, args.text);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const canFallback =
+      /only send testing emails to your own email address/i.test(msg) &&
+      args.to.trim().toLowerCase() !== RESEND_ONBOARDING_FALLBACK_TO;
+    if (!canFallback) throw e;
+
+    logger.warn(
+      `Resend blocked ${args.to} (unverified domain). Falling back to ${RESEND_ONBOARDING_FALLBACK_TO}. Verify flofilecaptions.com at resend.com/domains and set emailSummaryFrom to that domain.`,
+    );
+    await sendOnce(
+      RESEND_ONBOARDING_FALLBACK_TO,
+      args.subject,
+      [
+        `NOTE: Intended recipient was ${args.to}, but Resend only allows ${RESEND_ONBOARDING_FALLBACK_TO} until flofilecaptions.com is verified.`,
+        "",
+        args.text,
+      ].join("\n"),
+    );
+  }
+}
+
 async function sendRunSummaryEmail(
   summary: SyncRunSummary,
   cfg: RosterSyncConfig,
@@ -112,7 +219,7 @@ async function sendRunSummaryEmail(
     return;
   }
   const apiKey = (cfg.resendApiKey ?? "").trim();
-  if (!apiKey || !apiKey.trim()) {
+  if (!apiKey) {
     logger.warn("resendApiKey missing on roster_sync/config; skipping summary email.");
     return;
   }
@@ -186,25 +293,124 @@ async function sendRunSummaryEmail(
         ]
       : []),
   ];
-  const text = bodyLines.join("\n");
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      text,
-    }),
+  await sendResendEmail({
+    apiKey,
+    from,
+    to,
+    subject,
+    text: bodyLines.join("\n"),
   });
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(`Resend email failed (${res.status}): ${errorText}`);
+}
+
+async function sendTank01SummaryEmail(
+  summary: Tank01RunSummary,
+  cfg: Tank01SyncConfig,
+  rosterCfg: RosterSyncConfig,
+): Promise<void> {
+  const emailEnabled = cfg.emailSummaryEnabled !== false;
+  if (!emailEnabled) return;
+
+  const to = (cfg.emailSummaryTo ?? TANK01_EMAIL_DEFAULT_TO).trim();
+  const apiKey = (cfg.resendApiKey ?? rosterCfg.resendApiKey ?? "").trim();
+  if (!apiKey) {
+    logger.warn(
+      "resendApiKey missing on tank01_sync/config and roster_sync/config; skipping Tank01 email.",
+    );
+    return;
   }
+  const from = (
+    cfg.emailSummaryFrom ??
+    rosterCfg.emailSummaryFrom ??
+    "Tank01 Sync <onboarding@resend.dev>"
+  ).trim();
+
+  const totals = summary.totals;
+  const subject = summary.ok
+    ? `[Tank01 Sync] ${summary.trigger} run complete`
+    : `[Tank01 Sync] ${summary.trigger} run: ${summary.reason}`;
+  const durationPretty = formatDurationHuman(summary.durationMs);
+  const perSportLines = totals
+    ? Object.entries(totals.bySport)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .flatMap(([sport, s]) => [
+          `  - ${formatSportName(sport)}:`,
+          `      Teams scanned: ${s.teams}`,
+          `      Players written: ${s.playersWritten}`,
+          `      Players added: ${s.added}`,
+          `      Players updated: ${s.updated}`,
+          `      Players removed: ${s.removed}`,
+          ...(s.errors.length ? [`      Errors: ${s.errors.length}`] : []),
+        ])
+    : [];
+  const changed = totals?.changedPlayers ?? [];
+  const shownChanged = changed.slice(0, MAX_CHANGED_PLAYERS_IN_EMAIL);
+  const changedBySport = new Map<string, typeof shownChanged>();
+  for (const c of shownChanged) {
+    const list = changedBySport.get(c.sportId) ?? [];
+    list.push(c);
+    changedBySport.set(c.sportId, list);
+  }
+  const changedLines =
+    shownChanged.length === 0
+      ? ["  - none"]
+      : Array.from(changedBySport.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .flatMap(([sport, rows]) => [
+            `  - ${formatSportName(sport)}:`,
+            ...rows.map(
+              (c) =>
+                `      ${c.teamName}: ${c.changeType.toUpperCase()} ${c.playerName}`,
+            ),
+          ]);
+  const errorLines =
+    totals?.errors?.length
+      ? totals.errors.slice(0, 40).map((e) => `  - ${e}`)
+      : ["  - none"];
+  const resultLine =
+    summary.ok && summary.reason === "success"
+      ? "Result: success"
+      : `Result: ${summary.ok ? "success" : "noop/error"} (${summary.reason})`;
+  const bodyLines = [
+    resultLine,
+    `Trigger: ${summary.trigger}`,
+    `Started: ${formatTimestampForEmail(summary.startedAtIso)}`,
+    `Finished: ${formatTimestampForEmail(summary.finishedAtIso)}`,
+    `Duration: ${durationPretty}`,
+    "Overall totals:",
+    ...(totals
+      ? [
+          `  - Sports: ${totals.sports}`,
+          `  - Teams scanned: ${totals.teams}`,
+          `  - Players written: ${totals.playersWritten}`,
+          `  - Players added: ${totals.added}`,
+          `  - Players updated: ${totals.updated}`,
+          `  - Players removed: ${totals.removed}`,
+        ]
+      : ["  - n/a"]),
+    "",
+    "By sport:",
+    ...(perSportLines.length > 0 ? perSportLines : ["  - n/a"]),
+    "",
+    `Changed players (${changed.length}):`,
+    ...changedLines,
+    ...(changed.length > MAX_CHANGED_PLAYERS_IN_EMAIL
+      ? [
+          `  - ... truncated ${changed.length - MAX_CHANGED_PLAYERS_IN_EMAIL} additional player changes`,
+        ]
+      : []),
+    "",
+    `Errors (${totals?.errors?.length ?? 0}):`,
+    ...errorLines,
+  ];
+
+  await sendResendEmail({
+    apiKey,
+    from,
+    to,
+    subject,
+    text: bodyLines.join("\n"),
+  });
 }
 
 /** Shared core used by both the scheduled function and the manual trigger. */
@@ -288,6 +494,100 @@ async function runSync(trigger: SyncTrigger): Promise<{
   }
 }
 
+async function loadTank01Config(): Promise<{
+  tank01: Tank01SyncConfig;
+  roster: RosterSyncConfig;
+}> {
+  const db = getFirestore();
+  const [tank01Snap, rosterSnap] = await Promise.all([
+    db.doc("tank01_sync/config").get(),
+    db.doc("roster_sync/config").get(),
+  ]);
+  const tank01 = (tank01Snap.exists ? tank01Snap.data() : null) as
+    | Tank01SyncConfig
+    | null;
+  const roster = (rosterSnap.exists ? rosterSnap.data() : null) as
+    | RosterSyncConfig
+    | null;
+  return {
+    tank01: tank01 ?? {},
+    roster: roster ?? {},
+  };
+}
+
+async function runTank01Sync(trigger: SyncTrigger): Promise<{
+  ok: boolean;
+  reason?: string;
+  totals?: Tank01SyncTotals;
+}> {
+  const started = Date.now();
+  const startedAtIso = new Date(started).toISOString();
+  const db = getFirestore();
+  let tank01Cfg: Tank01SyncConfig = {};
+  let rosterCfg: RosterSyncConfig = {};
+
+  let result: {
+    ok: boolean;
+    reason?: string;
+    totals?: Tank01SyncTotals;
+  } = { ok: false, reason: "unknown" };
+
+  try {
+    const loaded = await loadTank01Config();
+    tank01Cfg = loaded.tank01;
+    rosterCfg = loaded.roster;
+
+    if (tank01Cfg.enabled === false) {
+      logger.info("tank01_sync/config.enabled is false — skipping.");
+      result = { ok: false, reason: "disabled" };
+      return result;
+    }
+
+    const apiKey = (
+      tank01Cfg.rapidApiKey ??
+      process.env.TANK01_RAPIDAPI_KEY ??
+      ""
+    ).trim();
+    if (!apiKey) {
+      logger.error(
+        "Tank01 RapidAPI key missing. Set tank01_sync/config.rapidApiKey or TANK01_RAPIDAPI_KEY.",
+      );
+      result = { ok: false, reason: "missing-api-key" };
+      return result;
+    }
+
+    const totals = await syncAllTank01Rosters(db, apiKey, {
+      delayBetweenTeamsMs: 150,
+    });
+    const hardFail = totals.teams === 0 && (totals.errors?.length ?? 0) > 0;
+    result = {
+      ok: !hardFail,
+      reason: hardFail ? "all-sports-failed" : "success",
+      totals,
+    };
+    return result;
+  } finally {
+    const finished = Date.now();
+    const summary: Tank01RunSummary = {
+      ok: result.ok,
+      reason: result.reason ?? "success",
+      trigger,
+      totals: result.totals ?? null,
+      startedAtIso,
+      finishedAtIso: new Date(finished).toISOString(),
+      durationMs: finished - started,
+    };
+    await writeTank01RunSummary(summary);
+    try {
+      await sendTank01SummaryEmail(summary, tank01Cfg, rosterCfg);
+    } catch (e) {
+      logger.error("Failed to send Tank01 summary email", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+}
+
 /**
  * Scheduled nightly run. 06:00 America/New_York — Cloud Scheduler handles DST
  * automatically, so it's always 6 AM Eastern regardless of the time of year.
@@ -314,10 +614,34 @@ export const nightlyRosterSync = onSchedule(
 );
 
 /**
+ * Tank01 → sports_tank01, twice daily (6am / 4pm ET).
+ */
+export const tank01RosterSync = onSchedule(
+  {
+    schedule: "0 6,16 * * *",
+    timeZone: "America/New_York",
+    memory: "512MiB",
+    timeoutSeconds: 540,
+    retryCount: 1,
+  },
+  async () => {
+    const result = await runTank01Sync("scheduled");
+    if (!result.ok) {
+      logger.info(`Tank01 scheduled run noop: ${result.reason}`);
+      return;
+    }
+    logger.info("Tank01 scheduled run complete", { totals: result.totals });
+  },
+);
+
+/**
  * Manual trigger: `firebase functions:shell` → `runRosterSyncNow({})` or call
  * from any authenticated admin client. Requires an authenticated caller.
  */
-const ADMIN_EMAILS = new Set(["projectflofile@gmail.com"]);
+const ADMIN_EMAILS = new Set([
+  "projectflofile@gmail.com",
+  "dev@flofilecaptions.com",
+]);
 
 function isAdminCaller(auth: { token?: { email?: string; admin?: boolean } }): boolean {
   if (auth.token?.admin === true) return true;
@@ -342,5 +666,24 @@ export const runRosterSyncNow = onCall(
     }
     const result = await runSync("manual");
     return result;
+  },
+);
+
+export const runTank01RosterSyncNow = onCall(
+  { memory: "512MiB", timeoutSeconds: 540 },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError(
+        "unauthenticated",
+        "Sign in as an admin to run the Tank01 roster sync manually.",
+      );
+    }
+    if (!isAdminCaller(request.auth)) {
+      throw new HttpsError(
+        "permission-denied",
+        "Only admin accounts may run manual Tank01 roster sync.",
+      );
+    }
+    return runTank01Sync("manual");
   },
 );

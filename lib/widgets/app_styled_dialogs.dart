@@ -635,7 +635,7 @@ class AppDialogExamplePreview extends StatelessWidget {
   }
 }
 
-/// Square, white dialogs with the standard [AppDialogTealTitleBar] (34px app chrome).
+/// Compact confirm dialog — Caption V2 [FfTokens] chrome (dark or light).
 Future<bool?> showAppConfirmDialog({
   required BuildContext context,
   required String title,
@@ -644,54 +644,116 @@ Future<bool?> showAppConfirmDialog({
   String confirmLabel = 'OK',
   bool barrierDismissible = true,
 }) {
+  final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
   return showDialog<bool>(
     context: context,
     barrierDismissible: barrierDismissible,
-    barrierColor: Colors.black.withValues(alpha: 0.45),
+    barrierColor: Colors.black.withValues(alpha: 0.55),
     builder: (ctx) {
       final screenW = MediaQuery.sizeOf(ctx).width;
-      // Burst dialog uses `math.min(880.0, screenW * 0.92)`; confirm is half that.
-      final burstDialogW = math.min(880.0, screenW * 0.92);
-      final dialogW = burstDialogW / 2;
-      return Center(
-        child: SizedBox(
-          width: dialogW,
-          child: AlertDialog(
-            shape: kAppDialogShape,
-            backgroundColor: Colors.white,
-            surfaceTintColor: Colors.transparent,
-            elevation: 8,
-            shadowColor: Colors.black.withValues(alpha: 0.18),
-            clipBehavior: Clip.antiAlias,
-            titlePadding: EdgeInsets.zero,
-            contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
-            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-            title: AppDialogTealTitleBar(title: title),
-            content: Text(
-              message,
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 11,
-                color: Colors.grey.shade800,
-                height: 1.35,
+      final dialogW = math.min(420.0, screenW * 0.92);
+      return AppDialogFfStyle(
+        enabled: true,
+        child: Center(
+          child: Material(
+            color: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minWidth: 280, maxWidth: dialogW),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: tokens.surface,
+                  borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+                  border: Border.all(color: tokens.divider),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      blurRadius: 24,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+                        decoration: BoxDecoration(
+                          color: tokens.bg,
+                          border: Border(
+                            bottom: BorderSide(color: tokens.divider),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: tokens.labelStyle.copyWith(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ),
+                            Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => Navigator.pop(ctx, false),
+                                borderRadius: BorderRadius.circular(6),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: tokens.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                        child: Text(
+                          message,
+                          style: tokens.bodyStyle.copyWith(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: tokens.text.withValues(alpha: 0.88),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            ElevatedGreyButton(
+                              label: cancelLabel,
+                              fontSize: 11,
+                              onPressed: () => Navigator.pop(ctx, false),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedGreyButton(
+                              label: confirmLabel,
+                              fontSize: 11,
+                              isPrimary: true,
+                              onPressed: () => Navigator.pop(ctx, true),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            actionsAlignment: MainAxisAlignment.end,
-            actionsOverflowAlignment: OverflowBarAlignment.end,
-            actions: [
-              ElevatedGreyButton(
-                label: cancelLabel,
-                fontSize: 11,
-                onPressed: () => Navigator.pop(ctx, false),
-              ),
-              const SizedBox(width: 8),
-              ElevatedGreyButton(
-                label: confirmLabel,
-                fontSize: 11,
-                isPrimary: true,
-                onPressed: () => Navigator.pop(ctx, true),
-              ),
-            ],
           ),
         ),
       );
@@ -1033,6 +1095,88 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
     final danger = widget.isDanger && _hovered && enabled;
     final admin = widget.isAdmin;
     final teal = widget.isTealGradient && !admin;
+    final ff = appDialogTokens(context);
+
+    if (ff != null && !admin && !teal) {
+      final fill = !enabled
+          ? ff.badgeFill
+          : danger
+              ? const Color(0x33C0392B)
+              : widget.isPrimary
+                  ? ( _pressed
+                      ? ff.accent.withValues(alpha: 0.85)
+                      : (_hovered
+                          ? ff.accent.withValues(alpha: 0.92)
+                          : ff.accent))
+                  : (_pressed
+                      ? ff.badgeFill
+                      : (_hovered ? ff.surface : ff.sunken));
+      final fg = !enabled
+          ? ff.textSecondary
+          : danger
+              ? const Color(0xFFC0392B)
+              : widget.isPrimary
+                  ? ff.inkOnAccent
+                  : ff.text;
+      return MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: enabled ? (_) => setState(() => _hovered = false) : null,
+        child: GestureDetector(
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            width: widget.fullWidth ? double.infinity : null,
+            padding: EdgeInsets.symmetric(
+              horizontal: widget.isPrimary ? 12 : 10,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+              border: Border.all(
+                color: !enabled
+                    ? ff.divider
+                    : danger
+                        ? const Color(0x33C0392B)
+                        : widget.isPrimary
+                            ? Colors.transparent
+                            : ff.divider,
+              ),
+            ),
+            child: Row(
+              mainAxisSize:
+                  widget.fullWidth ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (widget.icon != null) ...[
+                  Icon(widget.icon, size: widget.fontSize, color: fg),
+                  const SizedBox(width: 5),
+                ],
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: widget.fontSize,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: -0.3,
+                      color: fg,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,

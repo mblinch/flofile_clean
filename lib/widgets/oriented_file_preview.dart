@@ -11,6 +11,7 @@ class OrientedFilePreview extends StatefulWidget {
     required this.path,
     this.fit = BoxFit.contain,
     this.cacheWidth,
+    this.version = 0,
     this.filterQuality = FilterQuality.high,
     this.onLoaded,
   });
@@ -18,6 +19,9 @@ class OrientedFilePreview extends StatefulWidget {
   final String path;
   final BoxFit fit;
   final int? cacheWidth;
+
+  /// Bumped when the file at [path] is replaced so the preview reloads.
+  final int version;
   final FilterQuality filterQuality;
   final VoidCallback? onLoaded;
 
@@ -39,6 +43,7 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
   void didUpdateWidget(covariant OrientedFilePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.path != widget.path ||
+        oldWidget.version != widget.version ||
         _cacheWidthChanged(oldWidget.cacheWidth, widget.cacheWidth)) {
       _load();
     }

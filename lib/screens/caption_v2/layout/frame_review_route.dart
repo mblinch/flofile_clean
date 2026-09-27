@@ -77,6 +77,7 @@ class FrameReviewRoute extends StatelessWidget {
                             ),
                             child: OrientedFilePreview(
                               path: path,
+                              version: controller.imageContentStamp(path),
                               fit: BoxFit.contain,
                               cacheWidth: 1400,
                             ),

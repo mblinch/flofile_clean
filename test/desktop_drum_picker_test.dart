@@ -14,7 +14,7 @@ Player _player(String name, String number) => Player(
     );
 
 void main() {
-  testWidgets('scroll mode hovers, magnifies, and commits player rows',
+  testWidgets('scroll mode hovers and commits player rows',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 700);
     tester.view.devicePixelRatio = 1;

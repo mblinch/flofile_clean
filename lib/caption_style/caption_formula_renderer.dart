@@ -220,6 +220,43 @@ class CaptionFormulaRenderer {
     return out;
   }
 
+  /// Applies a location chip's Aa (ALL CAPS) toggle to geo text.
+  ///
+  /// IPTC Country / City / Province are often stored already uppercased. When
+  /// [caps] is false, an ALL-CAPS full name is title-cased so the toggle is
+  /// visible (CANADA → Canada). ISO codes (CAN, USA) are left as stored when
+  /// Aa is off.
+  static String applyLocationChipCaps(
+    String raw, {
+    required bool caps,
+    bool isIsoCode = false,
+  }) {
+    final value = raw.trim();
+    if (value.isEmpty) return value;
+    if (caps) return value.toUpperCase();
+    if (isIsoCode) return value;
+    if (value == value.toUpperCase() &&
+        value.contains(RegExp(r'[A-Za-z]')) &&
+        value.contains(RegExp(r'\s|[A-Za-z]{4,}'))) {
+      return value
+          .toLowerCase()
+          .split(RegExp(r'(\s+)'))
+          .map((part) {
+            if (part.trim().isEmpty) return part;
+            if (part.length == 1) return part.toUpperCase();
+            return '${part[0].toUpperCase()}${part.substring(1)}';
+          })
+          .join();
+    }
+    // Single ALL-CAPS token without spaces (e.g. CANADA): still title-case.
+    if (value == value.toUpperCase() &&
+        RegExp(r'^[A-Z]+$').hasMatch(value) &&
+        value.length > 3) {
+      return '${value[0]}${value.substring(1).toLowerCase()}';
+    }
+    return value;
+  }
+
   /// Builds the location line from [GameInfo] using ordered [LocationLineOptions.chips].
   ///
   /// - Per-chip `caps` uppercases just that chip's emitted text.
@@ -259,6 +296,7 @@ class CaptionFormulaRenderer {
         case LocationChipKind.region:
         case LocationChipKind.country:
           String raw;
+          var isIsoCode = false;
           if (c.kind == LocationChipKind.city) {
             raw = g.city.trim();
           } else if (c.kind == LocationChipKind.region) {
@@ -272,20 +310,24 @@ class CaptionFormulaRenderer {
               if (raw.isEmpty) raw = full;
             } else {
               final useShort = c.regionVariant == LocationRegionVariant.shortForm;
+              isIsoCode = useShort;
               raw = (useShort ? g.resolvedRegionShort : g.resolvedRegionName)
                   .trim();
               if (raw.isEmpty) {
                 raw = (useShort ? g.resolvedRegionName : g.resolvedRegionShort)
                     .trim();
+                isIsoCode = !useShort && raw == g.resolvedRegionShort.trim();
               }
             }
           } else {
             final useIso = c.countryVariant == LocationCountryVariant.isoCode;
+            isIsoCode = useIso;
             raw =
                 (useIso ? g.resolvedCountryCode : g.resolvedCountryName).trim();
             if (raw.isEmpty) {
               raw = (useIso ? g.resolvedCountryName : g.resolvedCountryCode)
                   .trim();
+              isIsoCode = !useIso && raw == g.resolvedCountryCode.trim();
             }
           }
           if (raw.isEmpty) {
@@ -293,7 +335,11 @@ class CaptionFormulaRenderer {
             break;
           }
           if (lastEmittedWasGeo) b.write(' ');
-          b.write(c.caps ? raw.toUpperCase() : raw);
+          b.write(applyLocationChipCaps(
+            raw,
+            caps: c.caps,
+            isIsoCode: isIsoCode,
+          ));
           lastEmittedWasGeo = true;
           break;
         case LocationChipKind.literal:
@@ -424,11 +470,25 @@ class CaptionFormulaRenderer {
     final cityCaps = cityChip?.caps ?? false;
     final parts = <String>[];
     if (cityRaw.isNotEmpty) {
-      parts.add(cityCaps || options.uppercase ? cityRaw.toUpperCase() : cityRaw);
+      parts.add(
+        applyLocationChipCaps(
+          cityRaw,
+          caps: cityCaps || options.uppercase,
+        ),
+      );
     }
     if (secondRaw.isNotEmpty) {
+      final useIso = !isUs &&
+          countryChip?.countryVariant == LocationCountryVariant.isoCode;
       parts.add(
-          secondCaps || options.uppercase ? secondRaw.toUpperCase() : secondRaw);
+        applyLocationChipCaps(
+          secondRaw,
+          caps: secondCaps || options.uppercase,
+          isIsoCode: useIso ||
+              (isUs &&
+                  regionChip?.regionVariant == LocationRegionVariant.shortForm),
+        ),
+      );
     }
 
     var body = parts.join(', ');
@@ -707,19 +767,28 @@ class CaptionFormulaRenderer {
   }
 
   /// Time phrase for layout/startup previews (matches live caption fields).
-  static String previewTimePhraseForSport(String? sport) {
+  static String previewTimePhraseForSport(
+    String? sport, {
+    bool caps = false,
+  }) {
+    String phrase;
     switch ((sport ?? 'baseball').toLowerCase().trim()) {
       case 'hockey':
-        return 'in the third period';
+        phrase = 'in the third period';
+        break;
       case 'basketball':
       case 'wnba':
-        return 'in the fourth quarter';
+        phrase = 'in the fourth quarter';
+        break;
       case 'soccer':
-        return 'in the second half';
+        phrase = 'in the second half';
+        break;
       case 'baseball':
       default:
-        return 'during the third inning';
+        phrase = 'during the third inning';
+        break;
     }
+    return caps ? phrase.toUpperCase() : phrase;
   }
 
   static String defaultPreviewActionForSport(String? sport) {
@@ -845,7 +914,16 @@ class CaptionFormulaRenderer {
       caseSensitive: false,
     ).hasMatch(line);
     if (!hasGameSegment) {
-      line = '$line ${previewTimePhraseForSport(sport)}';
+      if (template.includeTimingPhrase) {
+        line = '$line ${previewTimePhraseForSport(
+          sport,
+          caps: template.timingPhraseCaps,
+        )}';
+      }
+    } else if (!template.includeTimingPhrase) {
+      line = _stripTimingPhraseFromCaption(line);
+    } else if (template.timingPhraseCaps) {
+      line = _uppercaseTimingPhraseInCaption(line);
     }
     if (template.removeDiacritics) {
       line = CaptionTextNormalize.stripDiacritics(line);
@@ -893,6 +971,37 @@ class CaptionFormulaRenderer {
       default:
         return ['hits a home run against the {opp} $phrase'];
     }
+  }
+
+  /// Uppercases the inning / period / quarter / half clause inside a caption.
+  static String _uppercaseTimingPhraseInCaption(String text) {
+    return text.replaceAllMapped(
+      RegExp(
+        r'\b((?:during|in|before|following|ahead of)\s+(?:the\s+)?'
+        r'(?:(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|'
+        r'tenth|eleventh|twelfth|[\w-]+)\s+)?'
+        r'(?:inning|innings|period|periods|quarter|quarters|half|overtime|'
+        r'extra time|game|national anthem prior to play))\b',
+        caseSensitive: false,
+      ),
+      (m) => m.group(0)!.toUpperCase(),
+    );
+  }
+
+  /// Removes the inning / period / quarter / half clause from a caption body.
+  static String _stripTimingPhraseFromCaption(String text) {
+    var s = text.replaceAllMapped(
+      RegExp(
+        r'\s*\b((?:during|in|before|following|ahead of)\s+(?:the\s+)?'
+        r'(?:(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|'
+        r'tenth|eleventh|twelfth|[\w-]+)\s+)?'
+        r'(?:inning|innings|period|periods|quarter|quarters|half|overtime|'
+        r'extra time|game|national anthem prior to play))\b',
+        caseSensitive: false,
+      ),
+      (_) => '',
+    );
+    return s.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
   }
 
   /// Getty NBA/WNBA trailer (second sentence). Injected for Getty wire only.

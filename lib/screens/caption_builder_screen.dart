@@ -23,6 +23,7 @@ import '../widgets/burst_caption_confirm_dialog.dart';
 import '../widgets/app_styled_dialogs.dart';
 import '../widgets/update_notes_dialog.dart';
 import '../app_update_notes.dart';
+import '../utils/image_file_ready.dart';
 
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
@@ -702,7 +703,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       // image container is structurally complete (JPEG must end with EOI)
       // so we never show a truncated frame.
       unawaited(() async {
-        final isReady = await _waitForImageFileReady(newImagePath);
+        final isReady = await waitForImageFileReady(newImagePath);
         if (!isReady || !mounted) {
           print('DEBUG: Gave up waiting for complete image: $newImagePath');
           return;
@@ -732,151 +733,6 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       }());
     } else {
       print('DEBUG: Not a valid image file: $newImagePath');
-    }
-  }
-
-  /// Waits until [path] has a stable size for several polls and passes
-  /// [_isImageFileComplete]. Returns false on timeout.
-  Future<bool> _waitForImageFileReady(
-    String path, {
-    Duration pollInterval = const Duration(milliseconds: 250),
-    Duration timeout = const Duration(seconds: 90),
-    int stablePollsRequired = 3,
-  }) async {
-    final file = File(path);
-    final deadline = DateTime.now().add(timeout);
-    int? lastLength;
-    var stableCount = 0;
-
-    while (DateTime.now().isBefore(deadline)) {
-      int length;
-      try {
-        length = await file.length();
-      } catch (_) {
-        // File may not exist yet or is mid-move; keep polling.
-        stableCount = 0;
-        lastLength = null;
-        await Future.delayed(pollInterval);
-        continue;
-      }
-
-      if (length <= 0) {
-        stableCount = 0;
-        lastLength = length;
-        await Future.delayed(pollInterval);
-        continue;
-      }
-
-      if (lastLength != null && length == lastLength) {
-        stableCount++;
-      } else {
-        stableCount = 1;
-        lastLength = length;
-      }
-
-      if (stableCount >= stablePollsRequired) {
-        if (await _isImageFileComplete(path)) {
-          return true;
-        }
-        // Size stopped changing but the container is still incomplete
-        // (e.g. JPEG without EOI) — keep waiting for more bytes.
-        print('DEBUG: Size stable but image incomplete, waiting: $path');
-        stableCount = 0;
-      }
-
-      await Future.delayed(pollInterval);
-    }
-
-    print('DEBUG: Timed out waiting for complete image: $path');
-    return false;
-  }
-
-  /// Structural completeness check so truncated downloads are never shown.
-  /// JPEG: SOI (FFD8) at start and EOI (FFD9) near the end.
-  /// PNG: signature + IEND chunk at end.
-  /// Other formats: minimum header + non-trivial size after stabilize.
-  Future<bool> _isImageFileComplete(String path) async {
-    final ext = p.extension(path).toLowerCase();
-    final file = File(path);
-    RandomAccessFile? raf;
-    try {
-      raf = await file.open(mode: FileMode.read);
-      final length = await raf.length();
-      if (length < 24) return false;
-
-      if (ext == '.jpg' || ext == '.jpeg') {
-        await raf.setPosition(0);
-        final head = await raf.read(2);
-        if (head.length < 2 || head[0] != 0xFF || head[1] != 0xD8) {
-          return false;
-        }
-        // EOI must appear at/near EOF. Allow a little trailing padding after
-        // FFD9 (some cameras append nulls); reject if EOI is missing.
-        final scanLen = length < 4096 ? length : 4096;
-        await raf.setPosition(length - scanLen);
-        final tail = await raf.read(scanLen);
-        for (var i = tail.length - 2; i >= 0; i--) {
-          if (tail[i] == 0xFF && tail[i + 1] == 0xD9) {
-            // Bytes after EOI should only be padding / junk, not more image.
-            // Accept EOI anywhere in the last 4KB — truncated mid-scan files
-            // almost never end with a real FFD9 in that window by chance
-            // (JPEG byte-stuffs 0xFF as FF 00 in entropy data).
-            return true;
-          }
-        }
-        return false;
-      }
-
-      if (ext == '.png') {
-        await raf.setPosition(0);
-        final head = await raf.read(8);
-        const sig = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-        if (head.length < 8) return false;
-        for (var i = 0; i < 8; i++) {
-          if (head[i] != sig[i]) return false;
-        }
-        // IEND chunk is 12 bytes at EOF: len(0) + 'IEND' + CRC.
-        if (length < 12) return false;
-        await raf.setPosition(length - 8);
-        final end = await raf.read(8);
-        return end.length == 8 &&
-            end[0] == 0x49 && // I
-            end[1] == 0x45 && // E
-            end[2] == 0x4E && // N
-            end[3] == 0x44; // D
-      }
-
-      if (ext == '.bmp') {
-        await raf.setPosition(0);
-        final head = await raf.read(6);
-        if (head.length < 6 || head[0] != 0x42 || head[1] != 0x4D) {
-          return false;
-        }
-        final declared = head[2] |
-            (head[3] << 8) |
-            (head[4] << 16) |
-            (head[5] << 24);
-        return declared > 0 && declared <= length;
-      }
-
-      if (ext == '.tif' || ext == '.tiff') {
-        await raf.setPosition(0);
-        final head = await raf.read(4);
-        if (head.length < 4) return false;
-        final le = head[0] == 0x49 && head[1] == 0x49;
-        final be = head[0] == 0x4D && head[1] == 0x4D;
-        if (!le && !be) return false;
-        final magic = be ? ((head[2] << 8) | head[3]) : (head[2] | (head[3] << 8));
-        return magic == 42;
-      }
-
-      // Unknown extension that passed the image list: size-stable is enough.
-      return length > 0;
-    } catch (e) {
-      print('DEBUG: _isImageFileComplete failed for $path: $e');
-      return false;
-    } finally {
-      await raf?.close();
     }
   }
 

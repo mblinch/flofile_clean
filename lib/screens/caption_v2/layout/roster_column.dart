@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../services/mlb_api_service.dart';
 import '../data/caption_v2_controller.dart';
+import '../widgets/custom_name_entry.dart';
 import '../widgets/player_row.dart';
 
 enum RosterViewMode { classic, wheel, infinite }
@@ -15,6 +16,7 @@ class RosterColumn extends StatefulWidget {
     required this.controller,
     required this.isHome,
     required this.focused,
+    this.onEditRosters,
     this.onDrumRequested,
     this.onInfiniteRequested,
   });
@@ -22,6 +24,7 @@ class RosterColumn extends StatefulWidget {
   final CaptionV2Controller controller;
   final bool isHome;
   final bool focused;
+  final VoidCallback? onEditRosters;
   final VoidCallback? onDrumRequested;
   final VoidCallback? onInfiniteRequested;
 
@@ -35,13 +38,62 @@ class _RosterColumnState extends State<RosterColumn> {
   final _scrollController = ScrollController();
   RosterViewMode _viewMode = RosterViewMode.classic;
   String? _lastFirebarSelectionKey;
+  int _seenPlayerSearchClearGeneration = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    _seenPlayerSearchClearGeneration =
+        widget.controller.playerSearchClearGeneration;
+    widget.controller.addListener(_onController);
+  }
+
+  @override
+  void didUpdateWidget(covariant RosterColumn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onController);
+      widget.controller.addListener(_onController);
+      _seenPlayerSearchClearGeneration =
+          widget.controller.playerSearchClearGeneration;
+    }
+  }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_onController);
     _columnFocusNode.dispose();
     _scrollController.dispose();
     _filter.dispose();
     super.dispose();
+  }
+
+  void _onController() {
+    if (!mounted) return;
+    final generation = widget.controller.playerSearchClearGeneration;
+    if (generation == _seenPlayerSearchClearGeneration) return;
+    _seenPlayerSearchClearGeneration = generation;
+    if (_filter.text.isEmpty) return;
+    _filter.clear();
+    setState(() {});
+  }
+
+  Future<void> _openCustomNameDialog(CaptionV2Controller c) async {
+    final result = await showCustomNameEntryDialog(
+      context: context,
+      teamLabel: widget.isHome ? c.homeAbbr : c.awayAbbr,
+    );
+    if (!mounted || result == null) return;
+    final error = c.addCustomPlayer(
+      isHome: widget.isHome,
+      fullName: result.name,
+      jerseyNumber: result.jersey,
+    );
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
+      );
+    }
   }
 
   @override
@@ -56,8 +108,7 @@ class _RosterColumnState extends State<RosterColumn> {
     final q = _filter.text.trim();
     final List<Player> filtered;
     if (firebarActive) {
-      final players =
-          firebarResults.map((result) => result.player!).toList();
+      final players = firebarResults.map((result) => result.player!).toList();
       filtered = q.isEmpty ? players : c.filterAndRankPlayers(players, q);
     } else {
       filtered = c.filterAndRankPlayers(roster, q);
@@ -77,38 +128,32 @@ class _RosterColumnState extends State<RosterColumn> {
             abbr: abbr,
             filter: _filter,
             tokens: t,
-            trailing: firebarActive
-                ? Text(
-                    c.searchQuery.trim().isEmpty && q.isEmpty
-                        ? '${roster.length}'
-                        : '${filtered.length} / ${roster.length}',
-                    style: t.monoMetaStyle.copyWith(height: 1),
-                  )
-                : _RosterViewToggle(
-                    mode: _viewMode,
-                    tokens: t,
-                    supportsInfinite: widget.onInfiniteRequested != null,
-                    onChanged: (mode) {
-                      if (mode == RosterViewMode.wheel &&
-                          widget.onDrumRequested != null) {
-                        widget.onDrumRequested!();
-                        return;
-                      }
-                      if (mode == RosterViewMode.infinite &&
-                          widget.onInfiniteRequested != null) {
-                        widget.onInfiniteRequested!();
-                        return;
-                      }
-                      setState(() {
-                        if (mode == RosterViewMode.wheel &&
-                            _viewMode == RosterViewMode.wheel) {
-                          _viewMode = RosterViewMode.classic;
-                        } else {
-                          _viewMode = mode;
-                        }
-                      });
-                    },
-                  ),
+            onEditRosters: widget.onEditRosters,
+            trailing: _RosterViewToggle(
+              mode: _viewMode,
+              tokens: t,
+              supportsInfinite: widget.onInfiniteRequested != null,
+              onChanged: (mode) {
+                if (mode == RosterViewMode.wheel &&
+                    widget.onDrumRequested != null) {
+                  widget.onDrumRequested!();
+                  return;
+                }
+                if (mode == RosterViewMode.infinite &&
+                    widget.onInfiniteRequested != null) {
+                  widget.onInfiniteRequested!();
+                  return;
+                }
+                setState(() {
+                  if (mode == RosterViewMode.wheel &&
+                      _viewMode == RosterViewMode.wheel) {
+                    _viewMode = RosterViewMode.classic;
+                  } else {
+                    _viewMode = mode;
+                  }
+                });
+              },
+            ),
             onSort: c.cycleRosterSortField,
             sortLabel: c.rosterSortFieldLabel(),
             onSortDirection: c.toggleRosterSortDirection,
@@ -147,7 +192,9 @@ class _RosterColumnState extends State<RosterColumn> {
                     // do so. Only retain scrolling on exceptionally short windows.
                     final isMobile = MediaQuery.sizeOf(context).width < 1100;
                     final minRowHeight = isMobile ? 26.0 : 20.0;
-                    final maxRowHeight = isMobile ? 40.0 : 28.0;
+                    // When the roster fits, let each row use the leftover
+                    // height so names can grow instead of sitting in a gap.
+                    final maxRowHeight = isMobile ? 56.0 : 48.0;
                     final fittedHeight =
                         (constraints.maxHeight / filtered.length)
                             .clamp(minRowHeight, maxRowHeight);
@@ -239,7 +286,8 @@ class _RosterColumnState extends State<RosterColumn> {
                           onTap: firebarActive
                               ? () {
                                   if (firebarResult != null) {
-                                    c.commitFirebarResult(firebarResult);
+                                    c.commitFirebarResultAndClose(
+                                        firebarResult);
                                   }
                                 }
                               : () => c.selectPlayer(pl, isHome: widget.isHome),
@@ -249,6 +297,11 @@ class _RosterColumnState extends State<RosterColumn> {
                   },
                 ),
               ),
+              if (!firebarActive)
+                CustomNameEntryButton(
+                  tokens: t,
+                  onTap: () => _openCustomNameDialog(c),
+                ),
             ],
           ),
         ),
@@ -391,6 +444,7 @@ class _PlayerWheelState extends State<_PlayerWheel> {
     super.dispose();
   }
 
+  /// Slight center emphasis for the default player wheel.
   double _scaleFor(int index) {
     final position = _scrollController.hasClients
         ? _scrollController.offset / _itemExtent
@@ -398,12 +452,7 @@ class _PlayerWheelState extends State<_PlayerWheel> {
     final distance = (index - position).abs();
     if (distance <= 1) {
       final eased = distance * distance * (3 - 2 * distance);
-      return 1.08 - 0.06 * eased;
-    }
-    if (distance <= 2) {
-      final progress = distance - 1;
-      final eased = progress * progress * (3 - 2 * progress);
-      return 1.02 - 0.02 * eased;
+      return 1.08 - 0.08 * eased;
     }
     return 1;
   }
@@ -587,7 +636,7 @@ class _PlayerWheelState extends State<_PlayerWheel> {
                                                       ? t.text
                                                       : t.textSecondary,
                                                   fontSize:
-                                                      centered ? 13.5 : 11.5,
+                                                      centered ? 13.5 : 12.5,
                                                   letterSpacing: -0.25,
                                                 ),
                                                 child: Text(
@@ -669,6 +718,7 @@ class _RosterHeaderBar extends StatelessWidget {
     required this.onSortDirection,
     required this.sortDirectionLabel,
     required this.onFilterChanged,
+    this.onEditRosters,
   });
 
   static const double _controlHeight = 24;
@@ -682,6 +732,7 @@ class _RosterHeaderBar extends StatelessWidget {
   final VoidCallback onSortDirection;
   final String sortDirectionLabel;
   final VoidCallback onFilterChanged;
+  final VoidCallback? onEditRosters;
 
   @override
   Widget build(BuildContext context) {
@@ -701,7 +752,21 @@ class _RosterHeaderBar extends StatelessWidget {
             applyHeightToLastDescent: false,
           ),
         ),
-        const SizedBox(width: 8),
+        if (onEditRosters != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 6, right: 4),
+            child: IconButton(
+              onPressed: onEditRosters,
+              tooltip: 'Edit rosters',
+              padding: const EdgeInsets.all(4),
+              constraints: const BoxConstraints.tightFor(width: 24, height: 24),
+              visualDensity: VisualDensity.compact,
+              iconSize: 13,
+              color: tokens.textSecondary,
+              icon: const Icon(Icons.edit_outlined),
+            ),
+          ),
+        const SizedBox(width: 4),
         Expanded(
           child: Container(
             height: _controlHeight,

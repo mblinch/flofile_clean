@@ -13,12 +13,17 @@ import '../theme/auth_ui_constants.dart';
 import '../services/admin_service.dart';
 import '../services/api_manager.dart';
 import '../services/app_defaults_firestore_service.dart';
+import '../services/auth_service.dart';
 import '../config/tank01_config.dart';
 import '../services/preferences_service.dart';
 import '../services/roster_compare_service.dart';
+import '../services/tank01_roster_sync_service.dart';
 import '../caption_style/verb_sub_options.dart';
+import '../caption_style/verb_defaults_bundle.dart';
+import '../theme/ff_tokens.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
+import 'admin_verb_authoring_editor.dart';
 import 'verb_edit_plural_field.dart';
 import 'verb_edit_sub_options_section.dart';
 import 'caption_layout_builder_dialog.dart';
@@ -86,9 +91,11 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _compareRunning = false;
   String? _compareError;
   List<RosterCompareReport> _compareReports = const [];
+  bool _tank01SyncRunning = false;
+  String? _tank01SyncStatus;
 
   static const _sports = AppDefaultsFirestoreService.catalogSports;
-  static const _dialogWidth = 920.0;
+  static const _dialogWidth = 1180.0;
   static const _dialogHeight = 780.0;
   static const _sidebarWidth = 180.0;
   static const _contentPadding = 24.0;
@@ -162,8 +169,9 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() {
         _compareTeamNames = names;
         _compareTeamA = names.isNotEmpty ? names.first : null;
-        _compareTeamB =
-            names.length > 1 ? names[1] : (names.isNotEmpty ? names.first : null);
+        _compareTeamB = names.length > 1
+            ? names[1]
+            : (names.isNotEmpty ? names.first : null);
       });
     } catch (e) {
       if (!mounted) return;
@@ -212,34 +220,122 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
+  Future<void> _syncTank01ToFirestore({required bool allSports}) async {
+    if (!tank01SupportsSport(_compareSport) && !allSports) {
+      setState(() => _compareError =
+          'Tank01 sync is not available for $_compareSport.');
+      return;
+    }
+    setState(() {
+      _tank01SyncRunning = true;
+      _tank01SyncStatus = 'Starting Tank01 → sports_tank01 sync…';
+      _compareError = null;
+    });
+    try {
+      final results = await Tank01RosterSyncService().sync(
+        sportId: allSports ? null : _compareSport,
+        onProgress: (msg) {
+          if (!mounted) return;
+          setState(() => _tank01SyncStatus = msg);
+        },
+      );
+      if (!mounted) return;
+      final teams = results.fold<int>(0, (n, r) => n + r.teamsSynced);
+      final players = results.fold<int>(0, (n, r) => n + r.playersWritten);
+      final errors = results.expand((r) => r.errors).toList();
+      setState(() {
+        _tank01SyncStatus =
+            'Synced $teams teams / $players players into sports_tank01'
+            '${errors.isEmpty ? '' : ' (${errors.length} errors)'}';
+        if (errors.isNotEmpty) {
+          _compareError = errors.take(8).join('\n');
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _tank01SyncStatus = null;
+        _compareError = 'Tank01 sync failed: $e';
+      });
+    } finally {
+      if (mounted) setState(() => _tank01SyncRunning = false);
+    }
+  }
+
   Map<String, dynamic> _sportBundleFromCatalog(String sport) {
     final fromCatalog = _catalog?.sportVerbSettings(sport);
     if (fromCatalog != null && fromCatalog.isNotEmpty) {
-      return Map<String, dynamic>.from(fromCatalog);
+      return VerbDefaultsBundle.ensureComplete(
+        Map<String, dynamic>.from(fromCatalog),
+        sport,
+      );
     }
-    return _emptySportBundle(sport);
+    return VerbDefaultsBundle.buildFactory(sport);
   }
 
-  Map<String, dynamic> _emptySportBundle(String sport) {
-    final factory = SportVerbCategories.forSport(sport);
-    return {
-      'categoryOrder': [...factory.keys, 'Favorites'],
-      'favoriteVerbs': <String>[],
-      'deletedVerbs': <String>[],
-      'verbOrder': <String, dynamic>{},
-      'customVerbs': <Map<String, dynamic>>[],
-      'verbOverrides': <String, dynamic>{},
-      'verbWordingDefaults': <String, dynamic>{},
-      'customVerbWordings': <String, dynamic>{},
-      'favoriteTeams': <String>[],
-    };
-  }
+  Map<String, dynamic> _emptySportBundle(String sport) =>
+      VerbDefaultsBundle.buildFactory(sport);
 
   Map<String, dynamic> get _activeVerbBundle =>
       _verbBundles[_verbSport] ?? _emptySportBundle(_verbSport);
 
   void _setActiveVerbBundle(Map<String, dynamic> next) {
     _verbBundles[_verbSport] = next;
+  }
+
+  void _onAdminVerbBundleChanged(Map<String, dynamic> next) {
+    setState(() => _setActiveVerbBundle(next));
+    unawaited(_persistAdminVerbBundleLocally(_verbSport, next));
+  }
+
+  Future<void> _persistAdminVerbBundleLocally(
+    String sport,
+    Map<String, dynamic> bundle,
+  ) async {
+    final complete = VerbDefaultsBundle.ensureComplete(bundle, sport);
+    final categories = ((complete['categoryOrder'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .where((value) => value != 'Favorites')
+        .toList();
+    final favorites = ((complete['favoriteVerbs'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .toSet();
+    final deleted = ((complete['deletedVerbs'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .toSet();
+    final custom = ((complete['customVerbs'] as List?) ?? const [])
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .toList();
+    final order = <String, List<String>>{};
+    final rawOrder = complete['verbOrder'];
+    if (rawOrder is Map) {
+      rawOrder.forEach((key, value) {
+        order[key.toString()] = value is List
+            ? value.map((item) => item.toString()).toList()
+            : <String>[];
+      });
+    }
+    final overrides = <String, Map<String, dynamic>>{};
+    final rawOverrides = complete['verbOverrides'];
+    if (rawOverrides is Map) {
+      rawOverrides.forEach((key, value) {
+        if (value is Map) {
+          overrides[key.toString()] = Map<String, dynamic>.from(value);
+        }
+      });
+    }
+
+    await Future.wait([
+      _prefs.saveCategoryOrder(categories, sport: sport),
+      _prefs.saveFavoriteVerbs(favorites, sport: sport),
+      _prefs.saveDeletedVerbs(deleted, sport: sport),
+      _prefs.saveVerbOrder(order, sport: sport),
+      _prefs.saveCustomVerbs(custom, sport: sport),
+      _prefs.saveVerbCatalogComplete(true, sport: sport),
+      for (final entry in overrides.entries)
+        _prefs.saveVerbOverride(entry.key, entry.value, sport: sport),
+    ]);
   }
 
   Future<void> _importLocalVerbsForSport() async {
@@ -288,7 +384,8 @@ class _AdminScreenState extends State<AdminScreen> {
   void _applyGameIdToCaptionDraft(WireStyle wire, String sport) {
     final draft = _captionDrafts[wire];
     if (draft == null) return;
-    final text = _gameIdDrafts[wire]?[sport] ?? defaultGameIdentifierText(sport);
+    final text =
+        _gameIdDrafts[wire]?[sport] ?? defaultGameIdentifierText(sport);
     _captionDrafts[wire] = draft.copyWith(
       wireStyle: wire,
       gameIdentifierText: text,
@@ -330,10 +427,195 @@ class _AdminScreenState extends State<AdminScreen> {
     await _flushCaptionBuilder?.call();
   }
 
-  Future<void> _publishVerbs({bool allSports = false}) async {
+  Future<void> _saveCurrentVerb({
+    required String key,
+    required Map<String, dynamic> record,
+    required bool isCustom,
+  }) async {
+    setState(() => _busy = true);
+    try {
+      final bundle = Map<String, dynamic>.from(_activeVerbBundle);
+      if (isCustom) {
+        final list = ((bundle['customVerbs'] as List?) ?? const [])
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from)
+            .toList();
+        final index = list.indexWhere(
+          (item) => (item['key'] ?? item['label']).toString() == key,
+        );
+        if (index < 0) {
+          list.add(record);
+        } else {
+          list[index] = record;
+        }
+        bundle['customVerbs'] = list;
+        await _prefs.saveCustomVerbs(list, sport: _verbSport);
+      } else {
+        final overrides = Map<String, dynamic>.from(
+          (bundle['verbOverrides'] as Map?) ?? const {},
+        );
+        overrides[key] = record;
+        bundle['verbOverrides'] = overrides;
+        await _prefs.saveVerbOverride(key, record, sport: _verbSport);
+      }
+      _setActiveVerbBundle(bundle);
+      if (!mounted) return;
+      final label = (record['label'] ?? key).toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Saved “$label” on this machine'
+            '${AuthService.instance.isSignedIn ? ' (syncing to your account…)' : ''}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Save failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _publishCurrentVerb({
+    required String key,
+    required Map<String, dynamic> record,
+    required bool isCustom,
+  }) async {
+    final label = (record['label'] ?? key).toString();
+    final groups = record['modifierGroups'];
+    if (groups is List) {
+      final empty = groups.whereType<Map>().any((group) {
+        final options = group['options'];
+        return options is! List || options.isEmpty;
+      });
+      if (empty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Publish blocked: “$label” has a modifier group with no options.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     final ok = await showAppConfirmDialog(
       context: context,
-      title: allSports ? 'Publish all verb defaults?' : 'Publish verb defaults?',
+      title: 'Publish “$label” as default?',
+      message:
+          'Updates Firebase app originals for this one verb only. '
+          'Other verbs stay as they are.',
+      confirmLabel: 'Publish',
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _busy = true);
+    try {
+      final existing = _catalog?.sportVerbSettings(_verbSport) ??
+          Map<String, dynamic>.from(_activeVerbBundle);
+      final bundle = VerbDefaultsBundle.ensureComplete(
+        Map<String, dynamic>.from(existing),
+        _verbSport,
+      );
+      if (isCustom) {
+        final list = ((bundle['customVerbs'] as List?) ?? const [])
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from)
+            .toList();
+        final index = list.indexWhere(
+          (item) => (item['key'] ?? item['label']).toString() == key,
+        );
+        if (index < 0) {
+          list.add(record);
+        } else {
+          list[index] = record;
+        }
+        bundle['customVerbs'] = list;
+      } else {
+        final overrides = Map<String, dynamic>.from(
+          (bundle['verbOverrides'] as Map?) ?? const {},
+        );
+        overrides[key] = record;
+        bundle['verbOverrides'] = overrides;
+      }
+      _setActiveVerbBundle(bundle);
+      await AppDefaultsFirestoreService.publishVerbsForSport(_verbSport, bundle);
+      _catalog = AppDefaultsFirestoreService.getCachedCatalog();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Published “$label” as app default.'),
+          backgroundColor: kFloTealLight,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Publish failed: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _publishVerbs({bool allSports = false}) async {
+    final invalid = <String>[];
+    final bundles = allSports
+        ? _verbBundles.entries
+        : [_verbSport].map((sport) => MapEntry(sport, _activeVerbBundle));
+    for (final bundleEntry in bundles) {
+      final records = <Map<String, dynamic>>[
+        ...((bundleEntry.value['customVerbs'] as List?) ?? const [])
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from),
+        ...((bundleEntry.value['verbOverrides'] as Map?) ?? const {})
+            .values
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from),
+      ];
+      for (final record in records) {
+        final groups = record['modifierGroups'];
+        if (groups is! List) continue;
+        final hasEmptyGroup = groups.whereType<Map>().any((group) {
+          final options = group['options'];
+          return options is! List || options.isEmpty;
+        });
+        if (hasEmptyGroup) {
+          invalid.add(
+            '${SportVerbCategories.displayLabel(bundleEntry.key)} · '
+            '${record['label'] ?? 'Untitled verb'}',
+          );
+        }
+      }
+    }
+    if (invalid.isNotEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Publish blocked: modifier groups need at least one option '
+            '(${invalid.take(3).join(', ')}${invalid.length > 3 ? ', …' : ''}).',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title:
+          allSports ? 'Publish all verb defaults?' : 'Publish verb defaults?',
       message: allSports
           ? 'Updates Firebase app originals for every sport.'
           : 'Updates Firebase app originals for $_verbSport.',
@@ -364,7 +646,8 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Publish failed: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Publish failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -413,9 +696,8 @@ class _AdminScreenState extends State<AdminScreen> {
         await AppDefaultsFirestoreService.publishCaptionWireDefault(
           _captionWire,
           template,
-          gameIdentifierForSport:
-              _gameIdDrafts[_captionWire]?[_captionSport] ??
-                  template.gameIdentifierText,
+          gameIdentifierForSport: _gameIdDrafts[_captionWire]?[_captionSport] ??
+              template.gameIdentifierText,
           gameIdentifierSport: _captionSport,
         );
         await AppDefaultsFirestoreService.publishGameIdentifierByWireAndSport(
@@ -437,7 +719,8 @@ class _AdminScreenState extends State<AdminScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Publish failed: $e'), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Publish failed: $e'), backgroundColor: Colors.red),
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -538,9 +821,8 @@ class _AdminScreenState extends State<AdminScreen> {
       }
       final label = meta?['label']?.toString() ?? key;
       final phrase = meta?['verbPhrase']?.toString().trim() ?? '';
-      final singular = phrase.isNotEmpty
-          ? phrase
-          : VerbCaptionWording.defaultWording(key);
+      final singular =
+          phrase.isNotEmpty ? phrase : VerbCaptionWording.defaultWording(key);
       final savedPlural = meta?['pluralPhrase']?.toString().trim() ?? '';
       final plural = savedPlural.isNotEmpty
           ? savedPlural
@@ -704,8 +986,9 @@ class _AdminScreenState extends State<AdminScreen> {
           .toList();
       bundle['customVerbs'] = list;
     } else {
-      final deleted =
-          ((bundle['deletedVerbs'] as List?) ?? []).map((e) => e.toString()).toSet();
+      final deleted = ((bundle['deletedVerbs'] as List?) ?? [])
+          .map((e) => e.toString())
+          .toSet();
       deleted.add(row.key);
       bundle['deletedVerbs'] = deleted.toList();
     }
@@ -797,18 +1080,18 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  Widget _sidebarTile(_AdminSection section, String label) {
+  Widget _sidebarTile(FfTokens t, _AdminSection section, String label) {
     final selected = _section == section;
     return Material(
-      color: selected ? kFloTealSelectedFill : Colors.transparent,
+      color: selected ? t.selectedFill : Colors.transparent,
       child: InkWell(
         onTap: _busy ? null : () => setState(() => _section = section),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
             border: selected
-                ? const Border(
-                    left: BorderSide(color: kFloTealLight, width: 2),
+                ? Border(
+                    left: BorderSide(color: t.accent, width: 2),
                   )
                 : null,
           ),
@@ -816,10 +1099,10 @@ class _AdminScreenState extends State<AdminScreen> {
           child: Text(
             label,
             style: TextStyle(
-              fontFamily: 'Inter',
+              fontFamily: FfTokens.labelFamily,
               fontSize: 11,
               fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? kFloTealDark : Colors.grey.shade700,
+              color: selected ? t.accent : t.textSecondary,
             ),
           ),
         ),
@@ -862,9 +1145,12 @@ class _AdminScreenState extends State<AdminScreen> {
         hintText: 'Sport',
         items: _sports.map((s) => SportVerbCategories.displayLabel(s)).toList(),
         initialItem: SportVerbCategories.displayLabel(_verbSport),
-        closedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        expandedHeaderPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        listItemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        closedHeaderPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        expandedHeaderPadding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        listItemPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: _dropdownDecoration,
         onChanged: (label) {
           if (label == null) return;
@@ -964,15 +1250,13 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
           ),
           _iconAction(
-            icon: _verbHasRecordedDefault(v.key)
-                ? Icons.star
-                : Icons.star_border,
+            icon:
+                _verbHasRecordedDefault(v.key) ? Icons.star : Icons.star_border,
             tooltip: _verbHasRecordedDefault(v.key)
                 ? 'Already a recorded default — click to update from current wording'
                 : 'Set as default for app originals',
-            iconColor: _verbHasRecordedDefault(v.key)
-                ? const Color(0xFFFFB300)
-                : null,
+            iconColor:
+                _verbHasRecordedDefault(v.key) ? const Color(0xFFFFB300) : null,
             onPressed: _busy ? null : () => _recordVerbAsDefault(v),
           ),
           _iconAction(
@@ -1001,8 +1285,7 @@ class _AdminScreenState extends State<AdminScreen> {
     final wordingDefaults = Map<String, dynamic>.from(
       (bundle['verbWordingDefaults'] as Map?) ?? {},
     );
-    final map =
-        row.isCustom ? row.toCustomVerbMap() : row.toOverrideMap();
+    final map = row.isCustom ? row.toCustomVerbMap() : row.toOverrideMap();
     wordingDefaults[row.key] = map;
     bundle['verbWordingDefaults'] = wordingDefaults;
     if (row.isCustom) {
@@ -1065,72 +1348,21 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildVerbsContent() {
-    final bundle = _activeVerbBundle;
-    final categories =
-        _categoryOrder(bundle, _verbSport).where((c) => c != 'Favorites');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'App verb originals',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade900,
-          ),
-        ),
-        const SizedBox(height: 6),
-        const Text(
-          'Edit the verb catalog published to Firebase. Users receive these on restore and first sign-in. '
-          'Use Set as Default on a verb to record its wording as the Reset baseline before you publish.',
-          style: _bodyStyle,
-        ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _sportDropdown(onChanged: (sport) => setState(() => _verbSport = sport)),
-            ElevatedGreyButton(
-              label: 'Copy from my local settings',
-              fontSize: 11,
-              onPressed: _busy ? null : _importLocalVerbsForSport,
-            ),
-            ElevatedGreyButton(
-              label: 'Add verb',
-              fontSize: 11,
-              icon: Icons.add,
-              onPressed: _busy ? null : _addVerb,
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        ...categories.map((category) {
-          final verbs = _verbsForCategory(_verbSport, category, bundle);
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: _sectionCard(
-              label: category.toUpperCase(),
-              trailing: Text(
-                '${verbs.length} verbs',
-                style: _bodyStyle,
-              ),
-              children: verbs.isEmpty
-                  ? [
-                      const Text('No verbs in this category.', style: _bodyStyle),
-                    ]
-                  : verbs.map(_verbRow).toList(),
-            ),
-          );
-        }),
-      ],
+    return AdminVerbAuthoringEditor(
+      key: ValueKey('admin-verb-editor-$_verbSport'),
+      sport: _verbSport,
+      sports: _sports,
+      bundle: _activeVerbBundle,
+      busy: _busy,
+      embedded: true,
+      onSportChanged: (sport) => setState(() => _verbSport = sport),
+      onBundleChanged: _onAdminVerbBundleChanged,
+      onSaveCurrentVerb: _saveCurrentVerb,
+      onPublishCurrentVerb: _publishCurrentVerb,
     );
   }
 
-  Widget _buildCaptionContent() {
+  Widget _buildCaptionContent(FfTokens t) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -1148,10 +1380,10 @@ class _AdminScreenState extends State<AdminScreen> {
           ],
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           'Layout is per wire; game identifier (game ID segment) is per wire and sport. '
           'Switch sport to edit that phrase, then publish.',
-          style: _bodyStyle,
+          style: t.metaStyle.copyWith(height: 1.35),
         ),
         const SizedBox(height: 8),
         Expanded(
@@ -1162,7 +1394,8 @@ class _AdminScreenState extends State<AdminScreen> {
             initialWire: _captionWire,
             initialSport: _captionSport,
             initialTemplate: _captionDrafts[_captionWire],
-            wireDraftsSeed: Map<WireStyle, CaptionTemplate>.from(_captionDrafts),
+            wireDraftsSeed:
+                Map<WireStyle, CaptionTemplate>.from(_captionDrafts),
             gameIdDraftsSeed:
                 Map<WireStyle, Map<String, String>>.from(_gameIdDrafts),
             onDraftChanged: _onCaptionDraftChanged,
@@ -1174,274 +1407,312 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  Widget _buildFooter() {
-    if (_section == _AdminSection.rosterCompare) {
+  Widget _buildFooter(FfTokens t) {
+    if (_section != _AdminSection.captionStructures) {
       return const SizedBox.shrink();
     }
-    final isVerbs = _section == _AdminSection.verbs;
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+        color: t.surface,
+        border: Border(top: BorderSide(color: t.divider)),
       ),
       child: Row(
         children: [
-          if (isVerbs) ...[
-            ElevatedGreyButton(
-              label: _busy ? 'Publishing…' : 'Publish $_verbSport',
-              fontSize: 11,
-              icon: Icons.cloud_upload_outlined,
-              isAdmin: true,
-              onPressed: _busy ? null : () => _publishVerbs(),
-            ),
-            const SizedBox(width: 8),
-            ElevatedGreyButton(
-              label: 'Publish all sports',
-              fontSize: 11,
-              icon: Icons.cloud_upload_outlined,
-              isAdmin: true,
-              onPressed: _busy ? null : () => _publishVerbs(allSports: true),
-            ),
-          ] else ...[
-            ElevatedGreyButton(
-              label: _busy
-                  ? 'Publishing…'
-                  : 'Publish ${WireIptcSpecs.factoryWireLabel(_captionWire)}',
-              fontSize: 11,
-              icon: Icons.cloud_upload_outlined,
-              isAdmin: true,
-              onPressed: _busy ? null : () => _publishCaptions(),
-            ),
-            const SizedBox(width: 8),
-            ElevatedGreyButton(
-              label: 'Publish all wires',
-              fontSize: 11,
-              icon: Icons.cloud_upload_outlined,
-              isAdmin: true,
-              onPressed: _busy ? null : () => _publishCaptions(allWires: true),
-            ),
-            const SizedBox(width: 8),
-            ElevatedGreyButton(
-              label: 'Publish style library',
-              fontSize: 11,
-              icon: Icons.style_outlined,
-              isAdmin: true,
-              onPressed: _busy ? null : _publishCaptionStyleLibrary,
-            ),
-          ],
+          _OutlinedAccentButton(
+            tokens: t,
+            label: _busy
+                ? 'Publishing…'
+                : 'Publish ${WireIptcSpecs.factoryWireLabel(_captionWire)}',
+            icon: Icons.cloud_upload_outlined,
+            onPressed: _busy ? null : () => _publishCaptions(),
+          ),
+          const SizedBox(width: 8),
+          _OutlinedAccentButton(
+            tokens: t,
+            label: 'Publish all wires',
+            icon: Icons.cloud_upload_outlined,
+            onPressed: _busy ? null : () => _publishCaptions(allWires: true),
+          ),
+          const SizedBox(width: 8),
+          _OutlinedAccentButton(
+            tokens: t,
+            label: 'Publish style library',
+            icon: Icons.style_outlined,
+            onPressed: _busy ? null : _publishCaptionStyleLibrary,
+          ),
         ],
       ),
     );
   }
 
+  Widget _buildHeaderActions(FfTokens t) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _OutlinedAccentButton(
+          tokens: t,
+          label: _loading ? 'Loading…' : 'Reload',
+          icon: Icons.cloud_download_outlined,
+          onPressed: _loading || _busy ? null : _bootstrap,
+        ),
+        const SizedBox(width: 8),
+        Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _busy ? null : () => Navigator.pop(context),
+            borderRadius: BorderRadius.circular(4),
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: Icon(
+                Icons.close,
+                size: 20,
+                color: t.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.all(24),
-      child: Container(
-        width: _dialogWidth,
-        height: _dialogHeight,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                decoration: BoxDecoration(
-                  gradient: kFloTealGradientHorizontal,
-                  border: Border(
-                    bottom: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return AppDialogFfStyle(
+      enabled: true,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(24),
+        child: Container(
+          width: _dialogWidth,
+          height: _dialogHeight,
+          decoration: BoxDecoration(
+            color: t.surface,
+            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+            border: Border.all(color: t.divider),
+            boxShadow: [
+              BoxShadow(
+                color: t.bg.withValues(alpha: 0.55),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: t.surface,
+                    border: Border(
+                      bottom: BorderSide(color: t.divider),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: t.accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: t.accent.withValues(alpha: 0.44),
+                          ),
+                        ),
+                        child: Text(
+                          'Admin',
+                          style: TextStyle(
+                            fontFamily: FfTokens.labelFamily,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: t.accent,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'App originals',
+                        style: t.labelStyle.copyWith(
+                          fontSize: 13,
+                          color: t.text,
+                        ),
+                      ),
+                      const Spacer(),
+                      _buildHeaderActions(t),
+                    ],
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE8C547).withValues(alpha: 0.35),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE8C547)),
-                      ),
-                      child: const Text(
-                        'Admin',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFFFF3C4),
-                          height: 1,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    const Text(
-                      'App originals',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                        letterSpacing: -0.2,
-                      ),
-                    ),
-                    const Spacer(),
-                    ElevatedGreyButton(
-                      label: _loading ? 'Loading…' : 'Reload',
-                      fontSize: 10,
-                      icon: Icons.cloud_download_outlined,
-                      onPressed: _loading || _busy ? null : _bootstrap,
-                    ),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _busy ? null : () => Navigator.pop(context),
-                        borderRadius: BorderRadius.circular(4),
-                        child: const Padding(
-                          padding: EdgeInsets.all(4),
-                          child: Icon(Icons.close, size: 20, color: Colors.white70),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: _loading
-                    ? const Center(
-                        child: CircularProgressIndicator(color: kFloTealLight),
-                      )
-                    : _error != null
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Text(
-                                _error!,
-                                style: const TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 11,
-                                  color: Colors.red,
+                Expanded(
+                  child: _loading
+                      ? Center(
+                          child: CircularProgressIndicator(color: t.accent),
+                        )
+                      : _error != null
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text(
+                                  _error!,
+                                  style: t.metaStyle.copyWith(
+                                    color: const Color(0xFFE57373),
+                                  ),
+                                  textAlign: TextAlign.center,
                                 ),
-                                textAlign: TextAlign.center,
                               ),
-                            ),
-                          )
-                        : Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Container(
-                                width: _sidebarWidth,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade50,
-                                  border: Border(
-                                    right: BorderSide(color: Colors.grey.shade200),
+                            )
+                          : Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Container(
+                                  width: _sidebarWidth,
+                                  decoration: BoxDecoration(
+                                    color: t.sunken,
+                                    border: Border(
+                                      right: BorderSide(color: t.divider),
+                                    ),
+                                  ),
+                                  child: ListView(
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                    ),
+                                    children: [
+                                      _sidebarTile(
+                                        t,
+                                        _AdminSection.verbs,
+                                        'Verbs',
+                                      ),
+                                      Divider(
+                                        height: 1,
+                                        thickness: 1,
+                                        color: t.divider,
+                                      ),
+                                      _sidebarTile(
+                                        t,
+                                        _AdminSection.captionStructures,
+                                        'Caption Structures',
+                                      ),
+                                      Divider(
+                                        height: 1,
+                                        thickness: 1,
+                                        color: t.divider,
+                                      ),
+                                      _sidebarTile(
+                                        t,
+                                        _AdminSection.rosterCompare,
+                                        'Roster Compare',
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                child: ListView(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  children: [
-                                    _sidebarTile(_AdminSection.verbs, 'Verbs'),
-                                    Divider(
-                                      height: 1,
-                                      thickness: 1,
-                                      color: Colors.grey.shade300,
-                                    ),
-                                    _sidebarTile(
-                                      _AdminSection.captionStructures,
-                                      'Caption Structures',
-                                    ),
-                                    Divider(
-                                      height: 1,
-                                      thickness: 1,
-                                      color: Colors.grey.shade300,
-                                    ),
-                                    _sidebarTile(
-                                      _AdminSection.rosterCompare,
-                                      'Roster Compare',
-                                    ),
-                                  ],
+                                Expanded(
+                                  child: ColoredBox(
+                                    color: t.bg,
+                                    child: _section == _AdminSection.verbs
+                                        ? _buildVerbsContent()
+                                        : _section ==
+                                                _AdminSection.captionStructures
+                                            ? Padding(
+                                                padding:
+                                                    const EdgeInsets.fromLTRB(
+                                                  _contentPadding,
+                                                  _contentPadding,
+                                                  _contentPadding,
+                                                  0,
+                                                ),
+                                                child: _buildCaptionContent(t),
+                                              )
+                                            : SingleChildScrollView(
+                                                padding: const EdgeInsets.all(
+                                                  _contentPadding,
+                                                ),
+                                                child: _buildRosterCompareContent(
+                                                  t,
+                                                ),
+                                              ),
+                                  ),
                                 ),
-                              ),
-                              Expanded(
-                                child: _section == _AdminSection.verbs
-                                    ? SingleChildScrollView(
-                                        padding: const EdgeInsets.all(
-                                            _contentPadding),
-                                        child: _buildVerbsContent(),
-                                      )
-                                    : _section ==
-                                            _AdminSection.captionStructures
-                                        ? Padding(
-                                            padding: const EdgeInsets.fromLTRB(
-                                              _contentPadding,
-                                              _contentPadding,
-                                              _contentPadding,
-                                              0,
-                                            ),
-                                            child: _buildCaptionContent(),
-                                          )
-                                        : SingleChildScrollView(
-                                            padding: const EdgeInsets.all(
-                                                _contentPadding),
-                                            child: _buildRosterCompareContent(),
-                                          ),
-                              ),
-                            ],
-                          ),
-              ),
-              if (!_loading && _error == null) _buildFooter(),
-            ],
+                              ],
+                            ),
+                ),
+                if (!_loading && _error == null) _buildFooter(t),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildRosterCompareContent() {
+  Widget _buildRosterCompareContent(FfTokens t) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           'Compare $_compareSport rosters: Tank01 vs Firebase vs live API',
-          style: const TextStyle(
-            fontFamily: 'Inter',
+          style: t.labelStyle.copyWith(
             fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: Color(0xFF333333),
+            color: t.text,
           ),
         ),
         const SizedBox(height: 6),
         Text(
           'Use this after Go Time while captioning. Tank01 is the RapidAPI roster; '
-          'Firebase is your cached sports/.../players data; live API is MLB Stats / NHL / ESPN depending on sport.',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 11,
-            color: Colors.grey.shade700,
-            height: 1.35,
-          ),
+          'Firebase sports/... is your league-API cache; sports_tank01/... is the '
+          'Tank01 mirror (same player fields, team ids = Tank01 abbreviations). '
+          'Live API is MLB Stats / NHL / ESPN depending on sport.',
+          style: t.metaStyle.copyWith(height: 1.35),
         ),
         const SizedBox(height: 14),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            ElevatedGreyButton(
+              label: _tank01SyncRunning
+                  ? 'Syncing…'
+                  : 'Sync Tank01 → sports_tank01 ($_compareSport)',
+              fontSize: 11,
+              icon: Icons.cloud_upload_outlined,
+              onPressed: _tank01SyncRunning ||
+                      _compareRunning ||
+                      !tank01SupportsSport(_compareSport)
+                  ? null
+                  : () => _syncTank01ToFirestore(allSports: false),
+            ),
+            ElevatedGreyButton(
+              label: _tank01SyncRunning
+                  ? 'Syncing…'
+                  : 'Sync all Tank01 sports',
+              fontSize: 11,
+              icon: Icons.cloud_sync_outlined,
+              onPressed: _tank01SyncRunning || _compareRunning
+                  ? null
+                  : () => _syncTank01ToFirestore(allSports: true),
+            ),
+          ],
+        ),
+        if (_tank01SyncStatus != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _tank01SyncStatus!,
+            style: t.metaStyle.copyWith(color: t.accent),
+          ),
+        ],
+        const SizedBox(height: 14),
         if (_compareLoadingTeams)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: LinearProgressIndicator(color: kFloTealLight),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(color: t.accent),
           )
         else ...[
           Row(
@@ -1458,8 +1729,9 @@ class _AdminScreenState extends State<AdminScreen> {
                 label: _compareRunning ? 'Comparing…' : 'Compare rosters',
                 fontSize: 11,
                 icon: Icons.compare_arrows,
-                isAdmin: true,
-                onPressed: _compareRunning || _compareTeamNames.isEmpty
+                onPressed: _compareRunning ||
+                        _tank01SyncRunning ||
+                        _compareTeamNames.isEmpty
                     ? null
                     : _runRosterCompare,
               ),
@@ -1468,21 +1740,18 @@ class _AdminScreenState extends State<AdminScreen> {
                 label: 'Reload teams',
                 fontSize: 11,
                 icon: Icons.refresh,
-                onPressed:
-                    _compareRunning ? null : _loadTeamsForCompare,
+                onPressed: _compareRunning || _tank01SyncRunning
+                    ? null
+                    : _loadTeamsForCompare,
               ),
             ],
           ),
         ],
         if (_compareError != null) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             _compareError!,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 11,
-              color: Colors.red,
-            ),
+            style: t.metaStyle.copyWith(color: const Color(0xFFE57373)),
           ),
         ],
         const SizedBox(height: 16),
@@ -1492,6 +1761,7 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _compareTeamDropdown({required bool isA}) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final value = isA ? _compareTeamA : _compareTeamB;
     final hint = isA ? 'Team A' : 'Team B (optional)';
     return Column(
@@ -1499,11 +1769,9 @@ class _AdminScreenState extends State<AdminScreen> {
       children: [
         Text(
           hint,
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 10,
+          style: t.microStyle.copyWith(
             fontWeight: FontWeight.w600,
-            color: Colors.grey.shade700,
+            color: t.textSecondary,
           ),
         ),
         const SizedBox(height: 4),
@@ -1534,25 +1802,22 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildCompareReportCard(RosterCompareReport report) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: t.surface,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: t.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             report.teamName,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
+            style: t.labelStyle.copyWith(fontSize: 13, color: t.text),
           ),
           const SizedBox(height: 8),
           _sourceLine(report.tank01),
@@ -1693,7 +1958,8 @@ class _AdminVerbRow {
   Map<String, dynamic> toOverrideMap() => {
         'label': label,
         'verbPhrase': verbPhrase,
-        'pluralPhrase': pluralPhrase.trim().isEmpty ? null : pluralPhrase.trim(),
+        'pluralPhrase':
+            pluralPhrase.trim().isEmpty ? null : pluralPhrase.trim(),
         'usePluralPhrase': usePluralPhrase,
         'category': category,
         'wantsOpponent': wantsOpponent,
@@ -1813,8 +2079,9 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
   @override
   Widget build(BuildContext context) {
     final cats = widget.categories.where((c) => c != 'Favorites').toList();
-    final categoryValue =
-        cats.contains(_category) ? _category : (cats.isNotEmpty ? cats.first : _category);
+    final categoryValue = cats.contains(_category)
+        ? _category
+        : (cats.isNotEmpty ? cats.first : _category);
     return Center(
       child: SizedBox(
         width: kVerbEditDialogWidth,
@@ -1875,13 +2142,13 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
                         bottomGap: 0,
                         onChanged: (_) {
                           if (_plural.text.trim().isEmpty ||
-                              _plural.text == VerbCaptionWording
-                                  .defaultPluralWording(
-                                widget.initial.key,
-                                _phrase.text,
-                              )) {
-                            _plural.text = VerbCaptionWording
-                                .defaultPluralWording(
+                              _plural.text ==
+                                  VerbCaptionWording.defaultPluralWording(
+                                    widget.initial.key,
+                                    _phrase.text,
+                                  )) {
+                            _plural.text =
+                                VerbCaptionWording.defaultPluralWording(
                               _label.text.trim().isEmpty
                                   ? widget.initial.key
                                   : _label.text.trim(),
@@ -2000,6 +2267,56 @@ class AdminBadgeButton extends StatelessWidget {
           openRosterCompare: openRosterCompare,
         ),
         child: child,
+      ),
+    );
+  }
+}
+
+class _OutlinedAccentButton extends StatelessWidget {
+  const _OutlinedAccentButton({
+    required this.tokens,
+    required this.label,
+    required this.onPressed,
+    this.icon,
+  });
+
+  final FfTokens tokens;
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    final color =
+        enabled ? tokens.accent : tokens.text.withValues(alpha: 0.28);
+    return SizedBox(
+      height: 32,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: color),
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          textStyle: TextStyle(
+            fontFamily: FfTokens.labelFamily,
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+          ),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(7),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 6),
+            ],
+            Text(label),
+          ],
+        ),
       ),
     );
   }

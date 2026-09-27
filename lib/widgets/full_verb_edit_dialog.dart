@@ -1802,6 +1802,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     final chipsHint =
         VerbSubOptions.defaultCelebrationTypesForSport(widget.sport);
     final reactionsOn = _subOptions.celebrationEnabled;
+    final isHomeRun =
+        _currentVerb == 'Home Run' || _verbLabelForMods == 'Home Run';
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1814,9 +1816,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           children: [
             Expanded(
               child: AppDialogLabeledTextField(
-                label: 'Display name',
+                label: 'Name',
                 controller: _label,
-                hintText: 'e.g., Skates',
+                hintText: 'e.g., Single',
                 bottomGap: 0,
                 onChanged: (_) => setState(() {}),
               ),
@@ -1858,7 +1860,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                       child: Tooltip(
                         message: _isFavorite
                             ? 'Remove from favorites'
-                            : 'include in favorites',
+                            : 'Include in favorites',
                         child: InkWell(
                           borderRadius: BorderRadius.circular(6),
                           onTap: _toggleFavorite,
@@ -1880,281 +1882,215 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           ],
         ),
         _sectionDivider(),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _sectionHeader('Phrase'),
-                    const SizedBox(height: 8),
-                    AppDialogLabeledTextField(
-                      label: 'Singular phrase (1 player)',
-                      controller: _singular,
-                      hintText: 'e.g., skates, battles, shoots',
-                      onChanged: (_) {
-                        final label = _label.text.trim().isEmpty
-                            ? (_currentVerb.isEmpty ? 'Custom' : _currentVerb)
-                            : _label.text.trim();
-                        final singular = _singular.text.trim().isEmpty
-                            ? _currentVerb
-                            : _singular.text.trim();
-                        final autoIng = VerbCaptionWording.defaultIngWording(
-                          label,
-                          singular,
-                        );
-                        if (_ing.text.trim().isEmpty ||
-                            _ing.text.trim() == _lastAutoIng) {
-                          _setText(_ing, autoIng);
-                        }
-                        _lastAutoIng = autoIng;
-                        setState(() {});
-                      },
-                      bottomGap: 0,
-                    ),
-                    const SizedBox(height: 10),
-                    VerbEditPluralPhraseField(
-                      pluralController: _plural,
-                      usePluralPhrase: _usePluralPhrase,
-                      onUsePluralChanged: (v) =>
-                          setState(() => _usePluralPhrase = v),
-                      onPluralChanged: (_) => setState(() {}),
-                      bottomGap: 0,
-                    ),
-                    if (_currentVerb == 'Home Run' ||
-                        _verbLabelForMods == 'Home Run') ...[
-                      const SizedBox(height: 10),
-                      AppDialogLabeledTextField(
-                        label: 'Grand Slam phrase',
-                        controller: _grandSlamPhrase,
-                        hintText: 'e.g., grand slam home run',
-                        onChanged: (_) => setState(() {}),
-                        bottomGap: 0,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (showRbi) ...[
-                _columnDivider(),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _sectionHeader(
-                        (_currentVerb == 'Home Run' ||
-                                _verbLabelForMods == 'Home Run')
-                            ? 'Home run'
-                            : 'RBI',
-                        trailing: _optionCheckbox(
-                          value: _subOptions.rbiEnabled,
-                          label: 'On',
-                          compact: true,
-                          checkboxOnRight: true,
-                          textColor: _v2?.textSecondary ??
-                              Colors.white,
-                          onChanged: (v) => setState(
-                            () => _subOptions =
-                                _subOptions.copyWith(rbiEnabled: v),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (_currentVerb == 'Home Run' ||
-                          _verbLabelForMods == 'Home Run')
-                        AppDialogLabeledDropdown<HomeRunCaptionStyle>(
-                          label: 'Style — default for all run situations',
-                          value: _subOptions.homeRunStyle,
-                          items: HomeRunCaptionStyle.values
-                              .map(
-                                (s) => DropdownMenuItem<HomeRunCaptionStyle>(
-                                  value: s,
-                                  child: Text(s.menuLabel),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: _subOptions.rbiEnabled
-                              ? (v) {
-                                  if (v != null) {
-                                    setState(
-                                      () => _subOptions =
-                                          _subOptions.copyWith(homeRunStyle: v),
-                                    );
-                                  }
-                                }
-                              : null,
-                          bottomGap: 0,
-                        )
-                      else
-                        AppDialogLabeledDropdown<RbiCaptionStyle>(
-                          label: 'RBI style — default for all RBI situations',
-                          value: _subOptions.rbiStyle,
-                          items: RbiCaptionStyle.values
-                              .map(
-                                (s) => DropdownMenuItem<RbiCaptionStyle>(
-                                  value: s,
-                                  child: Text(s.menuLabel),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: _subOptions.rbiEnabled
-                              ? (v) {
-                                  if (v != null) {
-                                    setState(
-                                      () => _subOptions =
-                                          _subOptions.copyWith(rbiStyle: v),
-                                    );
-                                  }
-                                }
-                              : null,
-                          bottomGap: 0,
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-              _columnDivider(),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _sectionHeader(
-                      'Reactions',
-                      trailing: _optionCheckbox(
-                        value: reactionsOn,
-                        label: 'On',
-                        compact: true,
-                        checkboxOnRight: true,
-                        textColor: _v2?.textSecondary ??
-                            Colors.white,
-                        onChanged: (v) => setState(() {
-                          _subOptions = _subOptions.copyWith(
-                            celebrationEnabled: v,
-                          );
-                          if (!v) {
-                            _addingReactionPhrase = false;
-                            _reactionPhraseDraft.clear();
-                          }
-                        }),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _buildReactionPhraseChips(enabled: reactionsOn),
-                    const SizedBox(height: 10),
-                    AppDialogLabeledTextField(
-                      label: '-ing phrase',
-                      controller: _ing,
-                      hintText:
-                          'e.g., skating, hitting a single, tagging a runner out',
-                      enabled: reactionsOn,
-                      maxLines: 1,
-                      bottomGap: 0,
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(
-                        'Used after the reaction verb — e.g. "celebrates after '
-                        'hitting a double." Without it, reaction captions can\'t '
-                        'name the play.',
-                        style: appDialogFieldTextStyleOf(context).copyWith(
-                          fontSize: 9.5,
-                          color: _v2?.textSecondary ??
-                              const Color(0xFF888888),
-                          height: 1.3,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        _sectionHeader('Caption wording'),
+        const SizedBox(height: 8),
+        AppDialogLabeledTextField(
+          label: 'Wording',
+          controller: _singular,
+          hintText: 'e.g., hits a single',
+          onChanged: (_) {
+            final label = _label.text.trim().isEmpty
+                ? (_currentVerb.isEmpty ? 'Custom' : _currentVerb)
+                : _label.text.trim();
+            final singular = _singular.text.trim().isEmpty
+                ? _currentVerb
+                : _singular.text.trim();
+            final autoIng = VerbCaptionWording.defaultIngWording(
+              label,
+              singular,
+            );
+            if (_ing.text.trim().isEmpty ||
+                _ing.text.trim() == _lastAutoIng) {
+              _setText(_ing, autoIng);
+            }
+            _lastAutoIng = autoIng;
+            setState(() {});
+          },
+          bottomGap: 10,
         ),
-        if (showCeleTypes && reactionsOn) ...[
-          _sectionDivider(),
-          _sectionHeader('Celebration chips'),
-          const SizedBox(height: 8),
+        VerbEditPluralPhraseField(
+          pluralController: _plural,
+          usePluralPhrase: _usePluralPhrase,
+          onUsePluralChanged: (v) => setState(() => _usePluralPhrase = v),
+          onPluralChanged: (_) => setState(() {}),
+          bottomGap: 10,
+        ),
+        AppDialogLabeledTextField(
+          label: '-ing form',
+          controller: _ing,
+          hintText: 'e.g., hitting a single',
+          maxLines: 1,
+          bottomGap: 0,
+          onChanged: (_) => setState(() {}),
+        ),
+        if (isHomeRun) ...[
+          const SizedBox(height: 10),
           AppDialogLabeledTextField(
-            label: 'Chips (comma-separated)',
-            controller: _celebrationTypes,
-            hintText: chipsHint,
-            maxLines: 2,
-            bottomGap: 0,
+            label: 'Grand Slam phrase',
+            controller: _grandSlamPhrase,
+            hintText: 'e.g., grand slam home run',
             onChanged: (_) => setState(() {}),
+            bottomGap: 0,
           ),
         ],
         _sectionDivider(),
         _sectionHeader(
           'Preview',
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _optionCheckbox(
-                value: _previewIncludeOpponent,
-                label: 'Include opponent',
-                onChanged: (v) => setState(() {
-                  _previewIncludeOpponent = v;
-                  _wantsOpponent = v;
-                }),
-                compact: true,
-                textColor: _v2?.textSecondary ??
-                    Colors.white,
-              ),
-            ],
+          trailing: _optionCheckbox(
+            value: _previewIncludeOpponent,
+            label: 'Include opponent',
+            onChanged: (v) => setState(() {
+              _previewIncludeOpponent = v;
+              _wantsOpponent = v;
+            }),
+            compact: true,
+            textColor: _v2?.textSecondary ?? Colors.white,
           ),
         ),
         const SizedBox(height: 8),
         _buildCaptionPreview(),
         _sectionDivider(),
-        _sectionHeader('Keywords'),
-        const SizedBox(height: 8),
-        Builder(
-          builder: (context) {
-            final t = _v2;
-            final radius = t != null ? FfTokens.radiusChip : 6.0;
-            return Material(
-              color: t?.sunken ?? Colors.white,
-              elevation: t != null ? 0 : 2,
-              shadowColor: const Color(0x33000000),
-              borderRadius: BorderRadius.circular(radius),
-              child: Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(radius),
-                  border: Border.all(
-                    color: t?.divider ?? const Color(0xFFE4E4E4),
-                  ),
-                ),
-                child: TextField(
-                  controller: _keywords,
-                  style: appDialogFieldTextStyleOf(context),
-                  maxLines: 2,
-                  onChanged: (_) => setState(() {}),
-                  decoration: appDialogBareFieldDecoration(
-                    hintText: 'comma-separated',
-                  ).copyWith(
-                    hintStyle: appDialogHintStyleOf(context),
-                  ),
+        Theme(
+          data: Theme.of(context).copyWith(
+            dividerColor: _v2?.divider ?? const Color(0xFFE8E8E8),
+          ),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 4),
+            title: Text(
+              'Advanced',
+              style: appDialogFieldTextStyleOf(context).copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: _v2?.textSecondary ?? const Color(0xFF888888),
+              ),
+            ),
+            subtitle: Text(
+              'Keywords, RBI, reactions',
+              style: appDialogFieldTextStyleOf(context).copyWith(
+                fontSize: 10.5,
+                color: _v2?.textSecondary ?? const Color(0xFF888888),
+              ),
+            ),
+            children: [
+              AppDialogLabeledTextField(
+                label: 'Keywords',
+                controller: _keywords,
+                hintText: 'comma-separated',
+                maxLines: 2,
+                bottomGap: 8,
+                onChanged: (_) => setState(() {}),
+              ),
+              Text(
+                'Only written into keywords, not captions.',
+                style: appDialogFieldTextStyleOf(context).copyWith(
+                  fontSize: 9.5,
+                  color: _v2?.textSecondary ?? const Color(0xFF888888),
+                  height: 1.3,
                 ),
               ),
-            );
-          },
-        ),
-        Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            'Only written into keywords, not captions. Keywording mode must be enabled.',
-            style: appDialogFieldTextStyleOf(context).copyWith(
-              fontSize: 9.5,
-              color: _v2?.textSecondary ??
-                  const Color(0xFF888888),
-              height: 1.3,
-            ),
+              if (showRbi) ...[
+                const SizedBox(height: 12),
+                _sectionHeader(
+                  isHomeRun ? 'Home run' : 'RBI',
+                  trailing: _optionCheckbox(
+                    value: _subOptions.rbiEnabled,
+                    label: 'On',
+                    compact: true,
+                    checkboxOnRight: true,
+                    textColor: _v2?.textSecondary ?? Colors.white,
+                    onChanged: (v) => setState(
+                      () => _subOptions =
+                          _subOptions.copyWith(rbiEnabled: v),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (isHomeRun)
+                  AppDialogLabeledDropdown<HomeRunCaptionStyle>(
+                    label: 'Style',
+                    value: _subOptions.homeRunStyle,
+                    items: HomeRunCaptionStyle.values
+                        .map(
+                          (s) => DropdownMenuItem<HomeRunCaptionStyle>(
+                            value: s,
+                            child: Text(s.menuLabel),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _subOptions.rbiEnabled
+                        ? (v) {
+                            if (v != null) {
+                              setState(
+                                () => _subOptions =
+                                    _subOptions.copyWith(homeRunStyle: v),
+                              );
+                            }
+                          }
+                        : null,
+                    bottomGap: 0,
+                  )
+                else
+                  AppDialogLabeledDropdown<RbiCaptionStyle>(
+                    label: 'RBI style',
+                    value: _subOptions.rbiStyle,
+                    items: RbiCaptionStyle.values
+                        .map(
+                          (s) => DropdownMenuItem<RbiCaptionStyle>(
+                            value: s,
+                            child: Text(s.menuLabel),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: _subOptions.rbiEnabled
+                        ? (v) {
+                            if (v != null) {
+                              setState(
+                                () => _subOptions =
+                                    _subOptions.copyWith(rbiStyle: v),
+                              );
+                            }
+                          }
+                        : null,
+                    bottomGap: 0,
+                  ),
+              ],
+              if (showCele) ...[
+                const SizedBox(height: 12),
+                _sectionHeader(
+                  'Reactions',
+                  trailing: _optionCheckbox(
+                    value: reactionsOn,
+                    label: 'On',
+                    compact: true,
+                    checkboxOnRight: true,
+                    textColor: _v2?.textSecondary ?? Colors.white,
+                    onChanged: (v) => setState(() {
+                      _subOptions = _subOptions.copyWith(
+                        celebrationEnabled: v,
+                      );
+                      if (!v) {
+                        _addingReactionPhrase = false;
+                        _reactionPhraseDraft.clear();
+                      }
+                    }),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _buildReactionPhraseChips(enabled: reactionsOn),
+                if (showCeleTypes && reactionsOn) ...[
+                  const SizedBox(height: 10),
+                  AppDialogLabeledTextField(
+                    label: 'Celebration chips (comma-separated)',
+                    controller: _celebrationTypes,
+                    hintText: chipsHint,
+                    maxLines: 2,
+                    bottomGap: 0,
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ],
+              ],
+            ],
           ),
         ),
       ],
@@ -2167,18 +2103,6 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       padding: EdgeInsets.symmetric(vertical: t != null ? 12 : 14),
       child: Divider(
         height: 1,
-        thickness: 1,
-        color: t?.divider ?? const Color(0xFFE8E8E8),
-      ),
-    );
-  }
-
-  Widget _columnDivider() {
-    final t = _v2;
-    return Padding(
-      padding: const EdgeInsets.only(top: 36),
-      child: VerticalDivider(
-        width: 25,
         thickness: 1,
         color: t?.divider ?? const Color(0xFFE8E8E8),
       ),

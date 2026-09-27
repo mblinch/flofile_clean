@@ -31,6 +31,7 @@ class CaptionStrip extends StatelessWidget {
     required this.chips,
     required this.trailing,
     this.fullCaption,
+    this.highlightPhrases = const [],
     this.onChipTap,
     this.inningLabel,
     this.timingUnitLabel = 'Inning',
@@ -46,6 +47,8 @@ class CaptionStrip extends StatelessWidget {
     this.onInningIncrement,
     this.inningDisabled = false,
     this.onInningActivate,
+    this.timingPhraseEnabled = true,
+    this.onTimingPhraseEnabledChanged,
     this.preSelected = false,
     this.postSelected = false,
     this.onPreTap,
@@ -82,6 +85,9 @@ class CaptionStrip extends StatelessWidget {
   /// caption instead of the chip sentence.
   final String? fullCaption;
 
+  /// Phrases within [fullCaption] drawn in Firebar orange.
+  final List<String> highlightPhrases;
+
   final ValueChanged<String>? onChipTap;
 
   /// When set, [fullCaption] is shown in an editable field (mouse + keyboard).
@@ -112,6 +118,10 @@ class CaptionStrip extends StatelessWidget {
   final VoidCallback? onInningIncrement;
   final bool inningDisabled;
   final VoidCallback? onInningActivate;
+
+  /// When false, the timing bar controls are greyed out (Time of Game off).
+  final bool timingPhraseEnabled;
+  final ValueChanged<bool>? onTimingPhraseEnabledChanged;
 
   final bool preSelected;
   final bool postSelected;
@@ -165,6 +175,7 @@ class CaptionStrip extends StatelessWidget {
                           value: fullCaption ?? '',
                           hintText: captionHint,
                           tokens: t,
+                          highlightPhrases: highlightPhrases,
                           onChanged: onCaptionChanged!,
                         )
                       : fullCaption != null && fullCaption!.trim().isNotEmpty
@@ -202,13 +213,14 @@ class CaptionStrip extends StatelessWidget {
                     maxInning: maxInning,
                     segmentPrefix: segmentPrefix,
                     selectedHalf: selectedHalf,
-                    onHalfSelected:
-                        inningStepperOnly ? null : onHalfSelected,
+                    onHalfSelected: inningStepperOnly ? null : onHalfSelected,
                     onInningSelected: onInningSelected,
                     onInningDecrement: onInningDecrement,
                     onInningIncrement: onInningIncrement,
                     inningDisabled: inningDisabled,
                     onInningActivate: onInningActivate,
+                    timingPhraseEnabled: timingPhraseEnabled,
+                    onTimingPhraseEnabledChanged: onTimingPhraseEnabledChanged,
                     preSelected: preSelected,
                     postSelected: postSelected,
                     onPreTap: inningStepperOnly ? null : onPreTap,
@@ -263,12 +275,14 @@ class _CaptionEditor extends StatefulWidget {
     required this.hintText,
     required this.tokens,
     required this.onChanged,
+    this.highlightPhrases = const [],
   });
 
   final String value;
   final String hintText;
   final FfTokens tokens;
   final ValueChanged<String> onChanged;
+  final List<String> highlightPhrases;
 
   @override
   State<_CaptionEditor> createState() => _CaptionEditorState();
@@ -305,29 +319,95 @@ class _CaptionEditorState extends State<_CaptionEditor> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    return TextField(
+    final baseStyle = t.captionStyle;
+    final highlights = widget.highlightPhrases;
+    final field = TextField(
       controller: _controller,
       focusNode: _focusNode,
       maxLines: null,
       minLines: 3,
       keyboardType: TextInputType.multiline,
       textAlignVertical: TextAlignVertical.top,
-      style: t.captionStyle,
-      cursorColor: t.accent,
+      style: highlights.isEmpty
+          ? baseStyle
+          : baseStyle.copyWith(color: Colors.transparent),
+      cursorColor: highlights.isEmpty ? t.accent : FfTokens.firebar,
       mouseCursor: SystemMouseCursors.text,
       spellCheckConfiguration: floSpellCheckConfiguration(),
+      contextMenuBuilder: floSpellCheckContextMenuBuilder,
       decoration: InputDecoration(
         isDense: true,
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
         contentPadding: EdgeInsets.zero,
-        hintText: widget.hintText,
-        hintStyle: t.captionStyle.copyWith(color: t.textSecondary),
+        hintText: highlights.isEmpty ? widget.hintText : null,
+        hintStyle: baseStyle.copyWith(color: t.textSecondary),
       ),
       onChanged: widget.onChanged,
     );
+    if (highlights.isEmpty) return field;
+    return Stack(
+      children: [
+        IgnorePointer(
+          child: Text.rich(
+            _captionHighlightSpan(
+              _controller.text,
+              highlights,
+              baseStyle,
+              FfTokens.firebar,
+            ),
+          ),
+        ),
+        field,
+      ],
+    );
   }
+}
+
+class _CaptionRange {
+  const _CaptionRange(this.start, this.end);
+
+  final int start;
+  final int end;
+}
+
+TextSpan _captionHighlightSpan(
+  String text,
+  List<String> highlights,
+  TextStyle base,
+  Color highlight,
+) {
+  final ranges = <_CaptionRange>[];
+  for (final phrase in highlights) {
+    if (phrase.isEmpty) continue;
+    var from = 0;
+    while (from < text.length) {
+      final index = text.indexOf(phrase, from);
+      if (index < 0) break;
+      ranges.add(_CaptionRange(index, index + phrase.length));
+      from = index + phrase.length;
+    }
+  }
+  if (ranges.isEmpty) return TextSpan(text: text, style: base);
+  ranges.sort((a, b) => a.start.compareTo(b.start));
+  final children = <InlineSpan>[];
+  var cursor = 0;
+  for (final range in ranges) {
+    if (range.start < cursor) continue;
+    if (range.start > cursor) {
+      children.add(TextSpan(text: text.substring(cursor, range.start)));
+    }
+    children.add(TextSpan(
+      text: text.substring(range.start, range.end),
+      style: base.copyWith(color: highlight),
+    ));
+    cursor = range.end;
+  }
+  if (cursor < text.length) {
+    children.add(TextSpan(text: text.substring(cursor)));
+  }
+  return TextSpan(style: base, children: children);
 }
 
 class _CaptionPanel extends StatefulWidget {
@@ -440,6 +520,8 @@ class _InningCard extends StatefulWidget {
     required this.onInningIncrement,
     required this.inningDisabled,
     required this.onInningActivate,
+    required this.timingPhraseEnabled,
+    required this.onTimingPhraseEnabledChanged,
     required this.preSelected,
     required this.postSelected,
     required this.onPreTap,
@@ -467,6 +549,8 @@ class _InningCard extends StatefulWidget {
   final VoidCallback? onInningIncrement;
   final bool inningDisabled;
   final VoidCallback? onInningActivate;
+  final bool timingPhraseEnabled;
+  final ValueChanged<bool>? onTimingPhraseEnabledChanged;
   final bool preSelected;
   final bool postSelected;
   final VoidCallback? onPreTap;
@@ -489,10 +573,115 @@ class _InningCardState extends State<_InningCard> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
+    final timingOn = widget.timingPhraseEnabled;
     final canSquares = !widget.stepperOnly &&
         widget.inningLabel != null &&
         widget.onInningSelected != null;
     final useSquares = canSquares && !_useStepper;
+    final controls = <Widget>[
+      if (widget.onPreTap != null) ...[
+        SizedBox(
+          width: 42,
+          height: 24,
+          child: _ToggleChip(
+            label: 'Pre',
+            selected: widget.preSelected,
+            tokens: t,
+            onTap: widget.onPreTap,
+          ),
+        ),
+        if (widget.inningLabel != null) const SizedBox(width: 6),
+      ],
+      if (useSquares)
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(
+                flex: widget.onHalfSelected == null ? 1 : 5,
+                child: _InningSquares(
+                  selected: widget.inning ?? 1,
+                  regulationCount: widget.regulationCount,
+                  maxInning: widget.maxInning ?? (widget.regulationCount + 1),
+                  extraLabel: widget.extraLabel,
+                  segmentPrefix: widget.segmentPrefix,
+                  quarterSelected: widget.selectedHalf == null,
+                  tokens: t,
+                  disabled: widget.inningDisabled,
+                  onActivate: widget.onInningActivate,
+                  onSelected: widget.onInningSelected!,
+                ),
+              ),
+              if (widget.onHalfSelected != null) ...[
+                const SizedBox(width: 6),
+                SizedBox(
+                  width: 42,
+                  height: 24,
+                  child: _ToggleChip(
+                    label: '1H',
+                    selected:
+                        !widget.inningDisabled && widget.selectedHalf == '1H',
+                    tokens: t,
+                    onTap: () => widget.onHalfSelected!('1H'),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 42,
+                  height: 24,
+                  child: _ToggleChip(
+                    label: '2H',
+                    selected:
+                        !widget.inningDisabled && widget.selectedHalf == '2H',
+                    tokens: t,
+                    onTap: () => widget.onHalfSelected!('2H'),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        )
+      else if (widget.inningLabel != null) ...[
+        SizedBox(
+          width: 108,
+          child: _InningStepper(
+            label: widget.inningLabel!,
+            tokens: t,
+            onDecrement: widget.onInningDecrement,
+            onIncrement: widget.onInningIncrement,
+            disabled: widget.stepperOnly ? false : widget.inningDisabled,
+            onActivate: widget.onInningActivate,
+          ),
+        ),
+      ],
+      if (widget.onPostTap != null) ...[
+        if (widget.inningLabel != null) const SizedBox(width: 6),
+        SizedBox(
+          width: 42,
+          height: 24,
+          child: _ToggleChip(
+            label: 'Post',
+            selected: widget.postSelected,
+            tokens: t,
+            onTap: widget.onPostTap,
+          ),
+        ),
+      ],
+      if (widget.mlbTimestampVisible) ...[
+        const SizedBox(width: 6),
+        SizedBox(
+          width: 108,
+          height: 24,
+          child: _MlbTimestampChip(
+            enabled: widget.mlbTimestampEnabled,
+            loading: widget.mlbTimestampLoading,
+            matched: widget.mlbTimestampMatched,
+            tokens: t,
+            onTap: widget.onMlbTimestampTap,
+          ),
+        ),
+      ],
+    ];
+
     return Container(
       width: double.infinity,
       height: 38,
@@ -512,45 +701,70 @@ class _InningCardState extends State<_InningCard> {
                 Icon(
                   Icons.chevron_right,
                   size: 17,
-                  color: t.textSecondary,
+                  color: timingOn
+                      ? t.textSecondary
+                      : t.textSecondary.withValues(alpha: 0.45),
                 ),
                 const SizedBox(width: 5),
                 Expanded(
-                  child: Text(
-                    widget.timingUnitLabel,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: FfTokens.captionTitle.copyWith(
-                      color: t.text,
-                      fontSize: widget.timingUnitLabel.length > 8 ? 13 : 16,
-                      letterSpacing: 0.5,
+                  child: Tooltip(
+                    message: timingOn
+                        ? 'Time of game on — tap to turn off'
+                        : 'Time of game off — tap to turn on',
+                    waitDuration: const Duration(milliseconds: 400),
+                    child: InkWell(
+                      onTap: widget.onTimingPhraseEnabledChanged == null
+                          ? null
+                          : () =>
+                              widget.onTimingPhraseEnabledChanged!(!timingOn),
+                      borderRadius: BorderRadius.circular(4),
+                      child: Text(
+                        widget.timingUnitLabel,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: FfTokens.captionTitle.copyWith(
+                          color: timingOn
+                              ? t.text
+                              : t.textSecondary.withValues(alpha: 0.55),
+                          fontSize: widget.timingUnitLabel.length > 8 ? 13 : 16,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
                     ),
                   ),
                 ),
                 if (canSquares) ...[
                   const SizedBox(width: 4),
-                  Tooltip(
-                    message: _useStepper
-                        ? 'Switch to ${widget.timingUnitLabel.toLowerCase()} squares'
-                        : 'Switch to plus / minus',
-                    child: InkWell(
-                      onTap: () => setState(() => _useStepper = !_useStepper),
-                      borderRadius: BorderRadius.circular(5),
-                      child: Container(
-                        width: 40,
-                        height: 26,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: t.badgeFill,
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 120),
+                    opacity: timingOn ? 1 : 0.28,
+                    child: IgnorePointer(
+                      ignoring: !timingOn,
+                      child: Tooltip(
+                        message: _useStepper
+                            ? 'Switch to ${widget.timingUnitLabel.toLowerCase()} squares'
+                            : 'Switch to plus / minus',
+                        child: InkWell(
+                          onTap: () =>
+                              setState(() => _useStepper = !_useStepper),
                           borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Icon(
-                          _useStepper
-                              ? Icons.grid_view_rounded
-                              : Icons.add_box_outlined,
-                          size: 16,
-                          color: t.textSecondary,
+                          child: Container(
+                            width: 40,
+                            height: 26,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: t.badgeFill,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Icon(
+                              _useStepper
+                                  ? Icons.grid_view_rounded
+                                  : Icons.add_box_outlined,
+                              size: 16,
+                              color: t.textSecondary,
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -562,108 +776,16 @@ class _InningCardState extends State<_InningCard> {
           ),
           Container(width: 1, height: 18, color: t.divider),
           const SizedBox(width: 8),
-          if (widget.onPreTap != null) ...[
-            SizedBox(
-              width: 42,
-              height: 24,
-              child: _ToggleChip(
-                label: 'Pre',
-                selected: widget.preSelected,
-                tokens: t,
-                onTap: widget.onPreTap,
+          Expanded(
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 120),
+              opacity: timingOn ? 1 : 0.28,
+              child: IgnorePointer(
+                ignoring: !timingOn,
+                child: Row(children: controls),
               ),
             ),
-            if (widget.inningLabel != null) const SizedBox(width: 6),
-          ],
-          if (useSquares)
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: widget.onHalfSelected == null ? 1 : 5,
-                    child: _InningSquares(
-                      selected: widget.inning ?? 1,
-                      regulationCount: widget.regulationCount,
-                      maxInning:
-                          widget.maxInning ?? (widget.regulationCount + 1),
-                      extraLabel: widget.extraLabel,
-                      segmentPrefix: widget.segmentPrefix,
-                      quarterSelected: widget.selectedHalf == null,
-                      tokens: t,
-                      disabled: widget.inningDisabled,
-                      onActivate: widget.onInningActivate,
-                      onSelected: widget.onInningSelected!,
-                    ),
-                  ),
-                  if (widget.onHalfSelected != null) ...[
-                    const SizedBox(width: 6),
-                    SizedBox(
-                      width: 42,
-                      height: 24,
-                      child: _ToggleChip(
-                        label: '1H',
-                        selected: !widget.inningDisabled &&
-                            widget.selectedHalf == '1H',
-                        tokens: t,
-                        onTap: () => widget.onHalfSelected!('1H'),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    SizedBox(
-                      width: 42,
-                      height: 24,
-                      child: _ToggleChip(
-                        label: '2H',
-                        selected: !widget.inningDisabled &&
-                            widget.selectedHalf == '2H',
-                        tokens: t,
-                        onTap: () => widget.onHalfSelected!('2H'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            )
-          else if (widget.inningLabel != null) ...[
-            SizedBox(
-              width: 108,
-              child: _InningStepper(
-                label: widget.inningLabel!,
-                tokens: t,
-                onDecrement: widget.onInningDecrement,
-                onIncrement: widget.onInningIncrement,
-                disabled: widget.stepperOnly ? false : widget.inningDisabled,
-                onActivate: widget.onInningActivate,
-              ),
-            ),
-          ],
-          if (widget.onPostTap != null) ...[
-            if (widget.inningLabel != null) const SizedBox(width: 6),
-            SizedBox(
-              width: 42,
-              height: 24,
-              child: _ToggleChip(
-                label: 'Post',
-                selected: widget.postSelected,
-                tokens: t,
-                onTap: widget.onPostTap,
-              ),
-            ),
-          ],
-          if (widget.mlbTimestampVisible) ...[
-            const SizedBox(width: 6),
-            SizedBox(
-              width: 132,
-              height: 24,
-              child: _MlbTimestampChip(
-                enabled: widget.mlbTimestampEnabled,
-                loading: widget.mlbTimestampLoading,
-                matched: widget.mlbTimestampMatched,
-                tokens: t,
-                onTap: widget.onMlbTimestampTap,
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -726,6 +848,7 @@ class _MetadataBarState extends State<_MetadataBar> {
         style: t.metaStyle.copyWith(color: t.text),
         cursorColor: t.accent,
         spellCheckConfiguration: floSpellCheckConfiguration(),
+        contextMenuBuilder: floSpellCheckContextMenuBuilder,
         decoration: InputDecoration(
           prefixIcon: Padding(
             padding: const EdgeInsets.only(left: 8, right: 8),
@@ -826,6 +949,7 @@ class _PersonalityBarState extends State<_PersonalityBar> {
               ),
               cursorColor: t.accent,
               spellCheckConfiguration: floSpellCheckConfiguration(),
+              contextMenuBuilder: floSpellCheckContextMenuBuilder,
               decoration: InputDecoration(
                 border: InputBorder.none,
                 isDense: true,
@@ -1030,8 +1154,7 @@ class _InningSquaresState extends State<_InningSquares> {
                         !widget.disabled &&
                         widget.selected == widget.regulationCount + 1,
                     tokens: widget.tokens,
-                    onTap: () =>
-                        widget.onSelected(widget.regulationCount + 1),
+                    onTap: () => widget.onSelected(widget.regulationCount + 1),
                   ),
                 ),
               ],
@@ -1250,16 +1373,22 @@ class _MlbTimestampChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = enabled || matched;
+    final on = enabled;
+    final labelColor = on ? tokens.accent : tokens.textSecondary;
     return Tooltip(
-      message: matched
-          ? 'Inning matched from MLB timestamp. Click to turn off.'
-          : active
-              ? 'Match inning from this image’s EXIF timestamp.'
-              : 'Turn on MLB timestamp matching.',
+      message: on
+          ? (matched
+              ? 'MLB time is on. Inning matched from this photo. Tap to turn off.'
+              : 'MLB time is on. Tap to turn off.')
+          : 'MLB time is off. Tap to turn on.',
       child: Material(
-        color: matched ? tokens.selectedFill : tokens.badgeFill,
-        borderRadius: BorderRadius.circular(8),
+        color: on ? tokens.selectedFill : tokens.badgeFill,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: BorderSide(
+            color: on ? tokens.accent : tokens.divider,
+          ),
+        ),
         child: InkWell(
           onTap: loading ? null : onTap,
           borderRadius: BorderRadius.circular(8),
@@ -1269,22 +1398,28 @@ class _MlbTimestampChip extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (loading)
-                  Icon(
-                    Icons.sync,
-                    size: 13,
-                    color: tokens.textSecondary,
-                  )
+                  Icon(Icons.sync, size: 13, color: labelColor)
                 else
                   Icon(
-                    matched ? Icons.schedule : Icons.schedule_outlined,
+                    on ? Icons.schedule : Icons.schedule_outlined,
                     size: 13,
-                    color: matched ? tokens.accent : tokens.textSecondary,
+                    color: labelColor,
                   ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Text(
-                  'MLB TIME',
+                  'MLB',
                   style: FfTokens.railLabel.copyWith(
-                    color: matched ? tokens.accent : tokens.textSecondary,
+                    letterSpacing: 0.4,
+                    color: labelColor,
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Text(
+                  on ? 'ON' : 'OFF',
+                  style: FfTokens.railLabel.copyWith(
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w700,
+                    color: labelColor,
                   ),
                 ),
               ],

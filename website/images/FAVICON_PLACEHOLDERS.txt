@@ -1,0 +1,10 @@
+# Favicon placeholders
+#
+# Replace these with real assets when you have brand icons:
+#   favicon.ico          — 32x32 (and multi-size .ico)
+#   favicon-32.png       — 32x32 PNG
+#   apple-touch-icon.png — 180x180 PNG
+#
+# Until then, pages link to favicon.svg (works in modern browsers).
+#
+# Tools: https://realfavicongenerator.net or export from your app icon.

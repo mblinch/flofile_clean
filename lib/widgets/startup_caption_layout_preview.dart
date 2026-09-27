@@ -7,6 +7,7 @@ import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
 import '../services/caption_preview_data_service.dart';
 import '../services/preferences_service.dart';
+import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
 import 'caption_layout_builder_dialog.dart';
 import 'caption_style_dropdown_row.dart';
@@ -44,6 +45,14 @@ class _StartupCaptionLayoutPreviewState
   String? _favoriteCaptionStyleToken;
   CaptionPreviewSnapshot? _preview;
   bool _loading = true;
+
+  /// DropdownFlutter calls [onChanged] when its selection notifier updates
+  /// (including programmatic remounts). Ignore those writes during load /
+  /// after Done applies a template directly.
+  bool _ignoreStyleWrites = false;
+
+  FfTokens get _t =>
+      Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
 
   @override
   void initState() {
@@ -93,7 +102,27 @@ class _StartupCaptionLayoutPreviewState
     );
   }
 
+  String _tokenFor(CaptionTemplate template, CaptionStyleCatalog catalog) {
+    for (final e in catalog.library) {
+      if (e.id == template.id) return 'saved:${e.id}';
+    }
+    switch (template.wireStyle) {
+      case WireStyle.imagn:
+        return CaptionStyleCatalog.tokImagn;
+      case WireStyle.ap:
+        return CaptionStyleCatalog.tokAp;
+      case WireStyle.cp:
+        return CaptionStyleCatalog.tokCp;
+      case WireStyle.custom:
+        return CaptionStyleCatalog.tokCustom;
+      case WireStyle.getty:
+      case WireStyle.gettyInternational:
+        return CaptionStyleCatalog.tokGetty;
+    }
+  }
+
   Future<void> _load() async {
+    _ignoreStyleWrites = true;
     setState(() => _loading = true);
     final prefs = await PreferencesService.getInstance();
     final sport = widget.sport?.toLowerCase() ?? 'baseball';
@@ -101,21 +130,37 @@ class _StartupCaptionLayoutPreviewState
     final preview = CaptionPreviewDataService.load(sport: sport);
     final favoriteToken =
         await prefs.getFavoriteCaptionStyleToken(sport: sport);
-    var selectedToken = catalog.activeToken;
-    if (favoriteToken != null &&
-        catalog.options.any((o) => o.token == favoriteToken)) {
-      selectedToken = favoriteToken;
-    }
-    final template = catalog.resolve(selectedToken);
-    await prefs.saveCaptionTemplate(template.normalizePerOccurrenceLists());
+    // Use the active template that Done / Save wrote. Do not resolve a favorite
+    // over it or write prefs on load (that was wiping edits after Done).
+    final template = await prefs.getCaptionTemplate();
     if (!mounted) return;
     setState(() {
       _catalog = catalog;
-      _selectedToken = selectedToken;
+      _selectedToken = catalog.activeToken;
       _favoriteCaptionStyleToken = favoriteToken;
       _template = template;
       _preview = preview;
       _loading = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _ignoreStyleWrites = false;
+    });
+  }
+
+  Future<void> _applyTemplateLocally(CaptionTemplate template) async {
+    _ignoreStyleWrites = true;
+    final prefs = await PreferencesService.getInstance();
+    final catalog = await CaptionStyleCatalog.load(prefs, sport: widget.sport);
+    if (!mounted) return;
+    setState(() {
+      _catalog = catalog;
+      _template = template;
+      _selectedToken = _tokenFor(template, catalog);
+      _loading = false;
+    });
+    widget.onWireStyleChanged?.call(template.wireStyle);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _ignoreStyleWrites = false;
     });
   }
 
@@ -136,6 +181,7 @@ class _StartupCaptionLayoutPreviewState
   }
 
   Future<void> _onStyleChanged(String? token) async {
+    if (_ignoreStyleWrites) return;
     if (token == null || _catalog == null || token == _selectedToken) return;
     final prefs = await PreferencesService.getInstance();
     final template = _catalog!
@@ -185,14 +231,21 @@ class _StartupCaptionLayoutPreviewState
   }
 
   Future<void> _openEditor() async {
-    await CaptionLayoutBuilderDialog.show(context);
+    final applied = await CaptionLayoutBuilderDialog.show(context);
     if (!mounted) return;
+    if (applied != null) {
+      // Apply what Done just wrote immediately — do not wait on a prefs re-read
+      // that can race with dropdown remounts / sport overlay side effects.
+      await _applyTemplateLocally(applied);
+      return;
+    }
     await _load();
   }
 
   Widget _styleDropdown(CaptionStyleCatalog catalog) {
     final tokens = catalog.options.map((o) => o.token).toList();
     final compact = widget.compact;
+    final t = _t;
     final overlayHeight = () {
       final h = tokens.length * (compact ? 30.0 : 36.0);
       if (h < 120) return 120.0;
@@ -200,13 +253,19 @@ class _StartupCaptionLayoutPreviewState
       return h;
     }();
 
+    // Key must include the active token — DropdownFlutter only honors
+    // initialItem on first mount, so without this the header stays on Getty
+    // after Done promotes the layout to Custom.
     return DropdownFlutter<String>(
       key: ValueKey(
-        'startup_style_${tokens.length}_${catalog.library.map((e) => e.id).join()}',
+        'startup_style_${_selectedToken}_${_template?.wireStyle.name}_'
+        '${_template?.id}_${tokens.length}',
       ),
       hintText: 'Caption style',
       items: tokens,
-      initialItem: _selectedToken,
+      initialItem: _selectedToken != null && tokens.contains(_selectedToken)
+          ? _selectedToken
+          : null,
       excludeSelected: false,
       hideSelectedFieldWhenExpanded: true,
       overlayHeight: overlayHeight,
@@ -228,9 +287,9 @@ class _StartupCaptionLayoutPreviewState
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: compact ? 10 : 11,
+            fontSize: compact ? 13 : 14,
             fontWeight: FontWeight.w600,
-            color: Colors.grey.shade900,
+            color: t.text,
           ),
         );
       },
@@ -248,15 +307,15 @@ class _StartupCaptionLayoutPreviewState
         );
       },
       decoration: CustomDropdownDecoration(
-        closedFillColor: Colors.white,
-        expandedFillColor: Colors.white,
-        closedBorder: Border.all(color: Colors.grey.shade300),
-        expandedBorder: Border.all(color: Colors.grey.shade300),
-        closedBorderRadius: BorderRadius.circular(4),
-        expandedBorderRadius: BorderRadius.circular(4),
-        hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+        closedFillColor: t.sunken,
+        expandedFillColor: t.surface,
+        closedBorder: Border.all(color: t.divider),
+        expandedBorder: Border.all(color: t.divider),
+        closedBorderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        expandedBorderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        hintStyle: t.metaStyle.copyWith(fontSize: 11, color: t.textSecondary),
         listItemDecoration: ListItemDecoration(
-          selectedColor: Colors.grey.shade100,
+          selectedColor: t.selectedFill,
         ),
       ),
       onChanged: _onStyleChanged,
@@ -265,12 +324,16 @@ class _StartupCaptionLayoutPreviewState
 
   @override
   Widget build(BuildContext context) {
+    final t = _t;
     if (_loading) {
-      return const Center(
+      return Center(
         child: SizedBox(
           width: 18,
           height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: t.accent,
+          ),
         ),
       );
     }
@@ -290,35 +353,28 @@ class _StartupCaptionLayoutPreviewState
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(child: _styleDropdown(catalog)),
+              SizedBox(
+                width: 200,
+                child: _styleDropdown(catalog),
+              ),
               const SizedBox(width: 6),
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                child: GestureDetector(
+              Material(
+                type: MaterialType.transparency,
+                borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+                child: InkWell(
                   onTap: _openEditor,
+                  borderRadius: BorderRadius.circular(FfTokens.radiusChip),
                   child: Container(
+                    constraints: const BoxConstraints(minHeight: 28),
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+                      border: Border.all(color: t.accent, width: 1.5),
                     ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.view_agenda_outlined,
-                            size: 10, color: Colors.grey.shade700),
-                        const SizedBox(width: 3),
-                        Text(
-                          'Edit',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      'Edit',
+                      style: t.labelStyle.copyWith(fontSize: 11),
                     ),
                   ),
                 ),
@@ -326,17 +382,20 @@ class _StartupCaptionLayoutPreviewState
             ],
           )
         else
-          _styleDropdown(catalog),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SizedBox(
+              width: 240,
+              child: _styleDropdown(catalog),
+            ),
+          ),
         if (preview != null && preview.isNotEmpty) ...[
           SizedBox(height: compact ? 4 : 10),
           if (!compact)
             Text(
               'PREVIEW',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Colors.grey.shade800,
-                letterSpacing: 0.8,
+              style: FfTokens.railLabel.copyWith(
+                color: t.text.withValues(alpha: 0.70),
               ),
             ),
           if (!compact) const SizedBox(height: 6),
@@ -344,28 +403,23 @@ class _StartupCaptionLayoutPreviewState
             width: double.infinity,
             padding: EdgeInsets.symmetric(
               horizontal: compact ? 8 : 12,
-              vertical: compact ? 5 : 10,
+              vertical: compact ? 4 : 10,
             ),
             decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(4),
-              border: Border(
-                left: BorderSide(
-                  color: Colors.grey.shade400,
-                  width: compact ? 2 : 3,
-                ),
-              ),
+              color: t.sunken,
+              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+              border: Border.all(color: t.divider),
             ),
             child: SelectionArea(
               child: Text(
                 preview,
                 maxLines: compact ? 2 : null,
                 overflow: compact ? TextOverflow.ellipsis : null,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 11,
-                  height: 1.35,
-                  color: Colors.black87,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: compact ? 12 : 13,
+                  height: compact ? 1.25 : 1.35,
+                  color: t.text,
                 ),
               ),
             ),

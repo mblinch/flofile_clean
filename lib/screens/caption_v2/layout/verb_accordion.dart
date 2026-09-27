@@ -7,9 +7,10 @@ import '../data/effective_verb_catalog.dart';
 import '../widgets/base_row.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/celebration_dropdown.dart';
+import '../widgets/verb_tile.dart';
 import 'caption_v2_verb_editor.dart';
 
-/// Default no-scroll verb accordion (Favorites kept as a category).
+/// Default no-scroll verb accordion. Favorites is a pinned virtual category.
 class DefaultVerbAccordion extends StatefulWidget {
   const DefaultVerbAccordion({
     super.key,
@@ -27,7 +28,6 @@ class DefaultVerbAccordion extends StatefulWidget {
   static const laneHeaderH = 28.0;
   static const categoryFontSize = 15.0;
   static const verbFontSize = 13.5;
-  static const verbHoverFontSize = 17.0;
 
   @override
   State<DefaultVerbAccordion> createState() => DefaultVerbAccordionState();
@@ -61,18 +61,6 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
   List<EffectiveVerb> _verbsFor(String category) =>
       controller.verbDefinitionsByCategory[category] ?? const [];
 
-  int get _favoriteCount =>
-      controller.verbCatalog.favoriteKeys.length;
-
-  int get _totalVerbCount {
-    var total = 0;
-    for (final category in _categories) {
-      if (category == 'Favorites') continue;
-      total += _verbsFor(category).length;
-    }
-    return total;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -97,9 +85,8 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
     super.didUpdateWidget(oldWidget);
     final categories = _categories;
     if (!categories.contains(_openCategory) && categories.isNotEmpty) {
-      _openCategory = categories.contains('Offense')
-          ? 'Offense'
-          : categories.first;
+      _openCategory =
+          categories.contains('Offense') ? 'Offense' : categories.first;
     }
   }
 
@@ -211,15 +198,6 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                     color: t.text.withValues(alpha: 0.70),
                   ),
                 ),
-                const Spacer(),
-                Text(
-                  '$_totalVerbCount · $_favoriteCount favourites',
-                  style: TextStyle(
-                    fontFamily: FfTokens.monoFamily,
-                    fontSize: 10.5,
-                    color: t.text.withValues(alpha: 0.44),
-                  ),
-                ),
               ],
             ),
           ),
@@ -235,8 +213,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
               var headerH = DefaultVerbAccordion.headerH;
 
               // Tighten metrics when the body is short.
-              final worstOneUp =
-                  headerTotal + openVerbs.length * verbRowH;
+              final worstOneUp = headerTotal + openVerbs.length * verbRowH;
               if (worstOneUp > bodyH && bodyH > 0) {
                 headerH = 28;
                 verbRowH = 20;
@@ -244,18 +221,16 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
 
               final availableForVerbs =
                   (bodyH - categories.length * headerH).clamp(0.0, bodyH);
-              final maxRowsOneUp = verbRowH <= 0
-                  ? 0
-                  : (availableForVerbs / verbRowH).floor();
-              final twoUp = openVerbs.length > maxRowsOneUp &&
-                  openVerbs.length > 1;
+              final maxRowsOneUp =
+                  verbRowH <= 0 ? 0 : (availableForVerbs / verbRowH).floor();
+              final twoUp =
+                  openVerbs.length > maxRowsOneUp && openVerbs.length > 1;
 
               assert(() {
                 final fitted = twoUp
                     ? categories.length * headerH +
                         ((openVerbs.length + 1) ~/ 2) * verbRowH
-                    : categories.length * headerH +
-                        openVerbs.length * verbRowH;
+                    : categories.length * headerH + openVerbs.length * verbRowH;
                 if (bodyH > 0 && fitted > bodyH + 0.5) {
                   debugPrint(
                     'DefaultVerbAccordion: lane body ${bodyH.toStringAsFixed(0)}px '
@@ -271,23 +246,41 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
               return Column(
                 children: [
                   for (final category in categories)
-                    _AccordionSection(
-                      category: category,
-                      displayName: _displayName(category),
-                      count: _verbsFor(category).length,
-                      open: category == _openCategory,
-                      headerH: headerH,
-                      verbRowH: verbRowH,
-                      verbs: category == _openCategory
-                          ? openVerbs
-                          : const <EffectiveVerb>[],
-                      twoUp: category == _openCategory && twoUp,
-                      tokens: t,
-                      controller: controller,
-                      onOpen: () => _open(category),
-                      onEditVerb: widget.onEditVerb,
-                      onVerbArmed: widget.onVerbArmed,
-                    ),
+                    if (category != _openCategory)
+                      _AccordionSection(
+                        category: category,
+                        displayName: _displayName(category),
+                        count: _verbsFor(category).length,
+                        open: false,
+                        headerH: headerH,
+                        verbRowH: verbRowH,
+                        verbs: const <EffectiveVerb>[],
+                        twoUp: false,
+                        tokens: t,
+                        controller: controller,
+                        onOpen: () => _open(category),
+                        onEditVerb: widget.onEditVerb,
+                        onVerbArmed: widget.onVerbArmed,
+                      )
+                    else
+                      Expanded(
+                        child: _AccordionSection(
+                          category: category,
+                          displayName: _displayName(category),
+                          count: _verbsFor(category).length,
+                          open: true,
+                          scrollBody: true,
+                          headerH: headerH,
+                          verbRowH: verbRowH,
+                          verbs: openVerbs,
+                          twoUp: twoUp,
+                          tokens: t,
+                          controller: controller,
+                          onOpen: () => _open(category),
+                          onEditVerb: widget.onEditVerb,
+                          onVerbArmed: widget.onVerbArmed,
+                        ),
+                      ),
                 ],
               );
             },
@@ -313,12 +306,14 @@ class _AccordionSection extends StatelessWidget {
     required this.onOpen,
     required this.onEditVerb,
     this.onVerbArmed,
+    this.scrollBody = false,
   });
 
   final String category;
   final String displayName;
   final int count;
   final bool open;
+  final bool scrollBody;
   final double headerH;
   final double verbRowH;
   final List<EffectiveVerb> verbs;
@@ -331,32 +326,46 @@ class _AccordionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final header = _CategoryHeader(
+      label: displayName,
+      count: count,
+      open: open,
+      height: headerH,
+      tokens: tokens,
+      onTap: onOpen,
+    );
+    if (!open) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [header],
+      );
+    }
+
+    final board = _VerbBoard(
+      verbs: verbs,
+      rowHeight: verbRowH,
+      twoUp: twoUp,
+      tokens: tokens,
+      controller: controller,
+      onEditVerb: onEditVerb,
+      onVerbArmed: onVerbArmed,
+    );
+
+    if (!scrollBody) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [header, board],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _CategoryHeader(
-          label: displayName,
-          count: count,
-          open: open,
-          height: headerH,
-          tokens: tokens,
-          onTap: onOpen,
-        ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          alignment: Alignment.topCenter,
-          child: open
-              ? _VerbBoard(
-                  verbs: verbs,
-                  rowHeight: verbRowH,
-                  twoUp: twoUp,
-                  tokens: tokens,
-                  controller: controller,
-                  onEditVerb: onEditVerb,
-                  onVerbArmed: onVerbArmed,
-                )
-              : const SizedBox.shrink(),
+        header,
+        Expanded(
+          child: SingleChildScrollView(
+            child: board,
+          ),
         ),
       ],
     );
@@ -409,9 +418,7 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                     : Colors.transparent),
             border: Border(
               bottom: BorderSide(
-                color: open
-                    ? t.accent.withValues(alpha: 0.34)
-                    : t.divider,
+                color: open ? t.accent.withValues(alpha: 0.34) : t.divider,
               ),
             ),
           ),
@@ -420,9 +427,7 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
               Icon(
                 open ? Icons.keyboard_arrow_down : Icons.chevron_right,
                 size: 11,
-                color: open
-                    ? t.accent
-                    : t.text.withValues(alpha: 0.38),
+                color: open ? t.accent : t.text.withValues(alpha: 0.38),
               ),
               const SizedBox(width: 5),
               Expanded(
@@ -431,15 +436,12 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontFamily: open
-                        ? FfTokens.labelFamily
-                        : FfTokens.fontFamily,
+                    fontFamily:
+                        open ? FfTokens.labelFamily : FfTokens.fontFamily,
                     fontWeight: open ? FontWeight.w600 : FontWeight.w400,
                     fontSize: DefaultVerbAccordion.categoryFontSize,
                     letterSpacing: open ? -0.2 : 0,
-                    color: open
-                        ? t.accent
-                        : t.text.withValues(alpha: 0.76),
+                    color: open ? t.accent : t.text.withValues(alpha: 0.76),
                   ),
                 ),
               ),
@@ -448,9 +450,7 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                 style: TextStyle(
                   fontFamily: FfTokens.monoFamily,
                   fontSize: 10,
-                  color: open
-                      ? t.accent
-                      : t.text.withValues(alpha: 0.44),
+                  color: open ? t.accent : t.text.withValues(alpha: 0.44),
                 ),
               ),
             ],
@@ -598,9 +598,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
         PopupMenuItem(
           value: 'pin',
           child: Text(
-            controller.isVerbPinned(verb.key)
-                ? 'Unpin Verb'
-                : 'Pin Verb',
+            controller.isVerbPinned(verb.key) ? 'Unpin Verb' : 'Pin Verb',
           ),
         ),
         const PopupMenuItem(value: 'edit', child: Text('Edit verb…')),
@@ -625,8 +623,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
     final armed = controller.selectedVerb == verb.key;
     final showRbi = armed && controller.verbNeedsRbi(verb.key);
     final showBase = armed && controller.verbNeedsBase(verb.key);
-    final showCelebration =
-        armed && controller.verbNeedsCelebration(verb.key);
+    final showCelebration = armed && controller.verbNeedsCelebration(verb.key);
     final bright = armed || _hovered;
 
     return Column(
@@ -640,10 +637,15 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
             color: armed
                 ? tokens.accent.withValues(alpha: 0.15)
                 : Colors.transparent,
-            child: InkWell(
+            child: CmdClick(
+              useInkWell: true,
               onTap: () {
                 widget.onVerbArmed?.call();
                 controller.selectVerb(verb.key);
+              },
+              onCmdTap: () {
+                widget.onVerbArmed?.call();
+                controller.toggleVerbPin(verb.key);
               },
               onSecondaryTapDown: (details) => _contextMenu(context, details),
               child: Container(
@@ -660,25 +662,34 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                 ),
                 child: Row(
                   children: [
+                    SizedBox(
+                      width: 10,
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 4,
+                          height: 4,
+                          decoration: verb.isFavorite
+                              ? BoxDecoration(
+                                  color: tokens.accent,
+                                  shape: BoxShape.circle,
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
                     Expanded(
-                      child: AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 120),
-                        curve: Curves.easeOutCubic,
+                      child: Text(
+                        verb.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: FfTokens.labelFamily,
-                          fontSize: _hovered
-                              ? DefaultVerbAccordion.verbHoverFontSize
-                              : DefaultVerbAccordion.verbFontSize,
+                          fontSize: DefaultVerbAccordion.verbFontSize,
                           fontWeight: FontWeight.w500,
-                          letterSpacing: bright ? -0.4 : 0,
                           color: bright
                               ? tokens.text
                               : tokens.text.withValues(alpha: 0.84),
-                        ),
-                        child: Text(
-                          verb.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -732,6 +743,9 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
 
 /// Nested RUNNERS ON / BASE / REACTION panel under an armed verb,
 /// ending with Save / FTP once the option rows are shown.
+///
+/// Authored modifier groups are edited in Admin → Verb authoring only;
+/// the live caption session keeps these classic RBI / base / celebration rows.
 class VerbExtrasPanel extends StatelessWidget {
   const VerbExtrasPanel({
     super.key,

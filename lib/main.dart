@@ -47,6 +47,24 @@ Future<void> main() async {
     return null;
   });
 
+  const lifecycleChannel = MethodChannel('caption_writer/lifecycle');
+  lifecycleChannel.setMethodCallHandler((MethodCall call) async {
+    if (call.method == 'confirmQuit') {
+      final ctx = appNavigatorKey.currentContext;
+      if (ctx == null || !ctx.mounted) return true;
+      final confirmed = await showAppConfirmDialog(
+        context: ctx,
+        title: 'Quit FloFile?',
+        message: 'Are you sure you want to exit the app?',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'Quit',
+        barrierDismissible: false,
+      );
+      return confirmed == true;
+    }
+    return null;
+  });
+
   // Check if running from a mounted volume (DMG) and warn user
   final executablePath = Platform.resolvedExecutable;
   if (executablePath.contains('/Volumes/')) {

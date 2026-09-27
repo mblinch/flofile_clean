@@ -40,8 +40,8 @@ class PlayerRow extends StatelessWidget {
     final isMobile = MediaQuery.sizeOf(context).width < 1100;
     final rowHeight = height ?? (isMobile ? 44.0 : 28.0);
     final veryCompact = rowHeight < 24;
-    final nameFontSize =
-        (t.textSizeMeta + ((rowHeight - 24) / 4)).clamp(11.0, 16.0).toDouble();
+    final nameFontSize = (rowHeight * 0.56).clamp(12.0, 28.0).toDouble();
+    final jerseyFontSize = (rowHeight * 0.40).clamp(10.0, 18.0).toDouble();
 
     return Semantics(
       button: enabled,
@@ -86,6 +86,7 @@ class PlayerRow extends StatelessWidget {
                   selected: selected,
                   highlightQuery: highlightQuery,
                   tokens: t,
+                  fontSize: jerseyFontSize,
                 ),
                 SizedBox(width: veryCompact ? 5 : 8),
                 Expanded(
@@ -148,18 +149,21 @@ class _JerseyBadge extends StatelessWidget {
     required this.selected,
     required this.highlightQuery,
     required this.tokens,
+    required this.fontSize,
   });
 
   final String jersey;
   final bool selected;
   final String highlightQuery;
   final FfTokens tokens;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 24),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      constraints: BoxConstraints(minWidth: fontSize + 14),
+      padding:
+          EdgeInsets.symmetric(horizontal: fontSize > 14 ? 6 : 5, vertical: 2),
       decoration: BoxDecoration(
         color: selected ? tokens.accent : tokens.badgeFill,
         borderRadius: BorderRadius.circular(5),
@@ -169,7 +173,7 @@ class _JerseyBadge extends StatelessWidget {
           jersey,
           RegExp(r'^\d+$').hasMatch(highlightQuery) ? highlightQuery : '',
           normal: tokens.jerseyStyle.copyWith(
-            fontSize: tokens.textSizeMicro,
+            fontSize: fontSize,
             color: selected ? tokens.inkOnAccent : tokens.text,
             height: 1.1,
           ),

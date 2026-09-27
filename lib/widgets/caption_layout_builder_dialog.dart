@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:dropdown_flutter/custom_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -14,15 +13,13 @@ import '../caption_style/game_info.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/current_user_service.dart';
 import '../services/preferences_service.dart';
-import '../theme/app_tokens.dart';
-import 'app_compact_checkbox.dart';
+import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
 import 'date_formula_editor.dart';
-import 'caption_style_dropdown_row.dart';
 import 'location_formula_editor.dart';
 
-/// Same primary blue as [PreferencesDialog] (FTP / accents).
-const Color _captionLayoutBlue = Color(0xFF0052CC);
+FfTokens _ffOf(BuildContext context) =>
+    Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
 
 /// Caption layout: wire preset or custom formula; preview uses fixed sample metadata.
 class CaptionLayoutBuilderDialog extends StatefulWidget {
@@ -54,9 +51,11 @@ class CaptionLayoutBuilderDialog extends StatefulWidget {
   final ValueChanged<WireStyle>? onWireChanged;
   final void Function(Future<void> Function() flush)? onRegisterFlush;
 
-  static Future<void> show(BuildContext context) async {
-    await showDialog<void>(
+  /// Returns the applied [CaptionTemplate] when Done succeeds; `null` on Cancel.
+  static Future<CaptionTemplate?> show(BuildContext context) {
+    return showDialog<CaptionTemplate>(
       context: context,
+      barrierDismissible: false,
       barrierColor: Colors.black26,
       builder: (context) => const CaptionLayoutBuilderDialog(),
     );
@@ -68,6 +67,8 @@ class CaptionLayoutBuilderDialog extends StatefulWidget {
 }
 
 class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> {
+  FfTokens get _t => _ffOf(context);
+
   /// Sample city / date / venue for preview only (matches sample sentence in renderer).
   /// Photographer is resolved from the signed-in user at build time via
   /// [CurrentUserService]; agency is left blank so the renderer falls back to
@@ -181,8 +182,14 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   int _captionSampleSeed = DateTime.now().microsecondsSinceEpoch & 0x7fffffff;
   bool _prefsLoaded = false;
   String _lastSavedTemplateSnapshot = '';
+  /// Set by [_done] so [dispose] does not race a second prefs write.
+  bool _appliedOnDone = false;
   Timer? _autosaveDebounce;
   bool _renameCaptionStylePromptOpen = false;
+  /// When true, a successful Save as template from the footer closes the dialog.
+  bool _closeDialogAfterSaveAs = false;
+  /// When set, overrides [_currentRenameMode] (used by Save as template).
+  _RenamePromptMode? _forcedRenameMode;
   TextEditingController? _renameCaptionStyleNameCtrl;
   List<CaptionStyleLibraryEntry> _captionStyleLibrary = const [];
 
@@ -199,6 +206,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   /// Favorite caption-style menu token (per sport), shown with a star in the dropdown.
   String? _favoriteCaptionStyleToken;
+
+  /// Scroll target for "edit snippets below" when tapping Resolves to.
+  final GlobalKey _structureSectionKey = GlobalKey();
+  bool _structureHintFlash = false;
+  Timer? _structureHintFlashTimer;
 
   static const String _menuTokGetty = 'wire:getty';
   static const String _menuTokImagn = 'wire:imagn';
@@ -485,6 +497,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         _selectedWire,
         _template.normalizePerOccurrenceLists(),
       );
+    } else {
+      _scheduleAutosave();
     }
   }
 
@@ -852,6 +866,16 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }
 
   CaptionTemplate _withSessionSportGameId(CaptionTemplate t) {
+    // Named library styles and Custom keep authored game-ID / free-text.
+    // Blindly applying the wire sport overlay was wiping "Training camp" etc.
+    // on dialog open, then Save wrote the wiped text back into the library.
+    if (_selectedSavedStyleId != null || t.isUserAuthoredCaptionStyle) {
+      return CaptionTemplate.withSportGameIdentifierDefault(
+        t,
+        _sessionSport,
+        replaceKnownDefaults: false,
+      );
+    }
     final gid = _gameIdByWire[t.wireStyle] ??
         defaultGameIdentifierText(_sessionSport);
     return CaptionTemplate.applyGameIdentifierText(t, gid);
@@ -993,8 +1017,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
     if (syncBuiltInWireDefault &&
         libId == null &&
-        _isBuiltInWire(_selectedWire) &&
-        !_coreStyleLocked) {
+        _isBuiltInWire(_selectedWire)) {
+      // Personal wire baseline (Done) — does not create a named library template.
       await prefs.saveCaptionTemplateWireDefault(_selectedWire, normalized);
     }
 
@@ -1014,6 +1038,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   void _scheduleAutosave() {
     if (!_prefsLoaded) return;
+    // Built-in wire edits stay in the dialog until Done or Save as template.
+    if (_requiresSaveAsNewStyle) return;
     final snapshot = _templateSnapshot();
     if (snapshot == _lastSavedTemplateSnapshot) return;
     _autosaveDebounce?.cancel();
@@ -1151,27 +1177,23 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     ];
   }
 
-  /// Built-in Getty / Imagn / AP / CP are view-only for normal users.
-  /// Admin mode can still edit wire defaults. Duplicate creates an editable copy.
-  bool get _coreStyleLocked =>
+  /// Built-in Getty / Imagn / AP / CP stay editable for normal users. Done
+  /// applies the layout without naming; Save as template creates a library style.
+  /// Admin mode can still edit and save wire defaults directly.
+  bool get _requiresSaveAsNewStyle =>
       !widget.adminMode &&
       _selectedSavedStyleId == null &&
       _isBuiltInWire(_selectedWire);
 
-  bool _tokenIsLockedCore(String token) =>
-      !widget.adminMode && CaptionStyleCatalog.isCoreWireToken(token);
+  /// Legacy name kept for call sites that gated editing. Built-ins are no longer
+  /// read-only; use [_requiresSaveAsNewStyle] for autosave / discard rules.
+  bool get _coreStyleLocked => false;
 
-  /// Greys out and blocks interaction for read-only built-in styles.
-  Widget _lockableEditorSurface({required Widget child}) {
-    if (!_coreStyleLocked) return child;
-    return IgnorePointer(
-      ignoring: true,
-      child: Opacity(
-        opacity: 0.42,
-        child: child,
-      ),
-    );
-  }
+  /// Built-ins are editable; no longer shown as locked in the menu.
+  bool _tokenIsLockedCore(String token) => false;
+
+  /// No-op wrapper (built-ins are editable). Kept so call sites stay stable.
+  Widget _lockableEditorSurface({required Widget child}) => child;
 
   CaptionStyleLibraryEntry? _entryForSavedStyleToken(String token) {
     if (!token.startsWith('saved:')) return null;
@@ -1184,19 +1206,16 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   /// When the active caption template was saved from a library row, [CaptionTemplate.id]
   /// matches that row — set [_selectedSavedStyleId] so Rename / Delete apply.
+  ///
+  /// Do not match nested [CaptionTemplate.id] values like `preset_getty` or
+  /// full JSON equality — those false positives made Done update a library
+  /// row instead of promoting the live style to Custom.
   String? _libraryEntryIdMatchingActiveTemplate(
     CaptionTemplate template,
     List<CaptionStyleLibraryEntry> lib,
   ) {
     for (final e in lib) {
       if (e.id == template.id) return e.id;
-      if (e.template.id == template.id) return e.id;
-    }
-    final norm = template.normalizePerOccurrenceLists();
-    final snap = jsonEncode(norm.toJson());
-    for (final e in lib) {
-      final eNorm = e.template.normalizePerOccurrenceLists();
-      if (jsonEncode(eNorm.toJson()) == snap) return e.id;
     }
     return null;
   }
@@ -1235,6 +1254,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     if (token.startsWith('saved:')) {
       final entry = _entryForSavedStyleToken(token);
       if (entry == null) return;
+      // Keep the authored game-ID / custom text; only fill when empty.
+      final applied = CaptionTemplate.withSportGameIdentifierDefault(
+        _deepCopyCaptionTemplate(entry.template),
+        _sessionSport,
+        replaceKnownDefaults: false,
+      );
       setState(() {
         _locationEditorOpen = false;
         _dateEditorOpen = false;
@@ -1249,8 +1274,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         _focusedGapIndex = null;
         _disposeGapControllers();
         _selectedSavedStyleId = entry.id;
-        _template =
-            _withSessionSportGameId(_deepCopyCaptionTemplate(entry.template));
+        _template = applied;
         _selectedWire = _template.wireStyle;
         if (_template.wireStyle == WireStyle.custom) {
           _lastPreset = _wiredBaseline(WireStyle.getty);
@@ -1263,6 +1287,17 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _syncDateUiFromTemplate();
       });
+      // Selecting a named style should become the live caption style.
+      if (!widget.adminMode) {
+        unawaited(_persistCaptionLayoutToPreferences(
+          syncBuiltInWireDefault: false,
+          allowSkipIfUnchanged: false,
+        ));
+      } else {
+        unawaited(PreferencesService.getInstance().then((prefs) async {
+          await prefs.saveCaptionTemplate(applied);
+        }));
+      }
       return;
     }
     _applyWireStyle(_wireStyleFromMenuToken(token));
@@ -1358,6 +1393,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           removeDiacritics: t.removeDiacritics,
           showPersonalityField: t.showPersonalityField,
           showKeywordsField: t.showKeywordsField,
+          timingPhraseCaps: t.timingPhraseCaps,
+          includeTimingPhrase: t.includeTimingPhrase,
           separator: t.separator,
           creditFormat: t.creditFormat,
           bylineOptions: t.bylineOptions,
@@ -1395,6 +1432,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           removeDiacritics: t.removeDiacritics,
           showPersonalityField: t.showPersonalityField,
           showKeywordsField: t.showKeywordsField,
+          timingPhraseCaps: t.timingPhraseCaps,
+          includeTimingPhrase: t.includeTimingPhrase,
           separator: t.separator,
           creditFormat: t.creditFormat,
           bylineOptions: t.bylineOptions,
@@ -1433,6 +1472,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           removeDiacritics: t.removeDiacritics,
           showPersonalityField: t.showPersonalityField,
           showKeywordsField: t.showKeywordsField,
+          timingPhraseCaps: t.timingPhraseCaps,
+          includeTimingPhrase: t.includeTimingPhrase,
           separator: t.separator,
           creditFormat: t.creditFormat,
           bylineOptions: t.bylineOptions,
@@ -1522,20 +1563,26 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncDateUiFromTemplate();
-      if (mounted && duplicatedCore) {
-        _openRenameCaptionStylePrompt();
-      }
     });
+    // Persist as the live active style immediately so edits apply without
+    // requiring "Save as…" to create a named library template.
+    if (!widget.adminMode) {
+      unawaited(_persistCaptionLayoutToPreferences(
+        syncBuiltInWireDefault: false,
+        allowSkipIfUnchanged: false,
+      ));
+    }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           duplicatedCore
-              ? 'Duplicated "$sourceLabel" as Custom. Name it to save under Custom captions.'
+              ? 'Editing a copy of "$sourceLabel". Save applies it now — '
+                  'use Save as… only if you want a named style.'
               : previousWire == WireStyle.custom
                   ? 'Layout duplicated as Custom. Save to keep your caption template.'
                   : 'Copied $sourceLabel layout as Custom. Save to keep it.',
         ),
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
@@ -2144,6 +2191,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
             removeDiacritics: ref.removeDiacritics,
             showPersonalityField: ref.showPersonalityField,
             showKeywordsField: ref.showKeywordsField,
+            timingPhraseCaps: ref.timingPhraseCaps,
+            includeTimingPhrase: ref.includeTimingPhrase,
             separator: ref.separator,
             creditFormat: ref.creditFormat,
             bylineOptions: ref.bylineOptions,
@@ -2173,38 +2222,155 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncDateUiFromTemplate();
     });
+    // Selecting a wire (or Custom) should become the live caption style, same as
+    // picking a named library entry — otherwise only the dialog preview changes
+    // until the user happens to hit Save.
+    if (!widget.adminMode) {
+      unawaited(_persistCaptionLayoutToPreferences(
+        syncBuiltInWireDefault: false,
+        allowSkipIfUnchanged: false,
+      ));
+    }
   }
 
-  Future<void> _save() async {
-    if (!_prefsLoaded) return;
-    if (_coreStyleLocked) {
+  /// Ensures live text fields are copied into [_template] before persist/Done.
+  void _flushAllEditorsIntoTemplate() {
+    _flushGapControllersIntoTemplate();
+    if (!_syncingGlueSnippetCtrls) {
+      for (final entry in _glueSnippetControllers.entries) {
+        final segmentIndex = entry.key;
+        if (segmentIndex < 0 ||
+            segmentIndex >= _template.segmentOrder.length) {
+          continue;
+        }
+        final seg = _template.segmentOrder[segmentIndex];
+        if (!_isGlueSegment(seg)) continue;
+        if (seg == CaptionSegment.separator) {
+          final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
+              _template.segmentOrder, segmentIndex, CaptionSegment.separator);
+          _template = _templateWithSeparatorAtOccurrence(
+              _template, occ, entry.value.text);
+        } else {
+          final occ = CaptionFormulaRenderer.segmentOccurrenceIndex(
+              _template.segmentOrder,
+              segmentIndex,
+              CaptionSegment.punctuation);
+          _template = _templateWithPunctuationAtOccurrence(
+              _template, occ, entry.value.text);
+        }
+      }
+    }
+    _template = _template.copyWith(
+      gameIdentifierText: _gameIdentifierCtrl.text,
+      layoutPrefix: _layoutPrefixCtrl.text,
+      layoutSuffix: _layoutSuffixCtrl.text,
+    );
+  }
+
+  /// Applies the current layout as the active caption style and closes.
+  /// Built-in wire edits become [WireStyle.custom] so the style menu shows
+  /// Custom. The personal wire baseline is updated too. Named library rows
+  /// stay named. Use [_saveAsTemplate] to create a new named style.
+  Future<void> _done() async {
+    if (!_prefsLoaded) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Built-in styles are read-only. Duplicate to create an editable custom caption.',
-          ),
-          duration: Duration(seconds: 3),
+          content: Text('Caption layout is still loading — try Done again.'),
+          duration: Duration(seconds: 2),
         ),
       );
       return;
     }
     try {
-      await _persistCaptionLayoutToPreferences(
-        syncBuiltInWireDefault: true,
-        allowSkipIfUnchanged: false,
-      );
+      _autosaveDebounce?.cancel();
+      _flushAllEditorsIntoTemplate();
+
+      final prefs = await PreferencesService.getInstance();
+      var toSave = _template.normalizePerOccurrenceLists();
+      // Only treat as a named library edit when the user actually selected a
+      // saved: menu row (template.id == library entry id). Built-in wires
+      // always promote to Custom on Done.
+      final libId = _selectedSavedStyleId;
+      final editingNamedLibrary = libId != null && toSave.id == libId;
+      final sourceWire = _selectedWire;
+      final promoteToCustom = !widget.adminMode &&
+          !editingNamedLibrary &&
+          _isBuiltInWire(sourceWire);
+
+      if (widget.adminMode) {
+        await _persistCaptionLayoutToPreferences(
+          syncBuiltInWireDefault: true,
+          allowSkipIfUnchanged: false,
+        );
+        toSave = _template.normalizePerOccurrenceLists();
+      } else {
+        if (promoteToCustom) {
+          // Personal baseline for Getty/Imagn/… when that wire is chosen again.
+          await prefs.saveCaptionTemplateWireDefault(sourceWire, toSave);
+          toSave = _deepCopyCaptionTemplate(toSave).copyWith(
+            wireStyle: WireStyle.custom,
+            id: 'custom',
+            name: 'Custom',
+          );
+        }
+
+        await prefs.saveCaptionTemplate(toSave);
+
+        if (editingNamedLibrary) {
+          await prefs.updateCaptionStyleTemplateInLibrary(
+            id: libId,
+            template: toSave,
+          );
+        }
+
+        // Hard verify — do not close if prefs still hold the old style.
+        final verify = await prefs.getCaptionTemplateRaw();
+        if (verify.wireStyle != toSave.wireStyle ||
+            verify.includeTimingPhrase != toSave.includeTimingPhrase ||
+            verify.showPersonalityField != toSave.showPersonalityField ||
+            verify.showKeywordsField != toSave.showKeywordsField ||
+            jsonEncode(verify.segmentOrder.map((e) => e.name).toList()) !=
+                jsonEncode(toSave.segmentOrder.map((e) => e.name).toList())) {
+          await prefs.saveCaptionTemplate(toSave);
+          final retry = await prefs.getCaptionTemplateRaw();
+          if (retry.wireStyle != toSave.wireStyle) {
+            throw StateError(
+              'Caption layout did not save (still ${retry.wireStyle.name}).',
+            );
+          }
+        }
+
+        _appliedOnDone = true;
+        if (mounted) {
+          setState(() {
+            _template = toSave;
+            _selectedWire = toSave.wireStyle;
+            if (promoteToCustom) {
+              _selectedSavedStyleId = null;
+              _lastPreset = _clonePreset(_wiredBaseline(sourceWire));
+            }
+            _lastSavedTemplateSnapshot = _templateSnapshot(toSave);
+          });
+        }
+      }
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Caption layout saved.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
+      if (widget.embedded) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Caption layout applied.'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+      Navigator.of(context).pop(toSave);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Could not save caption layout: $e'),
+          content: Text('Could not apply caption layout: $e'),
           backgroundColor: Colors.red.shade800,
           duration: const Duration(seconds: 4),
         ),
@@ -2212,15 +2378,22 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     }
   }
 
+  /// Opens the name prompt to add the current layout as a named library style.
+  void _saveAsTemplate() {
+    if (!_prefsLoaded) return;
+    _forcedRenameMode = _RenamePromptMode.saveAsNewLibrary;
+    _closeDialogAfterSaveAs = !widget.embedded;
+    _openRenameCaptionStylePrompt();
+  }
+
   /// Three modes for the Rename / Save-as dialog:
   ///  * `libraryEntry` — selected style is a saved library entry → rename it.
-  ///  * `wireLabel` — selected style is a built-in wire (Getty USA / Imagn / AP) →
-  ///     update the wire's dropdown label override.
-  ///  * `saveAsNewLibrary` — selected style is Custom → save the current
-  ///     template as a new library entry.
+  ///  * `wireLabel` — admin renaming a built-in wire's dropdown label.
+  ///  * `saveAsNewLibrary` — save the current layout as a new named template.
   _RenamePromptMode _currentRenameMode() {
+    if (_forcedRenameMode != null) return _forcedRenameMode!;
     if (_selectedSavedStyleId != null) return _RenamePromptMode.libraryEntry;
-    if (_selectedWire == WireStyle.custom) {
+    if (_selectedWire == WireStyle.custom || _requiresSaveAsNewStyle) {
       return _RenamePromptMode.saveAsNewLibrary;
     }
     return _RenamePromptMode.wireLabel;
@@ -2228,6 +2401,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   void _openRenameCaptionStylePrompt() {
     final mode = _currentRenameMode();
+    // Inline rename / Save as template link keeps the dialog open unless the
+    // footer Save as template button set [_closeDialogAfterSaveAs].
+    if (mode != _RenamePromptMode.saveAsNewLibrary) {
+      _closeDialogAfterSaveAs = false;
+    }
     String? currentName;
     switch (mode) {
       case _RenamePromptMode.libraryEntry:
@@ -2255,6 +2433,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     if (!_renameCaptionStylePromptOpen) return;
     _renameCaptionStyleNameCtrl?.dispose();
     _renameCaptionStyleNameCtrl = null;
+    _closeDialogAfterSaveAs = false;
+    _forcedRenameMode = null;
     setState(() => _renameCaptionStylePromptOpen = false);
   }
 
@@ -2311,25 +2491,46 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               'Renamed ${_factoryWireLabel(wire)} to "$trimmed" in the menu.';
           break;
         case _RenamePromptMode.saveAsNewLibrary:
+          _flushGapControllersIntoTemplate();
+          final normalized = _template.normalizePerOccurrenceLists();
           final savedId = await prefs.addCaptionStyleToLibrary(
             displayName: trimmed,
-            template: _template,
+            template: normalized,
           );
+          // Apply immediately — naming alone used to only add a library row,
+          // so Caption V2 kept rendering the previous active template.
+          CaptionTemplate? applied;
           final lib = await prefs.getCaptionStyleLibrary();
+          for (final e in lib) {
+            if (e.id == savedId) {
+              applied = _deepCopyCaptionTemplate(e.template);
+              break;
+            }
+          }
+          applied ??= normalized.copyWith(id: savedId, name: trimmed);
+          await prefs.saveCaptionTemplate(applied);
           if (!mounted) return;
           _closeRenameCaptionStylePrompt();
           setState(() {
             _captionStyleLibrary = lib;
             _selectedSavedStyleId = savedId;
-            for (final e in lib) {
-              if (e.id == savedId) {
-                _template = _deepCopyCaptionTemplate(e.template);
-                _selectedWire = _template.wireStyle;
-                break;
-              }
-            }
+            _template = applied!;
+            _selectedWire = _template.wireStyle;
+            _lastSavedTemplateSnapshot = _templateSnapshot(applied);
           });
-          snackMessage = 'Saved "$trimmed" as a new caption style.';
+          snackMessage = 'Saved "$trimmed" and applied it as the active caption style.';
+          final shouldClose = _closeDialogAfterSaveAs;
+          _closeDialogAfterSaveAs = false;
+          if (shouldClose && mounted && !widget.embedded) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(snackMessage),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+            Navigator.of(context).pop();
+            return;
+          }
           break;
       }
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2367,26 +2568,43 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         submitLabel = 'Rename';
         break;
       case _RenamePromptMode.saveAsNewLibrary:
-        title = 'Save caption style as';
+        title = 'Save as template';
         submitLabel = 'Save';
         break;
     }
     return Material(
-      color: Colors.black.withValues(alpha: 0.45),
+      color: Colors.black.withValues(alpha: 0.55),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 360),
           child: Material(
-            color: Colors.white,
+            color: _t.surface,
             elevation: 8,
-            shadowColor: Colors.black.withValues(alpha: 0.18),
-            shape: kAppDialogShape,
+            shadowColor: Colors.black.withValues(alpha: 0.35),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+              side: BorderSide(color: _t.divider),
+            ),
             clipBehavior: Clip.antiAlias,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AppDialogTealTitleBar(title: title),
+                Container(
+                  height: 44,
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  alignment: Alignment.centerLeft,
+                  decoration: BoxDecoration(
+                    color: _t.surface,
+                    border: Border(bottom: BorderSide(color: _t.divider)),
+                  ),
+                  child: Text(
+                    title.toUpperCase(),
+                    style: FfTokens.railLabel.copyWith(
+                      color: _t.text.withValues(alpha: 0.70),
+                    ),
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
                   child: AppDialogLabeledField(
@@ -2396,7 +2614,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                       child: TextField(
                         controller: ctrl,
                         autofocus: true,
-                        style: kAppDialogFieldTextStyle,
+                        style: appDialogFieldTextStyleOf(context),
                         decoration: appDialogBareFieldDecoration(
                           hintText: 'My caption style',
                         ),
@@ -2441,16 +2659,22 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   @override
   void dispose() {
     _autosaveDebounce?.cancel();
-    // Flush any unsaved changes that were still pending in the debounce buffer.
+    _structureHintFlashTimer?.cancel();
+    // Flush pending edits for Custom / named styles only. Built-in edits are
+    // applied via Done (or Save as template); Cancel discards them.
+    // Skip after Done — that path already wrote prefs and must not be raced.
     final snapshot = _templateSnapshot();
-    if (_prefsLoaded && snapshot != _lastSavedTemplateSnapshot) {
+    if (_prefsLoaded &&
+        !_appliedOnDone &&
+        !_requiresSaveAsNewStyle &&
+        snapshot != _lastSavedTemplateSnapshot) {
       _flushGapControllersIntoTemplate();
       final normalized = _template.normalizePerOccurrenceLists();
       final libId = _selectedSavedStyleId;
       PreferencesService.getInstance().then((prefs) async {
         try {
           await prefs.saveCaptionTemplate(normalized);
-          if (libId != null) {
+          if (libId != null && normalized.id == libId) {
             await prefs.updateCaptionStyleTemplateInLibrary(
               id: libId,
               template: normalized,
@@ -2569,15 +2793,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.keyboard_arrow_down, size: 12, color: Colors.grey.shade700),
-        const SizedBox(width: 1),
         Text(
-          'Edit $label',
-          style: TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade700,
-          ),
+          '$label field'.toUpperCase(),
+          style: _sectionTitleStyle,
         ),
       ],
     );
@@ -2627,8 +2845,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(6),
+              color: _ffOf(context).sunken,
+              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+              border: Border.all(color: _ffOf(context).divider),
             ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
@@ -2727,7 +2946,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: Colors.grey.shade600,
+                    color: _ffOf(context).textSecondary,
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -2772,7 +2991,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
+              color: _ffOf(context).textSecondary,
               letterSpacing: 0.3,
             ),
           ),
@@ -2784,8 +3003,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: rendered.isEmpty
-                    ? Colors.grey.shade500
-                    : const Color(0xFF3A3A3A),
+                    ? _ffOf(context).text.withValues(alpha: 0.45)
+                    : _ffOf(context).text,
                 fontStyle:
                     rendered.isEmpty ? FontStyle.italic : FontStyle.normal,
               ),
@@ -2848,8 +3067,6 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       previewActions: CaptionSessionContext.previewActions,
       sport: _sessionSport,
     );
-    final rendered =
-        '${_template.captionPrefix}$sampleCaption${_template.captionSuffix}';
     return _simpleSegmentSeparatorEditor(
       label: 'Caption',
       body: sampleCaption,
@@ -2857,7 +3074,6 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       suffix: _template.captionSuffix,
       onPrefixChanged: _setCaptionPrefix,
       onSuffixChanged: _setCaptionSuffix,
-      rendered: rendered,
     );
   }
 
@@ -2868,7 +3084,6 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     required String suffix,
     required ValueChanged<String> onPrefixChanged,
     required ValueChanged<String> onSuffixChanged,
-    required String rendered,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2877,8 +3092,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(6),
+            color: _ffOf(context).sunken,
+            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+            border: Border.all(color: _ffOf(context).divider),
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -2895,17 +3111,17 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   constraints: const BoxConstraints(maxWidth: 520),
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF4F4F5),
+                    color: _ffOf(context).badgeFill,
                     border: Border.all(color: const Color(0x14000000)),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     '$label $body',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF3A3A3A),
+                      color: _ffOf(context).text,
                       height: 1,
                     ),
                     overflow: TextOverflow.ellipsis,
@@ -2925,30 +3141,13 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         const SizedBox(height: 6),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            children: [
-              Text(
-                'Preview:',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
-                  letterSpacing: 0.3,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  rendered,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF3A3A3A),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
+          child: Text(
+            'Edited in place, beside the token it belongs to — not in a panel at the bottom of the dialog.',
+            style: TextStyle(
+              fontSize: 10,
+              height: 1.35,
+              color: _ffOf(context).text.withValues(alpha: 0.45),
+            ),
           ),
         ),
       ],
@@ -2963,7 +3162,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w500,
-          color: Colors.grey.shade500,
+          color: _ffOf(context).text.withValues(alpha: 0.45),
         ),
       ),
     );
@@ -2981,8 +3180,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(6),
+            color: _ffOf(context).sunken,
+            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+            border: Border.all(color: _ffOf(context).divider),
           ),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -2998,17 +3198,17 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   height: 28,
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF4F4F5),
+                    color: _ffOf(context).badgeFill,
                     border: Border.all(color: const Color(0x14000000)),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     'IPTC:Location $venue',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF3A3A3A),
+                      color: _ffOf(context).text,
                       height: 1,
                     ),
                   ),
@@ -3034,7 +3234,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
+                  color: _ffOf(context).textSecondary,
                   letterSpacing: 0.3,
                 ),
               ),
@@ -3042,10 +3242,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               Flexible(
                 child: Text(
                   rendered,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF3A3A3A),
+                    color: _ffOf(context).text,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -3114,7 +3314,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           decoration: BoxDecoration(
             color: isEditingThis
                 ? const Color(0xFFEEF4FF)
-                : const Color(0xFFF4F4F5),
+                : _ffOf(context).badgeFill,
             border: Border.all(
               color: isEditingThis
                   ? const Color(0xFF2563EB)
@@ -3136,10 +3336,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               ],
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF3A3A3A),
+                  color: _ffOf(context).text,
                   height: 1,
                 ),
               ),
@@ -3153,7 +3353,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w400,
-                    color: Colors.grey.shade600,
+                    color: _ffOf(context).textSecondary,
                     height: 1,
                   ),
                 ),
@@ -3170,11 +3370,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                               : customOccurrence;
                     }),
                     background:
-                        isEditingThis ? const Color(0xFFD0E3FA) : Colors.white,
+                        isEditingThis ? _ffOf(context).selectedFill : _ffOf(context).sunken,
                     child: Icon(
                       Icons.edit_outlined,
                       size: 11,
-                      color: Colors.grey.shade700,
+                      color: _ffOf(context).textSecondary,
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -3182,24 +3382,24 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 _BylineChipIconButton(
                   tooltip: 'Remove',
                   onTap: () => _removeBylineFieldAtView(viewIndex),
-                  background: Colors.white,
+                  background: _ffOf(context).sunken,
                   child: Icon(
                     Icons.close,
                     size: 11,
-                    color: Colors.grey.shade700,
+                    color: _ffOf(context).textSecondary,
                   ),
                 ),
               ] else ...[
                 _BylineChipIconButton(
                   tooltip: 'ALL CAPS',
                   onTap: () => _toggleBylineFieldCaps(kind),
-                  background: caps ? const Color(0xFFD0E3FA) : Colors.white,
-                  child: const Text(
+                  background: caps ? _ffOf(context).selectedFill : _ffOf(context).sunken,
+                  child: Text(
                     'Aa',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xFF3A3A3A),
+                      color: _ffOf(context).text,
                       height: 1,
                     ),
                   ),
@@ -3208,11 +3408,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 _BylineChipIconButton(
                   tooltip: 'Remove',
                   onTap: () => _removeBylineFieldAtView(viewIndex),
-                  background: Colors.white,
+                  background: _ffOf(context).sunken,
                   child: Icon(
                     Icons.close,
                     size: 11,
-                    color: Colors.grey.shade700,
+                    color: _ffOf(context).textSecondary,
                   ),
                 ),
               ],
@@ -3227,7 +3427,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           child: Icon(
             Icons.drag_indicator,
             size: 14,
-            color: Colors.grey.shade500,
+            color: _ffOf(context).text.withValues(alpha: 0.45),
           ),
         );
 
@@ -3262,11 +3462,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           decoration: BoxDecoration(
             border: Border(
               left: BorderSide(
-                color: hot ? _captionLayoutBlue : Colors.transparent,
+                color: hot ? _ffOf(context).accent : Colors.transparent,
                 width: 2,
               ),
               right: BorderSide(
-                color: hot ? _captionLayoutBlue : Colors.transparent,
+                color: hot ? _ffOf(context).accent : Colors.transparent,
                 width: 2,
               ),
             ),
@@ -3384,10 +3584,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     required VoidCallback onTap,
   }) {
     return Material(
-      color: selected ? const Color(0xFFEAF2FF) : Colors.white,
+      color: selected ? _ffOf(context).selectedFill : _ffOf(context).sunken,
       shape: RoundedRectangleBorder(
         side: BorderSide(
-          color: selected ? _captionLayoutBlue : Colors.grey.shade300,
+          color: selected ? _ffOf(context).accent : _ffOf(context).divider,
           width: selected ? 1.2 : 1,
         ),
         borderRadius: BorderRadius.circular(4),
@@ -3402,7 +3602,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w500,
-              color: selected ? _captionLayoutBlue : Colors.grey.shade800,
+              color: selected ? _ffOf(context).accent : _ffOf(context).text.withValues(alpha: 0.88),
             ),
           ),
         ),
@@ -3410,99 +3610,209 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     );
   }
 
-  Widget _checkOptionChip({
-    required bool selected,
-    required String label,
-    required VoidCallback onTap,
+  /// Screenshot-style segmented control: one track, equal-width segments.
+  Widget _optionSegmentedControl({
+    required List<_SegOption> options,
   }) {
-    return InkWell(
-      onTap: _coreStyleLocked ? null : onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          textDirection: TextDirection.ltr,
-          children: [
-            Icon(
-              selected
-                  ? Icons.check_box_rounded
-                  : Icons.check_box_outline_blank_rounded,
-              size: 16,
-              color: selected ? _captionLayoutBlue : Colors.grey.shade600,
-            ),
-            const SizedBox(width: 3),
-            Text(
-              label,
-              style: _layoutOptionTextStyle,
+    final t = _ffOf(context);
+    const radius = 6.0;
+    return Container(
+      height: 26,
+      decoration: BoxDecoration(
+        color: t.bg,
+        borderRadius: BorderRadius.circular(radius),
+        border: Border.all(color: t.divider),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        children: [
+          for (var i = 0; i < options.length; i++) ...[
+            if (i > 0)
+              Container(
+                width: 1,
+                height: 24,
+                color: t.divider,
+              ),
+            Expanded(
+              child: Material(
+                color: options[i].selected
+                    ? const Color(0xFF3A4050)
+                    : Colors.transparent,
+                child: InkWell(
+                  onTap: _coreStyleLocked ? null : options[i].onTap,
+                  child: Center(
+                    child: Text(
+                      options[i].label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.0,
+                        fontWeight: FontWeight.w500,
+                        color: options[i].selected
+                            ? t.text
+                            : t.text.withValues(alpha: 0.42),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _captionTeamOrderChoice(CaptionTeamOrder value) {
-    final label =
-        value == CaptionTeamOrder.teamBefore ? 'Team before' : 'Team after';
-    return _checkOptionChip(
-      selected: _template.captionTeamOrder == value,
-      label: label,
-      onTap: () => setState(() {
-        _template = _template.copyWith(captionTeamOrder: value);
-      }),
+  Widget _teamOrderSegments() {
+    return _optionSegmentedControl(
+      options: [
+        _SegOption(
+          label: 'Team before',
+          selected: _template.captionTeamOrder == CaptionTeamOrder.teamBefore,
+          onTap: () => setState(() {
+            _template = _template.copyWith(
+                captionTeamOrder: CaptionTeamOrder.teamBefore);
+          }),
+        ),
+        _SegOption(
+          label: 'Team after',
+          selected: _template.captionTeamOrder == CaptionTeamOrder.teamAfter,
+          onTap: () => setState(() {
+            _template = _template.copyWith(
+                captionTeamOrder: CaptionTeamOrder.teamAfter);
+          }),
+        ),
+      ],
     );
   }
 
-  Widget _numberFormatChoice(NumberFormatStyle value) {
-    final label = value == NumberFormatStyle.hash ? '#99' : '(99)';
-    return _checkOptionChip(
-      selected: _template.numberFormat == value,
-      label: label,
-      onTap: () => setState(() {
-        _template = _template.copyWith(numberFormat: value);
-      }),
+  Widget _englishSegments() {
+    return _optionSegmentedControl(
+      options: [
+        _SegOption(
+          label: 'American',
+          selected: _template.americanEnglish,
+          onTap: () => setState(() {
+            _template = _template.copyWith(americanEnglish: true);
+          }),
+        ),
+        _SegOption(
+          label: 'International',
+          selected: !_template.americanEnglish,
+          onTap: () => setState(() {
+            _template = _template.copyWith(americanEnglish: false);
+          }),
+        ),
+      ],
     );
   }
 
-  Widget _positionToggleChoice(bool includePosition) {
+  Widget _numberFormatSegments() {
+    return _optionSegmentedControl(
+      options: [
+        _SegOption(
+          label: '#99',
+          selected: _template.numberFormat == NumberFormatStyle.hash,
+          onTap: () => setState(() {
+            _template =
+                _template.copyWith(numberFormat: NumberFormatStyle.hash);
+          }),
+        ),
+        _SegOption(
+          label: '(99)',
+          selected: _template.numberFormat == NumberFormatStyle.parens,
+          onTap: () => setState(() {
+            _template =
+                _template.copyWith(numberFormat: NumberFormatStyle.parens);
+          }),
+        ),
+      ],
+    );
+  }
+
+  Widget _positionSegments() {
     final gettyLocked = _selectedWire == WireStyle.getty ||
         _selectedWire == WireStyle.gettyInternational;
-    final label = includePosition ? 'Include position' : 'No position';
-    return _checkOptionChip(
-      selected: gettyLocked
-          ? !includePosition
-          : _template.includePlayerPosition == includePosition,
-      label: label,
-      onTap: () {
-        if (gettyLocked || _coreStyleLocked) return;
-        setState(() {
-          _template =
-              _template.copyWith(includePlayerPosition: includePosition);
-        });
-      },
+    final include = gettyLocked ? false : _template.includePlayerPosition;
+    return _optionSegmentedControl(
+      options: [
+        _SegOption(
+          label: 'Include',
+          selected: include,
+          onTap: () {
+            if (gettyLocked || _coreStyleLocked) return;
+            setState(() {
+              _template = _template.copyWith(includePlayerPosition: true);
+            });
+          },
+        ),
+        _SegOption(
+          label: 'Omit',
+          selected: !include,
+          onTap: () {
+            if (gettyLocked || _coreStyleLocked) return;
+            setState(() {
+              _template = _template.copyWith(includePlayerPosition: false);
+            });
+          },
+        ),
+      ],
     );
   }
 
-  Widget _removeDiacriticsChoice(bool strip) {
-    final label = strip ? 'Remove' : 'Keep';
-    return _checkOptionChip(
-      selected: _template.removeDiacritics == strip,
-      label: label,
-      onTap: () => setState(() {
-        _template = _template.copyWith(removeDiacritics: strip);
-      }),
+  Widget _diacriticsSegments() {
+    return _optionSegmentedControl(
+      options: [
+        _SegOption(
+          label: 'Keep',
+          selected: !_template.removeDiacritics,
+          onTap: () => setState(() {
+            _template = _template.copyWith(removeDiacritics: false);
+          }),
+        ),
+        _SegOption(
+          label: 'Remove',
+          selected: _template.removeDiacritics,
+          onTap: () => setState(() {
+            _template = _template.copyWith(removeDiacritics: true);
+          }),
+        ),
+      ],
     );
   }
 
-  Widget _americanEnglishChoice(bool american) {
-    final label = american ? 'American' : 'International';
-    return _checkOptionChip(
-      selected: _template.americanEnglish == american,
-      label: label,
-      onTap: () => setState(() {
-        _template = _template.copyWith(americanEnglish: american);
-      }),
+  Widget _timingPhraseSegments() {
+    final include = _template.includeTimingPhrase;
+    return Tooltip(
+      message: include
+          ? 'Include inning / period / quarter / half in the caption'
+          : 'Omit the time-of-game clause from the caption',
+      waitDuration: const Duration(milliseconds: 400),
+      child: _optionSegmentedControl(
+        options: [
+          _SegOption(
+            label: 'On',
+            selected: include,
+            onTap: () {
+              if (_coreStyleLocked) return;
+              setState(() {
+                _template = _template.copyWith(includeTimingPhrase: true);
+              });
+            },
+          ),
+          _SegOption(
+            label: 'Off',
+            selected: !include,
+            onTap: () {
+              if (_coreStyleLocked) return;
+              setState(() {
+                _template = _template.copyWith(includeTimingPhrase: false);
+              });
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -3522,24 +3832,29 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     required Future<void> Function(bool) onSave,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.only(top: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          AppCompactCheckbox(
-            value: value,
-            accentColor: _captionLayoutBlue,
-            onChanged: (v) => onSave(v),
+          SizedBox(
+            width: 108,
+            child: Text(label, style: _layoutOptionTextStyle),
           ),
           const SizedBox(width: 6),
           Expanded(
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => onSave(!value),
-              child: Text(
-                label,
-                style: _layoutOptionTextStyle,
-              ),
+            child: _optionSegmentedControl(
+              options: [
+                _SegOption(
+                  label: 'On',
+                  selected: value,
+                  onTap: () => onSave(true),
+                ),
+                _SegOption(
+                  label: 'Off',
+                  selected: !value,
+                  onTap: () => onSave(false),
+                ),
+              ],
             ),
           ),
         ],
@@ -3565,6 +3880,31 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               fontSize: 10,
               fontWeight: FontWeight.w600,
               color: Colors.green.shade50,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _inlineRemoveFieldButton() {
+    final canRemove = _activeFormulaIndex != null &&
+        _activeFormulaIndex! >= 0 &&
+        _activeFormulaIndex! < _template.segmentOrder.length;
+    if (!canRemove) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: () => _removeSegmentSnippet(_activeFormulaIndex!),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(
+              Icons.delete_outline,
+              size: 16,
+              color: _ffOf(context).textSecondary,
             ),
           ),
         ),
@@ -3602,12 +3942,12 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     );
   }
 
-  static const TextStyle _captionFullPreviewStyle = TextStyle(
-    fontSize: 13,
-    height: 1.45,
-    color: Color(0xFF3A3A3A),
-    fontWeight: FontWeight.w500,
-  );
+  TextStyle get _captionFullPreviewStyle => TextStyle(
+        fontSize: 13,
+        height: 1.45,
+        color: _t.text,
+        fontWeight: FontWeight.w500,
+      );
 
   /// Game identifier is edited via the panel editor, not inline in the preview.
   bool get _singleCustomNarrativeInlineEligible => false;
@@ -3650,19 +3990,19 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                           contentPadding: const EdgeInsets.only(bottom: 2),
                           border: UnderlineInputBorder(
                             borderSide: BorderSide(
-                                color: Colors.blue.shade300, width: 1.5),
+                                color: _ffOf(context).accent.withValues(alpha: 0.45), width: 1.5),
                           ),
                           enabledBorder: UnderlineInputBorder(
                             borderSide: BorderSide(
-                                color: Colors.blue.shade200, width: 1.5),
+                                color: _ffOf(context).accent.withValues(alpha: 0.35), width: 1.5),
                           ),
                           focusedBorder: UnderlineInputBorder(
                             borderSide: BorderSide(
-                                color: Colors.blue.shade500, width: 2),
+                                color: _ffOf(context).accent, width: 2),
                           ),
                           hintText: 'type here…',
                           hintStyle: _captionFullPreviewStyle.copyWith(
-                            color: Colors.grey.shade400,
+                            color: _ffOf(context).text.withValues(alpha: 0.40),
                             fontStyle: FontStyle.normal,
                           ),
                         ),
@@ -3676,11 +4016,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         },
       );
     }
-    return SelectionArea(
-      child: SelectableText(
-        fullCaptionPreview,
-        style: _captionFullPreviewStyle,
-      ),
+    // Plain text so the parent InkWell receives taps (SelectionArea would
+    // swallow them). Structure chips below are the edit surface.
+    return Text(
+      fullCaptionPreview,
+      style: _captionFullPreviewStyle,
     );
   }
 
@@ -3728,7 +4068,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w600,
-                  color: Colors.grey.shade600,
+                  color: _ffOf(context).textSecondary,
                   letterSpacing: 0.3,
                 ),
               ),
@@ -3736,10 +4076,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               Flexible(
                 child: Text(
                   rendered,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: Color(0xFF3A3A3A),
+                    color: _ffOf(context).text,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -3804,14 +4144,14 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.shuffle, size: 12, color: Colors.grey.shade700),
+              Icon(Icons.shuffle, size: 12, color: _ffOf(context).textSecondary),
               const SizedBox(width: 4),
               Text(
-                'Shuffle',
+                'Shuffle sample',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w500,
-                  color: Colors.grey.shade700,
+                  color: _ffOf(context).textSecondary,
                 ),
               ),
             ],
@@ -3824,7 +4164,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   Widget _addSnippetMenuButton() {
     final hasCustomText =
         _template.segmentOrder.contains(CaptionSegment.customText);
-    final menuStyle = TextStyle(fontSize: 12, color: Colors.grey.shade900);
+    final menuStyle = TextStyle(fontSize: 12, color: _ffOf(context).text);
     return PopupMenuButton<CaptionSegment>(
       tooltip:
           'Add a snippet after the selected one (or at the end if none selected)',
@@ -3872,34 +4212,33 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.add_circle_outline, size: 13, color: _captionLayoutBlue),
+            Icon(Icons.add_circle_outline, size: 13, color: _ffOf(context).accent),
             const SizedBox(width: 4),
             Text(
-              'Add snippet',
+              '+ Add field',
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color: _captionLayoutBlue,
+                color: _ffOf(context).accent,
               ),
             ),
-            Icon(Icons.arrow_drop_down, size: 18, color: _captionLayoutBlue),
+            Icon(Icons.arrow_drop_down, size: 18, color: _ffOf(context).accent),
           ],
         ),
       ),
     );
   }
 
-  TextStyle get _sectionTitleStyle => TextStyle(
-        fontSize: 10,
-        fontWeight: FontWeight.w600,
-        color: Colors.grey.shade900,
-        letterSpacing: -0.15,
+  /// Same treatment as in-app rail titles (PERSONALITY, VERBS section chrome,
+  /// CAPTION LAYOUT header): InterTight, tracked, uppercase at the call site.
+  TextStyle get _sectionTitleStyle => FfTokens.railLabel.copyWith(
+        color: _t.text.withValues(alpha: 0.70),
       );
 
   /// Same as "Show Personality Field" / layout option rows (Player Output choices use this too).
-  TextStyle get _layoutOptionTextStyle => TextStyle(
+  TextStyle get _layoutOptionTextStyle => _t.microStyle.copyWith(
         fontSize: 11,
-        color: Colors.grey.shade800,
+        color: _t.text.withValues(alpha: 0.82),
       );
 
   CaptionSegment? _activePreviewSegment() {
@@ -3935,48 +4274,18 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     return null;
   }
 
-  /// Per-snippet-type color palette used in the preview. Background tint shows
-  /// at-a-glance which snippet you're looking at; foreground is the readable
-  /// text color on that tint. The blue "active" highlight (see [_buildPreviewWidgets])
-  /// still wins when a segment is actively being edited.
-  static const Map<CaptionSegment, _SegmentTint> _segmentTints = {
-    CaptionSegment.location: _SegmentTint(
-      bg: Color(0xFFE3F2E8),
-      fg: Color(0xFF1E5D33),
-    ),
-    CaptionSegment.date: _SegmentTint(
-      bg: Color(0xFFFFF1D1),
-      fg: Color(0xFF7A4E00),
-    ),
-    CaptionSegment.venue: _SegmentTint(
-      bg: Color(0xFFEDE2F8),
-      fg: Color(0xFF4A2A82),
-    ),
-    CaptionSegment.caption: _SegmentTint(
-      bg: Color(0xFFEEF0F2),
-      fg: Color(0xFF333740),
-    ),
-    CaptionSegment.customText: _SegmentTint(
-      bg: Color(0xFFE8F4FA),
-      fg: Color(0xFF1A4A5E),
-    ),
-    CaptionSegment.freeText: _SegmentTint(
-      bg: Color(0xFFE6F7F2),
-      fg: Color(0xFF1A5C4A),
-    ),
-    CaptionSegment.credit: _SegmentTint(
-      bg: Color(0xFFFCE2E2),
-      fg: Color(0xFF8A2727),
-    ),
-    CaptionSegment.separator: _SegmentTint(
-      bg: Color(0xFFFFF4E0),
-      fg: Color(0xFF7A4A00),
-    ),
-    CaptionSegment.punctuation: _SegmentTint(
-      bg: Color(0xFFF0F4FF),
-      fg: Color(0xFF3A4A7A),
-    ),
-  };
+  /// Fixed slate fill for formula preview snippets — same in every state so
+  /// chips don't flash selectedFill / faded sunken while editing.
+  static const Color _snippetFill = Color(0xFF2C3143);
+
+  /// Shared height for snippet chips and glue/punctuation text boxes.
+  static const double _snippetChipHeight = 32;
+
+  /// Preview chips + player sample share [_snippetFill] with light body text.
+  _SegmentTint get _segmentTint => const _SegmentTint(
+        bg: _snippetFill,
+        fg: Color(0xFFE9E9ED),
+      );
 
   List<Widget> _buildPreviewWidgets({
     required String sampleCaption,
@@ -4153,7 +4462,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
-                  color: hot ? _captionLayoutBlue : Colors.transparent,
+                  color: hot ? _ffOf(context).accent : Colors.transparent,
                   width: 2,
                 ),
               ),
@@ -4189,19 +4498,19 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         elevation: 4,
         borderRadius: BorderRadius.circular(4),
         child:
-            Icon(Icons.drag_indicator, size: 12, color: Colors.grey.shade700),
+            Icon(Icons.drag_indicator, size: 10, color: _ffOf(context).textSecondary),
       ),
       childWhenDragging: Opacity(
         opacity: 0.25,
         child:
-            Icon(Icons.drag_indicator, size: 12, color: Colors.grey.shade400),
+            Icon(Icons.drag_indicator, size: 10, color: _ffOf(context).text.withValues(alpha: 0.40)),
       ),
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,
         child: Tooltip(
           message: 'Drag to reorder snippets',
           child:
-              Icon(Icons.drag_indicator, size: 12, color: Colors.grey.shade500),
+              Icon(Icons.drag_indicator, size: 10, color: _ffOf(context).text.withValues(alpha: 0.45)),
         ),
       ),
     );
@@ -4218,63 +4527,64 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     VoidCallback? onSnippetTap,
     VoidCallback? onRemove,
   }) {
-    final tint = _segmentTints[seg];
-    Color bg;
+    final tint = _segmentTint;
+    final tokens = _ffOf(context);
+    // Background stays [_snippetFill] in every state; only text weight / opacity
+    // and label colour change when active or dimmed.
+    final Color bg = _snippetFill;
     Color fg;
     Color labelFg;
     FontWeight weight;
     switch (state) {
       case _PreviewSegmentState.active:
-        bg = const Color(0xFFDDEBFF);
-        fg = const Color(0xFF1F3F74);
-        labelFg = const Color(0xFF1F3F74);
+        fg = tokens.text;
+        labelFg = tokens.accent;
         weight = FontWeight.w600;
         break;
       case _PreviewSegmentState.dim:
-        bg = tint?.bg.withValues(alpha: 0.35) ?? const Color(0xFFF0F0F0);
-        fg = Colors.grey.shade400;
-        labelFg = Colors.grey.shade400;
+        fg = tokens.text.withValues(alpha: 0.40);
+        labelFg = tokens.text.withValues(alpha: 0.40);
         weight = FontWeight.normal;
         break;
       case _PreviewSegmentState.tinted:
-        bg = tint?.bg ?? const Color(0xFFF0F0F0);
-        fg = tint?.fg ?? Colors.grey.shade900;
-        labelFg = (tint?.fg ?? Colors.grey.shade700).withValues(alpha: 0.7);
+        fg = tint.fg;
+        labelFg = tokens.textSecondary;
         weight = FontWeight.normal;
         break;
     }
 
     Widget chipContent = Container(
+      constraints: const BoxConstraints(minHeight: _snippetChipHeight),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(3),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(5, 3, 10, 3),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title label row
+          // Title label row — larger/bolder than the value below.
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (titleLeading != null) ...[
                 titleLeading,
-                const SizedBox(width: 3),
+                const SizedBox(width: 2),
               ],
               Text(
                 tooltipLabel,
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 11,
                   height: 1.1,
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w700,
                   color: labelFg,
-                  letterSpacing: 0.2,
+                  letterSpacing: 0.1,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 1),
           // Value
           Text(
             value,
@@ -4282,9 +4592,11 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 11,
-              height: 1.3,
+              height: 1.2,
               color: fg,
-              fontWeight: weight,
+              fontWeight: weight == FontWeight.w600
+                  ? FontWeight.w600
+                  : FontWeight.w400,
             ),
           ),
         ],
@@ -4317,21 +4629,21 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       children: [
         chipContent,
         Positioned(
-          top: -4,
-          right: -4,
+          top: -3,
+          right: -3,
           child: MouseRegion(
             cursor: SystemMouseCursors.click,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onRemove,
               child: Container(
-                width: 14,
-                height: 14,
+                width: 12,
+                height: 12,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade600,
+                  color: _ffOf(context).textSecondary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.close, size: 8, color: Colors.white),
+                child: const Icon(Icons.close, size: 7, color: Colors.white),
               ),
             ),
           ),
@@ -4344,14 +4656,15 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   /// (no chip background) so the inter-snippet separator visually belongs to
   /// neither side.
   Widget _previewGapText(String text, _PreviewGapState state) {
+    final tokens = _ffOf(context);
     TextStyle style;
     switch (state) {
       case _PreviewGapState.active:
-        style = const TextStyle(
+        style = TextStyle(
           fontSize: 12,
           height: 1.35,
-          color: Color(0xFF1F3F74),
-          backgroundColor: Color(0xFFDDEBFF),
+          color: tokens.text,
+          backgroundColor: _snippetFill,
           fontWeight: FontWeight.w600,
         );
         break;
@@ -4359,18 +4672,352 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         style = TextStyle(
           fontSize: 12,
           height: 1.35,
-          color: Colors.grey.shade400,
+          color: tokens.text.withValues(alpha: 0.40),
         );
         break;
       case _PreviewGapState.normal:
         style = TextStyle(
           fontSize: 12,
           height: 1.35,
-          color: Colors.grey.shade900,
+          color: tokens.text,
         );
         break;
     }
     return Text(text, style: style);
+  }
+
+
+  /// Compact style picker for the dialog header (fixed height; no DropdownFlutter).
+  Widget _buildCaptionStyleDropdown() {
+    final t = _ffOf(context);
+    final tokens = _captionStyleDropdownTokens();
+    final current = _captionStyleDropdownInitialToken();
+    final locked = _tokenIsLockedCore(current);
+    final label = _captionStyleMenuLabel(current);
+    final firstCustom = CaptionStyleCatalog.firstCustomTokenIndex(tokens);
+
+    return PopupMenuButton<String>(
+      tooltip: 'Caption style',
+      padding: EdgeInsets.zero,
+      offset: const Offset(0, 28),
+      color: t.surface,
+      constraints: const BoxConstraints(minWidth: 220, maxWidth: 280, maxHeight: 380),
+      onSelected: (token) {
+        _rememberCurrentWireDraft();
+        _applyCaptionStyleMenuToken(token);
+      },
+      itemBuilder: (ctx) {
+        final items = <PopupMenuEntry<String>>[];
+        for (var i = 0; i < tokens.length; i++) {
+          final token = tokens[i];
+          if (firstCustom >= 0 && i == firstCustom) {
+            items.add(const PopupMenuDivider(height: 8));
+          }
+          final selected = token == current;
+          final lockedTok = _tokenIsLockedCore(token);
+          final fav = _favoriteCaptionStyleToken == token;
+          items.add(
+            PopupMenuItem<String>(
+              value: token,
+              height: 34,
+              child: Row(
+                children: [
+                  if (lockedTok)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Icon(Icons.lock_outline,
+                          size: 13, color: t.textSecondary),
+                    )
+                  else if (token.startsWith('saved:'))
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Icon(Icons.bookmark_outline,
+                          size: 14, color: t.textSecondary),
+                    ),
+                  Expanded(
+                    child: Text(
+                      _captionStyleMenuLabel(token),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            selected ? FontWeight.w600 : FontWeight.w500,
+                        color: lockedTok ? t.textSecondary : t.text,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    fav ? Icons.star : Icons.star_border,
+                    size: 15,
+                    color: fav
+                        ? const Color(0xFFE6B84A)
+                        : t.text.withValues(alpha: 0.35),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+        return items;
+      },
+      child: Container(
+        height: 26,
+        decoration: BoxDecoration(
+          color: t.bg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: t.divider),
+        ),
+        clipBehavior: Clip.antiAlias,
+        // Stretch so the selected fill covers the full chip height — otherwise
+        // ColoredBox shrink-wraps the label and looks like a grey bar through
+        // the middle of the text.
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ColoredBox(
+                color: const Color(0xFF3A4050),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      if (locked) ...[
+                        Icon(
+                          Icons.lock_outline,
+                          size: 12,
+                          color: t.text.withValues(alpha: 0.45),
+                        ),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 11,
+                              height: 1.0,
+                              fontWeight: FontWeight.w500,
+                              color: locked ? t.textSecondary : t.text,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Container(width: 1, color: t.divider),
+            SizedBox(
+              width: 26,
+              child: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 14,
+                color: t.text.withValues(alpha: 0.42),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _promptEditStructureSnippets() {
+    final target = _structureSectionKey.currentContext;
+    if (target != null) {
+      Scrollable.ensureVisible(
+        target,
+        duration: const Duration(milliseconds: 280),
+        curve: Curves.easeOutCubic,
+        alignment: 0.05,
+      );
+    }
+    setState(() => _structureHintFlash = true);
+    _structureHintFlashTimer?.cancel();
+    _structureHintFlashTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (!mounted) return;
+      setState(() => _structureHintFlash = false);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Edit the snippets in Structure below.'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Widget _buildFieldsShownSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Fields shown'.toUpperCase(),
+                style: _sectionTitleStyle,
+              ),
+              const SizedBox(width: 4),
+              Tooltip(
+                message:
+                    'Turn optional fields on or off while you edit.\n'
+                    'Personality appears first, then Keywords, '
+                    'in a column beside the caption.\n'
+                    'Keywords sits below Personality in that column.',
+                waitDuration: const Duration(milliseconds: 400),
+                child: Icon(
+                  Icons.help_outline,
+                  size: 14,
+                  color: _ffOf(context).textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        _layoutOptionalFieldRow(
+          label: 'Personality field',
+          value: _template.showPersonalityField,
+          onSave: _setShowPersonalityField,
+        ),
+        _layoutOptionalFieldRow(
+          label: 'Keywords field',
+          value: _template.showKeywordsField,
+          onSave: _setShowKeywordsField,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlayerOutputSection(String playerPreviewText) {
+    const labelW = 108.0;
+    Widget optionRow(String label, Widget control) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: labelW,
+              child: Text(label, style: _layoutOptionTextStyle),
+            ),
+            const SizedBox(width: 6),
+            Expanded(child: control),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 8),
+        Text(
+          'Player Output'.toUpperCase(),
+          style: _sectionTitleStyle,
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          decoration: BoxDecoration(
+            color: _snippetFill,
+            border: Border.all(color: _ffOf(context).divider),
+            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+          ),
+          child: Text(
+            playerPreviewText,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              color: _ffOf(context).text,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        optionRow('Team order:', _teamOrderSegments()),
+        optionRow('English:', _englishSegments()),
+        optionRow('Number:', _numberFormatSegments()),
+        optionRow('Position:', _positionSegments()),
+        optionRow('Time of Game:', _timingPhraseSegments()),
+        optionRow(
+          'Diacritics:',
+          Tooltip(
+            message:
+                'Keep accents as on the roster, or strip them (e.g. José → Jose).',
+            child: _diacriticsSegments(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInlineFieldEditor() {
+    return Container(
+      decoration: BoxDecoration(
+        color: _ffOf(context).surface,
+        border: Border.all(color: _ffOf(context).divider),
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _ffOf(context).sunken,
+              border: Border(
+                bottom: BorderSide(color: _ffOf(context).divider),
+              ),
+            ),
+            child: Row(
+              children: [
+                _activeEditIndicator(),
+                const Spacer(),
+                _inlineRemoveFieldButton(),
+                _inlineDoneButton(),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_captionPreviewSelected)
+                  _captionSegmentEditor()
+                else if (_customTextSnippetEditorOpen)
+                  _customTextSnippetEditor()
+                else if (_freeTextSnippetEditorOpen)
+                  _freeTextSnippetEditor()
+                else if (_venuePreviewSelected)
+                  _venueEditor()
+                else if (_bylinePreviewSelected)
+                  _bylineEditor(),
+                if (_dateEditorOpen) _dateLineEditor(),
+                if (_locationEditorOpen) _locationOptionsEditor(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -4428,25 +5075,26 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     final dialogHeight = maxH.clamp(300.0, 720.0);
     // Size to the viewport (minus the insetPadding) up to a cap so the layout
     // stays usable on short windows while using more height on large displays.
-    final dialogWidth = (mq.width - 32).clamp(320.0, 1100.0);
+    final dialogWidth = (mq.width - 32).clamp(320.0, 960.0);
 
     final shell = SizedBox(
         width: widget.embedded ? double.infinity : dialogWidth,
         height: widget.embedded ? double.infinity : dialogHeight,
-        child: Container(
+        child: DecoratedBox(
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(0),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.08),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            color: _t.bg,
+            borderRadius: BorderRadius.circular(
+              widget.embedded ? 0 : FfTokens.radiusWindow,
+            ),
+            border: widget.embedded
+                ? null
+                : Border.all(color: _t.divider),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Stack(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(
+              widget.embedded ? 0 : FfTokens.radiusWindow,
+            ),
+            child: Stack(
             fit: StackFit.expand,
             children: [
               Column(
@@ -4454,33 +5102,83 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 children: [
                   if (!widget.embedded)
                     Container(
+                      height: 40,
                       width: double.infinity,
-                      padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: _t.surface,
                         border: Border(
-                          bottom:
-                              BorderSide(color: Colors.grey.shade200, width: 1),
+                          bottom: BorderSide(color: _t.divider),
                         ),
                       ),
                       child: Row(
                         children: [
                           Text(
-                            'Caption Layout',
-                            style: AppTokens.title.copyWith(
-                              color: Colors.grey.shade900,
+                            'CAPTION LAYOUT',
+                            style: FfTokens.railLabel.copyWith(
+                              color: _t.text.withValues(alpha: 0.70),
                             ),
                           ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 132,
+                            height: 26,
+                            child: _buildCaptionStyleDropdown(),
+                          ),
                           const Spacer(),
+                          if (!widget.adminMode) ...[
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: _duplicateCaptionStyle,
+                              child: Text(
+                                'Duplicate',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: _t.accent,
+                                ),
+                              ),
+                            ),
+                            TextButton(
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              onPressed: _selectedSavedStyleId == null
+                                  ? null
+                                  : _deleteSelectedCaptionStyle,
+                              child: Text(
+                                'Delete',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: _selectedSavedStyleId == null
+                                      ? _t.text.withValues(alpha: 0.40)
+                                      : Colors.red.shade700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
                           Material(
                             color: Colors.transparent,
                             child: InkWell(
                               onTap: () => Navigator.of(context).pop(),
-                              borderRadius: BorderRadius.circular(0),
+                              borderRadius: BorderRadius.circular(6),
                               child: Padding(
-                                padding: const EdgeInsets.all(3),
-                                child: Icon(Icons.close,
-                                    size: 18, color: Colors.grey.shade600),
+                                padding: const EdgeInsets.all(4),
+                                child: Icon(
+                                  Icons.close,
+                                  size: 18,
+                                  color: _t.textSecondary,
+                                ),
                               ),
                             ),
                           ),
@@ -4492,7 +5190,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                       future: _load,
                       builder: (context, snap) {
                         if (snap.connectionState != ConnectionState.done) {
-                          return const SizedBox(
+                          return SizedBox(
                             height: 120,
                             child: Center(
                               child: SizedBox(
@@ -4500,7 +5198,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                 height: 22,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: _captionLayoutBlue,
+                                  color: _t.accent,
                                 ),
                               ),
                             ),
@@ -4519,1260 +5217,235 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                     mainAxisSize: MainAxisSize.min,
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
-                                    children: [
-                                      Container(
-                                        width: double.infinity,
-                                        decoration: const BoxDecoration(
-                                          color: Colors.transparent,
+                                      children: [
+                                      // RESOLVES TO
+                                      const SizedBox(height: 8),
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Resolves to'.toUpperCase(),
+                                            style: _sectionTitleStyle,
+                                          ),
+                                          const Spacer(),
+                                          _shuffleCaptionButton(),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 6),
+                                      Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          onTap: _promptEditStructureSnippets,
+                                          borderRadius: BorderRadius.circular(6),
+                                          child: Ink(
+                                            width: double.infinity,
+                                            decoration: BoxDecoration(
+                                              color: _ffOf(context).sunken,
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color: _ffOf(context).divider,
+                                              ),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 10,
+                                                vertical: 10,
+                                              ),
+                                              child: _fullCaptionPreviewArea(
+                                                fullCaptionPreview:
+                                                    fullCaptionPreview,
+                                                narrativeSplit: narrativeSplit,
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                        child: Column(
-                                          mainAxisSize: MainAxisSize.min,
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            const SizedBox(height: 6),
-                                            Row(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Expanded(
-                                                  child: ConstrainedBox(
-                                                    constraints:
-                                                        const BoxConstraints(
-                                                      maxWidth: 360,
-                                                    ),
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .stretch,
-                                                      children: [
-                                                        Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .stretch,
-                                                          children: [
-                                                            const SizedBox(
-                                                                height: 8),
-                                                            Text(
-                                                              'Caption Style',
-                                                              style:
-                                                                  _sectionTitleStyle
-                                                                      .copyWith(
-                                                                fontSize: 12,
-                                                                height: 1.0,
-                                                              ),
-                                                            ),
-                                                            DropdownFlutter<
-                                                                String>(
-                                                              key: ValueKey<
-                                                                  String>(
-                                                                '${_template.id}_'
-                                                                '${_captionStyleLibrary.length}_'
-                                                                '${_captionStyleLibrary.map((e) => '${e.id}:${e.displayName}').join()}',
-                                                              ),
-                                                              hintText:
-                                                                  'Caption Style',
-                                                              items:
-                                                                  _captionStyleDropdownTokens(),
-                                                              initialItem:
-                                                                  _captionStyleDropdownInitialToken(),
-                                                              excludeSelected:
-                                                                  false,
-                                                              hideSelectedFieldWhenExpanded:
-                                                                  true,
-                                                              overlayHeight:
-                                                                  () {
-                                                                final n =
-                                                                    _captionStyleDropdownTokens()
-                                                                        .length;
-                                                                final h =
-                                                                    n * 40.0;
-                                                                if (h < 140)
-                                                                  return 140.0;
-                                                                if (h > 380)
-                                                                  return 380.0;
-                                                                return h;
-                                                              }(),
-                                                              // Padding is tuned so the natural closed height matches the
-                                                              // Player Output Style preview: 2px borders + 6px top/bottom
-                                                              // padding + 11px × 1.35 line height ≈ 28.85 px on both.
-                                                              closedHeaderPadding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                      horizontal:
-                                                                          9,
-                                                                      vertical:
-                                                                          6),
-                                                              expandedHeaderPadding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                      horizontal:
-                                                                          9,
-                                                                      vertical:
-                                                                          6),
-                                                              listItemPadding:
-                                                                  const EdgeInsets
-                                                                      .symmetric(
-                                                                      horizontal:
-                                                                          8,
-                                                                      vertical:
-                                                                          4),
-                                                              headerBuilder: (ctx,
-                                                                  selectedItem,
-                                                                  enabled) {
-                                                                final locked =
-                                                                    _tokenIsLockedCore(
-                                                                        selectedItem);
-                                                                return Align(
-                                                                  alignment:
-                                                                      Alignment
-                                                                          .centerLeft,
-                                                                  child: Row(
-                                                                    children: [
-                                                                      if (locked) ...[
-                                                                        Icon(
-                                                                          Icons
-                                                                              .lock_outline,
-                                                                          size:
-                                                                              13,
-                                                                          color: Colors
-                                                                              .grey
-                                                                              .shade500,
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                5),
-                                                                      ],
-                                                                      Expanded(
-                                                                        child:
-                                                                            Text(
-                                                                          _captionStyleMenuLabel(
-                                                                              selectedItem),
-                                                                          maxLines:
-                                                                              1,
-                                                                          overflow:
-                                                                              TextOverflow
-                                                                                  .ellipsis,
-                                                                          style:
-                                                                              TextStyle(
-                                                                            fontSize:
-                                                                                11,
-                                                                            height:
-                                                                                1.35,
-                                                                            fontWeight:
-                                                                                FontWeight
-                                                                                    .w600,
-                                                                            color: locked
-                                                                                ? Colors.grey.shade600
-                                                                                : Colors.grey.shade900,
-                                                                          ),
-                                                                        ),
-                                                                      ),
-                                                                    ],
-                                                                  ),
-                                                                );
-                                                              },
-                                                              listItemBuilder: (ctx,
-                                                                  item,
-                                                                  isSelected,
-                                                                  onItemSelect) {
-                                                                final tokens =
-                                                                    _captionStyleDropdownTokens();
-                                                                final firstCustom =
-                                                                    CaptionStyleCatalog
-                                                                        .firstCustomTokenIndex(
-                                                                            tokens);
-                                                                return CaptionStyleDropdownListRow(
-                                                                  label:
-                                                                      _captionStyleMenuLabel(
-                                                                          item),
-                                                                  isSelected:
-                                                                      isSelected,
-                                                                  isFavorite:
-                                                                      _favoriteCaptionStyleToken ==
-                                                                          item,
-                                                                  showSavedIcon:
-                                                                      item.startsWith(
-                                                                          'saved:'),
-                                                                  showLockIcon:
-                                                                      _tokenIsLockedCore(
-                                                                          item),
-                                                                  showDividerAbove:
-                                                                      firstCustom >=
-                                                                          0 &&
-                                                                      tokens.indexOf(
-                                                                              item) ==
-                                                                          firstCustom,
-                                                                  onSelect:
-                                                                      onItemSelect,
-                                                                  onToggleFavorite: () =>
-                                                                      _toggleFavoriteCaptionStyle(
-                                                                          item),
-                                                                );
-                                                              },
-                                                              decoration:
-                                                                  CustomDropdownDecoration(
-                                                                closedFillColor:
-                                                                    Colors
-                                                                        .white,
-                                                                expandedFillColor:
-                                                                    Colors
-                                                                        .white,
-                                                                closedBorder: Border.all(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade300),
-                                                                expandedBorder:
-                                                                    Border.all(
-                                                                  color: _captionLayoutBlue
-                                                                      .withValues(
-                                                                          alpha:
-                                                                              0.45),
-                                                                  width: 1,
-                                                                ),
-                                                                closedBorderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            4),
-                                                                expandedBorderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            6),
-                                                                closedShadow: [
-                                                                  BoxShadow(
-                                                                    color: Colors
-                                                                        .black
-                                                                        .withValues(
-                                                                            alpha:
-                                                                                0.03),
-                                                                    blurRadius:
-                                                                        2,
-                                                                    offset:
-                                                                        const Offset(
-                                                                            0,
-                                                                            1),
-                                                                  ),
-                                                                ],
-                                                                expandedShadow: [
-                                                                  BoxShadow(
-                                                                    color: Colors
-                                                                        .black
-                                                                        .withValues(
-                                                                            alpha:
-                                                                                0.08),
-                                                                    blurRadius:
-                                                                        8,
-                                                                    offset:
-                                                                        const Offset(
-                                                                            0,
-                                                                            2),
-                                                                  ),
-                                                                ],
-                                                                hintStyle:
-                                                                    TextStyle(
-                                                                  fontSize: 10,
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade500,
-                                                                ),
-                                                                headerStyle:
-                                                                    TextStyle(
-                                                                  fontSize: 11,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade900,
-                                                                ),
-                                                                listItemStyle:
-                                                                    TextStyle(
-                                                                  fontSize: 11,
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade800,
-                                                                ),
-                                                                listItemDecoration:
-                                                                    const ListItemDecoration(
-                                                                  selectedColor:
-                                                                      Color(
-                                                                          0xFFEAF2FF),
-                                                                ),
-                                                                closedSuffixIcon:
-                                                                    Icon(
-                                                                  Icons
-                                                                      .keyboard_arrow_down_rounded,
-                                                                  size: 14,
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade600,
-                                                                ),
-                                                                expandedSuffixIcon:
-                                                                    const Icon(
-                                                                  Icons
-                                                                      .keyboard_arrow_up_rounded,
-                                                                  size: 14,
-                                                                  color:
-                                                                      _captionLayoutBlue,
-                                                                ),
-                                                              ),
-                                                              onChanged:
-                                                                  (token) {
-                                                                if (token ==
-                                                                    null)
-                                                                  return;
-                                                                _rememberCurrentWireDraft();
-                                                                _applyCaptionStyleMenuToken(
-                                                                    token);
-                                                              },
-                                                            ),
-                                                          ],
-                                                        ),
-                                                        if (!widget.adminMode) ...[
-                                                          const SizedBox(
-                                                              height: 2),
-                                                          Align(
-                                                            alignment: Alignment
-                                                                .centerRight,
-                                                            child: Wrap(
-                                                              spacing: 0,
-                                                              runSpacing: 2,
-                                                              alignment:
-                                                                  WrapAlignment
-                                                                      .end,
-                                                              children: [
-                                                                if (!_coreStyleLocked)
-                                                                  Builder(
-                                                                    builder: (_) {
-                                                                  final mode =
-                                                                      _currentRenameMode();
-                                                                  if (mode ==
-                                                                      _RenamePromptMode
-                                                                          .wireLabel) {
-                                                                    return const SizedBox
-                                                                        .shrink();
-                                                                  }
-                                                                  String label;
-                                                                  String tooltip;
-                                                                  switch (mode) {
-                                                                    case _RenamePromptMode
-                                                                        .libraryEntry:
-                                                                      label =
-                                                                          'Rename';
-                                                                      tooltip =
-                                                                          'Change the name of the saved caption style '
-                                                                          'currently selected in the Caption Style menu.';
-                                                                      break;
-                                                                    case _RenamePromptMode
-                                                                        .wireLabel:
-                                                                      label =
-                                                                          'Rename';
-                                                                      tooltip =
-                                                                          '';
-                                                                      break;
-                                                                    case _RenamePromptMode
-                                                                        .saveAsNewLibrary:
-                                                                      label =
-                                                                          'Save as…';
-                                                                      tooltip =
-                                                                          'Save the current layout to your Caption Style '
-                                                                          'menu with a name of your choice.';
-                                                                      break;
-                                                                  }
-                                                                  return Tooltip(
-                                                                    message:
-                                                                        tooltip,
-                                                                    waitDuration:
-                                                                        const Duration(
-                                                                            milliseconds:
-                                                                                400),
-                                                                    child:
-                                                                        TextButton(
-                                                                      style: TextButton
-                                                                          .styleFrom(
-                                                                        padding:
-                                                                            const EdgeInsets
-                                                                                .symmetric(
-                                                                          horizontal:
-                                                                              6,
-                                                                          vertical:
-                                                                              2,
-                                                                        ),
-                                                                        minimumSize:
-                                                                            Size.zero,
-                                                                        tapTargetSize:
-                                                                            MaterialTapTargetSize
-                                                                                .shrinkWrap,
-                                                                      ),
-                                                                      onPressed:
-                                                                          _openRenameCaptionStylePrompt,
-                                                                      child: Text(
-                                                                        label,
-                                                                        style:
-                                                                            TextStyle(
-                                                                          fontSize:
-                                                                              10,
-                                                                          fontWeight:
-                                                                              FontWeight.w600,
-                                                                          color:
-                                                                              _captionLayoutBlue,
-                                                                        ),
-                                                                      ),
-                                                                    ),
-                                                                  );
-                                                                }),
-                                                                Tooltip(
-                                                                  message: _coreStyleLocked
-                                                                      ? 'Duplicate this built-in style to create an editable custom caption.'
-                                                                      : 'Copy this layout as Custom so you can edit it '
-                                                                          'without changing built-in Getty, Imagn, AP, or CP.',
-                                                                  child:
-                                                                      TextButton(
-                                                                    style: TextButton
-                                                                        .styleFrom(
-                                                                      padding:
-                                                                          const EdgeInsets
-                                                                              .symmetric(
-                                                                        horizontal:
-                                                                            6,
-                                                                        vertical:
-                                                                            2,
-                                                                      ),
-                                                                      minimumSize:
-                                                                          Size.zero,
-                                                                      tapTargetSize:
-                                                                          MaterialTapTargetSize
-                                                                              .shrinkWrap,
-                                                                    ),
-                                                                    onPressed:
-                                                                        _duplicateCaptionStyle,
-                                                                    child: Text(
-                                                                      'Duplicate',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight
-                                                                                .w600,
-                                                                        color:
-                                                                            _captionLayoutBlue,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                Tooltip(
-                                                                  message:
-                                                                      'Only your own saved caption styles can be removed '
-                                                                      '(under Custom in the Caption Style menu). '
-                                                                      'Built-in Getty / Imagn / AP / CP cannot be deleted.',
-                                                                  waitDuration:
-                                                                      const Duration(
-                                                                          milliseconds:
-                                                                              500),
-                                                                  child:
-                                                                      TextButton(
-                                                                    style: TextButton
-                                                                        .styleFrom(
-                                                                      padding:
-                                                                          const EdgeInsets
-                                                                              .symmetric(
-                                                                        horizontal:
-                                                                            6,
-                                                                        vertical:
-                                                                            2,
-                                                                      ),
-                                                                      minimumSize:
-                                                                          Size.zero,
-                                                                      tapTargetSize:
-                                                                          MaterialTapTargetSize
-                                                                              .shrinkWrap,
-                                                                    ),
-                                                                    onPressed:
-                                                                        _selectedSavedStyleId ==
-                                                                                null
-                                                                            ? null
-                                                                            : _deleteSelectedCaptionStyle,
-                                                                    child: Text(
-                                                                      'Delete',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        fontWeight:
-                                                                            FontWeight
-                                                                                .w600,
-                                                                        color: _selectedSavedStyleId ==
-                                                                                null
-                                                                            ? Colors
-                                                                                .grey
-                                                                                .shade400
-                                                                            : Colors
-                                                                                .red
-                                                                                .shade700,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                          if (_coreStyleLocked) ...[
-                                                            const SizedBox(
-                                                                height: 8),
-                                                            Container(
-                                                              width: double
-                                                                  .infinity,
-                                                              padding:
-                                                                  const EdgeInsets
-                                                                      .fromLTRB(
-                                                                      8,
-                                                                      7,
-                                                                      8,
-                                                                      7),
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                color: const Color(
-                                                                        0xFFF4F7FB),
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            4),
-                                                                border: Border.all(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade300),
-                                                              ),
-                                                              child: Row(
-                                                                children: [
-                                                                  Icon(
-                                                                    Icons
-                                                                        .lock_outline,
-                                                                    size: 14,
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade700,
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      width: 6),
-                                                                  Expanded(
-                                                                    child: Text(
-                                                                      'Built-in styles are read-only. Duplicate to create an editable custom caption.',
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            10,
-                                                                        height:
-                                                                            1.3,
-                                                                        color: Colors
-                                                                            .grey
-                                                                            .shade800,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ] else ...[
-                                                          const SizedBox(
-                                                              height: 2),
-                                                          Align(
-                                                            alignment: Alignment
-                                                                .centerRight,
-                                                            child: TextButton(
-                                                              style: TextButton
-                                                                  .styleFrom(
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal: 6,
-                                                                  vertical: 2,
-                                                                ),
-                                                                minimumSize:
-                                                                    Size.zero,
-                                                                tapTargetSize:
-                                                                    MaterialTapTargetSize
-                                                                        .shrinkWrap,
-                                                              ),
-                                                              onPressed:
-                                                                  _setAllStylesAsDefaults,
-                                                              child: Text(
-                                                                'Set all as defaults',
-                                                                style: TextStyle(
-                                                                  fontSize: 10,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  color:
-                                                                      _captionLayoutBlue,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                        _lockableEditorSurface(
-                                                          child: Column(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .stretch,
-                                                            children: [
-                                                              const SizedBox(
-                                                                  height: 8),
-                                                              Align(
-                                                                alignment:
-                                                                    Alignment
-                                                                        .centerLeft,
-                                                                child: Row(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  children: [
-                                                                    Text(
-                                                                      'Layout options',
-                                                                      style:
-                                                                          _sectionTitleStyle
-                                                                              .copyWith(
-                                                                        fontSize:
-                                                                            12,
-                                                                        fontWeight:
-                                                                            FontWeight
-                                                                                .w600,
-                                                                      ),
-                                                                    ),
-                                                                    const SizedBox(
-                                                                        width:
-                                                                            4),
-                                                                    Tooltip(
-                                                                      message:
-                                                                          'Turn optional fields on or off '
-                                                                          'while you edit.\n'
-                                                                          'Personality appears first, then Keywords, '
-                                                                          'in a column beside the caption.\n'
-                                                                          'Keywords sits below Personality in that column.',
-                                                                      waitDuration:
-                                                                          const Duration(
-                                                                              milliseconds:
-                                                                                  400),
-                                                                      child:
-                                                                          Icon(
-                                                                        Icons
-                                                                            .help_outline,
-                                                                        size:
-                                                                            14,
-                                                                        color: Colors
-                                                                            .grey
-                                                                            .shade600,
-                                                                      ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                              _layoutOptionalFieldRow(
-                                                                label:
-                                                                    'Show Personality Field:',
-                                                                value: _template
-                                                                    .showPersonalityField,
-                                                                onSave:
-                                                                    _setShowPersonalityField,
-                                                              ),
-                                                              _layoutOptionalFieldRow(
-                                                                label:
-                                                                    'Show Keywords Field:',
-                                                                value: _template
-                                                                    .showKeywordsField,
-                                                                onSave:
-                                                                    _setShowKeywordsField,
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      // STRUCTURE | PLAYER OUTPUT
+                                      Row(
+                                        key: _structureSectionKey,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: AnimatedContainer(
+                                              duration: const Duration(
+                                                  milliseconds: 220),
+                                              padding: _structureHintFlash
+                                                  ? const EdgeInsets.all(6)
+                                                  : EdgeInsets.zero,
+                                              decoration: BoxDecoration(
+                                                color: _structureHintFlash
+                                                    ? _t.accent
+                                                        .withValues(alpha: 0.12)
+                                                    : Colors.transparent,
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: _structureHintFlash
+                                                      ? _t.accent.withValues(
+                                                          alpha: 0.55)
+                                                      : Colors.transparent,
                                                 ),
-                                                const SizedBox(width: 10),
-                                                Expanded(
-                                                  child: Align(
-                                                    alignment:
-                                                        Alignment.topRight,
-                                                    child: LayoutBuilder(
-                                                      builder: (ctx, cons) {
-                                                        // Tight cap + right-align pushes the block flush to the dialog's
-                                                        // right edge; still shrinks to available width on narrow windows.
-                                                        // `topRight` keeps the right column's top at the same y as the
-                                                        // left column's top so the label / dropdown / preview boxes line up.
-                                                        const double preferred =
-                                                            360.0;
-                                                        final double w = cons
-                                                                .maxWidth
-                                                                .isFinite
-                                                            ? (cons.maxWidth <
-                                                                    preferred
-                                                                ? cons.maxWidth
-                                                                : preferred)
-                                                            : preferred;
-                                                        return SizedBox(
-                                                          width: w,
-                                                          child:
-                                                              _lockableEditorSurface(
-                                                            child: Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
-                                                              children: [
-                                                              const SizedBox(
-                                                                  height: 8),
-                                                              Text(
-                                                                'Player Output Style',
-                                                                style:
-                                                                    _sectionTitleStyle
-                                                                        .copyWith(
-                                                                  fontSize: 12,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w600,
-                                                                  height: 1.0,
-                                                                ),
-                                                              ),
-                                                              Container(
-                                                                width: double
-                                                                    .infinity,
-                                                                // Matches the Caption Style dropdown's closed-header
-                                                                // padding (horizontal 9, vertical 6) + the same 11px × 1.35
-                                                                // text line height, so the two boxes render at an identical
-                                                                // ~28.85 px natural height and align top-to-bottom.
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal: 9,
-                                                                  vertical: 6,
-                                                                ),
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: Colors
-                                                                      .white,
-                                                                  border: Border
-                                                                      .all(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade300,
-                                                                  ),
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              4),
-                                                                ),
-                                                                child:
-                                                                    SelectionArea(
-                                                                  child:
-                                                                      Text.rich(
-                                                                    TextSpan(
-                                                                      text:
-                                                                          playerPreviewText,
-                                                                      style:
-                                                                          TextStyle(
-                                                                        fontSize:
-                                                                            11,
-                                                                        height:
-                                                                            1.35,
-                                                                        color: Colors
-                                                                            .grey
-                                                                            .shade900,
-                                                                      ),
-                                                                    ),
-                                                                    maxLines: 1,
-                                                                    overflow:
-                                                                        TextOverflow
-                                                                            .ellipsis,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              const SizedBox(
-                                                                  height: 10),
-                                                              Row(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .center,
-                                                                children: [
-                                                                  SizedBox(
-                                                                    width: 90,
-                                                                    child: Text(
-                                                                      'Team Order:',
-                                                                      style:
-                                                                          _layoutOptionTextStyle,
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      width: 6),
-                                                                  Expanded(
-                                                                    child: Row(
-                                                                      crossAxisAlignment:
-                                                                          CrossAxisAlignment
-                                                                              .center,
-                                                                      mainAxisAlignment:
-                                                                          MainAxisAlignment
-                                                                              .start,
-                                                                      children: [
-                                                                        _captionTeamOrderChoice(
-                                                                          CaptionTeamOrder
-                                                                              .teamBefore,
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                12),
-                                                                        _captionTeamOrderChoice(
-                                                                          CaptionTeamOrder
-                                                                              .teamAfter,
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              const SizedBox(
-                                                                  height: 6),
-                                                              Row(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .center,
-                                                                children: [
-                                                                  SizedBox(
-                                                                    width: 90,
-                                                                    child: Text(
-                                                                      'English:',
-                                                                      style:
-                                                                          _layoutOptionTextStyle,
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      width: 6),
-                                                                  Expanded(
-                                                                    child: Row(
-                                                                      crossAxisAlignment:
-                                                                          CrossAxisAlignment
-                                                                              .center,
-                                                                      mainAxisAlignment:
-                                                                          MainAxisAlignment
-                                                                              .start,
-                                                                      children: [
-                                                                        _americanEnglishChoice(
-                                                                            true),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                12),
-                                                                        _americanEnglishChoice(
-                                                                            false),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              const SizedBox(
-                                                                  height: 6),
-                                                              Row(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .center,
-                                                                children: [
-                                                                  SizedBox(
-                                                                    width: 90,
-                                                                    child: Text(
-                                                                      'Number:',
-                                                                      style:
-                                                                          _layoutOptionTextStyle,
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      width: 6),
-                                                                  Expanded(
-                                                                    child: Row(
-                                                                      crossAxisAlignment:
-                                                                          CrossAxisAlignment
-                                                                              .center,
-                                                                      mainAxisAlignment:
-                                                                          MainAxisAlignment
-                                                                              .start,
-                                                                      children: [
-                                                                        _numberFormatChoice(
-                                                                          NumberFormatStyle
-                                                                              .hash,
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                12),
-                                                                        _numberFormatChoice(
-                                                                          NumberFormatStyle
-                                                                              .parens,
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              const SizedBox(
-                                                                  height: 6),
-                                                              Row(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .center,
-                                                                children: [
-                                                                  SizedBox(
-                                                                    width: 90,
-                                                                    child: Text(
-                                                                      'Position:',
-                                                                      style:
-                                                                          _layoutOptionTextStyle,
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      width: 6),
-                                                                  Expanded(
-                                                                    child: Row(
-                                                                      crossAxisAlignment:
-                                                                          CrossAxisAlignment
-                                                                              .center,
-                                                                      mainAxisAlignment:
-                                                                          MainAxisAlignment
-                                                                              .start,
-                                                                      children: [
-                                                                        _positionToggleChoice(
-                                                                            true),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                12),
-                                                                        _positionToggleChoice(
-                                                                            false),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              const SizedBox(
-                                                                  height: 6),
-                                                              Row(
-                                                                crossAxisAlignment:
-                                                                    CrossAxisAlignment
-                                                                        .center,
-                                                                children: [
-                                                                  SizedBox(
-                                                                    width: 90,
-                                                                    child: Text(
-                                                                      'Diacritics:',
-                                                                      style:
-                                                                          _layoutOptionTextStyle,
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                      width: 6),
-                                                                  Expanded(
-                                                                    child: Row(
-                                                                      crossAxisAlignment:
-                                                                          CrossAxisAlignment
-                                                                              .center,
-                                                                      mainAxisAlignment:
-                                                                          MainAxisAlignment
-                                                                              .start,
-                                                                      children: [
-                                                                        Tooltip(
-                                                                          message:
-                                                                              'Leave player and opponent names exactly as on the roster.',
-                                                                          child:
-                                                                              _removeDiacriticsChoice(false),
-                                                                        ),
-                                                                        const SizedBox(
-                                                                            width:
-                                                                                12),
-                                                                        Tooltip(
-                                                                          message:
-                                                                              'Strip accents from names in captions (e.g. José → Jose).',
-                                                                          child:
-                                                                              _removeDiacriticsChoice(true),
-                                                                        ),
-                                                                      ],
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ],
-                                                          ),
+                                              ),
+                                              child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                      'Structure'.toUpperCase(),
+                                                      style: _sectionTitleStyle,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Expanded(
+                                                      child: Text(
+                                                        'Drag to reorder · click a field to edit it · separators are the gaps',
+                                                        style: _t.microStyle.copyWith(
+                                                          color: _t.text.withValues(alpha: 0.40),
                                                         ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    _lockableEditorSurface(
+                                                      child: _addSnippetMenuButton(),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Container(
+                                                  width: double.infinity,
+                                                  padding: const EdgeInsets.all(8),
+                                                  decoration: BoxDecoration(
+                                                    color: _ffOf(context).sunken,
+                                                    borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+                                                    border: Border.all(color: _ffOf(context).divider),
+                                                  ),
+                                                  child: _lockableEditorSurface(
+                                                    child: LayoutBuilder(
+                                                      builder: (context, c) {
+                                                        final chipMax = c.maxWidth < 280
+                                                            ? c.maxWidth
+                                                            : 280.0;
+                                                        return Wrap(
+                                                          spacing: 4,
+                                                          runSpacing: 4,
+                                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                                          children: [
+                                                            for (final w in previewWidgets)
+                                                              ConstrainedBox(
+                                                                constraints: BoxConstraints(
+                                                                  maxWidth: chipMax,
+                                                                ),
+                                                                child: w,
+                                                              ),
+                                                          ],
                                                         );
                                                       },
                                                     ),
                                                   ),
                                                 ),
-                                              ],
-                                            ),
-                                            const SizedBox(height: 8),
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                  top: 4),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Container(
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.white,
-                                                      border: Border.all(
-                                                          color: Colors
-                                                              .grey.shade300),
-                                                      boxShadow: [
-                                                        BoxShadow(
-                                                          color: Colors.black
-                                                              .withValues(
-                                                                  alpha: 0.08),
-                                                          blurRadius: 4,
-                                                          offset: const Offset(
-                                                              0, 2),
+                                                if (_template.segmentOrder.any(_isGlueSegment)) ...[
+                                                  const SizedBox(height: 6),
+                                                  Padding(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                                                    child: _spaceLegend(),
+                                                  ),
+                                                ],
+                                                if (_locationEditorOpen ||
+                                                    _dateEditorOpen ||
+                                                    _captionPreviewSelected ||
+                                                    _venuePreviewSelected ||
+                                                    _bylinePreviewSelected ||
+                                                    _customTextSnippetEditorOpen ||
+                                                    _freeTextSnippetEditorOpen) ...[
+                                                  const SizedBox(height: 8),
+                                                  _buildInlineFieldEditor(),
+                                                ],
+                                                if (widget.adminMode) ...[
+                                                  const SizedBox(height: 8),
+                                                  Align(
+                                                    alignment: Alignment.centerRight,
+                                                    child: TextButton(
+                                                      style: TextButton.styleFrom(
+                                                        padding: const EdgeInsets.symmetric(
+                                                          horizontal: 6,
+                                                          vertical: 2,
                                                         ),
-                                                      ],
-                                                    ),
-                                                    child: Column(
-                                                      mainAxisSize:
-                                                          MainAxisSize.min,
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .stretch,
-                                                      children: [
-                                                        Container(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 4),
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color: Colors
-                                                                .grey.shade50,
-                                                            border: Border(
-                                                              bottom: BorderSide(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade300),
-                                                            ),
-                                                          ),
-                                                          child: Row(
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .center,
-                                                            children: [
-                                                              Text(
-                                                                'Preview',
-                                                                style: _sectionTitleStyle
-                                                                    .copyWith(
-                                                                        fontSize:
-                                                                            11),
-                                                              ),
-                                                              const SizedBox(
-                                                                  width: 4),
-                                                              Text(
-                                                                'Shuffle rerolls sample action',
-                                                                style:
-                                                                    TextStyle(
-                                                                  fontSize: 10,
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade500,
-                                                                ),
-                                                              ),
-                                                              const Spacer(),
-                                                              _lockableEditorSurface(
-                                                                child:
-                                                                    _addSnippetMenuButton(),
-                                                              ),
-                                                              const SizedBox(
-                                                                  width: 4),
-                                                              _shuffleCaptionButton(),
-                                                            ],
-                                                          ),
+                                                        minimumSize: const Size(0, 28),
+                                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                      ),
+                                                      onPressed: _setAllStylesAsDefaults,
+                                                      child: Text(
+                                                        'Set all as defaults',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: _ffOf(context).accent,
                                                         ),
-                                                        Padding(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                                  horizontal: 8,
-                                                                  vertical: 8),
-                                                          child: Column(
-                                                            mainAxisSize:
-                                                                MainAxisSize.min,
-                                                            crossAxisAlignment:
-                                                                CrossAxisAlignment
-                                                                    .stretch,
-                                                            children: [
-                                                              Container(
-                                                                width: double
-                                                                    .infinity,
-                                                                decoration:
-                                                                    BoxDecoration(
-                                                                  color: Colors
-                                                                      .grey
-                                                                      .shade50,
-                                                                  borderRadius:
-                                                                      BorderRadius
-                                                                          .circular(
-                                                                              6),
-                                                                  border: Border
-                                                                      .all(
-                                                                    color: Colors
-                                                                        .grey
-                                                                        .shade300,
-                                                                  ),
-                                                                ),
-                                                                padding:
-                                                                    const EdgeInsets
-                                                                        .symmetric(
-                                                                  horizontal:
-                                                                      10,
-                                                                  vertical: 10,
-                                                                ),
-                                                                child:
-                                                                    _fullCaptionPreviewArea(
-                                                                  fullCaptionPreview:
-                                                                      fullCaptionPreview,
-                                                                  narrativeSplit:
-                                                                      narrativeSplit,
-                                                                ),
-                                                              ),
-                                                              const SizedBox(
-                                                                  height: 10),
-                                                              _lockableEditorSurface(
-                                                                child:
-                                                                    LayoutBuilder(
-                                                                  builder:
-                                                                      (context,
-                                                                              c) =>
-                                                                          Wrap(
-                                                                    spacing: 8,
-                                                                    runSpacing:
-                                                                        8,
-                                                                    crossAxisAlignment:
-                                                                        WrapCrossAlignment
-                                                                            .center,
-                                                                    children: [
-                                                                      for (final w
-                                                                          in previewWidgets)
-                                                                        ConstrainedBox(
-                                                                          constraints:
-                                                                              BoxConstraints(
-                                                                            maxWidth:
-                                                                                c.maxWidth,
-                                                                          ),
-                                                                          child:
-                                                                              w,
-                                                                        ),
-                                                                    ],
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              if (_template
-                                                                  .segmentOrder
-                                                                  .any(_isGlueSegment)) ...[
-                                                                const SizedBox(
-                                                                    height: 6),
-                                                                Padding(
-                                                                  padding: const EdgeInsets
-                                                                      .symmetric(
-                                                                      horizontal:
-                                                                          2),
-                                                                  child:
-                                                                      _spaceLegend(),
-                                                                ),
-                                                              ],
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ],
+                                                      ),
                                                     ),
                                                   ),
                                                 ],
-                                              ),
+                                              ],
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                          if (!_coreStyleLocked &&
-                                          (_locationEditorOpen ||
-                                          _dateEditorOpen ||
-                                          _captionPreviewSelected ||
-                                          _venuePreviewSelected ||
-                                          _bylinePreviewSelected ||
-                                          _customTextSnippetEditorOpen ||
-                                          _freeTextSnippetEditorOpen)) ...[
-                                        const SizedBox(height: 8),
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            border: Border.all(
-                                                color: Colors.grey.shade300),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black
-                                                    .withValues(alpha: 0.08),
-                                                blurRadius: 4,
-                                                offset: const Offset(0, 2),
-                                              ),
-                                            ],
+                                            ),
                                           ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.stretch,
-                                            children: [
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8,
-                                                        vertical: 4),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.grey.shade50,
-                                                  border: Border(
-                                                    bottom: BorderSide(
-                                                        color: Colors
-                                                            .grey.shade300),
+                                          const SizedBox(width: 12),
+                                          SizedBox(
+                                            width: 300,
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                _lockableEditorSurface(
+                                                  child: _buildPlayerOutputSection(playerPreviewText),
+                                                ),
+                                                _lockableEditorSurface(
+                                                  child: _buildFieldsShownSection(),
+                                                ),
+                                                if (!widget.adminMode) ...[
+                                                  const SizedBox(height: 4),
+                                                  Align(
+                                                    alignment: Alignment.centerRight,
+                                                    child: Builder(
+                                                      builder: (_) {
+                                                        final mode = _currentRenameMode();
+                                                        if (mode == _RenamePromptMode.wireLabel) {
+                                                          return const SizedBox.shrink();
+                                                        }
+                                                        if (mode == _RenamePromptMode.libraryEntry) {
+                                                          return TextButton(
+                                                            style: TextButton.styleFrom(
+                                                              padding: const EdgeInsets.symmetric(
+                                                                horizontal: 6,
+                                                                vertical: 2,
+                                                              ),
+                                                              minimumSize: Size.zero,
+                                                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                            ),
+                                                            onPressed: _openRenameCaptionStylePrompt,
+                                                            child: Text(
+                                                              'Rename',
+                                                              style: TextStyle(
+                                                                fontSize: 10,
+                                                                fontWeight: FontWeight.w600,
+                                                                color: _ffOf(context).accent,
+                                                              ),
+                                                            ),
+                                                          );
+                                                        }
+                                                        return const SizedBox.shrink();
+                                                      },
+                                                    ),
                                                   ),
-                                                ),
-                                                child: Row(
-                                                  children: [
-                                                    _activeEditIndicator(),
-                                                    const Spacer(),
-                                                    _inlineDoneButton(),
-                                                  ],
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                        8, 6, 8, 6),
-                                                child: Column(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  mainAxisSize:
-                                                      MainAxisSize.min,
-                                                  children: [
-                                                    if (_captionPreviewSelected)
-                                                      _captionSegmentEditor()
-                                                    else if (_customTextSnippetEditorOpen)
-                                                      _customTextSnippetEditor()
-                                                    else if (_freeTextSnippetEditorOpen)
-                                                      _freeTextSnippetEditor()
-                                                    else if (_venuePreviewSelected)
-                                                      _venueEditor()
-                                                    else if (_bylinePreviewSelected)
-                                                      _bylineEditor(),
-                                                    if (_dateEditorOpen)
-                                                      _dateLineEditor(),
-                                                    if (_locationEditorOpen)
-                                                      _locationOptionsEditor(),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
+                                                ],
+                                              ],
+                                            ),
                                           ),
-                                        ),
-                                      ],
-                                    ],
+                                        ],
+                                      ),
+                                    ]
                                   ),
                                 );
                               },
@@ -5788,16 +5461,20 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                       padding:
                           const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
+                        color: _t.surface,
                         border: Border(
-                          top: BorderSide(color: Colors.grey.shade200, width: 1),
+                          top: BorderSide(color: _t.divider),
                         ),
                       ),
-                      child: Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 4,
-                        runSpacing: 6,
+                      child: Row(
                         children: [
+                          Text(
+                            'Changes apply as you make them',
+                            style: _t.microStyle.copyWith(
+                              color: _t.text.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          const Spacer(),
                           ElevatedGreyButton(
                             label: 'Cancel',
                             fontSize: 10,
@@ -5805,10 +5482,16 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                           ),
                           const SizedBox(width: 4),
                           ElevatedGreyButton(
-                            label: 'Save',
+                            label: 'Save as template',
+                            fontSize: 10,
+                            onPressed: _saveAsTemplate,
+                          ),
+                          const SizedBox(width: 4),
+                          ElevatedGreyButton(
+                            label: 'Done',
                             fontSize: 10,
                             isPrimary: true,
-                            onPressed: _save,
+                            onPressed: _done,
                           ),
                         ],
                       ),
@@ -5819,14 +5502,16 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 Positioned.fill(child: _renameCaptionStyleNameOverlay()),
             ],
           ),
+          ),
         ),
       );
 
-    if (widget.embedded) return shell;
+    final themed = AppDialogFfStyle(enabled: true, child: shell);
+    if (widget.embedded) return themed;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      child: shell,
+      child: themed,
     );
   }
 }
@@ -5917,35 +5602,34 @@ class _GapSeparatorFieldState extends State<_GapSeparatorField> {
     final focused = _focus.hasFocus;
     final highlighted = focused || widget.active;
     return Container(
-      width: 64,
-      height: 34,
+      width: 44,
+      height: CaptionLayoutBuilderDialogState._snippetChipHeight,
       decoration: BoxDecoration(
-        color: highlighted ? const Color(0xFFF0F4FF) : Colors.white,
-        borderRadius: BorderRadius.circular(4),
+        color: CaptionLayoutBuilderDialogState._snippetFill,
+        borderRadius: BorderRadius.circular(3),
         border: Border.all(
-          color: highlighted ? _captionLayoutBlue : Colors.grey.shade300,
+          color: highlighted ? _ffOf(context).accent : _ffOf(context).divider,
           width: highlighted ? 1.5 : 1,
         ),
       ),
-      child: Center(
-        child: TextField(
-          controller: widget.controller,
-          focusNode: _focus,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 15,
-            color: Colors.grey.shade800,
-            height: 1.1,
-            fontFamily: 'monospace',
-          ),
-          decoration: const InputDecoration(
-            isDense: true,
-            isCollapsed: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 4),
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-          ),
+      alignment: Alignment.center,
+      child: TextField(
+        controller: widget.controller,
+        focusNode: _focus,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          color: _ffOf(context).text.withValues(alpha: 0.88),
+          height: 1.1,
+          fontFamily: 'monospace',
+        ),
+        decoration: const InputDecoration(
+          isDense: true,
+          isCollapsed: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 2),
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
         ),
       ),
     );
@@ -6001,10 +5685,10 @@ class _CaptionLayoutBorderedMultilineFieldState
     return Container(
       constraints: const BoxConstraints(minHeight: 28),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
+        color: _ffOf(context).sunken,
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
         border: Border.all(
-          color: on ? _captionLayoutBlue : Colors.grey.shade300,
+          color: on ? _ffOf(context).accent : _ffOf(context).divider,
           width: on ? 1.5 : 1,
         ),
       ),
@@ -6017,10 +5701,10 @@ class _CaptionLayoutBorderedMultilineFieldState
         maxLines: widget.maxLines,
         style: TextStyle(
           fontSize: 13,
-          color: Colors.grey.shade800,
+          color: _ffOf(context).text.withValues(alpha: 0.88),
           height: 1.35,
         ),
-        cursorColor: _captionLayoutBlue,
+        cursorColor: _ffOf(context).accent,
         cursorWidth: 1.2,
         decoration: InputDecoration(
           isDense: true,
@@ -6031,7 +5715,7 @@ class _CaptionLayoutBorderedMultilineFieldState
           hintText: widget.hintText,
           hintStyle: TextStyle(
             fontSize: 13,
-            color: Colors.grey.shade400,
+            color: _ffOf(context).text.withValues(alpha: 0.40),
             height: 1.35,
           ),
         ),
@@ -6060,12 +5744,25 @@ class _BylineChipSwitch extends StatelessWidget {
           value: value,
           onChanged: onChanged,
           activeColor: Colors.white,
-          activeTrackColor: _captionLayoutBlue,
+          activeTrackColor: _ffOf(context).accent,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
       ),
     );
   }
+}
+
+/// One segment in [_CaptionLayoutBuilderDialogState._optionSegmentedControl].
+class _SegOption {
+  const _SegOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 }
 
 /// Small square button used inside byline chips (Aa, edit pencil, X). Matches
@@ -6091,7 +5788,7 @@ class _BylineChipIconButton extends StatelessWidget {
       child: Material(
         color: background,
         shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.grey.shade300),
+          side: BorderSide(color: _ffOf(context).divider),
           borderRadius: BorderRadius.circular(3),
         ),
         child: InkWell(
@@ -6141,7 +5838,7 @@ class _VisibleSpaceTextController extends TextEditingController {
   }) {
     final spaceStyle = style?.copyWith(
       fontSize: (style.fontSize ?? 13) * 0.75,
-      color: Colors.grey.shade500,
+      color: _ffOf(context).text.withValues(alpha: 0.45),
     );
     return TextSpan(
       style: style,
@@ -6202,11 +5899,11 @@ class _BylineSeparatorInputState extends State<_BylineSeparatorInput> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = _focused ? _captionLayoutBlue : Colors.grey.shade300;
+    final borderColor = _focused ? _ffOf(context).accent : _ffOf(context).divider;
     final borderWidth = _focused ? 1.5 : 1.0;
-    const style = TextStyle(
+    final style = TextStyle(
       fontSize: 13,
-      color: Color(0xFF3A3A3A),
+      color: _ffOf(context).text,
       height: 1.1,
     );
     final fieldWidth = _fieldWidthFor(_ctrl.text, style);
@@ -6222,8 +5919,8 @@ class _BylineSeparatorInputState extends State<_BylineSeparatorInput> {
           width: fieldWidth,
           height: 28,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
+            color: _ffOf(context).sunken,
+            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
             border: Border.all(color: borderColor, width: borderWidth),
           ),
           alignment: Alignment.center,
@@ -6233,7 +5930,7 @@ class _BylineSeparatorInputState extends State<_BylineSeparatorInput> {
             style: style,
             textAlign: TextAlign.center,
             cursorWidth: 1.2,
-            cursorColor: _captionLayoutBlue,
+            cursorColor: _ffOf(context).accent,
             decoration: const InputDecoration(
               isDense: true,
               isCollapsed: true,
@@ -6288,7 +5985,7 @@ class _BylineWideInput extends StatelessWidget {
             style: TextStyle(
               fontSize: 8,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
+              color: _ffOf(context).textSecondary,
               letterSpacing: 0.4,
               height: 1,
             ),
@@ -6322,10 +6019,10 @@ class _BylineAddChipButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: present ? const Color(0xFFEAF2FF) : Colors.white,
+      color: present ? _ffOf(context).selectedFill : _ffOf(context).sunken,
       shape: RoundedRectangleBorder(
         side: BorderSide(
-          color: present ? const Color(0xFF2563EB) : Colors.grey.shade300,
+          color: present ? _ffOf(context).selectedBorder : _ffOf(context).divider,
         ),
         borderRadius: BorderRadius.circular(4),
       ),
@@ -6342,7 +6039,7 @@ class _BylineAddChipButton extends StatelessWidget {
                 size: 11,
                 color: present
                     ? const Color(0xFF2563EB)
-                    : Colors.grey.shade700,
+                    : _ffOf(context).textSecondary,
               ),
               const SizedBox(width: 3),
               Text(
@@ -6352,7 +6049,7 @@ class _BylineAddChipButton extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                   color: present
                       ? const Color(0xFF2563EB)
-                      : Colors.grey.shade800,
+                      : _ffOf(context).text.withValues(alpha: 0.88),
                 ),
               ),
             ],
@@ -6383,7 +6080,7 @@ class _BylineLabeledInput extends StatelessWidget {
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w600,
-            color: Colors.grey.shade600,
+            color: _ffOf(context).textSecondary,
           ),
         ),
         const SizedBox(width: 6),
@@ -6398,14 +6095,14 @@ class _BylineLabeledInput extends StatelessWidget {
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: _ffOf(context).sunken,
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade300),
+                borderSide: BorderSide(color: _ffOf(context).divider),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(4),
-                borderSide: BorderSide(color: Colors.grey.shade500),
+                borderSide: BorderSide(color: _ffOf(context).text.withValues(alpha: 0.45)),
               ),
             ),
           ),
@@ -6428,9 +6125,9 @@ class _BylineAddCustomButton extends StatelessWidget {
     return Tooltip(
       message: 'Add custom text field',
       child: Material(
-        color: Colors.white,
+        color: _ffOf(context).sunken,
         shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.grey.shade300),
+          side: BorderSide(color: _ffOf(context).divider),
           borderRadius: BorderRadius.circular(4),
         ),
         child: InkWell(
@@ -6441,14 +6138,14 @@ class _BylineAddCustomButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.add, size: 11, color: Colors.grey.shade700),
+                Icon(Icons.add, size: 11, color: _ffOf(context).textSecondary),
                 const SizedBox(width: 3),
                 Text(
                   'Custom text',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
-                    color: Colors.grey.shade800,
+                    color: _ffOf(context).text.withValues(alpha: 0.88),
                   ),
                 ),
               ],

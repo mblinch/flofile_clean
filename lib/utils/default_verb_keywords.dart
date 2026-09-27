@@ -64,6 +64,7 @@ final Map<String, List<String>> _defaults = {
   'Blocks': ['block', 'blocks', 'blocking', 'shot block'],
   'Clears': ['clear', 'clears', 'clearing', 'puck'],
   'Checks': ['check', 'checks', 'checking', 'hit'],
+  'Fights': ['fight', 'fights', 'fighting', 'scrap', 'drop the gloves'],
   'Defends': ['defend', 'defends', 'defense', 'defending'],
   // Hockey — Goalie
   'Saves': ['save', 'saves', 'goaltending', 'goalie'],

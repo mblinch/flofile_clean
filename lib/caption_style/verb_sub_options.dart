@@ -736,6 +736,7 @@ class VerbSubOptions {
       'Guards the Net',
       'Clears',
       'Checks',
+      'Fights',
       'Defends',
       'Warm Ups',
       'Takes the Ice',

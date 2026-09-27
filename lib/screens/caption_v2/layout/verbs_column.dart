@@ -439,9 +439,11 @@ class _VerbWheelState extends State<_VerbWheel> {
 
   List<String> get _categories => widget.controller.verbCategories
       .where(
-        (category) => (widget.controller.verbDefinitionsByCategory[category] ??
-                const <EffectiveVerb>[])
-            .isNotEmpty,
+        (category) =>
+            category == 'Favorites' ||
+            (widget.controller.verbDefinitionsByCategory[category] ??
+                    const <EffectiveVerb>[])
+                .isNotEmpty,
       )
       .toList();
 
@@ -551,7 +553,7 @@ class _VerbWheelState extends State<_VerbWheel> {
                     physics: const FixedExtentScrollPhysics(),
                     overAndUnderCenterOpacity: 0.48,
                     useMagnifier: true,
-                    magnification: 1.06,
+                    magnification: 1.08,
                     onSelectedItemChanged: (index) {
                       setState(() => _centerIndex = index);
                     },
@@ -562,8 +564,7 @@ class _VerbWheelState extends State<_VerbWheel> {
                         final centered = index == _centerIndex;
                         return MouseRegion(
                           cursor: SystemMouseCursors.click,
-                          child: GestureDetector(
-                            behavior: HitTestBehavior.opaque,
+                          child: CmdClick(
                             onTap: () async {
                               if (!centered) {
                                 await _scrollController.animateToItem(
@@ -575,6 +576,17 @@ class _VerbWheelState extends State<_VerbWheel> {
                               if (!mounted) return;
                               widget.controller.selectVerb(verb.key);
                             },
+                            onCmdTap: () async {
+                              if (!centered) {
+                                await _scrollController.animateToItem(
+                                  index,
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                );
+                              }
+                              if (!mounted) return;
+                              widget.controller.toggleVerbPin(verb.key);
+                            },
                             child: Center(
                               child: Text(
                                 verb.label,
@@ -583,7 +595,7 @@ class _VerbWheelState extends State<_VerbWheel> {
                                   color: centered
                                       ? widget.tokens.text
                                       : widget.tokens.textSecondary,
-                                  fontSize: centered ? 14 : 12,
+                                  fontSize: centered ? 14 : 13,
                                   fontWeight: centered
                                       ? FfTokens.weightMedium
                                       : FfTokens.weightRegular,
@@ -698,20 +710,6 @@ class _FirebarVerbReferenceState extends State<_FirebarVerbReference> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: 27,
-            child: Row(
-              children: [
-                const Spacer(),
-                Text(
-                  controller.searchQuery.trim().isEmpty
-                      ? '${controller.firebarVerbTotal}'
-                      : '${matches.length} / ${controller.firebarVerbTotal}',
-                  style: tokens.monoMetaStyle,
-                ),
-              ],
-            ),
-          ),
           Divider(height: 1, color: tokens.divider),
           Expanded(
             child: entries.isEmpty
@@ -753,10 +751,15 @@ class _FirebarVerbReferenceState extends State<_FirebarVerbReference> {
                         label: verb.label,
                         selected: false,
                         firebarSelected: result.key == selected?.key,
-                        highlightQuery: controller.searchQuery.trim(),
+                        highlightQuery: controller.firebarVerbHighlightQuery,
                         pinned: controller.isVerbPinned(verb.key),
+                        dimmed: controller.isVerbPinned(verb.key) &&
+                            controller.searchQuery.trim().isNotEmpty &&
+                            result.key != selected?.key,
                         height: 26,
-                        onTap: () => controller.commitFirebarResult(result),
+                        onTap: () =>
+                            controller.commitFirebarResultAndClose(result),
+                        onPinTap: () => controller.toggleVerbPin(verb.key),
                       );
                     },
                   ),
@@ -958,9 +961,8 @@ class _VerbListItem extends StatelessWidget {
       items: [
         PopupMenuItem(
             value: 'pin',
-            child: Text(controller.isVerbPinned(verb.key)
-                ? 'Unpin Verb'
-                : 'Pin Verb')),
+            child: Text(
+                controller.isVerbPinned(verb.key) ? 'Unpin Verb' : 'Pin Verb')),
         PopupMenuItem(
             value: 'favorite',
             child: Text(verb.isFavorite ? 'Remove favorite' : 'Add favorite')),
@@ -994,10 +996,18 @@ class _VerbListItem extends StatelessWidget {
         onEditVerb(verb.key);
         break;
       case 'up':
-        await controller.moveVerb(verb.key, verb.category, index - 1);
+        await controller.moveVerb(
+          verb.key,
+          controller.verbCategory == 'Favorites' ? 'Favorites' : verb.category,
+          index - 1,
+        );
         break;
       case 'down':
-        await controller.moveVerb(verb.key, verb.category, index + 1);
+        await controller.moveVerb(
+          verb.key,
+          controller.verbCategory == 'Favorites' ? 'Favorites' : verb.category,
+          index + 1,
+        );
         break;
       case 'delete':
         await controller.deleteVerb(verb.key);
@@ -1126,6 +1136,7 @@ class _CustomVerbField extends StatelessWidget {
               readOnly: pinned,
               onChanged: onChanged,
               spellCheckConfiguration: floSpellCheckConfiguration(),
+              contextMenuBuilder: floSpellCheckContextMenuBuilder,
               style: tokens.labelStyle.copyWith(
                 fontSize: 11.5,
                 color: tokens.text,

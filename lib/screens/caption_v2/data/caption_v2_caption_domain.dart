@@ -181,9 +181,6 @@ class CaptionV2CaptionDomain {
         return '$action from $target';
       case 'Contests':
         return '$action by $target';
-      case 'Post Game Win':
-      case 'Post Game Loss':
-        return action;
       default:
         return '$action against $target';
     }

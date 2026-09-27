@@ -24,12 +24,9 @@ public class MacSpellCheckPlugin: NSObject, FlutterPlugin {
     }
     let localeTag = (args["locale"] as? String) ?? ""
 
-    DispatchQueue.global(qos: .userInitiated).async {
-      let spans = Self.checkSpelling(text: text, localeTag: localeTag)
-      DispatchQueue.main.async {
-        result(spans)
-      }
-    }
+    // NSSpellChecker is happiest on the main thread; keep work short.
+    let spans = Self.checkSpelling(text: text, localeTag: localeTag)
+    result(spans)
   }
 
   private static func checkSpelling(text: String, localeTag: String) -> [[String: Any]] {

@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
+import '../caption_style/verb_defaults_bundle.dart';
 import 'app_defaults_firestore_service.dart';
 import 'iptc_template_apply_service.dart';
 import 'user_preferences_firestore_service.dart';
@@ -68,7 +69,13 @@ class PreferencesService {
   static const String _keyBurstDetectionEnabled = 'burst_detection_enabled';
   /// Admin-only: load rosters from Tank01 RapidAPI instead of Firestore/live APIs
   /// for sports Tank01 supports (baseball, basketball, hockey, wnba). Soccer stays ESPN.
+  ///
+  /// Deprecated in favor of [_keyUseOfficialLeagueApis] — kept so old installs
+  /// don't crash; new code should use the official-API flag.
   static const String _keyUseTank01MlbRosters = 'use_tank01_mlb_rosters';
+  /// Admin-only: when true, use league APIs + `sports/...` Firebase.
+  /// When false (default), everyone — including admin — uses `sports_tank01/...`.
+  static const String _keyUseOfficialLeagueApis = 'use_official_league_apis';
   /// When false, caption V2 hides FTP buttons/shortcuts for the session.
   static const String _keyFtpModeEnabled = 'ftp_mode_enabled';
   /// `none` | `on_import` | `on_save` — when startup IPTC template is applied.
@@ -205,6 +212,21 @@ class PreferencesService {
 
   Future<void> saveUseTank01Rosters(bool enabled) =>
       saveUseTank01MlbRosters(enabled);
+
+  /// Admin-only: prefer MLB Stats / NHL / ESPN (+ `sports/...` cache).
+  /// Non-admins should ignore this and always use Tank01 Firebase.
+  Future<bool> getUseOfficialLeagueApis() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyUseOfficialLeagueApis) ?? false;
+  }
+
+  Future<void> saveUseOfficialLeagueApis(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyUseOfficialLeagueApis, enabled);
+    // Keep legacy key inverted so older builds don't flip unexpectedly.
+    await prefs.setBool(_keyUseTank01MlbRosters, !enabled);
+    _afterLocalPreferencesChanged();
+  }
 
   /// When true (default), FTP buttons and shortcuts are shown in caption V2.
   Future<bool> getFtpModeEnabled() async {
@@ -453,8 +475,12 @@ class PreferencesService {
     final normalized = sport.toLowerCase().trim();
     await prefs.setString(_keyCurrentSport, normalized);
 
-    final active = CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
-    if (active != null) {
+    // Built-in wires get the per-sport game-ID overlay. Custom / named styles
+    // keep their authored text — rewriting them here was wiping Done edits
+    // every time CaptionStyleCatalog.load ran.
+    final active =
+        CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
+    if (active != null && !active.isUserAuthoredCaptionStyle) {
       final gid = await resolveGameIdentifierText(active.wireStyle, normalized);
       final updated = CaptionTemplate.applyGameIdentifierText(active, gid);
       if (updated.gameIdentifierText != active.gameIdentifierText) {
@@ -549,6 +575,15 @@ class PreferencesService {
     WireStyle wire,
     String sport,
   ) async {
+    // Named / Custom styles keep authored game-identifier text. Only fill when
+    // empty so sport changes don't invent a blank slot.
+    if (template.isUserAuthoredCaptionStyle) {
+      return CaptionTemplate.withSportGameIdentifierDefault(
+        template,
+        sport,
+        replaceKnownDefaults: false,
+      );
+    }
     final text = await resolveGameIdentifierText(wire, sport);
     return CaptionTemplate.applyGameIdentifierText(template, text);
   }
@@ -1249,6 +1284,29 @@ class PreferencesService {
     return '${_keyDeletedVerbs}_${sport.toLowerCase()}';
   }
 
+  String _getVerbCatalogCompleteKey(String sport) {
+    return 'verb_catalog_complete_${sport.toLowerCase()}';
+  }
+
+  Future<bool> getVerbCatalogComplete({String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_getVerbCatalogCompleteKey(sport)) ?? false;
+  }
+
+  Future<void> saveVerbCatalogComplete(
+    bool complete, {
+    String sport = 'hockey',
+  }) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbCatalogCompleteKey(sport);
+    if (complete) {
+      await prefs.setBool(key, true);
+    } else {
+      await prefs.remove(key);
+    }
+    _afterLocalPreferencesChanged();
+  }
+
   Future<Set<String>> getDeletedVerbs({String sport = 'hockey'}) async {
     final prefs = await _getPrefs();
     final key = _getDeletedVerbsKey(sport);
@@ -1495,7 +1553,7 @@ class PreferencesService {
       'burstDetectionEnabled': await getBurstDetectionEnabled(),
       'captionLayoutOrder': await getCaptionLayoutOrder(),
       'captionLayoutFlavor': await getCaptionLayoutFlavor(),
-      'captionTemplate': (await getCaptionTemplate()).toJson(),
+      'captionTemplate': (await getCaptionTemplateRaw()).toJson(),
       'captionStyleLibrary':
           (await getCaptionStyleLibrary()).map((e) => e.toJson()).toList(),
       'captionTemplateWireDefaults': <String, dynamic>{
@@ -1614,6 +1672,10 @@ class PreferencesService {
             );
           }
         }
+        await saveVerbCatalogComplete(
+          VerbDefaultsBundle.isComplete(data),
+          sport: sport,
+        );
       }
     }
     if (preferences.containsKey('currentSport')) {
@@ -1829,28 +1891,39 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
-  /// Full caption wire template (presets + custom). Migrates legacy order/flavor once if needed.
-  Future<CaptionTemplate> getCaptionTemplate() async {
+  /// Active caption template as stored on disk (no sport game-ID overlay).
+  /// Prefer [getCaptionTemplate] for rendering; use this for cloud export so
+  /// authored Custom / named-style text is not replaced by wire defaults.
+  Future<CaptionTemplate> getCaptionTemplateRaw() async {
     final prefs = await _getPrefs();
-    final sport = await getCurrentSport();
     final raw = prefs.getString(_keyCaptionTemplateJson);
     final decoded = CaptionTemplate.tryDecode(raw);
-    CaptionTemplate template;
     if (decoded != null) {
       // One-time: templates saved before per-style layout options stored globals.
       if (raw != null && !raw.contains('"showKeywordsField"')) {
-        template = decoded.copyWith(
+        return decoded.copyWith(
           showKeywordsField: prefs.getBool(_keyShowKeywordsField) ?? false,
           showPersonalityField: prefs.getBool(_keyShowPersonalityField) ?? true,
         );
-      } else {
-        template = decoded;
       }
-    } else {
-      final migrated = await _migrateCaptionTemplateFromLegacy();
-      template = migrated ?? CaptionTemplate.getty();
+      return decoded;
     }
-    return await applyGameIdentifierForSport(template, template.wireStyle, sport);
+    final migrated = await _migrateCaptionTemplateFromLegacy();
+    return migrated ?? CaptionTemplate.getty();
+  }
+
+  /// Full caption wire template (presets + custom). Migrates legacy order/flavor once if needed.
+  ///
+  /// Built-in wire masters get the per-sport game-identifier overlay. Custom and
+  /// named library styles keep their authored [CaptionTemplate.gameIdentifierText].
+  Future<CaptionTemplate> getCaptionTemplate() async {
+    final sport = await getCurrentSport();
+    final template = await getCaptionTemplateRaw();
+    return await applyGameIdentifierForSport(
+      template,
+      template.wireStyle,
+      sport,
+    );
   }
 
   Future<CaptionTemplate?> _migrateCaptionTemplateFromLegacy() async {
@@ -2447,7 +2520,10 @@ class PreferencesService {
         'verbWordingDefaults': await getVerbWordingDefaults(sport: sport),
         'customVerbs': await getCustomVerbs(sport: sport),
         'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
+        VerbDefaultsBundle.catalogCompleteKey:
+            await getVerbCatalogComplete(sport: sport),
       };
+      out[sport] = VerbDefaultsBundle.ensureComplete(out[sport]!, sport);
     }
     return out;
   }

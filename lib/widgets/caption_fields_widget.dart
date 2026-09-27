@@ -3293,7 +3293,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     }
 
     final gameInfo = await _preferencesService.getCaptionGameInfo();
-    final gameDay = gameInfo.gameDate ?? DateTime.now();
+    final photoDay = DateTime(wall.year, wall.month, wall.day);
+    final gameDay = gameInfo.gameDate ?? photoDay;
 
     final token = ++_mlbInningResolveToken;
     try {
@@ -3301,6 +3302,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         userHomeName: home,
         userAwayName: away,
         gameCalendarDay: gameDay,
+        photoCalendarDay: photoDay,
         photoTimeUtc: utc,
       );
       if (!mounted ||
@@ -17123,7 +17125,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     const Set<String> hockeyOpponentVerbs = {
       // Hockey
       'Shoots', 'Scores', 'Skates', 'Goes to the Net', 'Battles', 'Faceoff',
-      'Checks', 'Defends', 'Blocks', 'Clears', 'Guards the Net', 'Saves',
+      'Checks', 'Fights', 'Defends', 'Blocks', 'Clears', 'Guards the Net', 'Saves',
       'Passes', 'Power Play', 'Breakaway',
       // Basketball (all embed opponent in their action phrase)
       'Drives', 'Goes to the Basket', 'Dribbles', 'Dunks', 'Lays Up',
@@ -17226,6 +17228,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         }
       }
       // Note: _isPriorToGame is handled separately in the gamePart logic
+    }
+    if (inningPart.isNotEmpty &&
+        !(captionTemplate.includeTimingPhrase)) {
+      inningPart = '';
+    } else if (inningPart.isNotEmpty && captionTemplate.timingPhraseCaps) {
+      inningPart = inningPart.toUpperCase();
     }
 
     // Use home team stadium from API, fallback to controller if not available
@@ -17610,6 +17618,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Blocks',
       'Clears',
       'Checks',
+      'Fights',
       'Defends',
       'Saves',
       'Handles the Puck',
@@ -17737,6 +17746,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'Blocks',
       'Clears',
       'Checks',
+      'Fights',
       'Defends',
       // Goalie verbs
       'Saves',
@@ -21514,6 +21524,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         originalVerb == 'Goes to the Net' ||
         originalVerb == 'Faceoff' ||
         originalVerb == 'Checks' ||
+        originalVerb == 'Fights' ||
         originalVerb == 'Defends' ||
         originalVerb == 'Blocks' ||
         // Basketball opponent verbs
@@ -22565,6 +22576,15 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           return '$checksPhrase$againstText $playerNames';
         }
         return '$checksPhrase$againstText the ${_getOpposingTeamName()}';
+      case 'Fights':
+        final opposingPlayers = _getOpposingPlayers();
+        final fightsPhrase = resolvedVerbPhrase ?? 'fights';
+        const againstText = ' against';
+        if (opposingPlayers.isNotEmpty) {
+          final playerNames = _formatPlayersWithTeam(opposingPlayers);
+          return '$fightsPhrase$againstText $playerNames';
+        }
+        return '$fightsPhrase$againstText the ${_getOpposingTeamName()}';
       case 'Defends':
         final opposingPlayers = _getOpposingPlayers();
         final defendsPhrase = resolvedVerbPhrase ?? 'defends';

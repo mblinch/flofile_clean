@@ -15,6 +15,7 @@ class AdminService {
   /// Google accounts that receive admin privileges in the app.
   static const Set<String> adminEmails = {
     'projectflofile@gmail.com',
+    'dev@flofilecaptions.com',
   };
 
   /// Optional Firebase Auth UIDs (stable if email ever changes).

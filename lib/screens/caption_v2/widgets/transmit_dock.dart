@@ -13,10 +13,12 @@ class CaptionV2ActionRow extends StatelessWidget {
     required this.onPastePrevious,
     required this.onSaveNext,
     required this.onTransmit,
+    this.transmitLabel = 'FTP',
     this.pasteEnabled = true,
     this.saveNextEnabled = true,
     this.transmitEnabled = true,
     this.showTransmit = true,
+    this.onFtpHistory,
   });
 
   final VoidCallback? onSavePrevious;
@@ -25,10 +27,12 @@ class CaptionV2ActionRow extends StatelessWidget {
   final VoidCallback? onPastePrevious;
   final VoidCallback? onSaveNext;
   final VoidCallback? onTransmit;
+  final String transmitLabel;
   final bool pasteEnabled;
   final bool saveNextEnabled;
   final bool transmitEnabled;
   final bool showTransmit;
+  final VoidCallback? onFtpHistory;
 
   @override
   Widget build(BuildContext context) {
@@ -71,7 +75,7 @@ class CaptionV2ActionRow extends StatelessWidget {
       ),
       if (showTransmit)
         _UtilityButton(
-          label: 'FTP',
+          label: transmitLabel,
           icon: Icons.send_outlined,
           iconTrailing: true,
           tokens: t,
@@ -88,6 +92,24 @@ class CaptionV2ActionRow extends StatelessWidget {
         children: [
           for (var i = 0; i < buttons.length; i++) ...[
             if (i > 0) const SizedBox(width: 4),
+            if (showTransmit && onFtpHistory != null && i == buttons.length - 1)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: IconButton(
+                  tooltip: 'FTP history',
+                  onPressed: onFtpHistory,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 32,
+                    height: 32,
+                  ),
+                  icon: Icon(
+                    Icons.history,
+                    size: 18,
+                    color: t.textSecondary,
+                  ),
+                ),
+              ),
             Expanded(child: buttons[i]),
           ],
         ],

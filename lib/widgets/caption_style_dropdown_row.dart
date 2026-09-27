@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/ff_tokens.dart';
+
 /// One row in the caption-style dropdown (label + optional lock/saved icon + star).
 class CaptionStyleDropdownListRow extends StatelessWidget {
   const CaptionStyleDropdownListRow({
@@ -25,6 +27,7 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final row = InkWell(
       onTap: onSelect,
       child: Padding(
@@ -37,7 +40,7 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
                 child: Icon(
                   Icons.lock_outline,
                   size: 13,
-                  color: Colors.grey.shade500,
+                  color: t.textSecondary,
                 ),
               )
             else if (showSavedIcon)
@@ -46,7 +49,7 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
                 child: Icon(
                   Icons.bookmark_outline,
                   size: 14,
-                  color: Colors.grey.shade600,
+                  color: t.textSecondary,
                 ),
               ),
             Expanded(
@@ -55,11 +58,9 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 14,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                  color: showLockIcon
-                      ? Colors.grey.shade600
-                      : Colors.grey.shade800,
+                  color: showLockIcon ? t.textSecondary : t.text,
                 ),
               ),
             ),
@@ -74,7 +75,9 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
                 child: Icon(
                   isFavorite ? Icons.star : Icons.star_border,
                   size: 16,
-                  color: isFavorite ? Colors.amber : Colors.grey.shade400,
+                  color: isFavorite
+                      ? const Color(0xFFE6B84A)
+                      : t.text.withValues(alpha: 0.35),
                 ),
               ),
             ),
@@ -94,15 +97,13 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Divider(height: 1, thickness: 1, color: Colors.grey.shade300),
+              Divider(height: 1, thickness: 1, color: t.divider),
               const SizedBox(height: 4),
               Text(
                 'CUSTOM',
-                style: TextStyle(
+                style: FfTokens.railLabel.copyWith(
                   fontSize: 9,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.6,
-                  color: Colors.grey.shade500,
+                  color: t.text.withValues(alpha: 0.45),
                 ),
               ),
             ],

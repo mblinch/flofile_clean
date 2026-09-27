@@ -1,16 +1,33 @@
 import Cocoa
 import FlutterMacOS
 
-class MainFlutterWindow: NSWindow {
+class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private let enforcedMinContentSize = NSSize(width: 1280, height: 800)
   private static var jerseyChannel: FlutterMethodChannel?
+  private static var lifecycleChannel: FlutterMethodChannel?
   private var jerseyMonitor: Any?
   private var windowControlChannel: FlutterMethodChannel?
   static var jerseyShortcutsEnabled = true
+  static var skipQuitConfirm = false
+
+  static func requestQuitConfirmation(completion: @escaping (Bool) -> Void) {
+    guard let channel = lifecycleChannel else {
+      completion(true)
+      return
+    }
+    channel.invokeMethod("confirmQuit", arguments: nil) { result in
+      if let confirmed = result as? Bool {
+        completion(confirmed)
+      } else {
+        completion(false)
+      }
+    }
+  }
 
   override func awakeFromNib() {
     let flutterViewController = FlutterViewController()
     self.contentViewController = flutterViewController
+    self.delegate = self
     
     // Set specific window size for the app
     let windowSize = NSSize(width: 1400, height: 900)
@@ -48,8 +65,30 @@ class MainFlutterWindow: NSWindow {
     _installJerseyShortcutChannel(flutterViewController)
     _installJerseyEventMonitor()
     _installWindowControlChannel(flutterViewController)
+    _installLifecycleChannel(flutterViewController)
 
     super.awakeFromNib()
+  }
+
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    if MainFlutterWindow.skipQuitConfirm {
+      return true
+    }
+    MainFlutterWindow.requestQuitConfirmation { confirmed in
+      if confirmed {
+        MainFlutterWindow.skipQuitConfirm = true
+        NSApp.terminate(nil)
+      }
+    }
+    return false
+  }
+
+  private func _installLifecycleChannel(_ flutterViewController: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "caption_writer/lifecycle",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    MainFlutterWindow.lifecycleChannel = channel
   }
 
   private func _installJerseyShortcutChannel(_ flutterViewController: FlutterViewController) {

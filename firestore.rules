@@ -10,7 +10,8 @@ service cloud.firestore {
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.admin == true ||
-        request.auth.token.email == 'projectflofile@gmail.com'
+        request.auth.token.email == 'projectflofile@gmail.com' ||
+        request.auth.token.email == 'dev@flofilecaptions.com'
       );
     }
 
@@ -30,6 +31,17 @@ service cloud.firestore {
       match /players/{playerId} {
         allow read: if isSignedIn();
         allow write: if false;
+      }
+    }
+
+    // Tank01 RapidAPI mirror — same shape as sports/...; admin may sync from
+    // the app, signed-in users may read.
+    match /sports_tank01/{sportId}/teams/{teamId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      match /players/{playerId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
       }
     }
 

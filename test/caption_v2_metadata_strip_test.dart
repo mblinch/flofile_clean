@@ -94,7 +94,8 @@ void main() {
       ),
     );
 
-    expect(find.text('MLB TIME'), findsOneWidget);
+    expect(find.text('MLB'), findsOneWidget);
+    expect(find.text('OFF'), findsOneWidget);
     final error = tester.takeException();
     expect(error, isNull);
   });

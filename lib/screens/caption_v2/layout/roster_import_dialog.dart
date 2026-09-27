@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/roster_text_parser.dart';
+import 'duplicate_jersey_dialog.dart';
 
 class RosterImportResult {
   const RosterImportResult({
@@ -36,6 +37,9 @@ Future<RosterImportResult?> showRosterImportDialog(
   String? awayTeamLabel,
   List<Player>? homePlayers,
   List<Player>? awayPlayers,
+  String title = 'Custom rosters',
+  String saveLabel = 'Use rosters',
+  String? subtitle,
 }) {
   return showDialog<RosterImportResult>(
     context: context,
@@ -46,6 +50,9 @@ Future<RosterImportResult?> showRosterImportDialog(
       awayTeamLabel: awayTeamLabel,
       homePlayers: homePlayers,
       awayPlayers: awayPlayers,
+      title: title,
+      saveLabel: saveLabel,
+      subtitle: subtitle,
     ),
   );
 }
@@ -103,18 +110,25 @@ class _SingleRosterImportDialogState extends State<_SingleRosterImportDialog> {
     });
   }
 
-  void _accept() {
+  Future<void> _accept() async {
     final parsed = _parsed;
     if (parsed == null ||
         parsed.entries.isEmpty ||
         _teamNameController.text.trim().isEmpty) {
       return;
     }
+    final teamName = _teamNameController.text.trim();
+    final players = await confirmDuplicateJerseys(
+      context,
+      players: parsed.players(_nameOrder),
+      teamName: teamName,
+    );
+    if (!mounted || players == null) return;
     Navigator.pop(
       context,
       _SingleRosterResult(
-        teamName: _teamNameController.text.trim(),
-        players: parsed.players(_nameOrder),
+        teamName: teamName,
+        players: players,
       ),
     );
   }
@@ -296,6 +310,9 @@ class _RosterManagerDialog extends StatefulWidget {
     required this.awayTeamLabel,
     required this.homePlayers,
     required this.awayPlayers,
+    required this.title,
+    required this.saveLabel,
+    this.subtitle,
   });
 
   final String sport;
@@ -303,22 +320,27 @@ class _RosterManagerDialog extends StatefulWidget {
   final String? awayTeamLabel;
   final List<Player>? homePlayers;
   final List<Player>? awayPlayers;
+  final String title;
+  final String saveLabel;
+  final String? subtitle;
 
   @override
   State<_RosterManagerDialog> createState() => _RosterManagerDialogState();
 }
 
 class _RosterManagerDialogState extends State<_RosterManagerDialog> {
-  late String _homeTeamName;
-  late String _awayTeamName;
+  late final TextEditingController _homeTeamNameController;
+  late final TextEditingController _awayTeamNameController;
   List<Player>? _homePlayers;
   List<Player>? _awayPlayers;
 
   @override
   void initState() {
     super.initState();
-    _homeTeamName = widget.homeTeamLabel ?? '';
-    _awayTeamName = widget.awayTeamLabel ?? '';
+    _homeTeamNameController =
+        TextEditingController(text: widget.homeTeamLabel ?? '');
+    _awayTeamNameController =
+        TextEditingController(text: widget.awayTeamLabel ?? '');
     _homePlayers = widget.homePlayers == null
         ? null
         : List<Player>.of(widget.homePlayers!);
@@ -327,23 +349,32 @@ class _RosterManagerDialogState extends State<_RosterManagerDialog> {
         : List<Player>.of(widget.awayPlayers!);
   }
 
+  @override
+  void dispose() {
+    _homeTeamNameController.dispose();
+    _awayTeamNameController.dispose();
+    super.dispose();
+  }
+
   Future<void> _openPasteWindow({required bool isHome}) async {
     final result = await showDialog<_SingleRosterResult>(
       context: context,
       barrierDismissible: false,
       builder: (_) => _SingleRosterImportDialog(
         sport: widget.sport,
-        teamLabel: isHome ? _homeTeamName : _awayTeamName,
+        teamLabel: isHome
+            ? _homeTeamNameController.text
+            : _awayTeamNameController.text,
         sideLabel: isHome ? 'Home' : 'Away',
       ),
     );
     if (!mounted || result == null) return;
     setState(() {
       if (isHome) {
-        _homeTeamName = result.teamName;
+        _homeTeamNameController.text = result.teamName;
         _homePlayers = result.players;
       } else {
-        _awayTeamName = result.teamName;
+        _awayTeamNameController.text = result.teamName;
         _awayPlayers = result.players;
       }
     });
@@ -401,24 +432,36 @@ class _RosterManagerDialogState extends State<_RosterManagerDialog> {
       if (confirmed != true || !mounted) return;
     }
 
+    final homeName = _homeTeamNameController.text.trim();
+    final awayName = _awayTeamNameController.text.trim();
     Navigator.pop(
       context,
       RosterImportResult(
-        homeTeamName: hasHome ? _homeTeamName : null,
+        homeTeamName: hasHome ? homeName : null,
         homePlayers: _homePlayers,
-        awayTeamName: hasAway ? _awayTeamName : null,
+        awayTeamName: hasAway ? awayName : null,
         awayPlayers: _awayPlayers,
       ),
     );
   }
 
+  bool get _canSave {
+    final hasAnyRoster = _homePlayers != null || _awayPlayers != null;
+    if (hasAnyRoster) {
+      if (_homePlayers != null && _homeTeamNameController.text.trim().isEmpty) {
+        return false;
+      }
+      if (_awayPlayers != null && _awayTeamNameController.text.trim().isEmpty) {
+        return false;
+      }
+      return true;
+    }
+    return widget.homePlayers != null || widget.awayPlayers != null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final hasAnyRoster = _homePlayers != null || _awayPlayers != null;
-    final canSave = hasAnyRoster ||
-        widget.homePlayers != null ||
-        widget.awayPlayers != null;
 
     return Dialog(
       insetPadding: const EdgeInsets.all(32),
@@ -439,7 +482,7 @@ class _RosterManagerDialogState extends State<_RosterManagerDialog> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Custom rosters',
+                      widget.title,
                       style: t.labelStyle.copyWith(fontSize: 16),
                     ),
                   ),
@@ -451,7 +494,8 @@ class _RosterManagerDialogState extends State<_RosterManagerDialog> {
                 ],
               ),
               Text(
-                'Add a pasted roster for either or both teams.',
+                widget.subtitle ??
+                    'Rename teams, paste a roster, or add players.',
                 style: t.metaStyle,
               ),
               const SizedBox(height: 16),
@@ -462,22 +506,24 @@ class _RosterManagerDialogState extends State<_RosterManagerDialog> {
                     Expanded(
                       child: _RosterColumn(
                         sideLabel: 'Away',
-                        teamName: _awayTeamName,
+                        teamNameController: _awayTeamNameController,
                         players: _awayPlayers,
                         onPaste: () => _openPasteWindow(isHome: false),
                         onClear: () => _clear(isHome: false),
                         onAddPlayer: () => _addPlayer(isHome: false),
+                        onTeamNameChanged: () => setState(() {}),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: _RosterColumn(
                         sideLabel: 'Home',
-                        teamName: _homeTeamName,
+                        teamNameController: _homeTeamNameController,
                         players: _homePlayers,
                         onPaste: () => _openPasteWindow(isHome: true),
                         onClear: () => _clear(isHome: true),
                         onAddPlayer: () => _addPlayer(isHome: true),
+                        onTeamNameChanged: () => setState(() {}),
                       ),
                     ),
                   ],
@@ -493,8 +539,8 @@ class _RosterManagerDialogState extends State<_RosterManagerDialog> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
-                    onPressed: canSave ? _useRosters : null,
-                    child: const Text('Use rosters'),
+                    onPressed: _canSave ? _useRosters : null,
+                    child: Text(widget.saveLabel),
                   ),
                 ],
               ),
@@ -685,19 +731,40 @@ class _AddPlayerDialogState extends State<_AddPlayerDialog> {
 class _RosterColumn extends StatelessWidget {
   const _RosterColumn({
     required this.sideLabel,
-    required this.teamName,
+    required this.teamNameController,
     required this.players,
     required this.onPaste,
     required this.onClear,
     required this.onAddPlayer,
+    required this.onTeamNameChanged,
   });
 
   final String sideLabel;
-  final String teamName;
+  final TextEditingController teamNameController;
   final List<Player>? players;
   final VoidCallback onPaste;
   final VoidCallback onClear;
   final VoidCallback onAddPlayer;
+  final VoidCallback onTeamNameChanged;
+
+  InputDecoration _teamFieldDecoration(FfTokens t) {
+    return InputDecoration(
+      isDense: true,
+      hintText: 'Team name',
+      hintStyle: t.metaStyle.copyWith(color: t.textSecondary),
+      filled: true,
+      fillColor: t.bg,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        borderSide: BorderSide(color: t.divider),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        borderSide: BorderSide(color: t.accent),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -721,20 +788,23 @@ class _RosterColumn extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(sideLabel.toUpperCase(), style: t.microStyle),
-                    const SizedBox(height: 3),
-                    Text(
-                      teamName.isEmpty ? 'No team entered' : teamName,
-                      style: t.labelStyle,
-                      overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: teamNameController,
+                      onChanged: (_) => onTeamNameChanged(),
+                      style: t.labelStyle.copyWith(fontSize: 14),
+                      decoration: _teamFieldDecoration(t),
                     ),
                   ],
                 ),
               ),
-              if (roster != null)
+              if (roster != null) ...[
+                const SizedBox(width: 8),
                 TextButton(
                   onPressed: onClear,
                   child: const Text('Clear'),
                 ),
+              ],
             ],
           ),
           const SizedBox(height: 10),
@@ -892,16 +962,24 @@ class _RosterImportDialogState extends State<_RosterImportDialog> {
     );
   }
 
-  void _acceptCurrentRoster() {
+  Future<void> _acceptCurrentRoster() async {
     final parsed = _parsed;
     if (parsed == null || parsed.entries.isEmpty) return;
 
+    final teamName = _teamNameController.text.trim();
+    final players = await confirmDuplicateJerseys(
+      context,
+      players: parsed.players(_nameOrder),
+      teamName: teamName,
+    );
+    if (!mounted || players == null) return;
+
     if (_isHome) {
-      _homeTeamName = _teamNameController.text.trim();
-      _homePlayers = parsed.players(_nameOrder);
+      _homeTeamName = teamName;
+      _homePlayers = players;
     } else {
-      _awayTeamName = _teamNameController.text.trim();
-      _awayPlayers = parsed.players(_nameOrder);
+      _awayTeamName = teamName;
+      _awayPlayers = players;
     }
 
     final otherRoster = _isHome ? _awayPlayers : _homePlayers;

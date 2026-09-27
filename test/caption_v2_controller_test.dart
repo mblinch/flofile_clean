@@ -73,6 +73,27 @@ void main() {
     expect(body, contains('celebrate against'));
   });
 
+  test('Celebrates a Goal keeps first player as scorer with teammates', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Montreal Canadiens';
+
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectPlayer(player('William Nylander', '88'), isHome: true);
+    controller.selectPlayer(player('Mitch Marner', '16'), isHome: true);
+    controller.selectVerb('Celebrates a Goal');
+
+    final body = controller.buildCaptionBody();
+    expect(body, startsWith('Auston Matthews'));
+    expect(body, isNot(contains('Auston Matthews #34 and William')));
+    expect(body, contains('celebrates a goal with'));
+    expect(body, contains('William Nylander'));
+    expect(body, contains('Mitch Marner'));
+    expect(body, contains('against the Montreal Canadiens'));
+    expect(body.toLowerCase(), isNot(contains('teammate')));
+  });
+
   test('single team mode omits opponent clause from captions', () {
     final controller = CaptionV2Controller()
       ..singleTeamMode = true
@@ -144,6 +165,27 @@ void main() {
     expect(
       controller.buildCaptionBody(),
       contains('poses with the trophy against the New York Yankees'),
+    );
+  });
+
+  test('captions always name the other team', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'Cincinnati Reds';
+
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    controller.selectVerb('Single');
+    expect(
+      controller.buildCaptionBody(),
+      contains('against the Cincinnati Reds'),
+    );
+
+    controller.selectPlayer(player('Bo Bichette', '11'), isHome: true);
+    controller.selectPlayer(player('Elly De La Cruz', '44'), isHome: false);
+    controller.selectVerb('Post Game Win');
+    expect(
+      controller.buildCaptionBody(),
+      contains('against the Toronto Blue Jays'),
     );
   });
 
@@ -469,6 +511,43 @@ void main() {
     );
   });
 
+  test('caption box h34 / v88 expands to select roster players', () {
+    final home = player('Home Ace', '34');
+    final away = player('Away Ace', '88');
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Home'
+      ..awayTeam = 'Away'
+      ..homeRoster = [home]
+      ..awayRoster = [away];
+
+    controller.setManualCaption('h34 ');
+    expect(controller.selectedPlayers.single.player, same(home));
+    expect(controller.selectedIsHome, isTrue);
+    expect(controller.manualCaptionOverride, isNull);
+    expect(controller.displayedCaption.toLowerCase(), contains('home ace'));
+
+    controller.selectedPlayers.clear();
+    controller.setManualCaption('v88 ');
+    expect(controller.selectedPlayers.single.player, same(away));
+    expect(controller.selectedIsHome, isFalse);
+    expect(controller.manualCaptionOverride, isNull);
+
+    controller.selectedPlayers.clear();
+    controller.setManualCaption('Hello h34 there ');
+    expect(controller.selectedPlayers.single.player, same(home));
+    expect(controller.manualCaptionOverride, 'Hello Home Ace there ');
+  });
+
+  test('caption box unknown jersey leaves text and reports status', () {
+    final controller = CaptionV2Controller()
+      ..homeRoster = [player('Home Ace', '34')];
+
+    controller.setManualCaption('h99 ');
+    expect(controller.selectedPlayers, isEmpty);
+    expect(controller.manualCaptionOverride, 'h99 ');
+    expect(controller.statusMessage, 'No player wearing #99');
+  });
+
   test('caption values publish headline personality and keyword aliases', () {
     final controller = CaptionV2Controller()
       ..manualCaptionOverride = 'Caption'
@@ -588,6 +667,35 @@ void main() {
     expect(body, contains('Marner'));
     expect(body, contains('check against Nick Suzuki'));
     expect(body, contains('of the Montreal Canadiens'));
+  });
+
+  test('hockey checks and fights agree for one and multiple players', () {
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Montreal Canadiens';
+
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectPlayer(player('Nick Suzuki', '14'), isHome: false);
+
+    controller.selectVerb('Checks');
+    expect(
+      controller.buildCaptionBody().toLowerCase(),
+      contains('checks against nick suzuki'),
+    );
+
+    controller.selectVerb('Fights');
+    expect(
+      controller.buildCaptionBody().toLowerCase(),
+      contains('fights against nick suzuki'),
+    );
+
+    controller.selectPlayer(player('Mitch Marner', '16'), isHome: true);
+    controller.selectVerb('Fights');
+    final fightBody = controller.buildCaptionBody().toLowerCase();
+    expect(fightBody, contains('matthews'));
+    expect(fightBody, contains('marner'));
+    expect(fightBody, contains('fight against nick suzuki'));
   });
 
   test('basketball contest assigns the selected shooter role', () {
@@ -818,6 +926,56 @@ void main() {
     expect(controller.selectedVerb, 'Single');
   });
 
+  test('pinned verb waits for a player before writing caption', () {
+    final bo = player('Bo Bichette', '11');
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg']
+      ..homeRoster = [bo]
+      ..currentIptcMeta = {'IPTC:Description': 'Embedded caption'};
+
+    controller.toggleVerbPin('Single');
+    expect(controller.pinDefersCaptionUntilPlayer, isTrue);
+    expect(controller.displayedCaption, 'Embedded caption');
+    expect(controller.captionSelectionStarted, isFalse);
+
+    controller.goToIndex(1);
+    expect(controller.selectedVerb, 'Single');
+    expect(controller.pinDefersCaptionUntilPlayer, isTrue);
+    expect(controller.displayedCaption, 'Embedded caption');
+
+    controller.selectPlayer(bo, isHome: true);
+    expect(controller.pinDefersCaptionUntilPlayer, isFalse);
+    expect(controller.displayedCaption.toLowerCase(), contains('bichette'));
+    expect(controller.displayedCaption.toLowerCase(), contains('single'));
+  });
+
+  test('Firebar verb override keeps catalog pin for the next frame', () {
+    final bo = player('Bo Bichette', '11');
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg']
+      ..homeRoster = [bo];
+
+    controller.toggleVerbPin('Single');
+    controller.selectPlayer(bo, isHome: true);
+    expect(controller.pinnedVerb, 'Single');
+    expect(controller.selectedVerb, 'Single');
+
+    controller.setSearchOpen(true);
+    controller.setSearchQuery('double');
+    expect(controller.firebarCanQuickSaveVerb, isTrue);
+    expect(controller.selectedVerb, 'Double'); // live preview
+    expect(controller.pinnedVerb, 'Single');
+
+    controller.commitFirebarResult(const FirebarResult.verb('Double'));
+    expect(controller.selectedVerb, 'Double');
+    expect(controller.pinnedVerb, 'Single');
+    expect(controller.displayedCaption.toLowerCase(), contains('double'));
+
+    controller.goToIndex(1);
+    expect(controller.pinnedVerb, 'Single');
+    expect(controller.selectedVerb, 'Single');
+  });
+
   test('custom verb does not unpin a catalog pin', () {
     final controller = CaptionV2Controller()
       ..imagePaths = ['/one.jpg', '/two.jpg'];
@@ -867,7 +1025,7 @@ void main() {
     expect(controller.displayedCaption, 'Pasted caption');
   });
 
-  test('applies clipboard and previous captions exactly', () {
+  test('applies clipboard and previous captions exactly', () async {
     final controller = CaptionV2Controller();
     const payload = CaptionTransferPayload(
       caption: '  Exact edited caption  ',
@@ -876,7 +1034,7 @@ void main() {
       keywords: 'baseball, sports',
     );
 
-    controller.applyTransferredCaption(payload);
+    await controller.applyTransferredCaption(payload);
     expect(controller.buildCaptionSentence(), '  Exact edited caption  ');
     expect(controller.personality, 'Player One;Player Two');
     expect(controller.headline, 'Game story');
@@ -884,8 +1042,77 @@ void main() {
 
     controller.previousCaption = payload;
     controller.setManualCaption(null);
-    expect(controller.applyPreviousCaption(), isTrue);
+    expect(await controller.applyPreviousCaption(), isTrue);
     expect(controller.buildCaptionSentence(), '  Exact edited caption  ');
+  });
+
+  test('paste keeps the destination photo photographer from IPTC', () async {
+    final controller = CaptionV2Controller()..photographerName = 'Jane Doe';
+    const payload = CaptionTransferPayload(
+      caption: 'Alex Smith scores. (Photo by John Smith/Getty Images)',
+      photographerName: 'John Smith',
+    );
+
+    await controller.applyTransferredCaption(payload);
+
+    expect(
+      controller.buildCaptionSentence(),
+      'Alex Smith scores. (Photo by Jane Doe/Getty Images)',
+    );
+  });
+
+  test('Firebar offers an unmatched phrase as a custom verb', () {
+    final controller = CaptionV2Controller()..setSearchOpen(true);
+
+    controller.setSearchQuery('double');
+    expect(controller.firebarCustomVerbOffer, isNull);
+
+    controller.setSearchQuery('dances through the rain');
+    expect(controller.firebarCustomVerbOffer, 'dances through the rain');
+    expect(
+        controller.firebarSelectedResult?.verbKey, 'dances through the rain');
+
+    controller.commitSelectedFirebarResult();
+    expect(controller.customVerbPhrase, 'dances through the rain');
+    expect(controller.searchQuery, isEmpty);
+  });
+
+  test('clicking a Firebar name exits and reopening keeps later picks', () {
+    final bo = player('Bo Bichette', '11');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [bo]
+      ..setSearchOpen(true);
+
+    controller.commitFirebarResultAndClose(
+      FirebarResult.player(player: bo, isHome: true),
+    );
+
+    expect(controller.searchOpen, isFalse);
+    expect(controller.isPlayerSelected(bo, isHome: true), isTrue);
+
+    controller.selectVerb('Single');
+    controller.setSearchOpen(true);
+
+    expect(controller.searchOpen, isTrue);
+    expect(controller.selectedVerb, 'Single');
+    expect(
+      controller.firebarCommitted.map((chip) => chip.kind),
+      containsAll([FirebarResultKind.player, FirebarResultKind.verb]),
+    );
+  });
+
+  test('Firebar marks the caption text it inserted', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees'
+      ..setSearchOpen(true);
+    controller.selectPlayer(player('Auston Matthews', '34'), isHome: true);
+    controller.selectVerb('Single');
+
+    final highlights = controller.firebarInsertedHighlights;
+    expect(highlights, isNotEmpty);
+    expect(controller.displayedCaption, contains(highlights.first));
+    expect(highlights.first.toLowerCase(), contains('matthews'));
   });
 
   test('bulk manual save marks only successful paths captioned', () async {
@@ -997,11 +1224,208 @@ void main() {
     expect(hrLabels, isNot(contains('Throws')));
 
     controller.setSearchQuery('hbp');
+
     expect(
       controller.firebarVerbResults
           .map((result) => controller.verbDefinition(result.verbKey!)?.label),
       contains('Hit by Pitch'),
     );
+  });
+
+  test('Firebar two jersey numbers apply both players immediately', () {
+    final bo = player('Bo Bichette', '11');
+    final vlad = player('Vladimir Guerrero Jr.', '27');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [bo, vlad]
+      ..setSearchOpen(true);
+
+    controller.setSearchQuery('11 27');
+    expect(controller.selectedPlayers, hasLength(2));
+    expect(
+      controller.selectedPlayers.map((row) => row.player.fullName),
+      containsAll(['Bo Bichette', 'Vladimir Guerrero Jr.']),
+    );
+    final caption = controller.displayedCaption.toLowerCase();
+    expect(caption, contains('bichette'));
+    expect(caption, contains('guerrero'));
+
+    controller.setSearchQuery('11 2');
+    expect(controller.selectedPlayers, isEmpty);
+
+    controller.setSearchQuery('11 27');
+    controller.commitSelectedFirebarResult();
+    expect(controller.selectedPlayers, hasLength(2));
+    expect(controller.searchQuery, isEmpty);
+  });
+
+  test('Firebar two jerseys plus verb previews Looks On', () {
+    final nylander = player('William Nylander', '88');
+    final knies = player('Matthew Knies', '92');
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Montréal Canadiens'
+      ..homeRoster = [nylander, knies]
+      ..awayRoster = [player('Away Skater', '12')]
+      ..setSearchOpen(true);
+
+    controller.setSearchQuery('88 92 look');
+
+    expect(
+      controller.selectedPlayers.map((row) => row.player.fullName),
+      containsAll(['William Nylander', 'Matthew Knies']),
+    );
+    expect(controller.selectedVerb, 'Looks On');
+    expect(
+      controller.firebarVerbResults.map((result) => result.verbKey),
+      contains('Looks On'),
+    );
+    final caption = controller.displayedCaption.toLowerCase();
+    expect(caption, contains('nylander'));
+    expect(caption, contains('knies'));
+    expect(caption, contains('look'));
+
+    controller.commitSelectedFirebarResult();
+    expect(controller.selectedPlayers, hasLength(2));
+    expect(controller.selectedVerb, 'Looks On');
+    expect(controller.searchQuery, isEmpty);
+  });
+
+  test('Firebar jersey+verb query activates player and Looks On', () {
+    final nylander = player('William Nylander', '88');
+    final controller = CaptionV2Controller()
+      ..sport = 'Hockey'
+      ..homeRoster = [nylander]
+      ..awayRoster = [player('Away Skater', '12')]
+      ..setSearchOpen(true);
+
+    controller.setSearchQuery('88 looks');
+
+    expect(controller.firebarHomeResults.single.player, same(nylander));
+    expect(controller.firebarAwayResults, isEmpty);
+    expect(
+      controller.firebarVerbResults.map((result) => result.verbKey),
+      contains('Looks On'),
+    );
+    expect(controller.selectedPlayers.single.player, same(nylander));
+    expect(controller.selectedVerb, 'Looks On');
+
+    controller.commitSelectedFirebarResult();
+    expect(controller.selectedPlayers.single.player, same(nylander));
+    expect(controller.selectedVerb, 'Looks On');
+    expect(controller.searchQuery, isEmpty);
+    expect(
+      controller.firebarCommitted.map((chip) => chip.kind),
+      containsAll([FirebarResultKind.player, FirebarResultKind.verb]),
+    );
+  });
+
+  test('Firebar ambiguous jersey+verb previews highlighted player in caption',
+      () {
+    final nylander = player('William Nylander', '88');
+    final poulin = player('Samuel Poulin', '88');
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'Montréal Canadiens'
+      ..homeRoster = [nylander]
+      ..awayRoster = [poulin]
+      ..setSearchOpen(true);
+
+    controller.setSearchQuery('88 looks');
+
+    expect(controller.firebarHomeResults.single.player, same(nylander));
+    expect(controller.firebarAwayResults.single.player, same(poulin));
+    expect(controller.selectedPlayers.single.player, same(nylander));
+    expect(controller.selectedVerb, 'Looks On');
+    expect(
+      controller.displayedCaption.toLowerCase(),
+      contains('nylander'),
+    );
+    expect(
+      controller.displayedCaption.toLowerCase(),
+      contains('looks'),
+    );
+
+    controller.selectFirebarResult(controller.firebarAwayResults.single);
+    expect(controller.selectedPlayers.single.player, same(poulin));
+    expect(
+      controller.displayedCaption.toLowerCase(),
+      contains('poulin'),
+    );
+  });
+
+  test('applyRosterEdits updates team names without restarting session', () {
+    final bo = player('Bo Bichette', '11');
+    final vlad = player('Vladimir Guerrero Jr.', '27');
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees'
+      ..homeRoster = [bo]
+      ..awayRoster = [vlad]
+      ..selectPlayer(bo, isHome: true);
+
+    controller.applyRosterEdits(
+      homeTeamName: 'Toronto Blue Jays',
+      homePlayers: [bo],
+      awayTeamName: 'Boston Red Sox',
+      awayPlayers: [vlad],
+    );
+
+    expect(controller.homeTeam, 'Toronto Blue Jays');
+    expect(controller.awayTeam, 'Boston Red Sox');
+    expect(controller.homeAbbr, 'TOR');
+    expect(controller.selectedPlayers.single.player, same(bo));
+    expect(controller.displayedCaption.toLowerCase(), contains('bichette'));
+  });
+
+  test('Firebar unique player match applies caption immediately', () {
+    final sanchez = player('Jesús Sánchez', '4');
+    final forty = player('Kazuma Okamoto', '40');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [sanchez, forty]
+      ..setSearchOpen(true);
+
+    controller.setSearchQuery('4');
+    expect(controller.selectedPlayers, isEmpty);
+
+    controller.setSearchQuery('sanchez');
+    expect(controller.selectedPlayers.single.player, same(sanchez));
+    expect(controller.displayedCaption.toLowerCase(), contains('sanchez'));
+
+    controller.setSearchQuery('4');
+    expect(controller.selectedPlayers, isEmpty);
+
+    controller.setSearchQuery('sanchez');
+    controller.commitSelectedFirebarResult();
+    expect(controller.selectedPlayers.single.player, same(sanchez));
+    expect(controller.searchQuery, isEmpty);
+  });
+
+  test('Firebar Shift+Enter quick-save commits name matches like jerseys', () {
+    final sanchez = player('Jesús Sánchez', '4');
+    final forty = player('Kazuma Okamoto', '40');
+    final controller = CaptionV2Controller()
+      ..homeRoster = [sanchez, forty]
+      ..setSearchOpen(true);
+
+    controller.setSearchQuery('4');
+    expect(controller.firebarCanQuickSavePlayer, isTrue);
+    expect(controller.commitFirebarForShiftEnterSave(), isFalse);
+    expect(controller.selectedPlayers.single.player, same(sanchez));
+    expect(controller.searchQuery, isEmpty);
+
+    controller.selectedPlayers.clear();
+    controller.setSearchOpen(true);
+    controller.setSearchQuery('okamoto');
+    expect(controller.firebarCanQuickSavePlayer, isTrue);
+    expect(controller.firebarSelectedResult?.player, same(forty));
+    expect(controller.commitFirebarForShiftEnterSave(), isFalse);
+    expect(controller.selectedPlayers.single.player, same(forty));
+    expect(controller.searchQuery, isEmpty);
+
+    controller.selectedPlayers.clear();
+    controller.setSearchOpen(true);
+    controller.setSearchQuery('single');
+    expect(controller.firebarCanQuickSavePlayer, isFalse);
   });
 
   test('Firebar uses one bounded selection across all three lanes', () {
@@ -1106,6 +1530,23 @@ void main() {
     controller.commitSelectedFirebarResult();
     expect(controller.rbi, 2);
     expect(controller.searchQuery, isEmpty);
+  });
+
+  test('Firebar finds verbs by phrase, keywords, and modifier labels', () {
+    final controller = CaptionV2Controller()..setSearchOpen(true);
+    addTearDown(controller.dispose);
+
+    controller.setSearchQuery('hits a');
+    expect(
+      controller.firebarVerbResults.map((result) => result.verbKey),
+      contains('Home Run'),
+    );
+
+    controller.setSearchQuery('solo');
+    expect(
+      controller.firebarVerbResults.map((result) => result.verbKey),
+      contains('Home Run'),
+    );
   });
 
   test('running verbs accept a base and rewrite the caption action', () {

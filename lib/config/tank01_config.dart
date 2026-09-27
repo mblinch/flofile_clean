@@ -2,7 +2,7 @@
 ///
 /// Prefer `--dart-define=TANK01_RAPIDAPI_KEY=...` when building.
 const String kTank01RapidApiKey =
-    'ed2a5e646dmshb06eaba5a965245p1254d8jsndbec435fecd4';
+    'e880499f5fmsh348fc62e5bd19e8p1ada50jsn1a2e95b20354';
 
 const String kTank01MlbHost =
     'tank01-mlb-live-in-game-real-time-statistics.p.rapidapi.com';

@@ -8,8 +8,10 @@ import 'package:path/path.dart' as p;
 
 import '../../services/admin_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/mlb_api_service.dart';
 import '../../theme/ff_tokens.dart';
 import '../../widgets/admin_screen.dart';
+import '../../widgets/app_styled_dialogs.dart';
 import '../../widgets/caption_layout_builder_dialog.dart';
 import '../../widgets/flo_chrome_header.dart';
 import '../../widgets/oriented_file_preview.dart';
@@ -18,14 +20,17 @@ import 'caption_v2_flag.dart';
 import 'caption_v2_shortcuts.dart';
 import 'data/caption_transfer_payload.dart';
 import 'data/caption_v2_controller.dart';
+import 'layout/duplicate_jersey_dialog.dart';
 import 'layout/caption_v2_search.dart';
 import 'layout/caption_v2_startup_screen.dart';
 import 'layout/desktop_drum_picker.dart';
 import 'layout/frame_review_route.dart';
 import 'layout/photo_column.dart';
 import 'layout/roster_column.dart';
+import 'layout/roster_import_dialog.dart';
 import 'layout/verbs_column.dart';
 import 'widgets/caption_strip.dart';
+import 'widgets/ftp_history_dialog.dart';
 import 'widgets/transmit_dock.dart';
 
 /// Caption V2 screen — full layout + behaviour behind `CAPTION_V2`.
@@ -50,6 +55,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   String _jerseyBuffer = '';
   bool? _jerseyBufferIsHome;
   bool _burstSaveDialogOpen = false;
+  VoidCallback? _confirmBurstSaveSelected;
 
   static const double _desktopBreakpoint = 1100;
   static double get _gap => 8;
@@ -61,6 +67,20 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     _controller.addListener(_onController);
     _controller.onSaveTransmit = ({required bool transmit}) async {
       await _saveInDirection(next: true, transmit: transmit);
+    };
+    _controller.confirmRetransmit = (alreadySent) async {
+      if (!mounted || alreadySent.isEmpty) return false;
+      final single = alreadySent.length == 1;
+      final ok = await showAppConfirmDialog(
+        context: context,
+        title: 'Already uploaded',
+        message: single
+            ? 'You have already uploaded this, do you want to upload it again?'
+            : 'You have already uploaded ${alreadySent.length} of these. Upload them again?',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'Upload again',
+      );
+      return ok == true;
     };
     _searchFocus.addListener(() {
       if (_searchFocus.hasFocus) {
@@ -83,7 +103,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final status = _controller.statusMessage;
     if (status != _lastObservedStatus) {
       _lastObservedStatus = status;
-      if (status != null && _isErrorStatus(status)) {
+      if (status != null && (_isErrorStatus(status) || _isFtpStatus(status))) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
           final messenger = ScaffoldMessenger.maybeOf(context);
@@ -108,9 +128,20 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         value.startsWith('nothing ') ||
         value.startsWith('invalid ') ||
         value.startsWith('could not ') ||
+        value.startsWith('configure ') ||
+        value.startsWith('ftp ') ||
         value.contains('not enabled') ||
         value.contains(' failed') ||
+        value.contains('incomplete') ||
         value.endsWith('failed');
+  }
+
+  static bool _isFtpStatus(String message) {
+    final value = message.toLowerCase();
+    return value.startsWith('ftp ') ||
+        value.startsWith('sent ') ||
+        value.startsWith('configure ') ||
+        value.contains('ftp');
   }
 
   Future<void> _onStartupComplete(CaptionV2StartupResult result) async {
@@ -123,6 +154,34 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       awayRosterOverride: result.awayRoster,
       singleTeamMode: result.singleTeamMode,
     );
+    if (!mounted) return;
+    await _confirmLoadedDuplicateJerseys(result);
+  }
+
+  Future<void> _confirmLoadedDuplicateJerseys(
+    CaptionV2StartupResult result,
+  ) async {
+    List<Player>? home;
+    List<Player>? away;
+    if (result.homeRoster == null && _controller.homeRoster.isNotEmpty) {
+      home = await confirmDuplicateJerseys(
+        context,
+        players: _controller.homeRoster,
+        teamName: _controller.homeTeam,
+      );
+      if (!mounted) return;
+    }
+    final awayWasLoaded = !result.singleTeamMode && result.awayRoster == null;
+    if (awayWasLoaded && _controller.awayRoster.isNotEmpty) {
+      away = await confirmDuplicateJerseys(
+        context,
+        players: _controller.awayRoster,
+        teamName: _controller.awayTeam,
+      );
+      if (!mounted) return;
+    }
+    if (home == null && away == null) return;
+    _controller.replaceLoadedRosters(home: home, away: away);
   }
 
   @override
@@ -133,6 +192,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     _jerseyShortcutChannel.setMethodCallHandler(null);
     unawaited(_setNativeJerseyShortcutsEnabled(true));
     _controller.onSaveTransmit = null;
+    _controller.confirmRetransmit = null;
     _controller.removeListener(_onController);
     _controller.dispose();
     _searchFocus.dispose();
@@ -195,17 +255,43 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   /// handler still works when focus is in a text field, drum lane, or lost.
   bool _handleSaveShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
-    if (!_controller.sessionReady || _controller.sessionLoading) return false;
 
     final keys = HardwareKeyboard.instance;
     final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
         event.logicalKey == LogicalKeyboardKey.numpadEnter;
     final isS = event.logicalKey == LogicalKeyboardKey.keyS;
 
+    // Burst picker: Enter / ⌘S confirm "Save selected" even if focus left
+    // the dialog Shortcuts subtree (e.g. landed on Cancel).
+    if (_burstSaveDialogOpen) {
+      final confirmSelected = isEnter &&
+          !keys.isShiftPressed &&
+          !keys.isMetaPressed &&
+          !keys.isControlPressed &&
+          !keys.isAltPressed;
+      final confirmCmdS = isS &&
+          (keys.isMetaPressed || keys.isControlPressed) &&
+          !keys.isShiftPressed &&
+          !keys.isAltPressed;
+      if (confirmSelected || confirmCmdS) {
+        _confirmBurstSaveSelected?.call();
+        return true;
+      }
+      return false;
+    }
+
+    if (!_controller.sessionReady || _controller.sessionLoading) return false;
+
     final saveTransmit = isEnter &&
         keys.isShiftPressed &&
         (keys.isMetaPressed || keys.isControlPressed);
     if (saveTransmit) {
+      if (_controller.searchOpen &&
+          (_controller.firebarCanQuickSavePlayer ||
+              _controller.firebarCanQuickSaveVerb)) {
+        _controller.commitSelectedFirebarResult();
+        _searchText.clear();
+      }
       if (_controller.ftpModeEnabled) {
         unawaited(_saveTransmitAndNext());
       } else {
@@ -224,6 +310,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         !keys.isShiftPressed &&
         !keys.isAltPressed;
     if (!shiftEnter && !cmdS) return false;
+
+    // Firebar: Shift+Enter commits the highlighted player before save, or
+    // picks Save from the destination chips (which already triggers save).
+    if (shiftEnter && _controller.searchOpen) {
+      if (_controller.firebarShowShiftEnterSaveHint) {
+        final fullyHandled = _controller.commitFirebarForShiftEnterSave();
+        _searchText.clear();
+        if (fullyHandled) return true;
+      }
+    }
 
     unawaited(_saveAndNext());
     return true;
@@ -358,6 +454,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       personality: _controller.personality,
       headline: _controller.headline,
       keywords: _controller.keywords,
+      photographerName: _controller.photographerName,
     );
     await Clipboard.setData(ClipboardData(text: payload.encode()));
     if (!mounted) return;
@@ -376,15 +473,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       );
       return;
     }
-    _controller.applyTransferredCaption(payload);
+    await _controller.applyTransferredCaption(payload);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Caption pasted')),
     );
   }
 
-  void _pastePreviousSelection() {
-    if (!_controller.applyPreviousCaption()) {
+  Future<void> _pastePreviousSelection() async {
+    if (!await _controller.applyPreviousCaption()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No previous caption available')),
       );
@@ -403,6 +500,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     await _saveInDirection(next: true, transmit: true);
   }
 
+  /// Save current (with burst UI if needed) and FTP, without changing frames.
+  Future<void> _saveAndFtpCurrent() async {
+    await _saveInDirection(next: true, transmit: true, advance: false);
+  }
+
   Future<void> _transmitSaved(CaptionSaveResult result) async {
     for (final path in result.succeededPaths) {
       await _controller.transmitPath(path);
@@ -412,15 +514,30 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   Future<void> _saveInDirection({
     required bool next,
     bool transmit = false,
+    bool advance = true,
   }) async {
     // Avoid stacking another burst picker while one is already open
     // (e.g. ⌘S while the dialog is visible).
     if (_burstSaveDialogOpen) return;
 
+    final keepFirebar = _controller.searchOpen;
+
+    void restoreFirebarFocus() {
+      if (!keepFirebar || !mounted) return;
+      _searchText.clear();
+      if (!_controller.searchOpen) {
+        _controller.setSearchOpen(true);
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _searchFocus.requestFocus();
+      });
+    }
+
     final selected = _controller.orderedSelectedImagePaths;
     if (selected.length >= 2) {
       final burstGroup = _controller.burstGroupOverlapping(selected);
-      if (burstGroup != null) {
+      final alreadySaved = selected.every(_controller.savedImages.contains);
+      if (burstGroup != null && !alreadySaved) {
         final decision = await _showBurstSaveDialog(
           burstGroup,
           initiallySelected: selected.toSet(),
@@ -432,6 +549,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           if (transmit) await _transmitSaved(result);
           if (!mounted) return;
           _controller.setSelectedImagePaths(result.failedPaths);
+          restoreFirebarFocus();
           return;
         }
         final result = await _controller.savePaths(decision.paths);
@@ -439,11 +557,13 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         if (transmit) await _transmitSaved(result);
         if (!mounted) return;
         _controller.setSelectedImagePaths(result.failedPaths);
-        if (result.anySucceeded) {
+        if (result.anySucceeded && advance) {
           _controller.advanceAfterBurstSelection(
             chain: burstGroup,
             savedPaths: decision.paths,
+            keepSearchOpen: keepFirebar,
           );
+          restoreFirebarFocus();
         }
         return;
       }
@@ -453,29 +573,37 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       if (transmit) await _transmitSaved(result);
       if (!mounted) return;
       _controller.setSelectedImagePaths(result.failedPaths);
+      restoreFirebarFocus();
       return;
     }
 
     final chain = _controller.forwardBurstChain;
-    if (chain.length > 1) {
+    final anchorAlreadySaved =
+        chain.isNotEmpty && _controller.savedImages.contains(chain.first);
+    if (chain.length > 1 && !anchorAlreadySaved) {
       final decision = await _showBurstSaveDialog(chain);
       if (!mounted || decision == null) return;
       if (decision.currentOnly) {
         final result = await _controller.savePaths([chain.first]);
         if (transmit) await _transmitSaved(result);
-        if (result.anySucceeded && mounted) {
-          next ? _controller.nextFrame() : _controller.prevFrame();
+        if (result.anySucceeded && mounted && advance) {
+          next
+              ? _controller.nextFrame(keepSearchOpen: keepFirebar)
+              : _controller.prevFrame(keepSearchOpen: keepFirebar);
+          restoreFirebarFocus();
         }
         return;
       }
 
       final result = await _controller.savePaths(decision.paths);
       if (transmit) await _transmitSaved(result);
-      if (result.anySucceeded && mounted) {
+      if (result.anySucceeded && mounted && advance) {
         _controller.advanceAfterBurstSelection(
           chain: chain,
           savedPaths: decision.paths,
+          keepSearchOpen: keepFirebar,
         );
+        restoreFirebarFocus();
       }
       return;
     }
@@ -487,8 +615,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     }
     final result = await _controller.savePaths([path]);
     if (transmit) await _transmitSaved(result);
-    if (result.anySucceeded && mounted) {
-      next ? _controller.nextFrame() : _controller.prevFrame();
+    if (result.anySucceeded && mounted && advance) {
+      next
+          ? _controller.nextFrame(keepSearchOpen: keepFirebar)
+          : _controller.prevFrame(keepSearchOpen: keepFirebar);
+      restoreFirebarFocus();
     }
   }
 
@@ -514,14 +645,20 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           final t =
               Theme.of(dialogContext).extension<FfTokens>() ?? FfTokens.dark;
 
+          var closed = false;
           void closeWith(_BurstSaveDecision? decision) {
-            Navigator.of(dialogContext, rootNavigator: true).pop(decision);
+            if (closed) return;
+            closed = true;
+            _confirmBurstSaveSelected = null;
+            _burstSaveDialogOpen = false;
+            final nav = Navigator.of(dialogContext, rootNavigator: true);
+            if (nav.canPop()) nav.pop(decision);
           }
 
           return StatefulBuilder(
             builder: (context, setDialogState) {
               void saveSelected() {
-                if (selected.isEmpty) return;
+                if (selected.isEmpty || closed) return;
                 closeWith(
                   _BurstSaveDecision.burst(
                     chain.where(selected.contains).toList(),
@@ -530,308 +667,269 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
               }
 
               void saveCurrentOnly() {
+                if (closed) return;
                 closeWith(_BurstSaveDecision.current());
               }
 
-              return Shortcuts(
-                shortcuts: <ShortcutActivator, Intent>{
-                  const SingleActivator(LogicalKeyboardKey.keyS, meta: true):
-                      const SaveNextIntent(),
-                  const SingleActivator(LogicalKeyboardKey.keyS, control: true):
-                      const SaveNextIntent(),
-                  const SingleActivator(LogicalKeyboardKey.enter):
-                      const SaveNextIntent(),
-                },
-                child: Actions(
-                  actions: <Type, Action<Intent>>{
-                    SaveNextIntent: CallbackAction<SaveNextIntent>(
-                      onInvoke: (_) {
-                        saveSelected();
-                        return null;
-                      },
+              _confirmBurstSaveSelected = saveSelected;
+
+              // Enter / ⌘S are handled by the screen hardware key handler so we
+              // do not also bind them here (that double-popped the root nav).
+              return Dialog(
+                backgroundColor: t.surface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+                  side: BorderSide(color: t.divider),
+                ),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: 480,
+                    maxWidth: math.min(
+                      720,
+                      MediaQuery.sizeOf(dialogContext).width * 0.92,
                     ),
-                  },
-                  child: Focus(
-                    autofocus: true,
-                    child: Dialog(
-                      backgroundColor: t.surface,
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(FfTokens.radiusWindow),
-                        side: BorderSide(color: t.divider),
-                      ),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minWidth: 480,
-                          maxWidth: math.min(
-                            720,
-                            MediaQuery.sizeOf(dialogContext).width * 0.92,
-                          ),
-                          maxHeight: math.min(
-                            640,
-                            MediaQuery.sizeOf(dialogContext).height * 0.85,
-                          ),
+                    maxHeight: math.min(
+                      640,
+                      MediaQuery.sizeOf(dialogContext).height * 0.85,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Burst detected',
+                          style: t.labelStyle.copyWith(fontSize: 16),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(18),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Text(
-                                'Burst detected',
-                                style: t.labelStyle.copyWith(fontSize: 16),
+                        const SizedBox(height: 6),
+                        Text(
+                          fromSelection
+                              ? 'Your selection is part of a ${chain.length}-frame '
+                                  'burst. Save the selection only, or choose frames '
+                                  'from the full burst?'
+                              : 'Apply this caption to the current frame only, or '
+                                  'choose frames from the forward burst?',
+                          style: t.secondaryLabelStyle,
+                        ),
+                        const SizedBox(height: 14),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: t.sunken,
+                              borderRadius: BorderRadius.circular(
+                                FfTokens.radiusCard,
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                fromSelection
-                                    ? 'Your selection is part of a ${chain.length}-frame '
-                                        'burst. Save the selection only, or choose frames '
-                                        'from the full burst?'
-                                    : 'Apply this caption to the current frame only, or '
-                                        'choose frames from the forward burst?',
-                                style: t.secondaryLabelStyle,
-                              ),
-                              const SizedBox(height: 14),
-                              Flexible(
-                                child: Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: t.sunken,
-                                    borderRadius: BorderRadius.circular(
-                                      FfTokens.radiusCard,
-                                    ),
-                                    border: Border.all(color: t.divider),
+                              border: Border.all(color: t.divider),
+                            ),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                const spacing = 8.0;
+                                final n = chain.length;
+                                final cols = math
+                                    .min(
+                                      4,
+                                      math.max(1, math.sqrt(n).ceil()),
+                                    )
+                                    .toInt();
+                                final cellW = (constraints.maxWidth -
+                                        (cols - 1) * spacing) /
+                                    cols;
+                                final cacheW = (cellW *
+                                        MediaQuery.devicePixelRatioOf(
+                                          context,
+                                        ))
+                                    .round()
+                                    .clamp(96, 512);
+                                return GridView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: n,
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: cols,
+                                    crossAxisSpacing: spacing,
+                                    mainAxisSpacing: spacing,
+                                    childAspectRatio: 1,
                                   ),
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      const spacing = 8.0;
-                                      final n = chain.length;
-                                      final cols = math
-                                          .min(
-                                            4,
-                                            math.max(1, math.sqrt(n).ceil()),
-                                          )
-                                          .toInt();
-                                      final cellW = (constraints.maxWidth -
-                                              (cols - 1) * spacing) /
-                                          cols;
-                                      final cacheW = (cellW *
-                                              MediaQuery.devicePixelRatioOf(
-                                                context,
-                                              ))
-                                          .round()
-                                          .clamp(96, 512);
-                                      return GridView.builder(
-                                        shrinkWrap: true,
-                                        itemCount: n,
-                                        gridDelegate:
-                                            SliverGridDelegateWithFixedCrossAxisCount(
-                                          crossAxisCount: cols,
-                                          crossAxisSpacing: spacing,
-                                          mainAxisSpacing: spacing,
-                                          childAspectRatio: 1,
-                                        ),
-                                        itemBuilder: (context, index) {
-                                          final path = chain[index];
-                                          final checked =
-                                              selected.contains(path);
-                                          final isCurrent =
-                                              !fromSelection && index == 0;
-                                          return Tooltip(
-                                            message: isCurrent
-                                                ? '${p.basename(path)} — current frame'
-                                                : p.basename(path),
-                                            child: MouseRegion(
-                                              cursor: SystemMouseCursors.click,
-                                              child: GestureDetector(
-                                                onTap: () =>
-                                                    setDialogState(() {
-                                                  checked
-                                                      ? selected.remove(path)
-                                                      : selected.add(path);
-                                                }),
-                                                child: AnimatedContainer(
-                                                  duration: const Duration(
-                                                    milliseconds: 120,
-                                                  ),
-                                                  decoration: BoxDecoration(
-                                                    color: t.bg,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      FfTokens.radiusTile,
-                                                    ),
-                                                    border: Border.all(
-                                                      color: checked
-                                                          ? (isCurrent
-                                                              ? t.accent
-                                                              : t.accent
-                                                                  .withValues(
-                                                                  alpha: 0.7,
-                                                                ))
-                                                          : t.divider,
-                                                      width: checked ||
-                                                              isCurrent
-                                                          ? 2
-                                                          : 1,
-                                                    ),
-                                                  ),
-                                                  child: ClipRRect(
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                      FfTokens.radiusTile - 1,
-                                                    ),
-                                                    child: Stack(
-                                                      fit: StackFit.expand,
-                                                      children: [
-                                                        ColoredBox(
-                                                          color: t.bg,
-                                                        ),
-                                                        OrientedFilePreview(
-                                                          path: path,
-                                                          fit: BoxFit.cover,
-                                                          cacheWidth: cacheW,
-                                                          filterQuality:
-                                                              FilterQuality
-                                                                  .medium,
-                                                        ),
-                                                        if (!checked)
-                                                          ColoredBox(
-                                                            color: Colors.black
-                                                                .withValues(
-                                                              alpha: 0.45,
-                                                            ),
-                                                          ),
-                                                        if (isCurrent)
-                                                          Positioned(
-                                                            left: 6,
-                                                            top: 6,
-                                                            child: Material(
-                                                              color: t.accent,
-                                                              borderRadius:
-                                                                  BorderRadius
-                                                                      .circular(
-                                                                FfTokens
-                                                                    .radiusChip,
-                                                              ),
-                                                              child: InkWell(
-                                                                onTap:
-                                                                    saveCurrentOnly,
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                  FfTokens
-                                                                      .radiusChip,
-                                                                ),
-                                                                child:
-                                                                    Padding(
-                                                                  padding:
-                                                                      const EdgeInsets
-                                                                          .symmetric(
-                                                                    horizontal:
-                                                                        5,
-                                                                    vertical:
-                                                                        2,
-                                                                  ),
-                                                                  child: Text(
-                                                                    'Current',
-                                                                    style: t
-                                                                        .metaStyle
-                                                                        .copyWith(
-                                                                      color:
-                                                                          t.bg,
-                                                                      fontWeight:
-                                                                          FontWeight
-                                                                              .w600,
-                                                                      fontSize:
-                                                                          10,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        Positioned(
-                                                          right: 6,
-                                                          bottom: 6,
-                                                          child: Container(
-                                                            width: 22,
-                                                            height: 22,
-                                                            decoration:
-                                                                BoxDecoration(
-                                                              color: checked
-                                                                  ? t.accent
-                                                                  : t.surface
-                                                                      .withValues(
-                                                                      alpha:
-                                                                          0.9,
-                                                                    ),
-                                                              shape: BoxShape
-                                                                  .circle,
-                                                              border:
-                                                                  Border.all(
-                                                                color: checked
-                                                                    ? t.accent
-                                                                    : t.divider,
-                                                              ),
-                                                            ),
-                                                            child: Icon(
-                                                              checked
-                                                                  ? Icons.check
-                                                                  : Icons
-                                                                      .close,
-                                                              size: 14,
-                                                              color: checked
-                                                                  ? t.bg
-                                                                  : t
-                                                                      .textSecondary,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
+                                  itemBuilder: (context, index) {
+                                    final path = chain[index];
+                                    final checked = selected.contains(path);
+                                    final isCurrent =
+                                        !fromSelection && index == 0;
+                                    return Tooltip(
+                                      message: isCurrent
+                                          ? '${p.basename(path)} — current frame'
+                                          : p.basename(path),
+                                      child: MouseRegion(
+                                        cursor: SystemMouseCursors.click,
+                                        child: GestureDetector(
+                                          onTap: () => setDialogState(() {
+                                            checked
+                                                ? selected.remove(path)
+                                                : selected.add(path);
+                                          }),
+                                          child: AnimatedContainer(
+                                            duration: const Duration(
+                                              milliseconds: 120,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: t.bg,
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                FfTokens.radiusTile,
+                                              ),
+                                              border: Border.all(
+                                                color: checked
+                                                    ? (isCurrent
+                                                        ? t.accent
+                                                        : t.accent.withValues(
+                                                            alpha: 0.7,
+                                                          ))
+                                                    : t.divider,
+                                                width: checked || isCurrent
+                                                    ? 2
+                                                    : 1,
                                               ),
                                             ),
-                                          );
-                                        },
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              Row(
-                                children: [
-                                  TextButton(
-                                    onPressed: () => closeWith(null),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  const Spacer(),
-                                  OutlinedButton(
-                                    onPressed: saveCurrentOnly,
-                                    child: Text(
-                                      fromSelection
-                                          ? 'Selection only'
-                                          : 'Current only',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  FilledButton(
-                                    onPressed: selected.isEmpty
-                                        ? null
-                                        : saveSelected,
-                                    child: Text(
-                                      'Save selected (${selected.length})',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
+                                            child: ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                FfTokens.radiusTile - 1,
+                                              ),
+                                              child: Stack(
+                                                fit: StackFit.expand,
+                                                children: [
+                                                  ColoredBox(color: t.bg),
+                                                  OrientedFilePreview(
+                                                    path: path,
+                                                    version: _controller
+                                                        .imageContentStamp(
+                                                            path),
+                                                    fit: BoxFit.cover,
+                                                    cacheWidth: cacheW,
+                                                    filterQuality:
+                                                        FilterQuality.medium,
+                                                  ),
+                                                  if (!checked)
+                                                    ColoredBox(
+                                                      color: Colors.black
+                                                          .withValues(
+                                                        alpha: 0.45,
+                                                      ),
+                                                    ),
+                                                  if (isCurrent)
+                                                    Positioned(
+                                                      left: 6,
+                                                      top: 6,
+                                                      child: Material(
+                                                        color: t.accent,
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(
+                                                          FfTokens.radiusChip,
+                                                        ),
+                                                        child: InkWell(
+                                                          onTap:
+                                                              saveCurrentOnly,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(
+                                                            FfTokens.radiusChip,
+                                                          ),
+                                                          child: Padding(
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 5,
+                                                              vertical: 2,
+                                                            ),
+                                                            child: Text(
+                                                              'Current',
+                                                              style: t.metaStyle
+                                                                  .copyWith(
+                                                                color: t.bg,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w600,
+                                                                fontSize: 10,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  Positioned(
+                                                    right: 6,
+                                                    bottom: 6,
+                                                    child: Container(
+                                                      width: 22,
+                                                      height: 22,
+                                                      decoration: BoxDecoration(
+                                                        color: checked
+                                                            ? t.accent
+                                                            : t.surface
+                                                                .withValues(
+                                                                alpha: 0.9,
+                                                              ),
+                                                        shape: BoxShape.circle,
+                                                        border: Border.all(
+                                                          color: checked
+                                                              ? t.accent
+                                                              : t.divider,
+                                                        ),
+                                                      ),
+                                                      child: Icon(
+                                                        checked
+                                                            ? Icons.check
+                                                            : Icons.close,
+                                                        size: 14,
+                                                        color: checked
+                                                            ? t.bg
+                                                            : t.textSecondary,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
                           ),
                         ),
-                      ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () => closeWith(null),
+                              child: const Text('Cancel'),
+                            ),
+                            const Spacer(),
+                            OutlinedButton(
+                              onPressed: saveCurrentOnly,
+                              child: Text(
+                                fromSelection
+                                    ? 'Selection only'
+                                    : 'Current only',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: selected.isEmpty ? null : saveSelected,
+                              child: Text(
+                                'Save selected (${selected.length})',
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -842,7 +940,30 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       );
     } finally {
       _burstSaveDialogOpen = false;
+      _confirmBurstSaveSelected = null;
     }
+  }
+
+  Future<void> _editRosters() async {
+    final c = _controller;
+    final result = await showRosterImportDialog(
+      context,
+      sport: c.sport,
+      homeTeamLabel: c.homeTeam,
+      awayTeamLabel: c.singleTeamMode ? null : c.awayTeam,
+      homePlayers: c.homeRoster,
+      awayPlayers: c.singleTeamMode ? null : c.awayRoster,
+      title: 'Edit rosters',
+      saveLabel: 'Save',
+      subtitle: 'Rename teams, paste a new roster, or add players.',
+    );
+    if (!mounted || result == null) return;
+    c.applyRosterEdits(
+      homeTeamName: result.homeTeamName,
+      homePlayers: result.homePlayers,
+      awayTeamName: result.awayTeamName,
+      awayPlayers: result.awayPlayers,
+    );
   }
 
   Widget _withChrome(Widget body, {bool sessionActive = false}) {
@@ -944,9 +1065,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             },
           ),
           TransmitIntent: CaptionV2GuardedAction<TransmitIntent>(
-            enabledWhen: () => c.ftpModeEnabled,
+            enabledWhen: () => c.ftpModeEnabled && !c.transmitting,
             onInvoke: (_) {
-              unawaited(c.transmitQueued());
+              unawaited(_saveAndFtpCurrent());
               return null;
             },
           ),
@@ -1092,6 +1213,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   child: _DesktopBody(
                     controller: c,
                     gap: _gap,
+                    onEditRosters: _editRosters,
                   ),
                 ),
               ],
@@ -1122,6 +1244,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
               controller: c,
               pageController: _pageController!,
               onPageChanged: (i) => c.setColumnFocus(i),
+              onEditRosters: _editRosters,
             ),
           ),
         ],
@@ -1139,9 +1262,14 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         onPastePrevious: _pastePreviousSelection,
         pasteEnabled: true,
         onSaveNext: _saveAndNext,
-        onTransmit: c.transmitQueued,
-        transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
+        onTransmit: () => unawaited(_saveAndFtpCurrent()),
+        transmitLabel: c.ftpButtonLabel,
+        transmitEnabled: !c.transmitting &&
+            (c.savedNotSentCount > 0 || c.currentPath != null),
         showTransmit: c.ftpModeEnabled,
+        onFtpHistory: c.ftpModeEnabled
+            ? () => showFtpHistoryDialog(context, c)
+            : null,
       ),
     );
   }
@@ -1151,10 +1279,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     bool inningStepperOnly = false,
   }) {
     final isBaseball = c.sport.toLowerCase() == 'baseball';
-    final hasLiveCaption =
-        c.manualCaptionOverride != null ||
+    final hasLiveCaption = c.manualCaptionOverride != null ||
         c.selectedPlayer != null ||
-        c.hasVerbSelection ||
+        (c.hasVerbSelection && !c.pinDefersCaptionUntilPlayer) ||
         c.originalCaption.trim().isNotEmpty;
     final captionText = c.displayedCaption;
     return CaptionStrip(
@@ -1162,6 +1289,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       chips: const [],
       trailing: '',
       fullCaption: captionText,
+      highlightPhrases: c.firebarInsertedHighlights,
       captionHint: hasLiveCaption
           ? 'Caption will appear here as you add players and a verb.'
           : 'No caption embedded in image.',
@@ -1202,6 +1330,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       onInningIncrement: () => c.bumpInning(1),
       inningDisabled: c.preGame || c.postGame,
       onInningActivate: c.activateInning,
+      timingPhraseEnabled: c.includeTimingPhrase,
+      onTimingPhraseEnabledChanged: c.setIncludeTimingPhrase,
       onPreTap: inningStepperOnly ? null : () => c.setPre(!c.preGame),
       onPostTap: inningStepperOnly ? null : () => c.setPost(!c.postGame),
       inningStepperOnly: inningStepperOnly,
@@ -1215,8 +1345,13 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Future<void> _openCaptionStyleEditor(CaptionV2Controller c) async {
-    await CaptionLayoutBuilderDialog.show(context);
+    final applied = await CaptionLayoutBuilderDialog.show(context);
     if (!mounted) return;
+    if (applied != null) {
+      c.captionTemplate = applied;
+      await c.reloadCaptionStyle();
+      return;
+    }
     await c.reloadCaptionStyle();
   }
 }
@@ -1389,39 +1524,60 @@ class _FtpModeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = enabled ? 'FTP On' : 'FTP Off';
-    final color = enabled ? tokens.accent : tokens.textSecondary;
+    Widget seg(
+        {required String label, required bool selected, required bool on}) {
+      return Material(
+        color: selected ? const Color(0xFF3A4050) : Colors.transparent,
+        child: InkWell(
+          onTap: selected ? null : () => onChanged(on),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.1,
+                fontWeight: FontWeight.w500,
+                color: selected
+                    ? tokens.text
+                    : tokens.text.withValues(alpha: 0.42),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Tooltip(
       message: enabled
           ? 'FTP mode on — FTP buttons and shortcuts are available'
           : 'FTP mode off — FTP buttons and shortcuts are hidden',
       waitDuration: const Duration(milliseconds: 400),
-      child: TextButton(
-        onPressed: () => onChanged(!enabled),
-        style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              enabled ? Icons.cloud_upload_outlined : Icons.cloud_off_outlined,
-              size: 14,
-              color: color,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'FTP',
+            style: tokens.metaStyle.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            decoration: BoxDecoration(
+              color: tokens.bg,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: tokens.divider),
             ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: tokens.metaStyle.copyWith(
-                color: color,
-                fontWeight: FontWeight.w600,
-              ),
+            clipBehavior: Clip.antiAlias,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                seg(label: 'On', selected: enabled, on: true),
+                Container(width: 1, height: 22, color: tokens.divider),
+                seg(label: 'Off', selected: !enabled, on: false),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1711,10 +1867,12 @@ class _DesktopBody extends StatefulWidget {
   const _DesktopBody({
     required this.controller,
     required this.gap,
+    required this.onEditRosters,
   });
 
   final CaptionV2Controller controller;
   final double gap;
+  final VoidCallback onEditRosters;
 
   @override
   State<_DesktopBody> createState() => _DesktopBodyState();
@@ -1734,6 +1892,7 @@ class _DesktopBodyState extends State<_DesktopBody> {
         mode: _drumMode!,
         onModeChanged: (mode) => setState(() => _drumMode = mode),
         onExit: () => setState(() => _drumMode = null),
+        onEditRosters: widget.onEditRosters,
       );
     }
 
@@ -1746,6 +1905,7 @@ class _DesktopBodyState extends State<_DesktopBody> {
             controller: controller,
             isHome: true,
             focused: controller.columnFocus == 0,
+            onEditRosters: widget.onEditRosters,
             onDrumRequested: () =>
                 setState(() => _drumMode = DrumPickerMode.scroll),
             onInfiniteRequested: () =>
@@ -1772,6 +1932,7 @@ class _DesktopBodyState extends State<_DesktopBody> {
               controller: controller,
               isHome: false,
               focused: controller.columnFocus == 2,
+              onEditRosters: widget.onEditRosters,
               onDrumRequested: () =>
                   setState(() => _drumMode = DrumPickerMode.scroll),
               onInfiniteRequested: () =>
@@ -1797,11 +1958,13 @@ class _MobileBody extends StatelessWidget {
     required this.controller,
     required this.pageController,
     required this.onPageChanged,
+    required this.onEditRosters,
   });
 
   final CaptionV2Controller controller;
   final PageController pageController;
   final ValueChanged<int> onPageChanged;
+  final VoidCallback onEditRosters;
 
   @override
   Widget build(BuildContext context) {
@@ -1864,6 +2027,7 @@ class _MobileBody extends StatelessWidget {
             mode: DrumPickerMode.infinite,
             pageController: pageController,
             onPageChanged: onPageChanged,
+            onEditRosters: onEditRosters,
           ),
         ),
         const SizedBox(height: 8),

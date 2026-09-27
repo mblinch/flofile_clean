@@ -9,6 +9,7 @@ import '../../../theme/ff_tokens.dart';
 import '../../../widgets/oriented_file_preview.dart';
 import '../data/caption_v2_controller.dart';
 import '../widgets/frame_status_dot.dart';
+import '../widgets/transmit_progress_overlay.dart';
 import 'caption_v2_photo_actions.dart';
 import 'caption_v2_thumbnail_overview.dart';
 
@@ -20,9 +21,6 @@ enum _BrowseSort {
   filenameAscending,
   filenameDescending
 }
-
-/// Green tile fill used to mark frames that belong to a burst.
-const Color _kBurstAccent = Color(0xFF6EE7A8);
 
 /// Desktop photo preview + thumbnail grid with burst linking.
 class PhotoColumn extends StatefulWidget {
@@ -46,6 +44,18 @@ class PhotoColumn extends StatefulWidget {
 class _PhotoColumnState extends State<PhotoColumn> {
   static const double _handleHeight = 14;
   double _previewFraction = 0.6;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.ensureLiveFolderRefresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant PhotoColumn oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    widget.controller.ensureLiveFolderRefresh();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -234,6 +244,7 @@ class _PhotoCard extends StatelessWidget {
                           onDoubleTap: () => showCaptionV2Zoom(context, path!),
                           child: OrientedFilePreview(
                             path: path!,
+                            version: controller.imageContentStamp(path!),
                             fit: BoxFit.contain,
                             cacheWidth: 1600,
                           ),
@@ -307,20 +318,71 @@ class _PhotoCard extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (path != null &&
+                    controller.transmitting &&
+                    controller.transmittingPath == path)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: TransmitProgressOverlay(
+                        progress: controller.transmitProgress,
+                        status: controller.transmitStatus,
+                        compact: true,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
-          if (technicalInfo.isNotEmpty)
+          if (path != null)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.fromLTRB(8, 2, 4, 2),
               decoration: BoxDecoration(
                 border: Border(top: BorderSide(color: tokens.divider)),
               ),
-              child: Text(
-                technicalInfo,
-                textAlign: TextAlign.center,
-                style: tokens.microStyle.copyWith(fontSize: 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      technicalInfo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.microStyle.copyWith(fontSize: 10),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: controller.refreshingFolder
+                        ? null
+                        : controller.refreshOpenFolder,
+                    icon: controller.refreshingFolder
+                        ? SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: tokens.accent,
+                            ),
+                          )
+                        : Icon(
+                            Icons.refresh_rounded,
+                            size: 16,
+                            color: tokens.accent,
+                          ),
+                    label: Text(
+                      'Refresh',
+                      style: tokens.metaStyle.copyWith(
+                        fontSize: 12,
+                        color: tokens.accent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: const Size(0, 28),
+                    ),
+                  ),
+                ],
               ),
             ),
         ],
@@ -782,13 +844,6 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
         .length;
     final sentCount =
         allPaths.where((path) => controller.sentImages.contains(path)).length;
-    final burstMembers = <String>{};
-    final burstLeaders = <String, int>{}; // first path -> group size
-    for (final group in controller.bursts) {
-      if (group.length < 2) continue;
-      burstMembers.addAll(group);
-      burstLeaders[group.first] = group.length;
-    }
     final maxColumns = widget.maxColumns;
     final columnCount = _columnCount.clamp(2, maxColumns);
     _scheduleRepairIfNeeded(paths);
@@ -812,7 +867,9 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
               sort: _sort,
               columnCount: columnCount,
               maxColumns: maxColumns,
+              refreshing: controller.refreshingFolder,
               onSortChanged: _setSort,
+              onRefresh: controller.refreshOpenFolder,
               onOpenOverview: () =>
                   showCaptionV2ThumbnailOverview(context, controller),
               onSmaller: columnCount >= maxColumns
@@ -878,8 +935,6 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                   final selected = _selectedPaths.isEmpty
                                       ? originalIndex == controller.currentIndex
                                       : _selectedPaths.contains(path);
-                                  final inBurst = burstMembers.contains(path);
-                                  final burstSize = burstLeaders[path];
                                   final captioned =
                                       controller.captionedImages.contains(path);
                                   final ftp =
@@ -900,19 +955,13 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                       details.globalPosition,
                                     ),
                                     child: Tooltip(
-                                      message: inBurst
-                                          ? '${p.basename(path)} — burst'
-                                          : p.basename(path),
+                                      message: p.basename(path),
                                       child: Container(
                                         padding: const EdgeInsets.all(4),
                                         decoration: BoxDecoration(
                                           color: selected
                                               ? tokens.selectedFill
-                                              : inBurst
-                                                  ? _kBurstAccent.withValues(
-                                                      alpha: 0.22,
-                                                    )
-                                                  : tokens.surface,
+                                              : tokens.surface,
                                           borderRadius: BorderRadius.circular(
                                             FfTokens.radiusTile,
                                           ),
@@ -943,18 +992,27 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                                   children: [
                                                     OrientedFilePreview(
                                                       path: path,
+                                                      version: controller
+                                                          .imageContentStamp(
+                                                              path),
                                                       fit: BoxFit.contain,
                                                       cacheWidth:
                                                           _thumbCacheWidth(
                                                               columns),
                                                     ),
-                                                    if (burstSize != null)
-                                                      Positioned(
-                                                        left: 4,
-                                                        top: 4,
-                                                        child: _BurstBadge(
-                                                          count: burstSize,
-                                                          tokens: tokens,
+                                                    if (controller
+                                                            .transmitting &&
+                                                        controller
+                                                                .transmittingPath ==
+                                                            path)
+                                                      Positioned.fill(
+                                                        child:
+                                                            TransmitProgressOverlay(
+                                                          progress: controller
+                                                              .transmitProgress,
+                                                          status: controller
+                                                              .transmitStatus,
+                                                          compact: true,
                                                         ),
                                                       ),
                                                     if (captioned || ftp)
@@ -984,8 +1042,8 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                                                 tooltip:
                                                                     "FTP'd",
                                                                 tokens: tokens,
-                                                                emphasized:
-                                                                    true,
+                                                                color: const Color(
+                                                                    0xFF3DDC84),
                                                               ),
                                                           ],
                                                         ),
@@ -1071,51 +1129,25 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
   }
 }
 
-class _BurstBadge extends StatelessWidget {
-  const _BurstBadge({required this.count, required this.tokens});
-
-  final int count;
-  final FfTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: tokens.surface.withValues(alpha: 0.92),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: _kBurstAccent.withValues(alpha: 0.55),
-        ),
-      ),
-      child: Text(
-        'Burst · $count',
-        style: tokens.microStyle.copyWith(
-          fontSize: 8.5,
-          fontWeight: FontWeight.w600,
-          color: tokens.text,
-          letterSpacing: 0.2,
-        ),
-      ),
-    );
-  }
-}
-
 class _ThumbnailStatusIcon extends StatelessWidget {
   const _ThumbnailStatusIcon({
     required this.icon,
     required this.tooltip,
     required this.tokens,
     this.emphasized = false,
+    this.color,
   });
 
   final IconData icon;
   final String tooltip;
   final FfTokens tokens;
   final bool emphasized;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final tint = color ?? (emphasized ? tokens.accent : tokens.textSecondary);
+    final border = color ?? (emphasized ? tokens.accent : tokens.divider);
     return Tooltip(
       message: tooltip,
       child: Container(
@@ -1125,14 +1157,12 @@ class _ThumbnailStatusIcon extends StatelessWidget {
         decoration: BoxDecoration(
           color: tokens.surface.withValues(alpha: 0.90),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: emphasized ? tokens.accent : tokens.divider,
-          ),
+          border: Border.all(color: border),
         ),
         child: Icon(
           icon,
           size: 13,
-          color: emphasized ? tokens.accent : tokens.textSecondary,
+          color: tint,
         ),
       ),
     );
@@ -1145,7 +1175,9 @@ class _ThumbnailToolbar extends StatelessWidget {
     required this.sort,
     required this.columnCount,
     required this.maxColumns,
+    required this.refreshing,
     required this.onSortChanged,
+    required this.onRefresh,
     required this.onOpenOverview,
     required this.onSmaller,
     required this.onLarger,
@@ -1155,7 +1187,9 @@ class _ThumbnailToolbar extends StatelessWidget {
   final _BrowseSort sort;
   final int columnCount;
   final int maxColumns;
+  final bool refreshing;
   final ValueChanged<_BrowseSort> onSortChanged;
+  final VoidCallback onRefresh;
   final VoidCallback onOpenOverview;
   final VoidCallback? onSmaller;
   final VoidCallback? onLarger;
@@ -1186,6 +1220,12 @@ class _ThumbnailToolbar extends StatelessWidget {
             tokens: tokens,
             sort: sort,
             onChanged: onSortChanged,
+          ),
+          const SizedBox(width: 6),
+          _ThumbnailRefreshButton(
+            tokens: tokens,
+            refreshing: refreshing,
+            onTap: onRefresh,
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -1722,6 +1762,56 @@ class _ThumbnailScopeOptionState extends State<_ThumbnailScopeOption> {
   }
 }
 
+class _ThumbnailRefreshButton extends StatelessWidget {
+  const _ThumbnailRefreshButton({
+    required this.tokens,
+    required this.refreshing,
+    required this.onTap,
+  });
+
+  final FfTokens tokens;
+  final bool refreshing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Refresh photos from folder',
+      child: Material(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          onTap: refreshing ? null : onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            width: 34,
+            height: 27,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: tokens.divider),
+            ),
+            child: refreshing
+                ? SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: tokens.accent,
+                    ),
+                  )
+                : Icon(
+                    Icons.refresh_rounded,
+                    size: 18,
+                    color: tokens.accent,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ThumbnailOverviewButton extends StatelessWidget {
   const _ThumbnailOverviewButton({
     required this.tokens,
@@ -1993,10 +2083,23 @@ class MobileFrameThumb extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: path == null
                 ? Icon(Icons.image_outlined, color: t.textSecondary, size: 20)
-                : OrientedFilePreview(
-                    path: path,
-                    fit: BoxFit.cover,
-                    cacheWidth: 88,
+                : Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      OrientedFilePreview(
+                        path: path,
+                        version: controller.imageContentStamp(path),
+                        fit: BoxFit.cover,
+                        cacheWidth: 88,
+                      ),
+                      if (controller.transmitting &&
+                          controller.transmittingPath == path)
+                        TransmitProgressOverlay(
+                          progress: controller.transmitProgress,
+                          status: controller.transmitStatus,
+                          compact: true,
+                        ),
+                    ],
                   ),
           ),
           const SizedBox(width: 10),
@@ -2070,8 +2173,11 @@ class MobileFrameBanner extends StatelessWidget {
                             ),
                           )
                         : OrientedFilePreview(
-                            key: ValueKey('mobile-banner-$path'),
+                            key: ValueKey(
+                              'mobile-banner-$path-${controller.imageContentStamp(path)}',
+                            ),
                             path: path,
+                            version: controller.imageContentStamp(path),
                             fit: BoxFit.cover,
                             cacheWidth: 780,
                           ),

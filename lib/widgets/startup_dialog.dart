@@ -120,7 +120,7 @@ class _StartupDialogState extends State<StartupDialog> {
   bool _awayCoachLoading = false;
   String _homeCoachName = '';
   String _awayCoachName = '';
-  bool _useTank01MlbRosters = false;
+  bool _useOfficialLeagueApis = false;
 
   bool get _folderChosen => selectedFolderPath != null;
 
@@ -162,9 +162,9 @@ class _StartupDialogState extends State<StartupDialog> {
   Future<void> _initializeAndLoadData() async {
     _preferencesService = await PreferencesService.getInstance();
     await _loadIptcApplyOptions();
-    final useTank01 = await _preferencesService.getUseTank01MlbRosters();
+    final useOfficial = await _preferencesService.getUseOfficialLeagueApis();
     if (mounted) {
-      setState(() => _useTank01MlbRosters = useTank01);
+      setState(() => _useOfficialLeagueApis = useOfficial);
     }
     // Fetch fresh app defaults from Firestore (no auth needed — public reads).
     // Falls back to disk cache if offline. This ensures caption style defaults
@@ -1905,13 +1905,13 @@ class _StartupDialogState extends State<StartupDialog> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               AppCompactCheckbox(
-                value: _useTank01MlbRosters,
+                value: _useOfficialLeagueApis,
                 onChanged: tank01Supported
                     ? (v) async {
                         final prefs = await PreferencesService.getInstance();
-                        await prefs.saveUseTank01Rosters(v);
+                        await prefs.saveUseOfficialLeagueApis(v);
                         if (!mounted) return;
-                        setState(() => _useTank01MlbRosters = v);
+                        setState(() => _useOfficialLeagueApis = v);
                       }
                     : null,
               ),
@@ -1919,8 +1919,8 @@ class _StartupDialogState extends State<StartupDialog> {
               Expanded(
                 child: Text(
                   tank01Supported
-                      ? 'Use Tank01 rosters (skip Firebase) — MLB/NBA/NHL/WNBA'
-                      : 'Tank01 rosters unavailable for soccer (MLS stays ESPN)',
+                      ? 'Use official league APIs (sports/…) — default is Tank01 Firebase'
+                      : 'Soccer always uses ESPN MLS',
                   style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 10,

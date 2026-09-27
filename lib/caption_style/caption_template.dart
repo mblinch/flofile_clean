@@ -690,6 +690,8 @@ class CaptionTemplate {
     this.removeDiacritics = true,
     this.showPersonalityField = true,
     this.showKeywordsField = false,
+    this.timingPhraseCaps = false,
+    this.includeTimingPhrase = true,
     required this.separator,
     required this.creditFormat,
     required this.bylineOptions,
@@ -765,6 +767,14 @@ class CaptionTemplate {
 
   /// Optional Keywords field beside the main caption (per caption style).
   final bool showKeywordsField;
+
+  /// When true, the period / inning / quarter / half timing clause is emitted
+  /// in ALL CAPS (e.g. `DURING THE THIRD INNING`). Defaults to off.
+  final bool timingPhraseCaps;
+
+  /// When false, captions omit the time-of-game clause (inning / period /
+  /// quarter / half / before / following the game). Defaults to on.
+  final bool includeTimingPhrase;
 
   /// Primary joiner used in [WireStyle.custom] between segments.
   final String separator;
@@ -1015,6 +1025,8 @@ class CaptionTemplate {
     bool removeDiacritics = true,
     bool showPersonalityField = true,
     bool showKeywordsField = false,
+    bool timingPhraseCaps = false,
+    bool includeTimingPhrase = true,
     String separator = '; ',
     CreditFormat creditFormat = CreditFormat.mandatory_credit,
     BylineOptions? bylineOptions,
@@ -1066,6 +1078,8 @@ class CaptionTemplate {
       removeDiacritics: removeDiacritics,
       showPersonalityField: showPersonalityField,
       showKeywordsField: showKeywordsField,
+      timingPhraseCaps: timingPhraseCaps,
+      includeTimingPhrase: includeTimingPhrase,
       separator: separator,
       creditFormat: creditFormat,
       bylineOptions:
@@ -1104,6 +1118,8 @@ class CaptionTemplate {
     bool? removeDiacritics,
     bool? showPersonalityField,
     bool? showKeywordsField,
+    bool? timingPhraseCaps,
+    bool? includeTimingPhrase,
     String? separator,
     CreditFormat? creditFormat,
     BylineOptions? bylineOptions,
@@ -1144,6 +1160,8 @@ class CaptionTemplate {
         showPersonalityField:
             showPersonalityField ?? this.showPersonalityField,
         showKeywordsField: showKeywordsField ?? this.showKeywordsField,
+        timingPhraseCaps: timingPhraseCaps ?? this.timingPhraseCaps,
+        includeTimingPhrase: includeTimingPhrase ?? this.includeTimingPhrase,
         separator: separator ?? this.separator,
         creditFormat: creditFormat ?? this.creditFormat,
         bylineOptions: bylineOptions ?? this.bylineOptions,
@@ -1379,6 +1397,8 @@ class CaptionTemplate {
         if (!removeDiacritics) 'removeDiacritics': false,
         'showPersonalityField': showPersonalityField,
         'showKeywordsField': showKeywordsField,
+        if (timingPhraseCaps) 'timingPhraseCaps': true,
+        if (!includeTimingPhrase) 'includeTimingPhrase': false,
         'separator': separator,
         'creditFormat': creditFormat.name,
         'bylineOptions': bylineOptions.toJson(),
@@ -1457,6 +1477,8 @@ class CaptionTemplate {
       removeDiacritics: json['removeDiacritics'] as bool? ?? true,
       showPersonalityField: json['showPersonalityField'] as bool? ?? true,
       showKeywordsField: json['showKeywordsField'] as bool? ?? false,
+      timingPhraseCaps: json['timingPhraseCaps'] as bool? ?? false,
+      includeTimingPhrase: json['includeTimingPhrase'] as bool? ?? true,
       separator: json['separator'] as String? ?? '; ',
       creditFormat: CreditFormat.values.firstWhere(
         (e) => e.name == json['creditFormat'],
@@ -1558,6 +1580,14 @@ class CaptionTemplate {
   }
 
   String encode() => json.encode(toJson());
+
+  /// True for user-authored Custom or named library styles — their
+  /// [gameIdentifierText] / free-text must not be overwritten by the
+  /// per-wire sport overlay used for Getty / Imagn / AP / CP masters.
+  bool get isUserAuthoredCaptionStyle =>
+      wireStyle == WireStyle.custom ||
+      id.startsWith('saved_') ||
+      id.startsWith('saved:');
 
   /// Fills [gameIdentifierText] from [defaultGameIdentifierText] when empty, or
   /// when [replaceKnownDefaults] and the current text is another sport’s default.

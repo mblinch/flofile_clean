@@ -1,11 +1,15 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../caption_style/caption_template.dart';
+import '../caption_style/verb_defaults_bundle.dart';
 import '../caption_style/wire_iptc_specs.dart';
 import 'admin_service.dart';
 import 'iptc_template_apply_service.dart';
@@ -136,6 +140,7 @@ class AppDefaultsFirestoreService {
   static const int currentSchemaVersion = 2;
   static const String _cacheJsonKey = 'cached_app_defaults_json';
   static const String _cacheUpdatedAtKey = 'cached_app_defaults_updated_at_ms';
+  static const String _cacheFileName = 'app_defaults_current.json';
 
   static const List<String> catalogSports = [
     'baseball',
@@ -151,6 +156,17 @@ class AppDefaultsFirestoreService {
 
   static DocumentReference<Map<String, dynamic>> get _doc =>
       FirebaseFirestore.instance.doc(docPath);
+
+  static Future<File> _cacheFile() async {
+    final dir = await getApplicationSupportDirectory();
+    return File(p.join(dir.path, _cacheFileName));
+  }
+
+  /// Absolute path of the offline catalog file (created after first cache write).
+  static Future<String> offlineCachePath() async {
+    final file = await _cacheFile();
+    return file.path;
+  }
 
   static Future<bool> canPublish() async {
     if (!isAvailable) return false;
@@ -186,12 +202,29 @@ class AppDefaultsFirestoreService {
 
   static Future<void> loadCacheFromDisk() async {
     if (_memoryCache != null) return;
+
+    try {
+      final file = await _cacheFile();
+      if (await file.exists()) {
+        final raw = await file.readAsString();
+        if (raw.trim().isNotEmpty) {
+          final decoded = json.decode(raw) as Map<String, dynamic>;
+          _memoryCache = _catalogFromJson(decoded);
+          return;
+        }
+      }
+    } catch (e) {
+      print('AppDefaultsFirestoreService: file cache parse failed: $e');
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_cacheJsonKey);
     if (raw == null || raw.isEmpty) return;
     try {
       final decoded = json.decode(raw) as Map<String, dynamic>;
       _memoryCache = _catalogFromJson(decoded);
+      // Migrate SharedPreferences cache into the offline file.
+      await _writeCacheFile(_memoryCache!);
     } catch (e) {
       print('AppDefaultsFirestoreService: cache parse failed: $e');
     }
@@ -201,7 +234,11 @@ class AppDefaultsFirestoreService {
     String sport,
   ) async {
     await loadCacheFromDisk();
-    return _memoryCache?.sportVerbSettings(sport);
+    final slice = _memoryCache?.sportVerbSettings(sport);
+    if (slice == null || slice.isEmpty) return null;
+    return VerbDefaultsBundle.isComplete(slice)
+        ? slice
+        : VerbDefaultsBundle.ensureComplete(slice, sport);
   }
 
   /// Returns the admin-published caption style library from cache as raw JSON
@@ -451,12 +488,13 @@ class AppDefaultsFirestoreService {
   ) async {
     await _assertCanPublish();
     final normalized = sport.toLowerCase().trim();
+    final complete = VerbDefaultsBundle.ensureComplete(sportData, normalized);
     await _doc.set(
       {
         'schemaVersion': currentSchemaVersion,
         'updatedAt': FieldValue.serverTimestamp(),
         'updatedBy': FirebaseAuth.instance.currentUser?.uid,
-        'verbSettingsBySport': {normalized: sportData},
+        'verbSettingsBySport': {normalized: complete},
       },
       SetOptions(merge: true),
     );
@@ -468,12 +506,24 @@ class AppDefaultsFirestoreService {
     Map<String, Map<String, dynamic>> bySport,
   ) async {
     await _assertCanPublish();
+    final completeBySport = <String, Map<String, dynamic>>{};
+    bySport.forEach((sport, data) {
+      final normalized = sport.toLowerCase().trim();
+      completeBySport[normalized] =
+          VerbDefaultsBundle.ensureComplete(data, normalized);
+    });
+    for (final sport in catalogSports) {
+      completeBySport.putIfAbsent(
+        sport,
+        () => VerbDefaultsBundle.buildFactory(sport),
+      );
+    }
     await _doc.set(
       {
         'schemaVersion': currentSchemaVersion,
         'updatedAt': FieldValue.serverTimestamp(),
         'updatedBy': FirebaseAuth.instance.currentUser?.uid,
-        'verbSettingsBySport': bySport,
+        'verbSettingsBySport': completeBySport,
       },
       SetOptions(merge: true),
     );
@@ -524,16 +574,31 @@ class AppDefaultsFirestoreService {
   }
 
   static Future<void> _writeCache(AppDefaultsCatalog catalog) async {
+    final encoded = json.encode(_catalogToJson(catalog));
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _cacheJsonKey,
-      json.encode(_catalogToJson(catalog)),
-    );
+    await prefs.setString(_cacheJsonKey, encoded);
     if (catalog.updatedAt != null) {
       await prefs.setInt(
         _cacheUpdatedAtKey,
         catalog.updatedAt!.millisecondsSinceEpoch,
       );
+    }
+    await _writeCacheFile(catalog, encoded: encoded);
+  }
+
+  static Future<void> _writeCacheFile(
+    AppDefaultsCatalog catalog, {
+    String? encoded,
+  }) async {
+    try {
+      final file = await _cacheFile();
+      await file.parent.create(recursive: true);
+      await file.writeAsString(
+        encoded ?? json.encode(_catalogToJson(catalog)),
+        flush: true,
+      );
+    } catch (e) {
+      print('AppDefaultsFirestoreService: file cache write failed: $e');
     }
   }
 
@@ -589,6 +654,13 @@ class AppDefaultsFirestoreService {
     final ts = data['updatedAt'];
     if (ts is Timestamp) {
       updatedAt = ts.toDate();
+    } else if (ts is DateTime) {
+      updatedAt = ts;
+    } else {
+      final ms = data['updatedAtMs'];
+      if (ms is num) {
+        updatedAt = DateTime.fromMillisecondsSinceEpoch(ms.toInt());
+      }
     }
     return AppDefaultsCatalog(
       schemaVersion: (data['schemaVersion'] as num?)?.toInt() ??

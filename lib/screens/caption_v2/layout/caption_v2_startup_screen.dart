@@ -11,6 +11,8 @@ import '../../../services/mlb_api_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
+import '../../../widgets/app_styled_dialogs.dart';
+import '../../../widgets/startup_caption_layout_preview.dart';
 import 'caption_v2_iptc_dialog.dart';
 import 'roster_import_dialog.dart';
 
@@ -60,7 +62,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   String? _awayTeam;
   List<Player>? _homeRoster;
   List<Player>? _awayRoster;
-  bool _singleTeamMode = false;
 
   List<String> _teams = const [];
   bool _loadingTeams = false;
@@ -72,7 +73,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   String? _favoriteHome;
   String? _favoriteAway;
-  bool _useTank01 = false;
+  bool _useOfficialLeagueApis = false;
   bool _isAdmin = false;
   IptcApplyMode _iptcMode = IptcApplyMode.none;
   IptcApplyMode _preferredWriteMode = IptcApplyMode.onSave;
@@ -89,13 +90,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   bool get _sportChosen => _sport != null && _sport!.isNotEmpty;
   bool get _folderChosen => _folderPath != null && _folderPath!.isNotEmpty;
+
+  bool get _homeFilled => _homeTeam != null && _homeTeam!.isNotEmpty;
+  bool get _awayFilled => _awayTeam != null && _awayTeam!.isNotEmpty;
+
+  /// Exactly one side filled → single-team session.
+  bool get _inferredSingleTeam =>
+      (_homeFilled && !_awayFilled) || (!_homeFilled && _awayFilled);
+
   bool get _teamsChosen {
-    final homeOk = _homeTeam != null && _homeTeam!.isNotEmpty;
-    if (!homeOk) return false;
-    if (_singleTeamMode) return true;
-    return _awayTeam != null &&
-        _awayTeam!.isNotEmpty &&
-        _homeTeam != _awayTeam;
+    if (_inferredSingleTeam) return true;
+    if (!_homeFilled || !_awayFilled) return false;
+    return _homeTeam != _awayTeam;
   }
 
   bool get _canGo => _sportChosen && _folderChosen && _teamsChosen && !_going;
@@ -106,16 +112,19 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   String get _apiLabel {
     if (!_sportChosen) return '';
-    final tank01 = _useTank01 && _tank01Supported;
+    final official = _isAdmin && _useOfficialLeagueApis && _tank01Supported;
+    final tank01Fb = _tank01Supported && !official;
     switch (_sport) {
       case 'baseball':
-        return tank01 ? 'Tank01 MLB' : 'MLB Stats API';
+        return tank01Fb
+            ? 'Tank01 Firebase (MLB)'
+            : 'MLB Stats API';
       case 'hockey':
-        return tank01 ? 'Tank01 NHL' : 'NHL API';
+        return tank01Fb ? 'Tank01 Firebase (NHL)' : 'NHL API';
       case 'basketball':
-        return tank01 ? 'Tank01 NBA' : 'ESPN NBA';
+        return tank01Fb ? 'Tank01 Firebase (NBA)' : 'ESPN NBA';
       case 'wnba':
-        return tank01 ? 'Tank01 WNBA' : 'ESPN WNBA';
+        return tank01Fb ? 'Tank01 Firebase (WNBA)' : 'ESPN WNBA';
       case 'soccer':
         return 'ESPN MLS';
       default:
@@ -132,7 +141,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   Future<void> _bootstrap() async {
     try {
       _prefs = await PreferencesService.getInstance();
-      _useTank01 = await _prefs!.getUseTank01Rosters();
+      _useOfficialLeagueApis = await _prefs!.getUseOfficialLeagueApis();
       _isAdmin = await AdminService.isCurrentUserAdmin();
       _iptcMode = await _prefs!.getIptcApplyMode();
       if (_iptcMode != IptcApplyMode.none) {
@@ -308,10 +317,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (mounted) setState(() {});
   }
 
-  Future<void> _setTank01(bool enabled) async {
-    await _prefs?.saveUseTank01Rosters(enabled);
+  Future<void> _setUseOfficialLeagueApis(bool enabled) async {
+    await _prefs?.saveUseOfficialLeagueApis(enabled);
     if (!mounted) return;
-    setState(() => _useTank01 = enabled);
+    setState(() => _useOfficialLeagueApis = enabled);
   }
 
   Future<void> _setWriteIptc(bool enabled) async {
@@ -371,34 +380,61 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     });
   }
 
-  void _setSingleTeamMode(bool enabled) {
-    setState(() {
-      _singleTeamMode = enabled;
-      if (enabled) {
-        _awayTeam = null;
-        _awayRoster = null;
-      }
-    });
-  }
-
   Future<void> _goTime() async {
     if (!_canGo) return;
+
+    final single = _inferredSingleTeam;
+    if (single) {
+      final teamName = _homeFilled ? _homeTeam! : _awayTeam!;
+      final confirmed = await showAppConfirmDialog(
+        context: context,
+        title: 'One team only?',
+        message:
+            'Only $teamName is selected. Continue with a single-team session (no opponent)?',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'Continue',
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
     setState(() => _going = true);
-    await _prefs?.saveUseTank01Rosters(_useTank01);
+    await _prefs?.saveUseOfficialLeagueApis(_useOfficialLeagueApis);
     if (_sport != null) {
       try {
         await _prefs?.saveCurrentSport(_sport!);
       } catch (_) {}
     }
+
+    final String home;
+    final String away;
+    final List<Player>? homeRoster;
+    final List<Player>? awayRoster;
+    if (single) {
+      if (_homeFilled) {
+        home = _homeTeam!;
+        homeRoster = _homeRoster;
+      } else {
+        home = _awayTeam!;
+        homeRoster = _awayRoster;
+      }
+      away = '';
+      awayRoster = null;
+    } else {
+      home = _homeTeam!;
+      away = _awayTeam!;
+      homeRoster = _homeRoster;
+      awayRoster = _awayRoster;
+    }
+
     widget.onComplete(
       CaptionV2StartupResult(
         sport: _sport!,
         folderPath: _folderPath!,
-        homeTeam: _homeTeam!,
-        awayTeam: _singleTeamMode ? '' : _awayTeam!,
-        homeRoster: _homeRoster,
-        awayRoster: _singleTeamMode ? null : _awayRoster,
-        singleTeamMode: _singleTeamMode,
+        homeTeam: home,
+        awayTeam: away,
+        homeRoster: homeRoster,
+        awayRoster: awayRoster,
+        singleTeamMode: single,
       ),
     );
   }
@@ -414,15 +450,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   'New Flo File Session',
-                  style: t.labelStyle.copyWith(fontSize: 18),
+                  style: t.labelStyle.copyWith(fontSize: 15),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 _Section(
                   title: 'Images folder',
                   unlocked: true,
@@ -437,17 +473,20 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                               ? t.secondaryLabelStyle
                               : t.monoMetaStyle.copyWith(color: t.text),
                           softWrap: true,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       _OutlinedBtn(
                         label: _pickingFolder ? 'Opening…' : 'Choose folder',
+                        compact: true,
                         onPressed: _pickingFolder ? null : _pickFolder,
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 _Section(
                   title: 'Sport',
                   unlocked: _folderChosen,
@@ -458,9 +497,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      // Shrink-wrapped pills on one row (Wrap only if the window is tiny).
                       Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
                           for (final s in _sports)
                             _Chip(
@@ -471,17 +511,20 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                         ],
                       ),
                       if (_isAdmin) ...[
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 6),
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             SizedBox(
-                              width: 22,
-                              height: 22,
+                              width: 18,
+                              height: 18,
                               child: Checkbox(
-                                value: _useTank01,
+                                value: _useOfficialLeagueApis,
                                 activeColor: t.accent,
                                 checkColor: t.inkOnAccent,
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
                                 side: BorderSide(
                                   color: _tank01Supported
                                       ? t.textSecondary
@@ -489,21 +532,22 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                                 ),
                                 onChanged: !_sportChosen || !_tank01Supported
                                     ? null
-                                    : (v) => _setTank01(v ?? false),
+                                    : (v) =>
+                                        _setUseOfficialLeagueApis(v ?? false),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Expanded(
                               child: Text(
                                 _tank01Supported
-                                    ? 'Use Tank01 rosters (skip Firebase) — MLB/NBA/NHL/WNBA'
-                                    : 'Tank01 unavailable for soccer (MLS stays ESPN)',
+                                    ? 'Use official league APIs (sports/…) — default is Tank01 Firebase'
+                                    : 'Soccer always uses ESPN MLS',
                                 maxLines: 2,
                                 style: t.metaStyle.copyWith(
                                   color: _tank01Supported
                                       ? t.text
                                       : t.textSecondary,
-                                  height: 1.35,
+                                  height: 1.25,
                                 ),
                               ),
                             ),
@@ -513,9 +557,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 _Section(
-                  title: _singleTeamMode ? 'Team' : 'Teams',
+                  title: 'Teams',
                   unlocked: _sportChosen,
                   dimmed: _usingCustomRosters,
                   trailing: SizedBox(
@@ -550,110 +594,68 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: Checkbox(
-                              value: _singleTeamMode,
-                              activeColor: t.accent,
-                              checkColor: t.inkOnAccent,
-                              side: BorderSide(color: t.textSecondary),
-                              onChanged: !_sportChosen
-                                  ? null
-                                  : (v) => _setSingleTeamMode(v ?? false),
+                          Expanded(
+                            child: _TeamPicker(
+                              label: 'Away',
+                              value: _awayTeam,
+                              teams: _teams,
+                              enabled: _sportChosen && !_loadingTeams,
+                              favorited: _awayTeam != null &&
+                                  _favoriteAway == _awayTeam,
+                              onChanged: (v) => setState(() {
+                                _usingCustomRosters = false;
+                                _awayTeam = v;
+                                _homeRoster = null;
+                                _awayRoster = null;
+                              }),
+                              onToggleFavorite: () =>
+                                  _toggleFavorite(isHome: false),
                             ),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              'Single team — one roster, no opponent',
-                              style: t.metaStyle.copyWith(
-                                color: t.text,
-                                height: 1.35,
-                              ),
+                            child: _TeamPicker(
+                              label: 'Home',
+                              value: _homeTeam,
+                              teams: _teams,
+                              enabled: _sportChosen && !_loadingTeams,
+                              favorited: _homeTeam != null &&
+                                  _favoriteHome == _homeTeam,
+                              onChanged: (v) => setState(() {
+                                _usingCustomRosters = false;
+                                _homeTeam = v;
+                                _awayRoster = null;
+                                _homeRoster = null;
+                              }),
+                              onToggleFavorite: () =>
+                                  _toggleFavorite(isHome: true),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      if (_singleTeamMode)
-                        _TeamPicker(
-                          label: 'Team',
-                          value: _homeTeam,
-                          teams: _teams,
-                          enabled: _sportChosen && !_loadingTeams,
-                          favorited: _homeTeam != null &&
-                              _favoriteHome == _homeTeam,
-                          onChanged: (v) => setState(() {
-                            _usingCustomRosters = false;
-                            _homeTeam = v;
-                            _homeRoster = null;
-                            _awayRoster = null;
-                          }),
-                          onToggleFavorite: () =>
-                              _toggleFavorite(isHome: true),
-                        )
-                      else
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: _TeamPicker(
-                                label: 'Away',
-                                value: _awayTeam,
-                                teams: _teams,
-                                enabled: _sportChosen && !_loadingTeams,
-                                favorited: _awayTeam != null &&
-                                    _favoriteAway == _awayTeam,
-                                onChanged: (v) => setState(() {
-                                  _usingCustomRosters = false;
-                                  _awayTeam = v;
-                                  _homeRoster = null;
-                                  _awayRoster = null;
-                                }),
-                                onToggleFavorite: () =>
-                                    _toggleFavorite(isHome: false),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: _TeamPicker(
-                                label: 'Home',
-                                value: _homeTeam,
-                                teams: _teams,
-                                enabled: _sportChosen && !_loadingTeams,
-                                favorited: _homeTeam != null &&
-                                    _favoriteHome == _homeTeam,
-                                onChanged: (v) => setState(() {
-                                  _usingCustomRosters = false;
-                                  _homeTeam = v;
-                                  _awayRoster = null;
-                                  _homeRoster = null;
-                                }),
-                                onToggleFavorite: () =>
-                                    _toggleFavorite(isHome: true),
-                              ),
-                            ),
-                          ],
-                        ),
+                      const SizedBox(height: 8),
+                      _RosterPasteButton(
+                        playerCount: _awayRoster == null && _homeRoster == null
+                            ? null
+                            : (_awayRoster?.length ?? 0) +
+                                (_homeRoster?.length ?? 0),
+                        onPressed: _pasteRoster,
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 _Section(
-                  title: 'Custom rosters',
+                  title: 'Caption style',
                   unlocked: _sportChosen,
-                  selected: _usingCustomRosters,
-                  child: _RosterPasteButton(
-                    playerCount: _awayRoster == null && _homeRoster == null
-                        ? null
-                        : (_awayRoster?.length ?? 0) +
-                            (_homeRoster?.length ?? 0),
-                    onPressed: _pasteRoster,
+                  child: StartupCaptionLayoutPreview(
+                    sport: _sport,
+                    compact: true,
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
                 _Section(
                   title: 'Session',
                   unlocked: _teamsChosen,
@@ -663,23 +665,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                       Row(
                         children: [
                           SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: Checkbox(
-                              value: _writeIptc,
-                              activeColor: t.accent,
-                              checkColor: t.inkOnAccent,
-                              side: BorderSide(color: t.textSecondary),
-                              onChanged: !_teamsChosen
-                                  ? null
-                                  : (v) => _setWriteIptc(v ?? false),
-                            ),
+                            width: 88,
+                            child: Text('Write IPTC', style: t.bodyStyle),
+                          ),
+                          _OnOffPills(
+                            value: _writeIptc,
+                            enabled: _teamsChosen,
+                            onChanged: _setWriteIptc,
                           ),
                           const SizedBox(width: 8),
-                          Text('Write IPTC', style: t.bodyStyle),
-                          const SizedBox(width: 10),
-                          _OutlinedBtn(
-                            label: 'IPTC…',
+                          _PillSizedBtn(
+                            label: 'Edit IPTC',
                             onPressed: !_teamsChosen || !_writeIptc
                                 ? null
                                 : _openIptc,
@@ -687,72 +683,49 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                         ],
                       ),
                       if (_writeIptc) ...[
-                        const SizedBox(height: 6),
-                        Padding(
-                          padding: const EdgeInsets.only(left: 30),
-                          child: Text(
-                            _iptcStatus,
-                            style: t.metaStyle,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _iptcStatus,
+                          style: t.metaStyle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 6),
                       Row(
                         children: [
                           SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: Checkbox(
-                              value: _ftpModeEnabled,
-                              activeColor: t.accent,
-                              checkColor: t.inkOnAccent,
-                              side: BorderSide(color: t.textSecondary),
-                              onChanged: !_teamsChosen
-                                  ? null
-                                  : (v) => _setFtpMode(v ?? false),
-                            ),
+                            width: 88,
+                            child: Text('FTP mode', style: t.bodyStyle),
                           ),
-                          const SizedBox(width: 8),
-                          Text('FTP mode', style: t.bodyStyle),
+                          _OnOffPills(
+                            value: _ftpModeEnabled,
+                            enabled: _teamsChosen,
+                            onChanged: _setFtpMode,
+                          ),
                           const SizedBox(width: 8),
                           Text(
-                            _ftpModeEnabled ? 'On' : 'Off',
-                            style: t.metaStyle.copyWith(
-                              color: _ftpModeEnabled
-                                  ? t.accent
-                                  : t.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            'Enables FTP button',
+                            style: t.metaStyle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 6),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 30),
-                        child: Text(
-                          _ftpModeEnabled
-                              ? 'FTP buttons and shortcuts stay available so you can send captioned photos.'
-                              : "Hides FTP buttons and shortcuts so you won't send by accident on a caption-only day.",
-                          style: t.metaStyle,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
                       ),
                     ],
                   ),
                 ),
                 if (_error != null) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Text(_error!, style: t.metaStyle.copyWith(color: t.accent)),
                 ],
-                const SizedBox(height: 18),
+                const SizedBox(height: 12),
                 Align(
                   alignment: Alignment.centerRight,
                   child: _OutlinedBtn(
                     label: _going ? 'Loading…' : 'Go Time',
                     emphasized: true,
+                    compact: true,
                     onPressed: _canGo ? _goTime : null,
                   ),
                 ),
@@ -931,6 +904,126 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 }
 
+class _OnOffPills extends StatelessWidget {
+  const _OnOffPills({
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  /// Matches [_PillSizedBtn] / segment row height.
+  static const double height = 26;
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>()!;
+    Widget seg({required String label, required bool selected, required bool on}) {
+      return Material(
+        color: selected ? const Color(0xFF3A4050) : Colors.transparent,
+        child: InkWell(
+          onTap: !enabled || selected ? null : () => onChanged(on),
+          child: SizedBox(
+            height: height - 2, // inside 1px border
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.0,
+                    fontWeight: FontWeight.w500,
+                    color: !enabled
+                        ? t.text.withValues(alpha: 0.28)
+                        : selected
+                            ? t.text
+                            : t.text.withValues(alpha: 0.42),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: Container(
+        height: height,
+        decoration: BoxDecoration(
+          color: t.bg,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: t.divider),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            seg(label: 'On', selected: value, on: true),
+            Container(width: 1, height: height - 2, color: t.divider),
+            seg(label: 'Off', selected: !value, on: false),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact outlined control matching [_OnOffPills] height; greys out when disabled.
+class _PillSizedBtn extends StatelessWidget {
+  const _PillSizedBtn({
+    required this.label,
+    this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final enabled = onPressed != null;
+    return Opacity(
+      opacity: enabled ? 1 : 0.38,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            height: _OnOffPills.height,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: t.bg,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: enabled ? t.divider : t.divider.withValues(alpha: 0.55),
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.0,
+                fontWeight: FontWeight.w500,
+                color: enabled
+                    ? t.text
+                    : t.text.withValues(alpha: 0.42),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _Section extends StatelessWidget {
   const _Section({
     required this.title,
@@ -955,7 +1048,7 @@ class _Section extends StatelessWidget {
       opacity: unlocked && !dimmed ? 1 : 0.4,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: selected ? t.selectedFill : t.surface,
           borderRadius: BorderRadius.circular(FfTokens.radiusCard),
@@ -968,12 +1061,17 @@ class _Section extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text(title.toUpperCase(), style: t.microStyle),
+                Text(
+                  title.toUpperCase(),
+                  style: FfTokens.railLabel.copyWith(
+                    color: t.text.withValues(alpha: 0.70),
+                  ),
+                ),
                 const Spacer(),
                 if (trailing != null) trailing!,
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             IgnorePointer(ignoring: !unlocked, child: child),
           ],
         ),
@@ -982,6 +1080,7 @@ class _Section extends StatelessWidget {
   }
 }
 
+/// Compact selectable pill matching [_OnOffPills] / [_PillSizedBtn].
 class _Chip extends StatelessWidget {
   const _Chip({
     required this.label,
@@ -996,22 +1095,34 @@ class _Chip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? t.selectedFill : t.badgeFill,
-          borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-          border: Border.all(
-            color: selected ? t.selectedBorder : t.divider,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: selected ? null : onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          height: _OnOffPills.height,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF3A4050) : t.bg,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: t.divider),
           ),
-        ),
-        child: Text(
-          label,
-          style: t.chipStyle.copyWith(
-            color: selected ? t.text : t.textSecondary,
+          child: Center(
+            widthFactor: 1,
+            heightFactor: 1,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.0,
+                fontWeight: FontWeight.w500,
+                color: selected
+                    ? t.text
+                    : t.text.withValues(alpha: 0.42),
+              ),
+            ),
           ),
         ),
       ),
@@ -1024,11 +1135,13 @@ class _OutlinedBtn extends StatelessWidget {
     required this.label,
     this.onPressed,
     this.emphasized = false,
+    this.compact = false,
   });
 
   final String label;
   final VoidCallback? onPressed;
   final bool emphasized;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1044,13 +1157,21 @@ class _OutlinedBtn extends StatelessWidget {
           onTap: onPressed,
           borderRadius: BorderRadius.circular(FfTokens.radiusChip),
           child: Container(
-            constraints: const BoxConstraints(minHeight: 40),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            constraints: BoxConstraints(minHeight: compact ? 28 : 40),
+            padding: EdgeInsets.symmetric(
+              horizontal: compact ? 10 : 16,
+              vertical: compact ? 5 : 10,
+            ),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(FfTokens.radiusChip),
               border: Border.all(color: t.accent, width: 1.5),
             ),
-            child: Text(label, style: t.labelStyle),
+            child: Text(
+              label,
+              style: compact
+                  ? t.labelStyle.copyWith(fontSize: 11)
+                  : t.labelStyle,
+            ),
           ),
         ),
       ),
@@ -1080,8 +1201,8 @@ class _RosterPasteButton extends StatelessWidget {
           onTap: onPressed,
           borderRadius: BorderRadius.circular(FfTokens.radiusChip),
           child: Container(
-            constraints: const BoxConstraints(minHeight: 42),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            constraints: const BoxConstraints(minHeight: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(FfTokens.radiusChip),
               border: Border.all(
@@ -1146,11 +1267,11 @@ class _TeamPicker extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(label, style: t.metaStyle),
-        const SizedBox(height: 4),
+        const SizedBox(height: 2),
         Row(
           children: [
             Expanded(
-              child: DropdownButtonFormField<String>(
+              child: DropdownButtonFormField<String?>(
                 key: ValueKey('$label:$effectiveValue'),
                 initialValue: effectiveValue,
                 isExpanded: true,
@@ -1164,15 +1285,23 @@ class _TeamPicker extends StatelessWidget {
                   filled: true,
                   fillColor: t.sunken,
                   contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(FfTokens.radiusChip),
                     borderSide: BorderSide.none,
                   ),
                 ),
                 items: [
+                  DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text(
+                      'None',
+                      style: t.secondaryLabelStyle,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                   for (final name in teams)
-                    DropdownMenuItem<String>(
+                    DropdownMenuItem<String?>(
                       value: name,
                       child: Text(
                         name,

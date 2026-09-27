@@ -187,6 +187,7 @@ class SportVerbCategories {
       'Blocks',
       'Clears',
       'Checks',
+      'Fights',
       'Defends',
     ],
     'Goalie': [

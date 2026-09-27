@@ -1,4 +1,5 @@
 import '../config/tank01_config.dart';
+import 'admin_service.dart';
 import 'mlb_api_service.dart'; // TeamInfo, Player
 import 'nhl_api_service.dart';
 import 'nba_api_service.dart';
@@ -6,11 +7,12 @@ import 'wnba_api_service.dart';
 import 'mls_api_service.dart';
 import 'preferences_service.dart';
 import 'roster_firestore_service.dart';
-import 'tank01_api_service.dart';
 
 /// Routes team and roster requests by sport.
-/// With admin Tank01 toggle: baseball / basketball / hockey / wnba use Tank01
-/// RapidAPI (skip Firestore). Soccer has no Tank01 product and always uses ESPN MLS.
+///
+/// Default for all users: Tank01-populated Firestore (`sports_tank01/...`).
+/// Admins may opt into official league APIs (`sports/...` + MLB/NHL/ESPN).
+/// Soccer has no Tank01 product and always uses ESPN MLS.
 class ApiManager {
   final MlbApiService _mlbService = MlbApiService();
   final NhlApiService _nhlService = NhlApiService();
@@ -33,40 +35,74 @@ class ApiManager {
     print('API Manager: Switched to $_currentSport mode using ${_apiDisplayName()}');
   }
 
-  Future<bool> _useTank01Rosters() async {
-    if (!tank01SupportsSport(_currentSport)) return false;
+  /// True only when an admin explicitly opts into league APIs.
+  Future<bool> _useOfficialLeagueApis() async {
     try {
+      final isAdmin = await AdminService.isCurrentUserAdmin();
+      if (!isAdmin) return false;
       final prefs = await PreferencesService.getInstance();
-      return await prefs.getUseTank01Rosters();
+      return await prefs.getUseOfficialLeagueApis();
     } catch (_) {
       return false;
     }
   }
 
-  Tank01ApiService _tank01ForCurrentSport() =>
-      Tank01ApiService.forSport(_currentSport);
+  /// Default path: Tank01 Firebase for supported sports (everyone).
+  Future<bool> _useTank01Firebase() async {
+    if (!tank01SupportsSport(_currentSport)) return false;
+    return !(await _useOfficialLeagueApis());
+  }
 
-  String _apiDisplayName({bool tank01 = false}) {
-    switch (_currentSport) {
-      case 'baseball':
-        return tank01 ? 'Tank01 MLB (RapidAPI)' : 'MLB API';
-      case 'hockey':
-        return tank01 ? 'Tank01 NHL (RapidAPI)' : 'NHL API';
-      case 'basketball':
-        return tank01 ? 'Tank01 NBA (RapidAPI)' : 'ESPN NBA API';
-      case 'wnba':
-        return tank01 ? 'Tank01 WNBA (RapidAPI)' : 'ESPN WNBA API';
-      case 'soccer':
-        return 'MLS (ESPN)';
-      default:
-        return 'ESPN NBA API';
+  String _apiDisplayName({bool tank01Firebase = false, bool official = false}) {
+    if (official) {
+      switch (_currentSport) {
+        case 'baseball':
+          return 'MLB API';
+        case 'hockey':
+          return 'NHL API';
+        case 'basketball':
+          return 'ESPN NBA API';
+        case 'wnba':
+          return 'ESPN WNBA API';
+        case 'soccer':
+          return 'MLS (ESPN)';
+        default:
+          return 'ESPN NBA API';
+      }
     }
+    if (tank01Firebase) {
+      switch (_currentSport) {
+        case 'baseball':
+          return 'Tank01 Firebase (MLB)';
+        case 'hockey':
+          return 'Tank01 Firebase (NHL)';
+        case 'basketball':
+          return 'Tank01 Firebase (NBA)';
+        case 'wnba':
+          return 'Tank01 Firebase (WNBA)';
+        default:
+          return 'Tank01 Firebase';
+      }
+    }
+    return _apiDisplayName(official: true);
   }
 
   /// Fetches all teams for the current sport.
   Future<List<TeamInfo>> fetchTeams() async {
-    print('API Manager: Fetching $_currentSport teams from ${_apiDisplayName()}');
+    final tank01Fb = await _useTank01Firebase();
+    print(
+        'API Manager: Fetching $_currentSport teams from ${_apiDisplayName(tank01Firebase: tank01Fb, official: !tank01Fb)}');
     try {
+      if (tank01Fb) {
+        final teams = await RosterFirestoreService.listTeams(
+          sportId: _currentSport,
+          rootCollection: RosterFirestoreService.tank01RootCollection,
+        );
+        if (teams.isNotEmpty) return teams;
+        throw Exception(
+          'sports_tank01/$_currentSport has no teams yet — run Tank01 sync',
+        );
+      }
       switch (_currentSport) {
         case 'baseball':
           return await _mlbService.fetchAllTeams();
@@ -89,18 +125,34 @@ class ApiManager {
 
   /// Fetches the roster for [teamName] in the current sport.
   Future<List<Player>> fetchTeamRoster(String teamName) async {
-    final useTank01 = await _useTank01Rosters();
+    final tank01Fb = await _useTank01Firebase();
     print(
-        'API Manager: Fetching $_currentSport roster for "$teamName" from ${_apiDisplayName(tank01: useTank01)}');
+        'API Manager: Fetching $_currentSport roster for "$teamName" from ${_apiDisplayName(tank01Firebase: tank01Fb, official: !tank01Fb)}');
     try {
-      if (useTank01) {
-        print(
-            'API Manager: Fetching $_currentSport roster for "$teamName" from Tank01 (skipping Firestore)');
-        final roster =
-            await _tank01ForCurrentSport().fetchRosterByTeamName(teamName);
-        print(
-            'API Manager: Loaded ${roster.length} players from Tank01 for "$teamName"');
-        return roster;
+      if (tank01Fb) {
+        final teamId = await RosterFirestoreService.findTeamIdByDisplayName(
+          sportId: _currentSport,
+          teamName: teamName,
+          rootCollection: RosterFirestoreService.tank01RootCollection,
+        );
+        if (teamId == null) {
+          throw Exception(
+            'Team "$teamName" not found in sports_tank01/$_currentSport',
+          );
+        }
+        final cached = await _readRosterFromFirestoreIfAvailable(
+          _currentSport,
+          teamId,
+          rootCollection: RosterFirestoreService.tank01RootCollection,
+        );
+        if (cached != null) {
+          print(
+              'API Manager: Loaded ${cached.length} players from sports_tank01 for "$teamName"');
+          return cached;
+        }
+        throw Exception(
+          'No roster in sports_tank01 for "$teamName" ($teamId) — wait for Tank01 sync',
+        );
       }
 
       switch (_currentSport) {
@@ -235,20 +287,23 @@ class ApiManager {
   /// Returns Firestore roster when available; null means "fallback to API".
   Future<List<Player>?> _readRosterFromFirestoreIfAvailable(
     String sportId,
-    String teamId,
-  ) async {
+    String teamId, {
+    String rootCollection = RosterFirestoreService.leagueRootCollection,
+  }) async {
     if (!RosterFirestoreService.isAvailable) return null;
     try {
       final players = await RosterFirestoreService.readTeamPlayers(
         sportId: sportId,
         teamId: teamId,
+        rootCollection: rootCollection,
       );
       if (players.isEmpty) return null;
       print(
-          'API Manager: Loaded ${players.length} players for $sportId/$teamId from Firestore');
+          'API Manager: Loaded ${players.length} players for $rootCollection/$sportId/$teamId from Firestore');
       return players;
     } catch (e) {
-      print('API Manager: Firestore roster read failed for $sportId/$teamId: $e');
+      print(
+          'API Manager: Firestore roster read failed for $rootCollection/$sportId/$teamId: $e');
       return null;
     }
   }

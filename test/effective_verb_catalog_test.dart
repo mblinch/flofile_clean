@@ -35,6 +35,12 @@ void main() {
     );
 
     expect(catalog.categoryOrder.first, 'Favorites');
+    expect(
+        catalog.categoryOrder, containsAll(['Pitching', 'Offense', 'Defense']));
+    expect(
+      catalog.verbsByCategory['Favorites']!.map((v) => v.key),
+      containsAll(['Single', 'My Play']),
+    );
     expect(catalog.verbsByCategory['Offense']!.map((v) => v.key),
         containsAllInOrder(['Home Run', 'My Play', 'Single']));
     expect(catalog.verbsByCategory['Defense']!.map((v) => v.key),
@@ -42,16 +48,46 @@ void main() {
     expect(catalog.byKey, isNot(contains('Triple')));
     expect(catalog.byKey['Single']!.label, 'Base Hit');
     expect(catalog.byKey['Single']!.singularPhrase, 'slaps a single');
+    expect(catalog.byKey['Single']!.category, 'Offense');
     expect(catalog.byKey['My Play']!.isCustom, isTrue);
     expect(catalog.byKey['My Play']!.keywords, contains('special'));
-    expect(catalog.verbsByCategory['Favorites']!.map((v) => v.key),
-        containsAll(['Single', 'My Play']));
+    expect(catalog.favoriteKeys, containsAll(['Single', 'My Play']));
+    expect(catalog.byKey['Single']!.isFavorite, isTrue);
+  });
+
+  test('Runs stays in Favorites when saved under a different name', () {
+    final catalog = EffectiveVerbCatalog.merge(
+      sport: 'baseball',
+      categoryOrder: const ['Running', 'Offense'],
+      verbOrder: const {
+        'Favorites': ['Runs'],
+        'Running': ['Steals', 'Slides', 'Rounds'],
+      },
+      favorites: const {'runs', 'run to a base'},
+      customVerbs: const [],
+      customWordings: const {},
+      overrides: const {},
+      deletedVerbs: const {},
+      catalogComplete: true,
+    );
+
+    expect(
+      catalog.verbsByCategory['Favorites']!.map((verb) => verb.key),
+      ['Runs'],
+    );
+    expect(catalog.byKey['Runs']!.isFavorite, isTrue);
+    expect(
+      catalog.verbsByCategory['Running']!.map((verb) => verb.key),
+      contains('Runs'),
+    );
   });
 
   test('falls back to complete sport factory catalog', () {
     final catalog = EffectiveVerbCatalog.factory('hockey');
 
+    expect(catalog.categoryOrder.first, 'Favorites');
     expect(catalog.categoryOrder, containsAll(['Offense', 'Goalie']));
+    expect(catalog.verbsByCategory['Favorites'], isEmpty);
     expect(catalog.byKey['Skates']!.singularPhrase, isNotEmpty);
     expect(catalog.verbsByCategory['Offense']!.map((v) => v.key),
         contains('Shoots'));

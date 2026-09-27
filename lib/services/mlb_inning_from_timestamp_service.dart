@@ -22,10 +22,13 @@ class MlbPhotoInningLookup {
   });
 
   final bool hasScheduleMatch;
+
   /// False when the game matched but play-by-play had no usable timestamps.
   final bool hasPlayByPlay;
+
   /// Meaningful when [hasPlayByPlay] is true.
   final MlbPhotoGametimePhase phase;
+
   /// Set only when [phase] is [MlbPhotoGametimePhase.live].
   final int? inningNumber;
 }
@@ -61,7 +64,8 @@ class MlbInningFromTimestampService {
   }
 
   /// Treats [wallClock] as local civil time in [ianaTimezone] and returns UTC.
-  static DateTime? naiveWallClockToUtc(String ianaTimezone, DateTime wallClock) {
+  static DateTime? naiveWallClockToUtc(
+      String ianaTimezone, DateTime wallClock) {
     try {
       final loc = tz.getLocation(ianaTimezone.trim());
       final z = tz.TZDateTime(
@@ -80,21 +84,20 @@ class MlbInningFromTimestampService {
     }
   }
 
-  static String _ymd(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-'
+  static String _ymd(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
-  /// Finds [gamePk] where the two franchises match (home/away may be swapped
-  /// in the UI vs the official game record).
-  Future<int?> findGamePkForTeamsOnDate({
+  /// All games that day between the two franchises (doubleheaders included).
+  /// Home/away in the UI may be swapped from the official record.
+  Future<List<int>> findGamePksForTeamsOnDate({
     required String userHomeName,
     required String userAwayName,
     required DateTime calendarDay,
   }) async {
     final home = await _mlb.findTeamByName(userHomeName);
     final away = await _mlb.findTeamByName(userAwayName);
-    if (home == null || away == null) return null;
+    if (home == null || away == null) return const [];
     final date = _ymd(calendarDay);
 
     Future<List<dynamic>> gamesForTeam(String teamId) async {
@@ -112,28 +115,49 @@ class MlbInningFromTimestampService {
       return first['games'] as List<dynamic>? ?? const [];
     }
 
-    final list = await gamesForTeam(home.id);
-    int? homeId = int.tryParse(home.id);
-    int? awayId = int.tryParse(away.id);
-    if (homeId == null || awayId == null) return null;
+    final homeId = int.tryParse(home.id);
+    final awayId = int.tryParse(away.id);
+    if (homeId == null || awayId == null) return const [];
 
-    for (final g in list) {
-      if (g is! Map<String, dynamic>) continue;
-      final teams = g['teams'] as Map<String, dynamic>?;
-      if (teams == null) continue;
-      final apiHome =
-          (teams['home'] as Map<String, dynamic>?)?['team'] as Map<String, dynamic>?;
-      final apiAway =
-          (teams['away'] as Map<String, dynamic>?)?['team'] as Map<String, dynamic>?;
-      if (apiHome == null || apiAway == null) continue;
-      final h = _apiTeamId(apiHome['id']);
-      final a = _apiTeamId(apiAway['id']);
-      if (h == null || a == null) continue;
-      if ((h == homeId && a == awayId) || (h == awayId && a == homeId)) {
-        return g['gamePk'] as int?;
+    final pks = <int>{};
+    for (final teamId in {home.id, away.id}) {
+      final list = await gamesForTeam(teamId);
+      for (final g in list) {
+        if (g is! Map<String, dynamic>) continue;
+        final teams = g['teams'] as Map<String, dynamic>?;
+        if (teams == null) continue;
+        final apiHome = (teams['home'] as Map<String, dynamic>?)?['team']
+            as Map<String, dynamic>?;
+        final apiAway = (teams['away'] as Map<String, dynamic>?)?['team']
+            as Map<String, dynamic>?;
+        if (apiHome == null || apiAway == null) continue;
+        final h = _apiTeamId(apiHome['id']);
+        final a = _apiTeamId(apiAway['id']);
+        if (h == null || a == null) continue;
+        if ((h == homeId && a == awayId) || (h == awayId && a == homeId)) {
+          final pk = g['gamePk'];
+          final id = pk is int ? pk : int.tryParse(pk?.toString() ?? '');
+          if (id != null) pks.add(id);
+        }
       }
     }
-    return null;
+    return pks.toList();
+  }
+
+  /// Finds [gamePk] where the two franchises match (home/away may be swapped
+  /// in the UI vs the official game record).
+  Future<int?> findGamePkForTeamsOnDate({
+    required String userHomeName,
+    required String userAwayName,
+    required DateTime calendarDay,
+  }) async {
+    final pks = await findGamePksForTeamsOnDate(
+      userHomeName: userHomeName,
+      userAwayName: userAwayName,
+      calendarDay: calendarDay,
+    );
+    if (pks.isEmpty) return null;
+    return pks.first;
   }
 
   Future<List<MlbPlayStart>> _loadTimeline(int gamePk) async {
@@ -204,53 +228,116 @@ class MlbInningFromTimestampService {
     return int.tryParse(v?.toString() ?? '');
   }
 
-  Future<MlbPhotoInningLookup> lookupPhotoInning({
-    required String userHomeName,
-    required String userAwayName,
-    required DateTime gameCalendarDay,
-    required DateTime photoTimeUtc,
-  }) async {
-    final pk = await findGamePkForTeamsOnDate(
-      userHomeName: userHomeName,
-      userAwayName: userAwayName,
-      calendarDay: gameCalendarDay,
-    );
-    if (pk == null) {
+  /// Picks the game whose play-by-play actually covers [photoTimeUtc].
+  ///
+  /// A doubleheader produces two timelines. The earlier game must not steal a
+  /// photo taken during the later one.
+  static MlbPhotoInningLookup timelineForPhoto(
+    List<List<MlbPlayStart>> games,
+    DateTime photoTimeUtc,
+  ) {
+    if (games.isEmpty) {
       return const MlbPhotoInningLookup(
         hasScheduleMatch: false,
         hasPlayByPlay: false,
       );
     }
-    final plays = await _loadTimeline(pk);
-    if (plays.isEmpty) {
+    final scored = <_ScoredTimeline>[];
+    for (final plays in games) {
+      if (plays.isEmpty) continue;
+      scored.add(_scoreTimeline(plays, photoTimeUtc));
+    }
+    if (scored.isEmpty) {
       return const MlbPhotoInningLookup(
         hasScheduleMatch: true,
         hasPlayByPlay: false,
       );
     }
+    scored.sort((a, b) {
+      final liveCmp = (a.inside ? 0 : 1).compareTo(b.inside ? 0 : 1);
+      if (liveCmp != 0) return liveCmp;
+      return a.distance.compareTo(b.distance);
+    });
+    return scored.first.lookup;
+  }
+
+  static _ScoredTimeline _scoreTimeline(
+    List<MlbPlayStart> plays,
+    DateTime photoTimeUtc,
+  ) {
     final firstStart = plays.first.startUtc;
     final endBound = gameEndUtc(plays);
     if (photoTimeUtc.isBefore(firstStart)) {
-      return const MlbPhotoInningLookup(
-        hasScheduleMatch: true,
-        hasPlayByPlay: true,
-        phase: MlbPhotoGametimePhase.pregame,
+      return _ScoredTimeline(
+        lookup: const MlbPhotoInningLookup(
+          hasScheduleMatch: true,
+          hasPlayByPlay: true,
+          phase: MlbPhotoGametimePhase.pregame,
+        ),
+        inside: false,
+        distance: firstStart.difference(photoTimeUtc),
       );
     }
     if (photoTimeUtc.isAfter(endBound)) {
-      return const MlbPhotoInningLookup(
-        hasScheduleMatch: true,
-        hasPlayByPlay: true,
-        phase: MlbPhotoGametimePhase.postgame,
+      return _ScoredTimeline(
+        lookup: const MlbPhotoInningLookup(
+          hasScheduleMatch: true,
+          hasPlayByPlay: true,
+          phase: MlbPhotoGametimePhase.postgame,
+        ),
+        inside: false,
+        distance: photoTimeUtc.difference(endBound),
       );
     }
-    final inn = inningAtUtc(plays, photoTimeUtc);
-    return MlbPhotoInningLookup(
-      hasScheduleMatch: true,
-      hasPlayByPlay: true,
-      phase: MlbPhotoGametimePhase.live,
-      inningNumber: inn,
+    return _ScoredTimeline(
+      lookup: MlbPhotoInningLookup(
+        hasScheduleMatch: true,
+        hasPlayByPlay: true,
+        phase: MlbPhotoGametimePhase.live,
+        inningNumber: inningAtUtc(plays, photoTimeUtc),
+      ),
+      inside: true,
+      distance: Duration.zero,
     );
+  }
+
+  Future<MlbPhotoInningLookup> lookupPhotoInning({
+    required String userHomeName,
+    required String userAwayName,
+    required DateTime gameCalendarDay,
+    DateTime? photoCalendarDay,
+    required DateTime photoTimeUtc,
+  }) async {
+    final days = <DateTime>{};
+    void addAround(DateTime day) {
+      final date = DateTime(day.year, day.month, day.day);
+      days.add(date);
+      days.add(date.subtract(const Duration(days: 1)));
+      days.add(date.add(const Duration(days: 1)));
+    }
+
+    addAround(gameCalendarDay);
+    if (photoCalendarDay != null) addAround(photoCalendarDay);
+
+    final pks = <int>{};
+    for (final day in days) {
+      pks.addAll(await findGamePksForTeamsOnDate(
+        userHomeName: userHomeName,
+        userAwayName: userAwayName,
+        calendarDay: day,
+      ));
+    }
+    if (pks.isEmpty) {
+      return const MlbPhotoInningLookup(
+        hasScheduleMatch: false,
+        hasPlayByPlay: false,
+      );
+    }
+    final timelines = <List<MlbPlayStart>>[];
+    for (final pk in pks) {
+      timelines.add(await _loadTimeline(pk));
+    }
+    return timelineForPhoto(timelines, photoTimeUtc);
   }
 
   Future<int?> resolveInning({
@@ -269,6 +356,18 @@ class MlbInningFromTimestampService {
     if (r.phase != MlbPhotoGametimePhase.live) return null;
     return r.inningNumber;
   }
+}
+
+class _ScoredTimeline {
+  const _ScoredTimeline({
+    required this.lookup,
+    required this.inside,
+    required this.distance,
+  });
+
+  final MlbPhotoInningLookup lookup;
+  final bool inside;
+  final Duration distance;
 }
 
 class MlbPlayStart {

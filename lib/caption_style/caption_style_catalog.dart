@@ -89,7 +89,12 @@ class CaptionStyleCatalog {
     final resolvedSport =
         (sport ?? await prefs.getCurrentSport()).toLowerCase().trim();
     if (resolvedSport.isNotEmpty) {
-      await prefs.saveCurrentSport(resolvedSport);
+      final current = (await prefs.getCurrentSport()).toLowerCase().trim();
+      // Only persist when the sport actually changes — saveCurrentSport used
+      // to rewrite the active caption template on every catalog load.
+      if (resolvedSport != current) {
+        await prefs.saveCurrentSport(resolvedSport);
+      }
     }
 
     final gettyDef = await prefs.getCaptionTemplateWireDefault(WireStyle.getty);
@@ -193,7 +198,13 @@ class CaptionStyleCatalog {
       final id = token.substring(6);
       for (final e in library) {
         if (e.id == id) {
-          return _withSport(_deepCopy(e.template));
+          // Named styles keep their authored game-identifier / custom text.
+          // Wire presets still get the per-sport overlay via [_withSport].
+          return CaptionTemplate.withSportGameIdentifierDefault(
+            _deepCopy(e.template),
+            sport,
+            replaceKnownDefaults: false,
+          );
         }
       }
       return _withSport(CaptionTemplate.getty());
@@ -209,7 +220,7 @@ class CaptionStyleCatalog {
         return _withSport(_wiredBaseline(wire));
       case WireStyle.custom:
         final ref = refForCustom ?? CaptionTemplate.getty();
-        return _withSport(
+        return CaptionTemplate.withSportGameIdentifierDefault(
           CaptionTemplate.custom(
             dateFormat: ref.dateFormat,
             dateExpression: ref.dateExpression,
@@ -227,6 +238,8 @@ class CaptionStyleCatalog {
             removeDiacritics: ref.removeDiacritics,
             showPersonalityField: ref.showPersonalityField,
             showKeywordsField: ref.showKeywordsField,
+            timingPhraseCaps: ref.timingPhraseCaps,
+            includeTimingPhrase: ref.includeTimingPhrase,
             separator: ref.separator,
             creditFormat: ref.creditFormat,
             bylineOptions: ref.bylineOptions,
@@ -248,6 +261,8 @@ class CaptionStyleCatalog {
                 : null,
             gameIdentifierText: ref.gameIdentifierText,
           ),
+          sport,
+          replaceKnownDefaults: false,
         );
     }
   }
@@ -390,15 +405,12 @@ class CaptionStyleCatalog {
     CaptionTemplate template,
     List<CaptionStyleLibraryEntry> lib,
   ) {
+    // Only match a library row when the active template's own id is that
+    // row's id. Matching nested template.id (e.g. preset_getty) or full JSON
+    // equality falsely tagged built-ins as saved styles and blocked Done →
+    // Custom promotion.
     for (final e in lib) {
       if (e.id == template.id) return 'saved:${e.id}';
-      if (e.template.id == template.id) return 'saved:${e.id}';
-    }
-    final norm = template.normalizePerOccurrenceLists();
-    final snap = jsonEncode(norm.toJson());
-    for (final e in lib) {
-      final eNorm = e.template.normalizePerOccurrenceLists();
-      if (jsonEncode(eNorm.toJson()) == snap) return 'saved:${e.id}';
     }
     return _wireToken(template.wireStyle);
   }

@@ -101,6 +101,8 @@ class VerbCaptionWording {
         return 'clears the puck';
       case 'Checks':
         return 'checks';
+      case 'Fights':
+        return 'fights';
       case 'Defends':
         return 'defends';
       case 'Saves':
@@ -222,6 +224,7 @@ class VerbCaptionWording {
       'Scores': 'score',
       'Blocks': 'block a shot',
       'Checks': 'check',
+      'Fights': 'fight',
       'Defends': 'defend',
       'Saves': 'make a save',
       'Celebrates': 'celebrate',
@@ -271,6 +274,7 @@ class VerbCaptionWording {
       'Scores': 'scoring',
       'Blocks': 'blocking a shot',
       'Checks': 'checking',
+      'Fights': 'fighting',
       'Defends': 'defending',
       'Saves': 'making a save',
       'Celebrates': 'celebrating',

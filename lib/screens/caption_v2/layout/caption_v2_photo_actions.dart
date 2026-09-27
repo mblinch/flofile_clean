@@ -9,6 +9,7 @@ import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/oriented_file_preview.dart';
+import '../data/caption_transfer_payload.dart';
 import '../data/caption_v2_controller.dart';
 
 enum _PhotoAction {
@@ -190,10 +191,12 @@ Future<void> showCaptionV2PhotoMenu({
   switch (action) {
     case _PhotoAction.copyCaption:
       final values = await controller.readIptcPanelValues(imagePath);
+      final photographer = await controller.photographerNameForPath(imagePath);
       final captionValues = <String, String>{
         'Caption': values['Caption'] ?? '',
         'Personality': values['Personality'] ?? '',
         'Keywords': values['Keywords'] ?? '',
+        if (photographer.trim().isNotEmpty) 'photographerName': photographer,
       };
       await Clipboard.setData(ClipboardData(text: jsonEncode(captionValues)));
       if (context.mounted) _message(context, 'Caption copied');
@@ -240,19 +243,46 @@ Future<void> _pasteCaption(
 ) async {
   try {
     final text = (await Clipboard.getData('text/plain'))?.text;
-    final decoded = text == null ? null : jsonDecode(text);
-    if (decoded is! Map) throw const FormatException();
-    final values = <String, String>{};
-    decoded.forEach((key, value) {
-      if (!const {'Caption', 'Personality', 'Keywords'}.contains(key)) return;
-      final stringValue = value?.toString() ?? '';
-      if (stringValue.isNotEmpty) values[key.toString()] = stringValue;
-    });
+    final payload = text == null ? null : CaptionTransferPayload.decode(text);
+    if (payload == null || payload.caption.trim().isEmpty) {
+      throw const FormatException();
+    }
     var pastedCount = 0;
+    String? openCaption;
+    final current = controller.currentPath;
     for (final imagePath in imagePaths) {
+      final destinationPhotographer =
+          await controller.photographerNameForPath(imagePath);
+      final caption = CaptionTransferPayload.captionForDestinationPhotographer(
+        caption: payload.caption,
+        sourcePhotographer: payload.photographerName,
+        destinationPhotographer: destinationPhotographer,
+        removeDiacritics: controller.captionTemplate.removeDiacritics,
+      );
+      if (imagePath == current) openCaption = caption;
+      final values = <String, String>{
+        'Caption': caption,
+        if (payload.personality.trim().isNotEmpty)
+          'Personality': payload.personality,
+        if (payload.keywords.trim().isNotEmpty) 'Keywords': payload.keywords,
+      };
       final ok = await controller.writeIptcPanelValues(imagePath, values);
       if (ok) pastedCount++;
     }
+
+    final appliesToOpenPreview =
+        current != null && imagePaths.contains(current);
+    if (appliesToOpenPreview) {
+      controller.applyPastedPhotoCaption(
+        caption: openCaption ?? payload.caption,
+        personality: payload.personality,
+        keywords: payload.keywords,
+      );
+    } else {
+      controller.selectedImagePaths.clear();
+      controller.notifyListeners();
+    }
+
     if (context.mounted) {
       final message = pastedCount == imagePaths.length
           ? (pastedCount == 1
@@ -470,6 +500,8 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
                             clipBehavior: Clip.antiAlias,
                             child: OrientedFilePreview(
                               path: widget.imagePath,
+                              version: widget.controller
+                                  .imageContentStamp(widget.imagePath),
                               fit: BoxFit.contain,
                               cacheWidth: 1000,
                             ),

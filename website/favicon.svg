@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="FloFile Captions">
+  <rect width="32" height="32" rx="8" fill="#8792AB"/>
+  <rect x="6" y="8" width="20" height="16" rx="2.5" fill="#161826" opacity="0.45"/>
+  <path fill="#E9E9ED" d="M9 12h14v2.2H9zm0 4.4h10v2.2H9zm0 4.4h12v2.2H9z"/>
+  <circle cx="24" cy="22" r="4.5" fill="#E8763A"/>
+</svg>

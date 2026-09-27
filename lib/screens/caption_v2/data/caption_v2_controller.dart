@@ -12,26 +12,31 @@ import '../../../caption_style/caption_style_catalog.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/caption_text_normalize.dart';
 import '../../../caption_style/game_info.dart';
+import '../../../caption_style/verb_authoring_model.dart';
 import '../../../caption_style/verb_caption_wording.dart';
 import '../../../caption_style/verb_sub_options.dart';
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/api_manager.dart';
 import '../../../services/ftpclient_service.dart';
+import '../../../services/flo_caption_mark.dart';
 import '../../../services/iptc_template_apply_service.dart';
 import '../../../services/iptc_template_import_service.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/mlb_inning_feature_gate.dart';
 import '../../../services/mlb_inning_from_timestamp_service.dart';
 import '../../../services/preferences_service.dart';
+import '../../../services/admin_service.dart';
 import '../../../config/tank01_config.dart';
 import '../../../utils/exiftool_helper.dart';
 import '../../../utils/default_verb_keywords.dart';
+import '../../../utils/image_file_ready.dart';
 import '../../../utils/native_file_picker.dart';
 import '../widgets/frame_status_dot.dart';
 import 'burst_groups.dart';
 import 'caption_transfer_payload.dart';
 import 'caption_v2_caption_domain.dart';
 import 'effective_verb_catalog.dart';
+import 'ftp_history.dart';
 import 'iptc_caption_writer.dart';
 import 'team_abbrev.dart';
 
@@ -126,6 +131,36 @@ class FirebarResult {
       : 'verb:$verbKey';
 }
 
+class _FirebarJerseyToken {
+  const _FirebarJerseyToken({this.side, required this.jersey});
+
+  final String? side;
+  final String jersey;
+}
+
+class _FirebarJerseyVerbCompound {
+  const _FirebarJerseyVerbCompound({
+    required this.jerseys,
+    required this.verbQuery,
+  });
+
+  /// One or more jersey tokens (`88`, `h4 v3`, …) before the verb text.
+  final List<_FirebarJerseyToken> jerseys;
+  final String verbQuery;
+}
+
+class _CaptionJerseyExpansion {
+  const _CaptionJerseyExpansion({
+    required this.text,
+    required this.players,
+    required this.clearManual,
+  });
+
+  final String text;
+  final List<RosterHit> players;
+  final bool clearManual;
+}
+
 class CaptionSaveResult {
   const CaptionSaveResult({
     required this.requestedPaths,
@@ -218,8 +253,7 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Session has one roster only ([homeTeam]); captions omit opponent clauses.
   bool singleTeamMode = false;
 
-  bool get hasOpponentTeam =>
-      !singleTeamMode && awayTeam.trim().isNotEmpty;
+  bool get hasOpponentTeam => !singleTeamMode && awayTeam.trim().isNotEmpty;
 
   String venue = '';
   String sport = 'baseball';
@@ -277,6 +311,7 @@ class CaptionV2Controller extends ChangeNotifier {
   Player? selectedPlayer;
   bool selectedIsHome = true;
   String? selectedVerb;
+  final Map<String, String?> verbModifierSelections = {};
   String customVerbPhrase = '';
   String lastCustomVerbPhrase = '';
   bool customVerbPinned = false;
@@ -288,6 +323,7 @@ class CaptionV2Controller extends ChangeNotifier {
   String? manualCaptionOverride;
   CaptionTransferPayload? previousCaption;
   int rbi = 0;
+
   /// Running-verb base: `1B`, `2B`, `3B`, `Home`, or null.
   String? selectedBase;
   int inning = 2;
@@ -318,6 +354,28 @@ class CaptionV2Controller extends ChangeNotifier {
   final Set<String> selectedImagePaths = {};
   bool burstDetectionEnabled = true;
   bool loadingImages = false;
+  bool refreshingFolder = false;
+  bool _folderScanInFlight = false;
+  bool _folderScanAgain = false;
+  StreamSubscription<FileSystemEvent>? _folderWatch;
+  Timer? _folderIngestTimer;
+  Timer? _folderPollTimer;
+  int _folderWatchGeneration = 0;
+  String? _watchedFolder;
+  final Set<String> _pendingIngest = {};
+  final Map<String, int> _imageContentStamp = {};
+  final Map<String, int> _fileLength = {};
+  final Map<String, int> _fileModifiedMs = {};
+  final Map<String, int> _fileChangedMs = {};
+
+  static const _sessionImageExtensions = {
+    '.jpg',
+    '.jpeg',
+    '.tif',
+    '.tiff',
+    '.png',
+  };
+
   /// When false, FTP buttons/shortcuts/menu items are hidden.
   bool ftpModeEnabled = true;
 
@@ -330,12 +388,27 @@ class CaptionV2Controller extends ChangeNotifier {
   int columnFocus = 1; // 0 home, 1 verbs, 2 away, 3 thumbnails
   RosterSortMode rosterSort = RosterSortMode.number;
   bool rosterSortAscending = true;
+
+  /// Bumped when advancing frames so roster/drum player search fields clear.
+  int playerSearchClearGeneration = 0;
   int firebarSelectionIndex = -1;
   final List<FirebarResult> _firebarCommitted = [];
+
+  /// Player keys auto-applied while Firebar search narrows to roster match(es).
+  final Set<String> _firebarAutoPreviewKeys = {};
+
+  /// Verb key auto-applied while Firebar search narrows to a single verb match.
+  /// Does not clear [pinnedVerb] — preview is a one-frame override.
+  String? _firebarVerbPreviewKey;
+  String? _firebarVerbPreviewPriorSelected;
   String? firebarOptionPrompt;
   FirebarOptionKind? _firebarOptionKind;
   List<FirebarOption> firebarOptions = const [];
   int firebarOptionIndex = 0;
+
+  /// Screen asks before re-uploading paths already in [sentImages].
+  /// Return true to upload those paths again.
+  Future<bool> Function(List<String> alreadySent)? confirmRetransmit;
 
   /// Screen-provided save path so verb-menu / Firebar Save/FTP can show burst alerts.
   Future<void> Function({required bool transmit})? onSaveTransmit;
@@ -363,15 +436,19 @@ class CaptionV2Controller extends ChangeNotifier {
 
   List<FirebarResult> get firebarVerbResults {
     final query = _normalizedFirebarQuery;
-    if (RegExp(r'^(?:[hv])?\d+$').hasMatch(query)) return const [];
+    final compound = _parseFirebarJerseyVerbCompound(query);
+    final verbQuery = compound?.verbQuery ?? query;
+    if (compound == null) {
+      if (RegExp(r'^(?:[hv])?\d+$').hasMatch(query)) return const [];
+      if (_parseFirebarJerseyTokens(query) != null) return const [];
+    }
     final seen = <String>{};
     final results = <FirebarResult>[];
     for (final category in verbCategories) {
-      if (category == 'Favorites') continue;
       for (final verb
           in verbDefinitionsByCategory[category] ?? const <EffectiveVerb>[]) {
         if (!seen.add(verb.key)) continue;
-        if (query.isEmpty || _firebarVerbMatches(verb.label, query)) {
+        if (verbQuery.isEmpty || _firebarVerbMatches(verb, verbQuery)) {
           results.add(FirebarResult.verb(verb.key));
         }
       }
@@ -382,9 +459,69 @@ class CaptionV2Controller extends ChangeNotifier {
   List<FirebarResult> get firebarOrderedResults {
     final home = firebarHomeResults;
     final away = firebarAwayResults;
+    final custom = firebarCustomVerbOffer;
+    final extras =
+        custom == null ? const <FirebarResult>[] : [FirebarResult.verb(custom)];
     return selectedIsHome
-        ? [...home, ...firebarVerbResults, ...away]
-        : [...away, ...firebarVerbResults, ...home];
+        ? [...home, ...firebarVerbResults, ...away, ...extras]
+        : [...away, ...firebarVerbResults, ...home, ...extras];
+  }
+
+  /// Typed wording that isn't a catalog verb, offered as its own Firebar chip.
+  String? get firebarCustomVerbOffer {
+    if (!searchOpen || firebarOptions.isNotEmpty) return null;
+    final raw = searchQuery.trim();
+    if (raw.isEmpty) return null;
+    final normalized = _normalizedFirebarQuery;
+    if (RegExp(r'^(?:[hv])?\d+$').hasMatch(normalized)) return null;
+    if (_parseFirebarJerseyVerbCompound(normalized) == null &&
+        _parseFirebarJerseyTokens(normalized) != null) {
+      return null;
+    }
+    final verbQuery = firebarVerbHighlightQuery;
+    if (verbQuery.length < 2) return null;
+    if (_catalogVerbExactlyMatches(verbQuery)) return null;
+    if (_queryMatchesPlayerName(verbQuery)) return null;
+    final catalogHits = firebarVerbResults.isNotEmpty;
+    final playerHits =
+        firebarHomeResults.isNotEmpty || firebarAwayResults.isNotEmpty;
+    final hasSpace = verbQuery.contains(' ');
+    if (catalogHits && !hasSpace) return null;
+    if (!catalogHits && !hasSpace && playerHits) return null;
+    final tail = _typedVerbTail(raw);
+    return tail.length < 2 ? null : tail;
+  }
+
+  bool _catalogVerbExactlyMatches(String query) {
+    for (final result in firebarVerbResults) {
+      final verb = verbDefinition(result.verbKey ?? '');
+      if (verb == null) continue;
+      if (_normalizeFirebarText(verb.label) == query ||
+          _normalizeFirebarText(verb.key) == query ||
+          _normalizeFirebarText(verb.singularPhrase) == query) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool _queryMatchesPlayerName(String query) {
+    bool matches(List<Player> roster) {
+      for (final player in roster) {
+        if (_normalizeFirebarText(player.fullName) == query) return true;
+      }
+      return false;
+    }
+
+    return matches(homeRoster) || matches(awayRoster);
+  }
+
+  static String _typedVerbTail(String raw) {
+    final match = RegExp(
+      r'^(?:(?:[hv])?\s*#?\d+\s+)+(.+)$',
+      caseSensitive: false,
+    ).firstMatch(raw.trim());
+    return (match?.group(1) ?? raw).trim();
   }
 
   FirebarResult? get firebarSelectedResult {
@@ -394,6 +531,31 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     return results[firebarSelectionIndex];
   }
+
+  /// True when Firebar has a highlighted player match (name or jersey), so
+  /// Shift+Enter can commit that match and save without pressing Enter first.
+  bool get firebarCanQuickSavePlayer {
+    if (!searchOpen || firebarOptions.isNotEmpty) return false;
+    if (searchQuery.trim().isEmpty) return false;
+    return firebarSelectedResult?.kind == FirebarResultKind.player;
+  }
+
+  /// True when Firebar has a highlighted verb — commit as a one-frame override
+  /// of any pinned verb, then save (or wait for RBI/base chips).
+  bool get firebarCanQuickSaveVerb {
+    if (!searchOpen || firebarOptions.isNotEmpty) return false;
+    if (searchQuery.trim().isEmpty) return false;
+    return firebarSelectedResult?.kind == FirebarResultKind.verb;
+  }
+
+  bool get firebarShowingDestinationOptions =>
+      searchOpen && _firebarOptionKind == FirebarOptionKind.destination;
+
+  /// Show the Shift+Enter save hint in the Firebar chrome.
+  bool get firebarShowShiftEnterSaveHint =>
+      firebarCanQuickSavePlayer ||
+      firebarCanQuickSaveVerb ||
+      firebarShowingDestinationOptions;
 
   List<FirebarResult> get firebarCommitted =>
       List.unmodifiable(_firebarCommitted);
@@ -411,7 +573,6 @@ class CaptionV2Controller extends ChangeNotifier {
   int get firebarVerbTotal {
     final seen = <String>{};
     for (final category in verbCategories) {
-      if (category == 'Favorites') continue;
       for (final verb
           in verbDefinitionsByCategory[category] ?? const <EffectiveVerb>[]) {
         seen.add(verb.key);
@@ -428,21 +589,146 @@ class CaptionV2Controller extends ChangeNotifier {
       firebarVerbResults.length +
       firebarAwayResults.length;
 
+  /// Caption text Firebar just put into the sentence. Orange in the caption
+  /// while Firebar is open; date, venue, and byline stay the normal color.
+  List<String> get firebarInsertedHighlights {
+    if (!searchOpen) return const [];
+    final caption = displayedCaption;
+    if (caption.trim().isEmpty) return const [];
+    final body = buildCaptionBody().trim();
+    if (body.isNotEmpty && caption.contains(body)) return [body];
+    final found = <String>[];
+    void add(String phrase) {
+      final text = phrase.trim();
+      if (text.isEmpty || found.contains(text)) return;
+      if (caption.contains(text)) found.add(text);
+    }
+
+    for (final row in selectedPlayers) {
+      add(row.player.fullName);
+    }
+    add(customVerbPhrase);
+    final verb = selectedVerb;
+    if (verb != null) {
+      add(verbDefinition(verb)?.singularPhrase ?? '');
+      add(verbDefinition(verb)?.label ?? verb);
+    }
+    return found;
+  }
+
   String get _normalizedFirebarQuery =>
       firebarOptions.isNotEmpty ? '' : _normalizeFirebarText(searchQuery);
 
   static String _normalizeFirebarText(String value) =>
       CaptionTextNormalize.stripDiacritics(value).trim().toLowerCase();
 
-  static bool _firebarVerbMatches(String label, String query) {
-    final normalized = _normalizeFirebarText(label);
-    if (normalized.startsWith(query)) return true;
-    final initials = normalized
+  static bool _firebarVerbMatches(EffectiveVerb verb, String query) {
+    if (_firebarTextMatches(verb.label, query, allowInitials: true)) {
+      return true;
+    }
+    if (_firebarTextMatches(verb.singularPhrase, query)) return true;
+    if (_firebarTextMatches(verb.pluralPhrase, query)) return true;
+    if (_firebarTextMatches(verb.ingPhrase, query)) return true;
+    for (final keyword in verb.keywords) {
+      if (_firebarTextMatches(keyword, query, allowInitials: true)) {
+        return true;
+      }
+    }
+    final phraseText = verb.authoring.phrase.parts
+        .whereType<VerbPhraseText>()
+        .map((part) => part.text)
+        .join();
+    if (_firebarTextMatches(phraseText, query)) return true;
+    for (final group in verb.authoring.groups) {
+      if (_firebarTextMatches(group.name, query)) return true;
+      for (final option in group.options) {
+        if (_firebarTextMatches(option.label, query) ||
+            _firebarTextMatches(option.value, query)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  static bool _firebarTextMatches(
+    String value,
+    String query, {
+    bool allowInitials = false,
+  }) {
+    final normalized = _normalizeFirebarText(value);
+    if (normalized.isEmpty) return false;
+    if (normalized == query || normalized.startsWith(query)) return true;
+    final words = normalized
         .split(RegExp(r'[^a-z0-9]+'))
         .where((word) => word.isNotEmpty)
-        .map((word) => word[0])
-        .join();
+        .toList(growable: false);
+    if (words.any((word) => word == query || word.startsWith(query))) {
+      return true;
+    }
+    // Multi-word fragments like "hits a" should match inside a longer phrase.
+    if (query.contains(' ') && normalized.contains(query)) return true;
+    if (!allowInitials) return false;
+    final initials = words.map((word) => word[0]).join();
     return initials.startsWith(query);
+  }
+
+  static final RegExp _firebarJerseyTokenPattern = RegExp(r'^([hv])?(\d+)$');
+
+  /// Parses `88 looks`, `88 92 look`, or `h4 v3 home run` into jerseys + verb.
+  _FirebarJerseyVerbCompound? _parseFirebarJerseyVerbCompound(String query) {
+    final parts = query.trim().split(RegExp(r'\s+'));
+    if (parts.length < 2) return null;
+
+    final jerseys = <_FirebarJerseyToken>[];
+    var index = 0;
+    for (; index < parts.length; index++) {
+      final match = _firebarJerseyTokenPattern.firstMatch(parts[index]);
+      if (match == null) break;
+      jerseys.add(
+        _FirebarJerseyToken(
+          side: match.group(1)?.toLowerCase(),
+          jersey: match.group(2)!,
+        ),
+      );
+    }
+    if (jerseys.isEmpty || index >= parts.length) return null;
+
+    final verbQuery = _normalizeFirebarText(parts.sublist(index).join(' '));
+    if (verbQuery.isEmpty) return null;
+    return _FirebarJerseyVerbCompound(
+      jerseys: jerseys,
+      verbQuery: verbQuery,
+    );
+  }
+
+  /// Verb-only fragment of the Firebar query (e.g. `look` from `88 92 look`).
+  String get firebarVerbHighlightQuery {
+    final compound = _parseFirebarJerseyVerbCompound(_normalizedFirebarQuery);
+    return compound?.verbQuery ?? _normalizedFirebarQuery;
+  }
+
+  /// Parses space-separated jersey tokens like `11 27` or `h4 v3`.
+  List<_FirebarJerseyToken>? _parseFirebarJerseyTokens(String query) {
+    final parts = query.trim().split(RegExp(r'\s+'));
+    if (parts.length < 2) return null;
+    final tokens = <_FirebarJerseyToken>[];
+    for (final part in parts) {
+      final match = _firebarJerseyTokenPattern.firstMatch(part);
+      if (match == null) return null;
+      tokens.add(
+        _FirebarJerseyToken(
+          side: match.group(1)?.toLowerCase(),
+          jersey: match.group(2)!,
+        ),
+      );
+    }
+    return tokens;
+  }
+
+  List<_FirebarJerseyToken>? _firebarJerseyTokensForQuery(String query) {
+    return _parseFirebarJerseyVerbCompound(query)?.jerseys ??
+        _parseFirebarJerseyTokens(query);
   }
 
   List<FirebarResult> _firebarRosterResults(
@@ -450,7 +736,33 @@ class CaptionV2Controller extends ChangeNotifier {
     required bool isHome,
   }) {
     final query = _normalizedFirebarQuery;
-    final jerseyMatch = RegExp(r'^([hv])?(\d+)$').firstMatch(query);
+    final jerseyTokens = _firebarJerseyTokensForQuery(query);
+    if (jerseyTokens != null) {
+      final wantedJerseys = <String>{};
+      for (final token in jerseyTokens) {
+        if ((token.side == 'h' && !isHome) || (token.side == 'v' && isHome)) {
+          continue;
+        }
+        wantedJerseys.add(token.jersey);
+      }
+      if (wantedJerseys.isEmpty) return const [];
+      final matches = roster
+          .where(
+            (player) => wantedJerseys.contains(
+              (player.jerseyNumber ?? '').trim(),
+            ),
+          )
+          .toList()
+        ..sort(_comparePlayers);
+      return [
+        for (final player in matches)
+          FirebarResult.player(
+            player: player,
+            isHome: isHome,
+          ),
+      ];
+    }
+    final jerseyMatch = _firebarJerseyTokenPattern.firstMatch(query);
     final requestedSide = jerseyMatch?.group(1);
     final jerseyQuery = jerseyMatch?.group(2);
     if ((requestedSide == 'h' && !isHome) || (requestedSide == 'v' && isHome)) {
@@ -465,8 +777,8 @@ class CaptionV2Controller extends ChangeNotifier {
     }).toList();
     if (query.isNotEmpty) {
       matches.sort((a, b) {
-        final score = _playerMatchScore(a, query)
-            .compareTo(_playerMatchScore(b, query));
+        final score =
+            _playerMatchScore(a, query).compareTo(_playerMatchScore(b, query));
         if (score != 0) return score;
         return _comparePlayers(a, b);
       });
@@ -511,8 +823,7 @@ class CaptionV2Controller extends ChangeNotifier {
     final matches =
         roster.where((player) => _playerMatchScore(player, q) < 900).toList();
     matches.sort((a, b) {
-      final score =
-          _playerMatchScore(a, q).compareTo(_playerMatchScore(b, q));
+      final score = _playerMatchScore(a, q).compareTo(_playerMatchScore(b, q));
       if (score != 0) return score;
       return _comparePlayers(a, b);
     });
@@ -521,9 +832,26 @@ class CaptionV2Controller extends ChangeNotifier {
 
   // --- Transmit ---
   String destinationLabel = 'Photoshelter · FTP';
+  String? ftpProfileName;
+
+  String get ftpButtonLabel {
+    final name = ftpProfileName?.trim();
+    if (name == null || name.isEmpty) return 'FTP';
+    return 'FTP · $name';
+  }
   int queuedCount = 0;
   String? lastSentLabel;
   bool transmitting = false;
+  final List<FtpHistoryEntry> ftpHistory = [];
+
+  /// 0.0–1.0 while [transmitting]; cleared when idle.
+  double transmitProgress = 0;
+
+  /// Human-readable phase, e.g. "Uploading…".
+  String? transmitStatus;
+
+  /// Path currently uploading (for preview/thumbnail overlays).
+  String? transmittingPath;
   String? statusMessage;
 
   String? get currentPath => imagePaths.isEmpty
@@ -692,6 +1020,19 @@ class CaptionV2Controller extends ChangeNotifier {
   bool get hasVerbSelection =>
       selectedVerb != null || customVerbPhrase.trim().isNotEmpty;
 
+  /// Pinned verb is armed for the next frame, but don't compose a caption
+  /// until a player is chosen. Manual (unpinned) verb picks still preview.
+  bool get pinDefersCaptionUntilPlayer {
+    if (selectedPlayer != null) return false;
+    if (pinnedVerb != null && selectedVerb == pinnedVerb) return true;
+    if (customVerbPinned &&
+        selectedVerb == null &&
+        customVerbPhrase.trim().isNotEmpty) {
+      return true;
+    }
+    return false;
+  }
+
   String get rbiChipLabel => rbi > 0 ? 'RBI $rbi' : '';
 
   String get baseChipLabel {
@@ -795,8 +1136,7 @@ class CaptionV2Controller extends ChangeNotifier {
   /// instead of stacking "before the game in their WNBA game".
   bool get _canFoldPrePostIntoGameIdentifier {
     if (!preGame && !postGame) return false;
-    return _inTheirGameId
-        .hasMatch(captionTemplate.gameIdentifierText.trim());
+    return _inTheirGameId.hasMatch(captionTemplate.gameIdentifierText.trim());
   }
 
   String? get _foldedGameIdentifierText {
@@ -813,36 +1153,51 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Caption clause for the current timing selection (matches classic wording).
   String get timingCaptionClause {
+    String phrase;
     if (preGame) {
-      return _canFoldPrePostIntoGameIdentifier ? '' : 'before the game';
-    }
-    if (postGame) {
-      return _canFoldPrePostIntoGameIdentifier ? '' : 'following the game';
-    }
-    if (timingHalf == '1H') return 'during the first half';
-    if (timingHalf == '2H') return 'during the second half';
-    final max = timingRegulationCount;
-    final s = sport.toLowerCase();
-    if (inning > max && s != 'baseball') {
-      switch (s) {
-        case 'soccer':
-          return 'during extra time';
-        default:
-          return 'during overtime';
+      phrase = _canFoldPrePostIntoGameIdentifier ? '' : 'before the game';
+    } else if (postGame) {
+      phrase = _canFoldPrePostIntoGameIdentifier ? '' : 'following the game';
+    } else if (timingHalf == '1H') {
+      phrase = 'during the first half';
+    } else if (timingHalf == '2H') {
+      phrase = 'during the second half';
+    } else {
+      final max = timingRegulationCount;
+      final s = sport.toLowerCase();
+      if (inning > max && s != 'baseball') {
+        switch (s) {
+          case 'soccer':
+            phrase = 'during extra time';
+            break;
+          default:
+            phrase = 'during overtime';
+            break;
+        }
+      } else {
+        switch (s) {
+          case 'hockey':
+            phrase = 'during the ${_ordinalWord(inning)} period';
+            break;
+          case 'basketball':
+          case 'wnba':
+            phrase = 'during the ${_ordinalWord(inning)} quarter';
+            break;
+          case 'soccer':
+            phrase = inning == 1
+                ? 'during the first half'
+                : 'during the second half';
+            break;
+          case 'baseball':
+          default:
+            phrase = 'during the ${_ordinalWord(inning)} inning';
+            break;
+        }
       }
     }
-    switch (s) {
-      case 'hockey':
-        return 'during the ${_ordinalWord(inning)} period';
-      case 'basketball':
-      case 'wnba':
-        return 'during the ${_ordinalWord(inning)} quarter';
-      case 'soccer':
-        return inning == 1 ? 'during the first half' : 'during the second half';
-      case 'baseball':
-      default:
-        return 'during the ${_ordinalWord(inning)} inning';
-    }
+    if (phrase.isEmpty) return phrase;
+    if (!captionTemplate.includeTimingPhrase) return '';
+    return captionTemplate.timingPhraseCaps ? phrase.toUpperCase() : phrase;
   }
 
   /// Chip-mode leading text (used when the full style caption isn't ready yet).
@@ -1077,8 +1432,11 @@ class CaptionV2Controller extends ChangeNotifier {
     final rows = subjectPlayers.isEmpty
         ? [RosterHit(player: selectedPlayer!, isHome: selectedIsHome)]
         : subjectPlayers;
-    var teamName = rows.first.isHome ? homeTeam : awayTeam;
-    final playerLabels = rows.map((row) {
+    // Celebrates a Goal: first pick is the scorer; teammates follow as "with…".
+    final leadRows =
+        _verbUsesScoringLeadWithTeammates(selectedVerb) ? [rows.first] : rows;
+    var teamName = leadRows.first.isHome ? homeTeam : awayTeam;
+    final playerLabels = leadRows.map((row) {
       var playerName = row.player.fullName;
       if (template.removeDiacritics) {
         playerName = CaptionTextNormalize.stripDiacritics(playerName);
@@ -1102,6 +1460,11 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
+  /// Verbs where the first same-team pick is the action subject and later
+  /// same-team picks are named in a trailing "with …" clause.
+  static bool _verbUsesScoringLeadWithTeammates(String? verb) =>
+      verb == 'Celebrates a Goal';
+
   String _actionPhrase() {
     final verb = selectedVerb!;
     final definition = verbDefinition(verb);
@@ -1109,7 +1472,10 @@ class CaptionV2Controller extends ChangeNotifier {
     final subjectIsHome =
         subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
     final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
-    final plural = subjects.length > 1;
+    final scoringLead = _verbUsesScoringLeadWithTeammates(verb);
+    final plural = scoringLead ? false : subjects.length > 1;
+    // Live captioning uses classic RBI / celebration controls. Authored
+    // modifier phrases are edited in Admin → Verb authoring only for now.
     var action = CaptionV2CaptionDomain.actionCore(
       verb: verb,
       sport: sport,
@@ -1128,7 +1494,16 @@ class CaptionV2Controller extends ChangeNotifier {
       subOptions: definition?.subOptions,
     );
 
-    if ((definition?.wantsOpponent ?? true) && hasOpponentTeam) {
+    if (scoringLead && subjects.length > 1) {
+      final teammates = subjects.skip(1).toList(growable: false);
+      final names = _formatPlayerNamesOnly(teammates, captionTemplate);
+      if (names.isNotEmpty) {
+        action = '$action with $names';
+      }
+    }
+
+    if (hasOpponentTeam &&
+        !action.toLowerCase().contains(opponentTeam.trim().toLowerCase())) {
       action = CaptionV2CaptionDomain.withOpponent(
         verb: verb,
         action: action,
@@ -1154,21 +1529,26 @@ class CaptionV2Controller extends ChangeNotifier {
 
   String _customActionPhrase() {
     var action = customVerbPhrase.trim();
-    final lower = action.toLowerCase();
-    if (hasOpponentTeam &&
-        !lower.contains(' against ') &&
-        !lower.contains(' playing ')) {
+    if (hasOpponentTeam) {
       final subjects = subjectPlayers;
       final subjectIsHome =
           subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
-      action = CaptionV2CaptionDomain.withOpponent(
-        verb: action,
-        action: action,
-        opponentTeam: subjectIsHome ? awayTeam : homeTeam,
-        opposingPlayers: opposingPlayers.isEmpty
-            ? null
-            : _formatPlayersWithTeam(opposingPlayers, captionTemplate),
-      );
+      final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
+      final lower = action.toLowerCase();
+      if (!lower.contains(opponentTeam.trim().toLowerCase())) {
+        final alreadyJoined =
+            lower.contains(' against ') || lower.contains(' playing ');
+        action = alreadyJoined
+            ? '$action the ${opponentTeam.trim()}'
+            : CaptionV2CaptionDomain.withOpponent(
+                verb: action,
+                action: action,
+                opponentTeam: opponentTeam,
+                opposingPlayers: opposingPlayers.isEmpty
+                    ? null
+                    : _formatPlayersWithTeam(opposingPlayers, captionTemplate),
+              );
+      }
     }
     if (preGame) {
       return _canFoldPrePostIntoGameIdentifier
@@ -1263,6 +1643,26 @@ class CaptionV2Controller extends ChangeNotifier {
     return '${_joinNames(labels)} of the $team';
   }
 
+  /// Player names only (no team), for "with …" teammate clauses.
+  String _formatPlayerNamesOnly(
+    List<RosterHit> rows,
+    CaptionTemplate template,
+  ) {
+    if (rows.isEmpty) return '';
+    final labels = rows.map((row) {
+      var name = row.player.fullName;
+      if (template.removeDiacritics) {
+        name = CaptionTextNormalize.stripDiacritics(name);
+      }
+      final jersey = row.player.jerseyNumber?.trim() ?? '';
+      if (jersey.isEmpty) return name;
+      return template.numberFormat == NumberFormatStyle.hash
+          ? '$name #$jersey'
+          : '$name ($jersey)';
+    }).toList();
+    return _joinNames(labels);
+  }
+
   static String _joinNames(List<String> names) {
     if (names.isEmpty) return '';
     if (names.length == 1) return names.first;
@@ -1300,19 +1700,40 @@ class CaptionV2Controller extends ChangeNotifier {
         : CaptionTransferPayload.decode(jsonEncode(previous));
     await _loadCaptionStyleCatalog();
     await _refreshFtpDestination();
+    await _loadFtpHistory();
     notifyListeners();
   }
 
   Future<void> _loadCaptionStyleCatalog() async {
     final prefs = _prefs;
     if (prefs == null) return;
+    // Always re-read the active template. Bootstrap may have loaded an older
+    // copy before the startup Edit/Done path wrote Custom to prefs — without
+    // this, Go Time kept the stale in-memory template.
+    captionTemplate = await prefs.getCaptionTemplate();
     final catalog = await CaptionStyleCatalog.load(prefs, sport: sport);
     _captionStyleCatalog = catalog;
     _activeCaptionStyleToken = catalog.activeToken;
-    captionTemplate = catalog.resolve(
-      catalog.activeToken,
-      refForCustom: captionTemplate,
-    );
+
+    // Keep the persisted working template. Resolving wire tokens via the catalog
+    // returns the wire master and was wiping named-style / custom free-text after
+    // Save as… or closing the layout editor. Only re-hydrate from the library
+    // entry when that is the active menu selection (so library edits apply).
+    if (catalog.activeToken.startsWith('saved:')) {
+      captionTemplate = catalog.resolve(
+        catalog.activeToken,
+        refForCustom: captionTemplate,
+      );
+    } else {
+      // Wire / custom working copy: fill empty game-ID, and swap known sport
+      // defaults (MLB → NHL) without clobbering authored free-text.
+      // Custom / named styles: only fill when empty (never replace authored text).
+      captionTemplate = CaptionTemplate.withSportGameIdentifierDefault(
+        captionTemplate,
+        sport,
+        replaceKnownDefaults: !captionTemplate.isUserAuthoredCaptionStyle,
+      );
+    }
   }
 
   Future<void> _loadVerbCatalog() async {
@@ -1351,6 +1772,17 @@ class CaptionV2Controller extends ChangeNotifier {
     _activeCaptionStyleToken = token;
     notifyListeners();
     await prefs.saveCaptionTemplate(captionTemplate);
+  }
+
+  /// When false, captions omit the inning/period/quarter clause and the timing
+  /// bar is greyed out. Persists on the working caption template.
+  bool get includeTimingPhrase => captionTemplate.includeTimingPhrase;
+
+  Future<void> setIncludeTimingPhrase(bool include) async {
+    if (captionTemplate.includeTimingPhrase == include) return;
+    captionTemplate = captionTemplate.copyWith(includeTimingPhrase: include);
+    notifyListeners();
+    await _prefs?.saveCaptionTemplate(captionTemplate);
   }
 
   Future<void> setFtpModeEnabled(bool enabled) async {
@@ -1430,7 +1862,73 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Apply roster / team-name edits from [showRosterImportDialog] without
+  /// restarting the session.
+  void applyRosterEdits({
+    String? homeTeamName,
+    List<Player>? homePlayers,
+    String? awayTeamName,
+    List<Player>? awayPlayers,
+  }) {
+    if (homePlayers != null) {
+      homeRoster = _sortPlayers(homePlayers);
+    }
+    if (homeTeamName != null && homeTeamName.trim().isNotEmpty) {
+      homeTeam = homeTeamName.trim();
+    }
+
+    if (awayPlayers != null) {
+      awayRoster = _sortPlayers(awayPlayers);
+      singleTeamMode = false;
+      if (awayTeamName != null && awayTeamName.trim().isNotEmpty) {
+        awayTeam = awayTeamName.trim();
+      }
+    } else if (awayTeamName != null && awayTeamName.trim().isNotEmpty) {
+      awayTeam = awayTeamName.trim();
+      singleTeamMode = false;
+    } else if (homePlayers != null && awayPlayers == null) {
+      singleTeamMode = true;
+      awayTeam = '';
+      awayRoster = const [];
+    }
+
+    _reconcileSelectedPlayersAfterRosterChange();
+    notifyListeners();
+  }
+
+  void _reconcileSelectedPlayersAfterRosterChange() {
+    if (selectedPlayers.isEmpty) {
+      _syncPrimaryPlayer();
+      return;
+    }
+    final kept = <RosterHit>[];
+    for (final row in selectedPlayers) {
+      final roster = row.isHome ? homeRoster : awayRoster;
+      Player? match;
+      for (final player in roster) {
+        if (_samePlayer(player, row.player)) {
+          match = player;
+          break;
+        }
+      }
+      if (match != null) {
+        kept.add(RosterHit(player: match, isHome: row.isHome));
+      }
+    }
+    selectedPlayers
+      ..clear()
+      ..addAll(kept);
+    if (selectedPlayers.isEmpty) {
+      selectedPlayer = null;
+    }
+    _syncPrimaryPlayer();
+    _syncPersonality();
+    _syncKeywords();
+  }
+
   void resetToStartup() {
+    _folderWatchGeneration++;
+    _stopFolderWatch();
     sessionReady = false;
     sessionLoading = false;
     sessionLoadingLabel = null;
@@ -1463,12 +1961,13 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
     try {
       _api.setSport(sport);
-      final useTank01 = tank01SupportsSport(sport) &&
-          (await _prefs?.getUseTank01Rosters() ?? false);
-      final apiSource = _rosterSourceFor(sport, useTank01);
+      final isAdmin = await AdminService.isCurrentUserAdmin();
+      final useOfficial =
+          isAdmin && (await _prefs?.getUseOfficialLeagueApis() ?? false);
+      final useTank01Fb = tank01SupportsSport(sport) && !useOfficial;
+      final apiSource = _rosterSourceFor(sport, useTank01Fb);
       if (singleTeamMode || !hasOpponentTeam) {
-        rosterSourceLabel =
-            homeOverride != null ? 'Pasted roster' : apiSource;
+        rosterSourceLabel = homeOverride != null ? 'Pasted roster' : apiSource;
         final home = homeOverride ?? await _api.fetchTeamRoster(homeTeam);
         homeRoster = _sortPlayers(home);
         awayRoster = const [];
@@ -1508,16 +2007,23 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
-  static String _rosterSourceFor(String sport, bool useTank01) {
+  /// Replaces a loaded roster after the user decides how to handle duplicates.
+  void replaceLoadedRosters({List<Player>? home, List<Player>? away}) {
+    if (home != null) homeRoster = _sortPlayers(home);
+    if (away != null) awayRoster = _sortPlayers(away);
+    notifyListeners();
+  }
+
+  static String _rosterSourceFor(String sport, bool useTank01Firebase) {
     switch (sport.toLowerCase()) {
       case 'baseball':
-        return useTank01 ? 'Tank01 MLB' : 'MLB API';
+        return useTank01Firebase ? 'Tank01 Firebase (MLB)' : 'MLB API';
       case 'hockey':
-        return useTank01 ? 'Tank01 NHL' : 'NHL API';
+        return useTank01Firebase ? 'Tank01 Firebase (NHL)' : 'NHL API';
       case 'basketball':
-        return useTank01 ? 'Tank01 NBA' : 'ESPN NBA';
+        return useTank01Firebase ? 'Tank01 Firebase (NBA)' : 'ESPN NBA';
       case 'wnba':
-        return useTank01 ? 'Tank01 WNBA' : 'ESPN WNBA';
+        return useTank01Firebase ? 'Tank01 Firebase (WNBA)' : 'ESPN WNBA';
       case 'soccer':
         return 'ESPN MLS';
       default:
@@ -1534,6 +2040,8 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<void> loadFolder(String dirPath) async {
     loadingImages = true;
     notifyListeners();
+    final generation = ++_folderWatchGeneration;
+    _stopFolderWatch();
     try {
       await NativeFilePicker.ensureMediaReadPermission();
       final dir = Directory(dirPath);
@@ -1542,33 +2050,365 @@ class CaptionV2Controller extends ChangeNotifier {
         currentIndex = 0;
         return;
       }
-      final files = await dir
-          .list()
-          .where((e) => e is File)
-          .cast<File>()
-          .where((f) {
-            final ext = p.extension(f.path).toLowerCase();
-            return const {'.jpg', '.jpeg', '.tif', '.tiff', '.png'}
-                .contains(ext);
-          })
-          .map((f) => f.path)
-          .toList();
-      files.sort();
-      imagePaths = files;
+      final listed = await _listSessionImages(dirPath);
+      if (generation != _folderWatchGeneration) return;
+      final ready = <String>[];
+      final pending = <String>[];
+      final recentCutoff = DateTime.now().subtract(const Duration(minutes: 2));
+      for (final path in listed) {
+        var includeNow = true;
+        try {
+          final modified = await File(path).lastModified();
+          if (modified.isAfter(recentCutoff)) {
+            includeNow = await isImageFileComplete(path);
+          }
+        } catch (_) {
+          includeNow = false;
+        }
+        if (includeNow) {
+          ready.add(path);
+        } else {
+          pending.add(path);
+        }
+      }
+      if (generation != _folderWatchGeneration) return;
+      ready.sort();
+      imagePaths = ready;
       currentIndex = 0;
       selectedImagePaths.clear();
       savedImages.clear();
       captionedImages.clear();
       sentImages.clear();
       captureByPath.clear();
+      _imageContentStamp.clear();
+      _fileLength.clear();
+      _fileModifiedMs.clear();
+      _fileChangedMs.clear();
       await _loadCaptureTimes();
+      if (generation != _folderWatchGeneration) return;
+      final marked = await FloCaptionMark.savedPaths(imagePaths);
+      savedImages.addAll(marked);
+      captionedImages.addAll(marked);
       await _restoreSavedPrefs(dirPath);
       await _applyIptcTemplateOnImportIfEnabled();
       await _refreshFrameIptc();
+      if (generation != _folderWatchGeneration) return;
+      for (final path in imagePaths) {
+        try {
+          final stat = await File(path).stat();
+          _fileLength[path] = stat.size;
+          _fileModifiedMs[path] = stat.modified.millisecondsSinceEpoch;
+          _fileChangedMs[path] = stat.changed.millisecondsSinceEpoch;
+        } catch (_) {}
+      }
+      _startFolderWatch(dirPath, generation);
+      unawaited(_ingestFolderAdditions(generation));
+      for (final path in pending) {
+        unawaited(_addImageWhenReady(path, generation));
+      }
     } finally {
-      loadingImages = false;
+      if (generation == _folderWatchGeneration) {
+        loadingImages = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  bool _isSessionImagePath(String path) {
+    final name = p.basename(path);
+    if (name.startsWith('.') || name.startsWith('._')) return false;
+    final lower = name.toLowerCase();
+    if (lower.startsWith('tmp.') || lower.endsWith('.tmp')) return false;
+    return _sessionImageExtensions.contains(p.extension(lower));
+  }
+
+  Future<List<String>> _listSessionImages(String dirPath) async {
+    final files = <String>[];
+    await for (final entity in Directory(dirPath).list(followLinks: false)) {
+      if (entity is! File) continue;
+      if (_isSessionImagePath(entity.path)) files.add(entity.path);
+    }
+    return files;
+  }
+
+  /// Keeps the open folder in sync: new photos are added, and a file saved
+  /// over an existing name is redrawn. Uses the same scan as [refreshOpenFolder].
+  void ensureLiveFolderRefresh() {
+    if (_openFolderPath == null) return;
+    _watchedFolder ??= _openFolderPath;
+    if (_folderPollTimer != null) return;
+    _folderPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_scanOpenFolder(announce: false));
+    });
+  }
+
+  String? get _openFolderPath {
+    final watched = _watchedFolder?.trim();
+    if (watched != null && watched.isNotEmpty) {
+      return _normalizeDir(watched);
+    }
+    if (imagePaths.isEmpty) return null;
+    return _normalizeDir(p.dirname(imagePaths.first));
+  }
+
+  String _normalizeDir(String path) {
+    var normalized = p.normalize(path);
+    if (normalized.length > 1 && normalized.endsWith(p.separator)) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
+
+  /// Reloads the open folder: new photos are added, and existing thumbnails
+  /// are drawn again from disk so a save-over shows up.
+  Future<void> refreshOpenFolder() => _scanOpenFolder(announce: true);
+
+  Future<void> _scanOpenFolder({required bool announce}) async {
+    if (_folderScanInFlight) {
+      if (!announce) return;
+      _folderScanAgain = true;
+      return;
+    }
+    final folder = _openFolderPath;
+    if (folder == null) {
+      if (announce) {
+        statusMessage = 'Open a photo folder first';
+        notifyListeners();
+      }
+      return;
+    }
+    _watchedFolder = folder;
+    _folderScanInFlight = true;
+    if (announce) {
+      refreshingFolder = true;
       notifyListeners();
     }
+    var added = 0;
+    var updated = 0;
+    try {
+      final listed = await _listSessionImages(folder);
+      final current = currentPath;
+      for (final path in listed) {
+        if (!imagePaths.contains(path)) {
+          if (!await isImageFileComplete(path)) continue;
+          await _insertCompletedImage(path);
+          added++;
+          continue;
+        }
+        FileStat stat;
+        try {
+          stat = await File(path).stat();
+        } catch (_) {
+          continue;
+        }
+        final modifiedMs = stat.modified.millisecondsSinceEpoch;
+        final changedMs = stat.changed.millisecondsSinceEpoch;
+        final changed = !_fileLength.containsKey(path) ||
+            _fileLength[path] != stat.size ||
+            _fileModifiedMs[path] != modifiedMs ||
+            _fileChangedMs[path] != changedMs;
+        _fileLength[path] = stat.size;
+        _fileModifiedMs[path] = modifiedMs;
+        _fileChangedMs[path] = changedMs;
+        if (!changed && !announce) continue;
+        _imageContentStamp[path] = imageContentStamp(path) + 1;
+        updated++;
+      }
+      if (current != null) {
+        final index = imagePaths.indexOf(current);
+        if (index >= 0) currentIndex = index;
+        if (announce || updated > 0) {
+          await _refreshFrameIptc();
+        }
+      }
+      if (announce) {
+        statusMessage = added == 0
+            ? 'Photos refreshed'
+            : 'Added $added photo${added == 1 ? '' : 's'}';
+      }
+    } catch (_) {
+      if (announce) statusMessage = 'Could not refresh photos';
+    } finally {
+      _folderScanInFlight = false;
+      if (announce) refreshingFolder = false;
+      if (announce || added > 0 || updated > 0) notifyListeners();
+      if (_folderScanAgain) {
+        _folderScanAgain = false;
+        unawaited(_scanOpenFolder(announce: announce));
+      }
+    }
+  }
+
+  int imageContentStamp(String path) => _imageContentStamp[path] ?? 0;
+
+  void _startFolderWatch(String dirPath, int generation) {
+    _folderWatch?.cancel();
+    _folderPollTimer?.cancel();
+    _watchedFolder = dirPath;
+    try {
+      _folderWatch = Directory(dirPath).watch().listen(
+        (_) {
+          if (generation != _folderWatchGeneration) return;
+          _scheduleFolderIngest(generation);
+        },
+        onError: (_) {},
+      );
+    } catch (_) {
+      _folderWatch = null;
+    }
+    // External volumes often drop file-system events. The same scan as the
+    // Refresh button runs on a timer so new and replaced photos show up.
+    ensureLiveFolderRefresh();
+  }
+
+  void _stopFolderWatch() {
+    _folderIngestTimer?.cancel();
+    _folderIngestTimer = null;
+    _folderPollTimer?.cancel();
+    _folderPollTimer = null;
+    _folderWatch?.cancel();
+    _folderWatch = null;
+    _watchedFolder = null;
+    _pendingIngest.clear();
+  }
+
+  void _scheduleFolderIngest(int generation) {
+    _folderIngestTimer?.cancel();
+    _folderIngestTimer = Timer(const Duration(milliseconds: 400), () {
+      if (generation != _folderWatchGeneration) return;
+      unawaited(_scanOpenFolder(announce: false));
+    });
+  }
+
+  /// Adds pictures saved into the open folder without replacing the list.
+  /// Files still being written stay out until the image container is complete.
+  Future<void> _ingestFolderAdditions(int generation) async {
+    final folder = _watchedFolder;
+    if (folder == null || generation != _folderWatchGeneration) return;
+    List<String> listed;
+    try {
+      listed = await _listSessionImages(folder);
+    } catch (_) {
+      return;
+    }
+    if (generation != _folderWatchGeneration) return;
+    for (final path in listed) {
+      if (!imagePaths.contains(path)) {
+        if (_pendingIngest.contains(path)) continue;
+        unawaited(_addImageWhenReady(path, generation));
+        continue;
+      }
+      unawaited(_refreshIfReplaced(path, generation));
+    }
+  }
+
+  Future<void> _refreshIfReplaced(String path, int generation) async {
+    if (generation != _folderWatchGeneration) return;
+    if (_pendingIngest.contains(path)) return;
+    FileStat stat;
+    try {
+      stat = await File(path).stat();
+    } catch (_) {
+      return;
+    }
+    if (generation != _folderWatchGeneration) return;
+    final modifiedMs = stat.modified.millisecondsSinceEpoch;
+    final known = _fileLength.containsKey(path);
+    if (!known) {
+      _fileLength[path] = stat.size;
+      _fileModifiedMs[path] = modifiedMs;
+      return;
+    }
+    if (_fileLength[path] == stat.size && _fileModifiedMs[path] == modifiedMs) {
+      return;
+    }
+    if (!_pendingIngest.add(path)) return;
+    try {
+      final ready = await waitForImageFileReady(path);
+      if (!ready || generation != _folderWatchGeneration) return;
+      if (!imagePaths.contains(path)) return;
+      final after = await File(path).stat();
+      _fileLength[path] = after.size;
+      _fileModifiedMs[path] = after.modified.millisecondsSinceEpoch;
+      _imageContentStamp[path] = imageContentStamp(path) + 1;
+      notifyListeners();
+      if (path == currentPath) unawaited(_refreshFrameIptc());
+    } catch (_) {
+    } finally {
+      if (generation == _folderWatchGeneration) {
+        _pendingIngest.remove(path);
+      }
+    }
+  }
+
+  Future<void> _addImageWhenReady(String path, int generation) async {
+    if (imagePaths.contains(path) || !_pendingIngest.add(path)) return;
+    try {
+      final ready = await waitForImageFileReady(path);
+      if (!ready || generation != _folderWatchGeneration) return;
+      if (imagePaths.contains(path)) return;
+      final folder = _watchedFolder;
+      if (folder == null || p.dirname(path) != folder) return;
+      await _insertCompletedImage(path);
+    } finally {
+      if (generation == _folderWatchGeneration) {
+        _pendingIngest.remove(path);
+      }
+    }
+  }
+
+  Future<void> _insertCompletedImage(String path) async {
+    final current = currentPath;
+    await _recordCaptureTime(path);
+    if (imagePaths.contains(path)) return;
+    imagePaths.add(path);
+    imagePaths.sort((a, b) {
+      final ta = captureByPath[a];
+      final tb = captureByPath[b];
+      if (ta != null && tb != null) return ta.compareTo(tb);
+      return a.compareTo(b);
+    });
+    if (current != null) {
+      final index = imagePaths.indexOf(current);
+      if (index >= 0) currentIndex = index;
+    }
+    try {
+      final stat = await File(path).stat();
+      _fileLength[path] = stat.size;
+      _fileModifiedMs[path] = stat.modified.millisecondsSinceEpoch;
+      _fileChangedMs[path] = stat.changed.millisecondsSinceEpoch;
+    } catch (_) {}
+    notifyListeners();
+    unawaited(() async {
+      if (await FloCaptionMark.isSaved(path)) {
+        savedImages.add(path);
+        captionedImages.add(path);
+        notifyListeners();
+      }
+      await _applyIptcTemplateOnImportToPath(path);
+    }());
+  }
+
+  Future<void> _applyIptcTemplateOnImportToPath(String imagePath) async {
+    if (_prefs == null || !imagePaths.contains(imagePath)) return;
+    try {
+      final mode = await _prefs!.getIptcApplyMode();
+      if (mode != IptcApplyMode.onImport) return;
+      var preset = await _loadSelectedIptcPreset();
+      var cleared = await _loadIptcClearedFields();
+      if (captionedImages.contains(imagePath)) {
+        preset = FloCaptionMark.withoutProtectedFields(preset);
+        cleared = FloCaptionMark.withoutProtectedClears(cleared);
+      }
+      if (preset.isEmpty && cleared.isEmpty) return;
+      final index = imagePaths.indexOf(imagePath);
+      await IptcTemplateApplyService.applyToImage(
+        imagePath,
+        preset,
+        imageIndex: index >= 0 ? index : null,
+        fieldsToClear: cleared.isNotEmpty ? cleared : null,
+      );
+    } catch (_) {}
   }
 
   Future<Map<String, String>> _loadSelectedIptcPreset() async {
@@ -1613,11 +2453,16 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       var i = 0;
       for (final path in imagePaths) {
+        final alreadyCaptioned = captionedImages.contains(path);
         await IptcTemplateApplyService.applyToImage(
           path,
-          preset,
+          alreadyCaptioned
+              ? FloCaptionMark.withoutProtectedFields(preset)
+              : preset,
           imageIndex: i,
-          fieldsToClear: cleared.isNotEmpty ? cleared : null,
+          fieldsToClear: alreadyCaptioned
+              ? FloCaptionMark.withoutProtectedClears(cleared)
+              : (cleared.isNotEmpty ? cleared : null),
         );
         i++;
       }
@@ -1650,26 +2495,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
   Future<void> _loadCaptureTimes() async {
     for (final path in imagePaths) {
-      try {
-        final proc = await ExiftoolHelper.run([
-          '-s3',
-          '-DateTimeOriginal',
-          '-d',
-          '%Y:%m:%d %H:%M:%S',
-          path,
-        ]);
-        if (proc.isSuccess) {
-          final raw = proc.stdoutText.trim().split('\n').first.trim();
-          final parsed = _parseExifDate(raw);
-          if (parsed != null) {
-            captureByPath[path] = parsed;
-            continue;
-          }
-        }
-      } catch (_) {}
-      try {
-        captureByPath[path] = await File(path).lastModified();
-      } catch (_) {}
+      await _recordCaptureTime(path);
     }
     // Re-sort by capture time when available.
     imagePaths.sort((a, b) {
@@ -1678,6 +2504,29 @@ class CaptionV2Controller extends ChangeNotifier {
       if (ta != null && tb != null) return ta.compareTo(tb);
       return a.compareTo(b);
     });
+  }
+
+  Future<void> _recordCaptureTime(String path) async {
+    try {
+      final proc = await ExiftoolHelper.run([
+        '-s3',
+        '-DateTimeOriginal',
+        '-d',
+        '%Y:%m:%d %H:%M:%S',
+        path,
+      ]);
+      if (proc.isSuccess) {
+        final raw = proc.stdoutText.trim().split('\n').first.trim();
+        final parsed = _parseExifDate(raw);
+        if (parsed != null) {
+          captureByPath[path] = parsed;
+          return;
+        }
+      }
+    } catch (_) {}
+    try {
+      captureByPath[path] = await File(path).lastModified();
+    } catch (_) {}
   }
 
   DateTime? _parseExifDate(String raw) {
@@ -1724,7 +2573,11 @@ class CaptionV2Controller extends ChangeNotifier {
     if (prefs == null) return;
     final current = await prefs.getCurrentFtpProfile();
     if (current != null && current.isNotEmpty) {
+      ftpProfileName = current;
       destinationLabel = '$current · FTP';
+    } else {
+      ftpProfileName = null;
+      destinationLabel = 'Photoshelter · FTP';
     }
   }
 
@@ -1746,6 +2599,50 @@ class CaptionV2Controller extends ChangeNotifier {
     _syncPrimaryPlayer();
     _syncKeywords();
     notifyListeners();
+  }
+
+  /// Adds a typed custom name to the home/away roster and selects it.
+  /// Returns an error message on jersey conflict; null on success.
+  String? addCustomPlayer({
+    required bool isHome,
+    required String fullName,
+    String? jerseyNumber,
+    String? position,
+  }) {
+    final name = fullName.trim();
+    if (name.isEmpty) return 'Enter a player name.';
+    final jersey = jerseyNumber?.trim();
+    final jerseyKey = (jersey == null || jersey.isEmpty) ? null : jersey;
+    final roster = isHome ? homeRoster : awayRoster;
+    if (jerseyKey != null) {
+      final taken = roster.any(
+        (p) => (p.jerseyNumber ?? '').trim() == jerseyKey,
+      );
+      if (taken) return 'Jersey #$jerseyKey is already on this team.';
+    }
+    final player = Player(
+      fullName: name,
+      firstName: name.split(RegExp(r'\s+')).first,
+      jerseyNumber: jerseyKey,
+      displayName: jerseyKey == null ? name : '$name #$jerseyKey',
+      position: position?.trim().isEmpty ?? true ? null : position!.trim(),
+    );
+    final next = _sortPlayers([...roster, player]);
+    if (isHome) {
+      homeRoster = next;
+    } else {
+      awayRoster = next;
+    }
+    // Always select the new custom name (don't toggle off if somehow present).
+    final already = selectedPlayers.any(
+      (row) => row.isHome == isHome && _samePlayer(row.player, player),
+    );
+    if (!already) {
+      selectPlayer(player, isHome: isHome);
+    } else {
+      notifyListeners();
+    }
+    return null;
   }
 
   void _syncPrimaryPlayer() {
@@ -1818,15 +2715,124 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Jersey shorthand typed in the caption box: `h34 `, `v88 `, `hh27 `.
+  static final RegExp _captionJerseyTokenPattern = RegExp(
+    r'(?:^|(?<=\s))([hH]{1,2}|[vV]{1,2})(\d{1,3}) ',
+  );
+
+  /// True when [value] is only home/visitor jersey codes (no free text).
+  static final RegExp _captionJerseyOnlyPattern = RegExp(
+    r'^([hv]{1,2}\d{1,3}\s*)+$',
+    caseSensitive: false,
+  );
+
   void setManualCaption(String? value) {
+    if (value == null) {
+      manualCaptionOverride = null;
+      notifyListeners();
+      return;
+    }
+
+    final expanded = _expandCaptionJerseyTokens(value);
+    if (expanded != null) {
+      for (final hit in expanded.players) {
+        _ensurePlayerSelected(hit.player, isHome: hit.isHome);
+      }
+      captionSelectionStarted = true;
+      if (expanded.clearManual) {
+        manualCaptionOverride = null;
+      } else {
+        manualCaptionOverride = expanded.text;
+      }
+      _syncPrimaryPlayer();
+      _syncKeywords();
+      notifyListeners();
+      return;
+    }
+
     manualCaptionOverride = value;
     notifyListeners();
   }
 
-  void applyTransferredCaption(CaptionTransferPayload payload) {
+  /// Expands completed `h34 ` / `v88 ` tokens in caption text.
+  ///
+  /// Returns null when nothing resolved. [clearManual] is true when the input
+  /// was only jersey codes so the formula caption can take over.
+  _CaptionJerseyExpansion? _expandCaptionJerseyTokens(String value) {
+    final matches = _captionJerseyTokenPattern.allMatches(value).toList();
+    if (matches.isEmpty) return null;
+
+    final players = <RosterHit>[];
+    final buffer = StringBuffer();
+    var cursor = 0;
+    var anyResolved = false;
+    String? missingJersey;
+
+    for (final match in matches) {
+      buffer.write(value.substring(cursor, match.start));
+      final prefix = match.group(1)!.toLowerCase();
+      final jersey = match.group(2)!;
+      final isHome = prefix.startsWith('h');
+      final roster = isHome ? homeRoster : awayRoster;
+      Player? found;
+      for (final player in roster) {
+        if ((player.jerseyNumber ?? '').trim() == jersey) {
+          found = player;
+          break;
+        }
+      }
+      if (found != null) {
+        anyResolved = true;
+        players.add(RosterHit(player: found, isHome: isHome));
+        buffer.write('${found.fullName} ');
+      } else {
+        missingJersey = jersey;
+        buffer.write(value.substring(match.start, match.end));
+      }
+      cursor = match.end;
+    }
+    buffer.write(value.substring(cursor));
+
+    if (!anyResolved) {
+      if (missingJersey != null) {
+        statusMessage = 'No player wearing #$missingJersey';
+      }
+      return null;
+    }
+
+    return _CaptionJerseyExpansion(
+      text: buffer.toString(),
+      players: players,
+      clearManual: _captionJerseyOnlyPattern.hasMatch(value.trim()),
+    );
+  }
+
+  void _ensurePlayerSelected(Player player, {required bool isHome}) {
+    final exists = selectedPlayers.any(
+      (row) => row.isHome == isHome && _samePlayer(row.player, player),
+    );
+    if (!exists) {
+      selectedPlayers.add(RosterHit(player: player, isHome: isHome));
+    }
+  }
+
+  Future<void> applyTransferredCaption(CaptionTransferPayload payload) async {
     // Paste replaces the live caption as a manual override; keep roster/verb
     // pins so the next frame can restore them after save.
-    manualCaptionOverride = payload.caption;
+    // The copied byline names the source photographer — swap in this frame's
+    // IPTC photographer so a shared moment keeps the right credit.
+    final path = currentPath;
+    if (path != null) {
+      final fromFile = await photographerNameForPath(path);
+      if (fromFile.isNotEmpty) photographerName = fromFile;
+    }
+    manualCaptionOverride =
+        CaptionTransferPayload.captionForDestinationPhotographer(
+      caption: payload.caption,
+      sourcePhotographer: payload.photographerName,
+      destinationPhotographer: photographerName,
+      removeDiacritics: captionTemplate.removeDiacritics,
+    );
     personality = payload.personality;
     if (payload.headline.isNotEmpty || showHeadlineField) {
       headline = payload.headline;
@@ -1843,10 +2849,46 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
-  bool applyPreviousCaption() {
+  /// Right-click Paste Caption on a photo: drop live player/verb picks and show
+  /// the pasted text immediately in the preview strip.
+  void applyPastedPhotoCaption({
+    required String caption,
+    String personality = '',
+    String keywords = '',
+  }) {
+    selectedPlayers.clear();
+    selectedPlayer = null;
+    selectedVerb = null;
+    customVerbPhrase = '';
+    celebrationType = null;
+    verbModifierSelections.clear();
+    rbi = 0;
+    selectedBase = null;
+    preGame = false;
+    postGame = false;
+    _firebarCommitted.clear();
+    _clearFirebarOptions();
+    searchQuery = '';
+    selectedImagePaths.clear();
+
+    manualCaptionOverride = caption;
+    this.personality = personality;
+    if (keywords.isNotEmpty || showKeywordsField) {
+      this.keywords = keywords;
+      _baseKeywordKeys
+        ..clear()
+        ..addAll(_parseMetadataList(keywords).map((e) => e.toLowerCase()));
+      _managedKeywordKeys.clear();
+    }
+    metadataDirty = true;
+    captionSelectionStarted = caption.trim().isNotEmpty;
+    notifyListeners();
+  }
+
+  Future<bool> applyPreviousCaption() async {
     final previous = previousCaption;
     if (previous == null) return false;
-    applyTransferredCaption(previous);
+    await applyTransferredCaption(previous);
     return true;
   }
 
@@ -1870,7 +2912,16 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void selectVerb(String verb) {
     captionSelectionStarted = true;
-    if (selectedVerb != verb) celebrationType = null;
+    if (selectedVerb != verb) {
+      celebrationType = null;
+      verbModifierSelections
+        ..clear()
+        ..addEntries(
+          (verbDefinition(verb)?.authoring.groups ?? const []).map(
+            (group) => MapEntry(group.id, group.defaultOptionId),
+          ),
+        );
+    }
     selectedVerb = verb;
     // Selecting a catalog verb for this frame must not drop a pinned custom
     // verb — stash the phrase and restore it after save / frame advance.
@@ -1887,6 +2938,36 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setVerbModifierOption(String groupId, String optionId) {
+    final definition =
+        selectedVerb == null ? null : verbDefinition(selectedVerb!);
+    final matches =
+        definition?.authoring.groups.where((item) => item.id == groupId) ??
+            const [];
+    final group = matches.isEmpty ? null : matches.first;
+    if (group == null) return;
+    if (!group.required && verbModifierSelections[groupId] == optionId) {
+      verbModifierSelections[groupId] = null;
+    } else {
+      verbModifierSelections[groupId] = optionId;
+    }
+    manualCaptionOverride = null;
+    notifyListeners();
+  }
+
+  bool get authoredVerbModifiersComplete {
+    final definition =
+        selectedVerb == null ? null : verbDefinition(selectedVerb!);
+    if (definition == null || !definition.hasAuthoredModifiers) return true;
+    return definition.authoring.groups.every((group) {
+      if (!group.required) return true;
+      final selected =
+          verbModifierSelections[group.id] ?? group.defaultOptionId;
+      return selected != null &&
+          group.options.any((option) => option.id == selected);
+    });
+  }
+
   void clearSelectedVerb() {
     if (selectedVerb == null &&
         customVerbPhrase.trim().isEmpty &&
@@ -1896,6 +2977,7 @@ class CaptionV2Controller extends ChangeNotifier {
       return;
     }
     selectedVerb = null;
+    verbModifierSelections.clear();
     if (!customVerbPinned) {
       customVerbPhrase = '';
     }
@@ -1903,9 +2985,8 @@ class CaptionV2Controller extends ChangeNotifier {
     rbi = 0;
     selectedBase = null;
     manualCaptionOverride = null;
-    captionSelectionStarted = selectedPlayers.isNotEmpty ||
-        pinnedVerb != null ||
-        customVerbPinned;
+    captionSelectionStarted =
+        selectedPlayers.isNotEmpty || pinnedVerb != null || customVerbPinned;
     _syncKeywords();
     notifyListeners();
   }
@@ -1950,7 +3031,7 @@ class CaptionV2Controller extends ChangeNotifier {
       pinnedVerb = null;
       selectedVerb = null;
       lastCustomVerbPhrase = customVerbPhrase.trim();
-      captionSelectionStarted = true;
+      captionSelectionStarted = selectedPlayers.isNotEmpty;
       manualCaptionOverride = null;
       _syncKeywords();
     }
@@ -1982,6 +3063,11 @@ class CaptionV2Controller extends ChangeNotifier {
     } else {
       notifyListeners();
     }
+    // Pin alone should not start a caption — wait for a player.
+    if (selectedPlayer == null) {
+      captionSelectionStarted = false;
+      notifyListeners();
+    }
   }
 
   void unpinVerb() {
@@ -2000,7 +3086,11 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Caption text shown in the strip / used by Copy.
   String get displayedCaption {
     if (manualCaptionOverride != null) return manualCaptionOverride!;
-    if (selectedPlayer != null || hasVerbSelection) {
+    if (selectedPlayer == null) {
+      // Never compose the "Team + verb" filler — wait for a player.
+      return originalCaption;
+    }
+    if (hasVerbSelection || selectedPlayer != null) {
       return buildCaptionSentence();
     }
     return originalCaption;
@@ -2040,6 +3130,20 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<void> moveVerb(String verb, String category, int index) async {
     final prefs = _prefs;
     if (prefs == null || !_verbCatalog.byKey.containsKey(verb)) return;
+    if (category == 'Favorites') {
+      final favorites =
+          (await prefs.getFavoriteVerbs(sport: sport)).toList(growable: true);
+      favorites.remove(verb);
+      favorites.insert(index.clamp(0, favorites.length), verb);
+      await prefs.saveFavoriteVerbs(
+        Set<String>.from(favorites),
+        sport: sport,
+      );
+      await _loadVerbCatalog();
+      verbCategory = 'Favorites';
+      notifyListeners();
+      return;
+    }
     final order = {
       for (final entry in _verbCatalog.verbsByCategory.entries)
         if (entry.key != 'Favorites')
@@ -2080,7 +3184,8 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> saveCategoryOrder(List<String> order) async {
-    await _prefs?.saveCategoryOrder(order, sport: sport);
+    final cleaned = order.where((category) => category != 'Favorites').toList();
+    await _prefs?.saveCategoryOrder(cleaned, sport: sport);
     await _loadVerbCatalog();
     notifyListeners();
   }
@@ -2435,13 +3540,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
   Future<void> toggleMlbTimestamp() async {
     if (!mlbTimestampAvailable || sport.toLowerCase() != 'baseball') return;
-    if (!mlbTimestampEnabled) {
-      mlbTimestampEnabled = true;
-      await _prefs?.setMlbInningFromClockEnabled(true);
-      await applyMlbTimestamp(userInitiated: true);
-      return;
-    }
-    if (mlbTimestampMatched) {
+    if (mlbTimestampEnabled) {
       mlbTimestampEnabled = false;
       mlbTimestampMatchedPath = null;
       _mlbTimestampToken++;
@@ -2449,6 +3548,8 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    mlbTimestampEnabled = true;
+    await _prefs?.setMlbInningFromClockEnabled(true);
     await applyMlbTimestamp(userInitiated: true);
   }
 
@@ -2503,7 +3604,8 @@ class CaptionV2Controller extends ChangeNotifier {
       return;
     }
     final gameInfo = await prefs.getCaptionGameInfo();
-    final gameDay = gameInfo.gameDate ?? wall;
+    final photoDay = DateTime(wall.year, wall.month, wall.day);
+    final gameDay = gameInfo.gameDate ?? photoDay;
     final token = ++_mlbTimestampToken;
     mlbTimestampLoading = true;
     notifyListeners();
@@ -2513,6 +3615,7 @@ class CaptionV2Controller extends ChangeNotifier {
         userHomeName: homeTeam,
         userAwayName: awayTeam,
         gameCalendarDay: gameDay,
+        photoCalendarDay: photoDay,
         photoTimeUtc: photoUtc,
       );
       if (token != _mlbTimestampToken || path != currentPath) return;
@@ -2599,7 +3702,9 @@ class CaptionV2Controller extends ChangeNotifier {
       manualCaptionOverride = null;
       mlbTimestampMatchedPath = null;
       searchQuery = '';
-      firebarSelectionIndex = firebarOrderedResults.isEmpty ? -1 : 0;
+      firebarSelectionIndex = -1;
+      _clearFirebarAutoPlayerPreview();
+      _clearFirebarVerbPreview();
       notifyListeners();
       return;
     }
@@ -2612,11 +3717,21 @@ class CaptionV2Controller extends ChangeNotifier {
     final selectedKey = firebarSelectedResult?.key;
     searchQuery = q;
     final results = firebarOrderedResults;
+    if (q.trim().isEmpty) {
+      // Full roster is visible for browsing — no orange caret until typing.
+      firebarSelectionIndex = -1;
+      _clearFirebarAutoPlayerPreview();
+      _clearFirebarVerbPreview();
+      notifyListeners();
+      return;
+    }
     final retained = selectedKey == null
         ? -1
         : results.indexWhere((r) => r.key == selectedKey);
     firebarSelectionIndex =
         retained >= 0 ? retained : (results.isEmpty ? -1 : 0);
+    _syncFirebarPlayerPreview();
+    _syncFirebarVerbPreview();
     notifyListeners();
   }
 
@@ -2627,6 +3742,8 @@ class CaptionV2Controller extends ChangeNotifier {
       _guidedSearchHits = const [];
       _pendingCommandInning = null;
       _clearFirebarOptions();
+      _firebarAutoPreviewKeys.clear();
+      _discardFirebarVerbPreview(keepSelection: true);
       _firebarCommitted
         ..clear()
         ..addAll(
@@ -2637,21 +3754,37 @@ class CaptionV2Controller extends ChangeNotifier {
             ),
           ),
         );
-      if (selectedVerb != null) {
+      if (customVerbPhrase.trim().isNotEmpty) {
+        _firebarCommitted.add(FirebarResult.verb(customVerbPhrase.trim()));
+      } else if (selectedVerb != null) {
         _firebarCommitted.add(FirebarResult.verb(selectedVerb));
       }
     }
     searchOpen = open;
-    firebarSelectionIndex = open && firebarOrderedResults.isNotEmpty ? 0 : -1;
+    // Empty Firebar lists the full roster for browsing, but don't orange-
+    // highlight the first player until the user types or presses ↑↓.
+    firebarSelectionIndex = -1;
     if (!open) {
       searchQuery = '';
       guidedSearchPrompt = null;
       _guidedSearchHits = const [];
       _pendingCommandInning = null;
+      // Keep any match preview as a real selection when Firebar closes.
+      _firebarAutoPreviewKeys.clear();
+      _discardFirebarVerbPreview(keepSelection: true);
       _firebarCommitted.clear();
       _clearFirebarOptions();
     }
     notifyListeners();
+  }
+
+  /// Clicking a name or verb in Firebar commits it and leaves Firebar, unless
+  /// the verb still needs a follow-up choice (RBI, base, celebration).
+  void commitFirebarResultAndClose(FirebarResult result) {
+    commitFirebarResult(result);
+    if (searchOpen && firebarOptions.isEmpty) {
+      setSearchOpen(false);
+    }
   }
 
   void moveFirebarSelection(int delta) {
@@ -2665,10 +3798,16 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     final results = firebarOrderedResults;
     if (!searchOpen || results.isEmpty || delta == 0) return;
-    final start = firebarSelectionIndex < 0 ? 0 : firebarSelectionIndex;
-    final next = (start + delta).clamp(0, results.length - 1);
-    if (next == firebarSelectionIndex) return;
+    final int next;
+    if (firebarSelectionIndex < 0) {
+      next = delta > 0 ? 0 : results.length - 1;
+    } else {
+      next = (firebarSelectionIndex + delta).clamp(0, results.length - 1);
+      if (next == firebarSelectionIndex) return;
+    }
     firebarSelectionIndex = next;
+    _syncFirebarPlayerPreview();
+    _syncFirebarVerbPreview();
     notifyListeners();
   }
 
@@ -2677,6 +3816,8 @@ class CaptionV2Controller extends ChangeNotifier {
         .indexWhere((candidate) => candidate.key == result.key);
     if (index < 0 || index == firebarSelectionIndex) return;
     firebarSelectionIndex = index;
+    _syncFirebarPlayerPreview();
+    _syncFirebarVerbPreview();
     notifyListeners();
   }
 
@@ -2689,8 +3830,121 @@ class CaptionV2Controller extends ChangeNotifier {
       );
       return;
     }
+    final compound = _parseFirebarJerseyVerbCompound(_normalizedFirebarQuery);
+    if (compound != null) {
+      _commitFirebarJerseyVerbCompound(compound);
+      return;
+    }
     final result = firebarSelectedResult;
     if (result != null) commitFirebarResult(result);
+  }
+
+  /// Applies `88 looks` / `88 92 look` as player(s) + matching verb in one Enter.
+  void _commitFirebarJerseyVerbCompound(_FirebarJerseyVerbCompound compound) {
+    final resolved = _resolveFirebarJerseyPlayers(compound.jerseys);
+    final verbs = firebarVerbResults;
+    if (resolved == null || resolved.isEmpty || verbs.isEmpty) {
+      final result = firebarSelectedResult;
+      if (result != null) commitFirebarResult(result);
+      return;
+    }
+
+    // Multi-jersey compounds commit every resolved player. Single-jersey with
+    // home+away collisions still prefer the highlighted / subject-side player.
+    List<FirebarResult> playersToCommit;
+    if (compound.jerseys.length == 1 && resolved.length > 1) {
+      final highlighted = firebarSelectedResult;
+      if (highlighted?.kind == FirebarResultKind.player &&
+          resolved.any((candidate) => candidate.key == highlighted!.key)) {
+        playersToCommit = [highlighted!];
+      } else if (selectedPlayers.isNotEmpty) {
+        final preferredSide = selectedPlayers.first.isHome;
+        final preferred = resolved
+            .where((candidate) => candidate.isHome == preferredSide)
+            .toList();
+        playersToCommit = preferred.length == 1 ? preferred : [resolved.first];
+      } else {
+        if (highlighted?.kind != FirebarResultKind.player) {
+          firebarSelectionIndex = firebarOrderedResults.indexWhere(
+            (candidate) => candidate.kind == FirebarResultKind.player,
+          );
+          _syncFirebarPlayerPreview();
+          _syncFirebarVerbPreview();
+          notifyListeners();
+        }
+        return;
+      }
+    } else {
+      playersToCommit = resolved;
+    }
+
+    final highlighted = firebarSelectedResult;
+    final verbKey = _matchCommandVerb(compound.verbQuery);
+    final FirebarResult verbResult;
+    if (verbKey != null &&
+        verbs.any((candidate) => candidate.verbKey == verbKey)) {
+      verbResult = FirebarResult.verb(verbKey);
+    } else if (verbs.length == 1) {
+      verbResult = verbs.first;
+    } else if (highlighted?.kind == FirebarResultKind.verb) {
+      verbResult = highlighted!;
+    } else {
+      verbResult = verbs.first;
+    }
+
+    for (final playerResult in playersToCommit) {
+      final player = playerResult.player!;
+      final isHome = playerResult.isHome!;
+      if (_firebarAutoPreviewKeys.remove(playerResult.key)) {
+        // Already applied as a search preview — keep selection.
+      } else if (!isPlayerSelected(player, isHome: isHome)) {
+        selectedPlayers.add(RosterHit(player: player, isHome: isHome));
+      }
+      if (!_firebarCommitted.any((item) => item.key == playerResult.key)) {
+        _firebarCommitted.add(playerResult);
+      }
+    }
+    _syncPrimaryPlayer();
+    _syncPersonality();
+    commitFirebarResult(verbResult);
+  }
+
+  /// Shift+Enter from Firebar: commit the highlighted player/verb match, or pick
+  /// Save from the destination prompt. Returns true if save was already
+  /// kicked off (destination Save/FTP) or follow-up chips need a choice;
+  /// false if the caller should still save.
+  bool commitFirebarForShiftEnterSave() {
+    if (firebarShowingDestinationOptions) {
+      final options = filteredFirebarOptions.isNotEmpty
+          ? filteredFirebarOptions
+          : firebarOptions;
+      FirebarOption? saveOpt;
+      for (final option in options) {
+        if (option.transmit != true) {
+          saveOpt = option;
+          break;
+        }
+      }
+      chooseFirebarOption(saveOpt ?? options.first);
+      return true;
+    }
+    if (firebarCanQuickSavePlayer) {
+      commitSelectedFirebarResult();
+      return false;
+    }
+    if (firebarCanQuickSaveVerb) {
+      commitSelectedFirebarResult();
+      // Verb commit may open RBI/base/celebration chips — wait for those.
+      // Destination Save/FTP chips are cleared so Shift+Enter still saves,
+      // matching jersey quick-save.
+      if (firebarShowingDestinationOptions) {
+        _clearFirebarOptions();
+        return false;
+      }
+      if (firebarOptions.isNotEmpty) return true;
+      return false;
+    }
+    return false;
   }
 
   void commitFirebarResult(FirebarResult result) {
@@ -2699,13 +3953,31 @@ class CaptionV2Controller extends ChangeNotifier {
     if (result.kind == FirebarResultKind.player) {
       final player = result.player!;
       final isHome = result.isHome!;
-      if (!isPlayerSelected(player, isHome: isHome)) {
+      if (_firebarAutoPreviewKeys.remove(result.key)) {
+        // Already applied as a search preview — keep selection.
+      } else if (!isPlayerSelected(player, isHome: isHome)) {
         selectedPlayers.add(RosterHit(player: player, isHome: isHome));
       }
       _syncPrimaryPlayer();
       _syncPersonality();
     } else {
       final verb = result.verbKey!;
+      if (verbDefinition(verb) == null) {
+        _discardFirebarVerbPreview(keepSelection: true);
+        setCustomVerbPhrase(verb);
+        _firebarCommitted
+            .removeWhere((item) => item.kind == FirebarResultKind.verb);
+        _clearFirebarOptions();
+        if (!_firebarCommitted.any((item) => item.key == result.key)) {
+          _firebarCommitted.add(result);
+        }
+        searchQuery = '';
+        firebarSelectionIndex = -1;
+        notifyListeners();
+        return;
+      }
+      // One-frame override: keep [pinnedVerb] so the next frame restores it.
+      _discardFirebarVerbPreview(keepSelection: true);
       selectedVerb = verb;
       _stashCustomVerbIfNeeded();
       customVerbPhrase = '';
@@ -2722,8 +3994,250 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     _syncKeywords();
     searchQuery = '';
-    firebarSelectionIndex = firebarOrderedResults.isEmpty ? -1 : 0;
+    firebarSelectionIndex = -1;
     notifyListeners();
+  }
+
+  /// When Firebar search narrows to roster match(es), apply player(s) to the
+  /// live caption immediately so the strip updates while typing.
+  void _syncFirebarPlayerPreview() {
+    if (!searchOpen || firebarOptions.isNotEmpty) {
+      _clearFirebarAutoPlayerPreview();
+      return;
+    }
+    final query = _normalizedFirebarQuery;
+    if (query.isEmpty) {
+      _clearFirebarAutoPlayerPreview();
+      return;
+    }
+
+    final jerseyTokens = _firebarJerseyTokensForQuery(query);
+    List<FirebarResult>? previewTargets;
+    if (jerseyTokens == null) {
+      previewTargets = _singleFirebarPreviewMatch();
+    } else if (jerseyTokens.length == 1) {
+      // One jersey (± verb): if both teams wear it, follow the highlight.
+      final matches = [...firebarHomeResults, ...firebarAwayResults];
+      previewTargets = matches.length > 1
+          ? _preferredFirebarPlayerPreview(matches)
+          : _resolveFirebarJerseyPlayers(jerseyTokens);
+    } else {
+      previewTargets = _resolveFirebarJerseyPlayers(jerseyTokens);
+    }
+    if (previewTargets == null || previewTargets.isEmpty) {
+      _clearFirebarAutoPlayerPreview();
+      return;
+    }
+
+    final targetKeys = previewTargets.map((result) => result.key).toSet();
+    if (setEquals(targetKeys, _firebarAutoPreviewKeys)) return;
+
+    _clearFirebarAutoPlayerPreview();
+    for (final result in previewTargets) {
+      final player = result.player!;
+      final isHome = result.isHome!;
+      if (!isPlayerSelected(player, isHome: isHome)) {
+        selectedPlayers.add(RosterHit(player: player, isHome: isHome));
+      }
+      _firebarAutoPreviewKeys.add(result.key);
+    }
+    captionSelectionStarted = true;
+    manualCaptionOverride = null;
+    _syncPrimaryPlayer();
+    _syncPersonality();
+    _syncKeywords();
+  }
+
+  /// While Firebar narrows onto a verb, preview it as the active verb without
+  /// clearing [pinnedVerb] (one-frame override while typing / arrowing).
+  void _syncFirebarVerbPreview() {
+    if (!searchOpen || firebarOptions.isNotEmpty) {
+      _clearFirebarVerbPreview();
+      return;
+    }
+    final query = _normalizedFirebarQuery;
+    if (query.isEmpty || _parseFirebarJerseyTokens(query) != null) {
+      _clearFirebarVerbPreview();
+      return;
+    }
+    final compound = _parseFirebarJerseyVerbCompound(query);
+    final matches = firebarVerbResults;
+    final players = [...firebarHomeResults, ...firebarAwayResults];
+    final highlighted = firebarSelectedResult;
+    final String? verb;
+    if (compound != null) {
+      // Prefer the command resolver so `looks` picks Looks On over
+      // National Anthem (whose wording also starts with "looks on").
+      final resolved = _matchCommandVerb(compound.verbQuery);
+      if (resolved != null &&
+          matches.any((candidate) => candidate.verbKey == resolved)) {
+        verb = resolved;
+      } else if (matches.length == 1) {
+        verb = matches.first.verbKey;
+      } else {
+        _clearFirebarVerbPreview();
+        return;
+      }
+    } else if (matches.length == 1) {
+      verb = matches.first.verbKey;
+    } else if (players.isEmpty &&
+        matches.isNotEmpty &&
+        highlighted?.kind == FirebarResultKind.verb &&
+        highlighted?.verbKey != null &&
+        verbDefinition(highlighted!.verbKey!) != null) {
+      // Verb-focused query with several hits — follow the highlight.
+      verb = highlighted.verbKey;
+    } else if (highlighted?.kind == FirebarResultKind.verb &&
+        highlighted?.verbKey != null &&
+        verbDefinition(highlighted!.verbKey!) == null) {
+      // Custom wording is its own chip; don't treat it as a catalog verb.
+      _clearFirebarVerbPreview();
+      return;
+    } else {
+      _clearFirebarVerbPreview();
+      return;
+    }
+    if (verb == null) {
+      _clearFirebarVerbPreview();
+      return;
+    }
+    if (_firebarVerbPreviewKey == verb && selectedVerb == verb) return;
+
+    if (_firebarVerbPreviewKey == null) {
+      _firebarVerbPreviewPriorSelected = selectedVerb;
+    }
+    _firebarVerbPreviewKey = verb;
+    selectedVerb = verb;
+    _stashCustomVerbIfNeeded();
+    customVerbPhrase = '';
+    celebrationType = null;
+    if (!_verbNeedsRbi(verb)) rbi = 0;
+    if (!_verbNeedsBase(verb)) selectedBase = null;
+    manualCaptionOverride = null;
+    if (selectedPlayer != null || pinnedVerb == null) {
+      captionSelectionStarted = true;
+    }
+    _syncKeywords();
+  }
+
+  void _clearFirebarVerbPreview() {
+    _discardFirebarVerbPreview(keepSelection: false);
+  }
+
+  void _discardFirebarVerbPreview({required bool keepSelection}) {
+    final previewKey = _firebarVerbPreviewKey;
+    final prior = _firebarVerbPreviewPriorSelected;
+    if (previewKey == null) return;
+    _firebarVerbPreviewKey = null;
+    _firebarVerbPreviewPriorSelected = null;
+    if (keepSelection) return;
+    if (selectedVerb != previewKey) return;
+    selectedVerb = prior;
+    if (selectedVerb == null && pinnedVerb != null) {
+      selectedVerb = pinnedVerb;
+    }
+  }
+
+  List<FirebarResult>? _singleFirebarPreviewMatch() {
+    final matches = [...firebarHomeResults, ...firebarAwayResults];
+    if (matches.isEmpty) return null;
+    if (matches.length == 1) return matches;
+
+    final query = _normalizedFirebarQuery;
+    final compound = _parseFirebarJerseyVerbCompound(query);
+    if (compound != null) {
+      // `88 skates` with home+away #88 — preview the highlighted player so
+      // the caption starts writing; ↑↓ swaps sides.
+      return _preferredFirebarPlayerPreview(matches);
+    }
+
+    final jerseyMatch = _firebarJerseyTokenPattern.firstMatch(query);
+    if (jerseyMatch == null) return null;
+    final jersey = jerseyMatch.group(2)!;
+    final exactMatches = matches
+        .where((match) => (match.player!.jerseyNumber ?? '').trim() == jersey)
+        .toList();
+    // Prefix hits like `4` → #4 and #40 stay unresolved until unique.
+    if (exactMatches.isEmpty || exactMatches.length != matches.length) {
+      return null;
+    }
+    return _preferredFirebarPlayerPreview(exactMatches);
+  }
+
+  List<FirebarResult> _preferredFirebarPlayerPreview(
+    List<FirebarResult> matches,
+  ) {
+    final highlighted = firebarSelectedResult;
+    if (highlighted?.kind == FirebarResultKind.player &&
+        matches.any((match) => match.key == highlighted!.key)) {
+      return [highlighted!];
+    }
+    return [matches.first];
+  }
+
+  List<FirebarResult>? _resolveFirebarJerseyPlayers(
+    List<_FirebarJerseyToken> tokens,
+  ) {
+    final results = <FirebarResult>[];
+    bool? teamBiasIsHome;
+
+    for (final token in tokens) {
+      final candidates = <FirebarResult>[];
+      if (token.side != 'v') {
+        for (final player in homeRoster) {
+          if ((player.jerseyNumber ?? '').trim() == token.jersey) {
+            candidates.add(FirebarResult.player(player: player, isHome: true));
+          }
+        }
+      }
+      if (token.side != 'h') {
+        for (final player in awayRoster) {
+          if ((player.jerseyNumber ?? '').trim() == token.jersey) {
+            candidates.add(
+              FirebarResult.player(player: player, isHome: false),
+            );
+          }
+        }
+      }
+      if (candidates.isEmpty) return null;
+
+      FirebarResult? chosen;
+      if (candidates.length == 1) {
+        chosen = candidates.first;
+      } else if (teamBiasIsHome != null) {
+        final preferred = candidates
+            .where((candidate) => candidate.isHome == teamBiasIsHome)
+            .toList();
+        if (preferred.length == 1) chosen = preferred.first;
+      } else if (selectedPlayers.isNotEmpty) {
+        final subjectIsHome = selectedPlayers.first.isHome;
+        final preferred = candidates
+            .where((candidate) => candidate.isHome == subjectIsHome)
+            .toList();
+        if (preferred.length == 1) chosen = preferred.first;
+      }
+
+      chosen ??= candidates.first;
+      results.add(chosen);
+      teamBiasIsHome ??= chosen.isHome;
+    }
+    return results;
+  }
+
+  void _clearFirebarAutoPlayerPreview() {
+    if (_firebarAutoPreviewKeys.isEmpty) return;
+    final keys = Set<String>.from(_firebarAutoPreviewKeys);
+    _firebarAutoPreviewKeys.clear();
+    selectedPlayers.removeWhere((row) {
+      final candidate = FirebarResult.player(
+        player: row.player,
+        isHome: row.isHome,
+      );
+      return keys.contains(candidate.key);
+    });
+    _syncPrimaryPlayer();
+    _syncPersonality();
+    _syncKeywords();
   }
 
   void removeFirebarChip(FirebarResult result) {
@@ -2738,18 +4252,37 @@ class CaptionV2Controller extends ChangeNotifier {
       );
       _syncPrimaryPlayer();
     } else if (selectedVerb == result.verbKey) {
-      selectedVerb = null;
       celebrationType = null;
       rbi = 0;
       selectedBase = null;
       _clearFirebarOptions();
+      if (pinnedVerb != null && pinnedVerb != result.verbKey) {
+        // Cleared a one-frame override — restore the pinned verb for this frame.
+        selectedVerb = pinnedVerb;
+        if (!_firebarCommitted.any((item) => item.verbKey == pinnedVerb)) {
+          _firebarCommitted.add(FirebarResult.verb(pinnedVerb));
+        }
+      } else {
+        // Cleared this frame's verb (including the pinned chip) — pin stays
+        // for the next frame via [_clearCaptionSelection].
+        selectedVerb = null;
+      }
+    } else if (result.kind == FirebarResultKind.verb &&
+        verbDefinition(result.verbKey ?? '') == null &&
+        customVerbPhrase.trim() == (result.verbKey ?? '').trim()) {
+      customVerbPhrase = '';
+      customVerbPinned = false;
+      if (pinnedVerb != null) selectedVerb = pinnedVerb;
     }
     if (_firebarCommitted.isEmpty) {
       captionSelectionStarted = false;
       manualCaptionOverride = null;
     }
     _syncKeywords();
-    firebarSelectionIndex = firebarOrderedResults.isEmpty ? -1 : 0;
+    firebarSelectionIndex =
+        searchQuery.trim().isEmpty || firebarOrderedResults.isEmpty
+            ? -1
+            : firebarSelectionIndex.clamp(0, firebarOrderedResults.length - 1);
     notifyListeners();
   }
 
@@ -2867,10 +4400,11 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     final path = currentPath;
     if (path == null) return;
+    final keepFirebar = searchOpen;
     final saved = await saveCurrent();
     if (!saved) return;
     if (transmit) await transmitPath(path);
-    if (currentPath == path) nextFrame();
+    if (currentPath == path) nextFrame(keepSearchOpen: keepFirebar);
   }
 
   Future<void> saveOrTransmitFromVerbMenu({required bool transmit}) async {
@@ -2975,7 +4509,10 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   String? _categoryForVerb(String verb) {
+    final definition = verbDefinition(verb);
+    if (definition != null) return definition.category;
     for (final e in verbsByCategory.entries) {
+      if (e.key == 'Favorites') continue;
       if (e.value.contains(verb)) return e.key;
     }
     return null;
@@ -2985,12 +4522,16 @@ class CaptionV2Controller extends ChangeNotifier {
   // Navigation
   // ---------------------------------------------------------------------------
 
-  void goToIndex(int index) {
+  void goToIndex(int index, {bool keepSearchOpen = false}) {
     if (imagePaths.isEmpty) return;
     currentIndex = index.clamp(0, imagePaths.length - 1);
     _clearCaptionSelection();
     searchQuery = '';
-    searchOpen = false;
+    // Stay in Firebar after Save → next so the user can keep typing.
+    // Manual navigation (arrows / thumbnails) still closes it.
+    if (!keepSearchOpen) {
+      searchOpen = false;
+    }
     guidedSearchPrompt = null;
     _guidedSearchHits = const [];
     _pendingCommandInning = null;
@@ -3001,8 +4542,10 @@ class CaptionV2Controller extends ChangeNotifier {
     unawaited(_refreshFrameIptc());
   }
 
-  void nextFrame() => goToIndex(currentIndex + 1);
-  void prevFrame() => goToIndex(currentIndex - 1);
+  void nextFrame({bool keepSearchOpen = false}) =>
+      goToIndex(currentIndex + 1, keepSearchOpen: keepSearchOpen);
+  void prevFrame({bool keepSearchOpen = false}) =>
+      goToIndex(currentIndex - 1, keepSearchOpen: keepSearchOpen);
 
   /// Re-read the current frame after an external IPTC or file operation.
   Future<void> refreshCurrentFrameMetadata() => _refreshFrameIptc();
@@ -3113,6 +4656,30 @@ class CaptionV2Controller extends ChangeNotifier {
       if (v != null && v.isNotEmpty) return v;
     }
     return null;
+  }
+
+  /// Photographer the caption byline should use for [path], read from that
+  /// file's IPTC. A pasted caption calls this per photo so two shooters of the
+  /// same moment are not credited with the source name.
+  Future<String> photographerNameForPath(String path) async {
+    final metadata = await IptcTemplateImportService.readMetadata(path);
+    if (metadata == null) {
+      return path == currentPath ? photographerName : '';
+    }
+    return photographerNameFromMetadata(metadata);
+  }
+
+  static String photographerNameFromMetadata(Map<dynamic, dynamic> raw) {
+    return _stringFromMeta(raw['Creator']) ??
+        _stringFromMeta(raw['Artist']) ??
+        _stringFromMeta(raw['Photographer']) ??
+        _stringFromMeta(raw['IPTC:Photographer']) ??
+        _stringFromMeta(raw['XMP:Photographer']) ??
+        _stringFromMeta(raw['IPTC:By-line']) ??
+        _stringFromMeta(raw['By-line']) ??
+        _stringFromMeta(raw['Byline']) ??
+        _stringFromMeta(raw['XMP:Creator']) ??
+        '';
   }
 
   static String? _stringFromMeta(dynamic value) {
@@ -3230,16 +4797,7 @@ class CaptionV2Controller extends ChangeNotifier {
         if (s != null) meta[key.toString()] = s;
       });
       currentIptcMeta = meta;
-      photographerName = _stringFromMeta(raw['Creator']) ??
-          _stringFromMeta(raw['Artist']) ??
-          _stringFromMeta(raw['Photographer']) ??
-          _stringFromMeta(raw['IPTC:Photographer']) ??
-          _stringFromMeta(raw['XMP:Photographer']) ??
-          _stringFromMeta(raw['IPTC:By-line']) ??
-          _stringFromMeta(raw['By-line']) ??
-          _stringFromMeta(raw['Byline']) ??
-          _stringFromMeta(raw['XMP:Creator']) ??
-          '';
+      photographerName = photographerNameFromMetadata(raw);
       agencyName = _stringFromMeta(raw['IPTC:Credit']) ??
           _stringFromMeta(raw['Credit']) ??
           '';
@@ -3311,6 +4869,7 @@ class CaptionV2Controller extends ChangeNotifier {
       personality: personality,
       headline: headline,
       keywords: keywords,
+      photographerName: photographerName,
     );
     previousCaption = payload;
     await _prefs?.saveLastSavedMetadata(payload.toJson());
@@ -3323,8 +4882,11 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+    final keepFirebar = searchOpen;
     final result = await savePaths([path]);
-    if (result.anySucceeded && advance) nextFrame();
+    if (result.anySucceeded && advance) {
+      nextFrame(keepSearchOpen: keepFirebar);
+    }
     return result.anySucceeded;
   }
 
@@ -3345,7 +4907,7 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     final captionUnchanged = selectedPlayer == null &&
-        !hasVerbSelection &&
+        (!hasVerbSelection || pinDefersCaptionUntilPlayer) &&
         manualCaptionOverride == null;
     if (captionUnchanged && !metadataDirty && originalCaption.trim().isEmpty) {
       statusMessage = 'Select a player and verb first';
@@ -3388,6 +4950,7 @@ class CaptionV2Controller extends ChangeNotifier {
       savedImages.addAll(succeeded);
       if (generatedCaption || manualCaption) {
         captionedImages.addAll(succeeded);
+        await FloCaptionMark.markSaved(succeeded);
       }
       await _persistSaved();
       metadataDirty = false;
@@ -3430,7 +4993,10 @@ class CaptionV2Controller extends ChangeNotifier {
     return result.anySucceeded;
   }
 
-  void advancePastHandledChain(List<String> chain) {
+  void advancePastHandledChain(
+    List<String> chain, {
+    bool keepSearchOpen = false,
+  }) {
     if (imagePaths.isEmpty || chain.isEmpty) return;
     var lastIndex = -1;
     for (final path in chain) {
@@ -3438,7 +5004,10 @@ class CaptionV2Controller extends ChangeNotifier {
       if (index > lastIndex) lastIndex = index;
     }
     if (lastIndex < 0) return;
-    goToIndex((lastIndex + 1).clamp(0, imagePaths.length - 1));
+    goToIndex(
+      (lastIndex + 1).clamp(0, imagePaths.length - 1),
+      keepSearchOpen: keepSearchOpen,
+    );
   }
 
   /// After saving a subset of a burst, land on the first frame in [chain]
@@ -3447,17 +5016,18 @@ class CaptionV2Controller extends ChangeNotifier {
   void advanceAfterBurstSelection({
     required List<String> chain,
     required Iterable<String> savedPaths,
+    bool keepSearchOpen = false,
   }) {
     final saved = savedPaths.toSet();
     for (final path in chain) {
       if (saved.contains(path)) continue;
       final index = imagePaths.indexOf(path);
       if (index >= 0) {
-        goToIndex(index);
+        goToIndex(index, keepSearchOpen: keepSearchOpen);
         return;
       }
     }
-    advancePastHandledChain(chain);
+    advancePastHandledChain(chain, keepSearchOpen: keepSearchOpen);
   }
 
   Future<bool> saveAndNext() async {
@@ -3472,6 +5042,7 @@ class CaptionV2Controller extends ChangeNotifier {
   void _clearCaptionSelection() {
     selectedPlayers.clear();
     selectedPlayer = null;
+    playerSearchClearGeneration++;
     // Pinned catalog verb always comes back on the next frame, even if the
     // user picked a different verb for the frame they just saved.
     if (pinnedVerb != null) {
@@ -3491,8 +5062,9 @@ class CaptionV2Controller extends ChangeNotifier {
     manualCaptionOverride = null;
     rbi = 0;
     selectedBase = null;
-    captionSelectionStarted =
-        selectedVerb != null || customVerbPhrase.trim().isNotEmpty;
+    // Pinned verb is restored for the next frame, but caption writing waits
+    // until a player is selected.
+    captionSelectionStarted = false;
     _firebarCommitted
         .removeWhere((item) => item.kind == FirebarResultKind.player);
     if (pinnedVerb != null) {
@@ -3501,8 +5073,14 @@ class CaptionV2Controller extends ChangeNotifier {
       if (!_firebarCommitted.any((item) => item.verbKey == pinnedVerb)) {
         _firebarCommitted.add(FirebarResult.verb(pinnedVerb));
       }
-      final category = _categoryForVerb(pinnedVerb!);
-      if (category != null) verbCategory = category;
+      // A favorite pinned from the Favorites list should stay there. Saving
+      // must not jump back to the verb's home category.
+      final stayingOnFavorites =
+          verbCategory == 'Favorites' && isVerbFavorite(pinnedVerb!);
+      if (!stayingOnFavorites) {
+        final category = _categoryForVerb(pinnedVerb!);
+        if (category != null) verbCategory = category;
+      }
     } else if (customVerbPinned && customVerbPhrase.trim().isNotEmpty) {
       _firebarCommitted
           .removeWhere((item) => item.kind == FirebarResultKind.verb);
@@ -3528,8 +5106,8 @@ class CaptionV2Controller extends ChangeNotifier {
     final toSend =
         imagePaths.where((p) => frameStateFor(p) == FrameState.saved).toList();
     if (toSend.isEmpty) {
-      statusMessage = 'Nothing queued';
-      notifyListeners();
+      // Button / shortcut often fire with nothing pre-queued — save+send current.
+      await transmitCurrent();
       return;
     }
     await _transmitPaths(toSend);
@@ -3542,7 +5120,11 @@ class CaptionV2Controller extends ChangeNotifier {
       return;
     }
     final path = currentPath;
-    if (path == null) return;
+    if (path == null) {
+      statusMessage = 'No image to FTP';
+      notifyListeners();
+      return;
+    }
     // Ensure saved first.
     if (frameStateFor(path) == FrameState.todo) {
       final ok = await saveCurrent();
@@ -3557,17 +5139,43 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    if (paths.isEmpty) {
+      statusMessage = 'Nothing to FTP';
+      notifyListeners();
+      return;
+    }
+    if (transmitting) {
+      statusMessage = 'FTP already in progress';
+      notifyListeners();
+      return;
+    }
+
+    final alreadySent =
+        paths.where((path) => sentImages.contains(path)).toList();
+    var toSend = paths.where((path) => !sentImages.contains(path)).toList();
+    if (alreadySent.isNotEmpty) {
+      final allow = await confirmRetransmit?.call(alreadySent) ?? true;
+      if (allow) toSend = [...toSend, ...alreadySent];
+    }
+    if (toSend.isEmpty) return;
+
     transmitting = true;
-    queuedCount = paths.length;
+    transmitProgress = 0;
+    transmitStatus = 'Connecting…';
+    transmittingPath = toSend.first;
+    queuedCount = toSend.length;
     notifyListeners();
 
     final prefs = _prefs;
     if (prefs == null) {
-      sentImages.addAll(paths);
-      savedImages.addAll(paths);
+      sentImages.addAll(toSend);
+      savedImages.addAll(toSend);
       lastSentLabel = _formatTime(DateTime.now());
       queuedCount = 0;
       transmitting = false;
+      transmittingPath = null;
+      transmitStatus = null;
+      transmitProgress = 0;
       statusMessage = 'Marked sent (prefs unavailable)';
       notifyListeners();
       return;
@@ -3578,13 +5186,12 @@ class CaptionV2Controller extends ChangeNotifier {
     final profile = profileName == null ? null : profiles[profileName];
 
     if (profile == null) {
-      // Soft success for UI review when FTP isn't configured.
-      sentImages.addAll(paths);
-      savedImages.addAll(paths);
-      lastSentLabel = _formatTime(DateTime.now());
-      queuedCount = 0;
       transmitting = false;
-      statusMessage = 'Marked sent (no FTP profile)';
+      transmittingPath = null;
+      transmitStatus = null;
+      transmitProgress = 0;
+      queuedCount = savedNotSentCount;
+      statusMessage = 'Configure an FTP profile first (Settings → FTP)';
       notifyListeners();
       return;
     }
@@ -3594,10 +5201,32 @@ class CaptionV2Controller extends ChangeNotifier {
     final pass = profile['password']?.toString() ?? '';
     final port = int.tryParse(profile['port']?.toString() ?? '') ?? 21;
     final remoteDir = profile['remotePath']?.toString() ?? '/';
+    final passive = profile['passiveMode'] != false;
+
+    if (host.isEmpty || user.isEmpty || pass.isEmpty) {
+      transmitting = false;
+      transmittingPath = null;
+      transmitStatus = null;
+      transmitProgress = 0;
+      statusMessage = 'FTP profile is incomplete';
+      notifyListeners();
+      return;
+    }
 
     var ok = 0;
-    for (final path in paths) {
-      final remote = p.join(remoteDir, p.basename(path));
+    String? lastError;
+    for (var i = 0; i < toSend.length; i++) {
+      final path = toSend[i];
+      transmittingPath = path;
+      transmitProgress = 0;
+      transmitStatus = toSend.length > 1
+          ? 'Uploading ${i + 1}/${toSend.length}…'
+          : 'Uploading…';
+      notifyListeners();
+
+      final remote = remoteDir.endsWith('/')
+          ? '$remoteDir${p.basename(path)}'
+          : '$remoteDir/${p.basename(path)}';
       final result = await FtpClientService.uploadFile(
         host: host,
         username: user,
@@ -3605,18 +5234,53 @@ class CaptionV2Controller extends ChangeNotifier {
         localFilePath: path,
         remoteFilePath: remote,
         port: port,
+        passiveMode: passive,
+        onProgress: (status, progress, error) {
+          final next = progress.clamp(0.0, 1.0);
+          final bumped = (next - transmitProgress).abs() >= 0.02 ||
+              status != transmitStatus ||
+              error != null;
+          transmitStatus = status;
+          transmitProgress = next;
+          if (error != null && error.isNotEmpty) lastError = error;
+          if (bumped) notifyListeners();
+        },
       );
       if (result.success) {
         ok++;
         sentImages.add(path);
         savedImages.add(path);
+      } else {
+        lastError = result.details ?? result.error ?? 'Upload failed';
       }
+      await _recordFtpHistory(
+        FtpHistoryEntry(
+          at: DateTime.now(),
+          fileName: p.basename(path),
+          path: path,
+          profile: profileName ?? '',
+          success: result.success,
+          error: result.success ? null : lastError,
+        ),
+      );
     }
 
     lastSentLabel = _formatTime(DateTime.now());
     queuedCount = savedNotSentCount;
     transmitting = false;
-    statusMessage = 'Sent $ok / ${paths.length}';
+    transmittingPath = null;
+    transmitProgress = 0;
+    transmitStatus = null;
+    if (ok == toSend.length) {
+      statusMessage =
+          toSend.length == 1 ? 'FTP complete' : 'Sent $ok / ${toSend.length}';
+    } else if (ok == 0) {
+      statusMessage =
+          lastError == null ? 'FTP failed' : 'FTP failed: $lastError';
+    } else {
+      statusMessage = 'Sent $ok / ${toSend.length}'
+          '${lastError == null ? '' : ' — $lastError'}';
+    }
     notifyListeners();
   }
 
@@ -3625,6 +5289,39 @@ class CaptionV2Controller extends ChangeNotifier {
     final m = dt.minute.toString().padLeft(2, '0');
     final ap = dt.hour >= 12 ? 'PM' : 'AM';
     return '$h:$m $ap';
+  }
+
+  static const _ftpHistoryKey = 'caption_v2_ftp_history';
+
+  Future<void> _loadFtpHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_ftpHistoryKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      ftpHistory
+        ..clear()
+        ..addAll(
+          decoded.whereType<Map>().map(
+                (item) => FtpHistoryEntry.fromJson(
+                  Map<String, dynamic>.from(item),
+                ),
+              ),
+        );
+    } catch (_) {}
+  }
+
+  Future<void> _recordFtpHistory(FtpHistoryEntry entry) async {
+    ftpHistory.insert(0, entry);
+    if (ftpHistory.length > 80) {
+      ftpHistory.removeRange(80, ftpHistory.length);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _ftpHistoryKey,
+      jsonEncode(ftpHistory.map((item) => item.toJson()).toList()),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -3845,6 +5542,8 @@ class CaptionV2Controller extends ChangeNotifier {
       'tp': 'Triple Play',
       'bp': 'Batting Practice',
       'fp': 'Fielding Practice',
+      'look': 'Looks On',
+      'looks': 'Looks On',
     };
     final aliased = aliases[normalized];
     if (aliased != null) return aliased;
@@ -4050,7 +5749,8 @@ class CaptionV2Controller extends ChangeNotifier {
     _finishCommand();
   }
 
-  void _finishCommand({int? rbiValue, String? baseValue, String? verbOverride}) {
+  void _finishCommand(
+      {int? rbiValue, String? baseValue, String? verbOverride}) {
     if (verbOverride != null) {
       selectedVerb = verbOverride;
       _stashCustomVerbIfNeeded();
@@ -4219,13 +5919,14 @@ class CaptionV2Controller extends ChangeNotifier {
     guidedSearchPrompt = null;
     _guidedSearchHits = const [];
     searchQuery = '';
+    final keepFirebar = searchOpen;
     notifyListeners();
     if (path == null) return;
 
     final saved = await saveCurrent();
     if (!saved) return;
     if (transmit) await transmitPath(path);
-    if (currentPath == path) nextFrame();
+    if (currentPath == path) nextFrame(keepSearchOpen: keepFirebar);
   }
 
   List<SearchHit> topSearchHits() {
@@ -4294,9 +5995,8 @@ class CaptionV2Controller extends ChangeNotifier {
         cmp = byNumber != 0 ? byNumber : a.fullName.compareTo(b.fullName);
         break;
       case RosterSortMode.firstName:
-        final byFirst = a.firstName
-            .toLowerCase()
-            .compareTo(b.firstName.toLowerCase());
+        final byFirst =
+            a.firstName.toLowerCase().compareTo(b.firstName.toLowerCase());
         cmp = byFirst != 0
             ? byFirst
             : playerLastName(a)
@@ -4383,6 +6083,8 @@ class CaptionV2Controller extends ChangeNotifier {
 
   @override
   void dispose() {
+    _folderWatchGeneration++;
+    _stopFolderWatch();
     _prefs?.captionFieldVisibilityRevision.removeListener(
       _onCaptionFieldVisibilityChanged,
     );
