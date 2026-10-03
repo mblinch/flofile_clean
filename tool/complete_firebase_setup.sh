@@ -19,7 +19,7 @@ firebase login
 
 # Default to your console project id; override: ./tool/complete_firebase_setup.sh my-other-project
 PROJECT_ID="${1:-projectflo-e99c6}"
-BUNDLE_ID="${2:-com.example.captionWriterFlutter}"
+BUNDLE_ID="${2:-com.flofilecaptions.app}"
 
 echo "Configuring FlutterFire for project: $PROJECT_ID (macOS + iOS bundle: $BUNDLE_ID)"
 flutterfire configure -y \

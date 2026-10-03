@@ -53,19 +53,22 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyDbPXlflCVYlcGZYzSxdHiENKCkYu2QZuc',
-    appId: '1:737938045380:ios:33a1fd21ab07af5ff48c91',
+    appId: '1:737938045380:ios:ffb645b448523036f48c91',
     messagingSenderId: '737938045380',
     projectId: 'projectflo-e99c6',
     storageBucket: 'projectflo-e99c6.firebasestorage.app',
-    iosBundleId: 'com.example.captionWriterFlutter',
+    iosClientId: '737938045380-glsi10g9l570m64k8d9nepvekb6fm629.apps.googleusercontent.com',
+    iosBundleId: 'com.flofilecaptions.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDbPXlflCVYlcGZYzSxdHiENKCkYu2QZuc',
-    appId: '1:737938045380:ios:33a1fd21ab07af5ff48c91',
+    appId: '1:737938045380:ios:ffb645b448523036f48c91',
     messagingSenderId: '737938045380',
     projectId: 'projectflo-e99c6',
     storageBucket: 'projectflo-e99c6.firebasestorage.app',
-    iosBundleId: 'com.example.captionWriterFlutter',
+    iosClientId: '737938045380-glsi10g9l570m64k8d9nepvekb6fm629.apps.googleusercontent.com',
+    iosBundleId: 'com.flofilecaptions.app',
   );
+
 }

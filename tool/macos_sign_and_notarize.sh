@@ -7,8 +7,9 @@
 #   3. Notary credentials stored once:
 #        xcrun notarytool store-credentials "flofile-notarize" \
 #          --apple-id "you@example.com" \
-#          --team-id "YOUR_TEAM_ID" \
+#          --team-id "468BFM5WRZ" \
 #          --password "xxxx-xxxx-xxxx-xxxx"
+#   Or run: ./tool/macos_setup_developer_id.sh
 #
 # Usage:
 #   ./tool/macos_sign_and_notarize.sh "build/macos/Build/Products/Release/FloFile Beta.app"
@@ -36,15 +37,21 @@ resolve_signing_identity() {
     return
   fi
   local found
-  found="$(security find-identity -v -p codesigning 2>/dev/null \
-    | grep 'Developer ID Application:' \
-    | head -1 \
-    | grep -o '"[^"]*"' \
-    | tr -d '"')"
+  # Prefer the org team (DEVELOPMENT_TEAM from AppInfo.xcconfig) when multiple exist.
+  local preferred_team
+  preferred_team="$(grep '^DEVELOPMENT_TEAM' "$ROOT/macos/Runner/Configs/AppInfo.xcconfig" 2>/dev/null \
+    | sed 's/.*= *//' | tr -d '[:space:]')"
+  local lines
+  lines="$(security find-identity -v -p codesigning 2>/dev/null | grep 'Developer ID Application:' || true)"
+  if [ -n "$preferred_team" ]; then
+    found="$(echo "$lines" | grep "($preferred_team)" | head -1 | grep -o '"[^"]*"' | tr -d '"')"
+  fi
+  if [ -z "${found:-}" ]; then
+    found="$(echo "$lines" | head -1 | grep -o '"[^"]*"' | tr -d '"')"
+  fi
   if [ -z "$found" ]; then
     echo "Error: No Developer ID Application certificate in Keychain." >&2
-    echo "Create one at https://developer.apple.com/account/resources/certificates/list" >&2
-    echo "Then download/install it, or set DEVELOPER_ID_SIGNING_IDENTITY." >&2
+    echo "Run: ./tool/macos_setup_developer_id.sh" >&2
     exit 1
   fi
   echo "$found"

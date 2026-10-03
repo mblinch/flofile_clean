@@ -21,6 +21,7 @@ xcodebuild \
   -scheme Runner \
   -configuration Debug \
   -allowProvisioningUpdates \
+  -allowProvisioningDeviceRegistration \
   CODE_SIGN_STYLE=Automatic \
   DEVELOPMENT_TEAM="$TEAM" \
   -quiet

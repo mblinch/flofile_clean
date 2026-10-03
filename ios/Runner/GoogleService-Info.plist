@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CLIENT_ID</key>
+	<string>737938045380-glsi10g9l570m64k8d9nepvekb6fm629.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.737938045380-glsi10g9l570m64k8d9nepvekb6fm629</string>
 	<key>API_KEY</key>
 	<string>AIzaSyDbPXlflCVYlcGZYzSxdHiENKCkYu2QZuc</string>
 	<key>GCM_SENDER_ID</key>
@@ -9,7 +13,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.example.captionWriterFlutter</string>
+	<string>com.flofilecaptions.app</string>
 	<key>PROJECT_ID</key>
 	<string>projectflo-e99c6</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:737938045380:ios:33a1fd21ab07af5ff48c91</string>
+	<string>1:737938045380:ios:ffb645b448523036f48c91</string>
 </dict>
 </plist>

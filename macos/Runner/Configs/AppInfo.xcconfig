@@ -11,12 +11,12 @@
 PRODUCT_NAME = FloFile Beta
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.example.captionWriterFlutter
+PRODUCT_BUNDLE_IDENTIFIER = com.flofilecaptions.app
 
-// Set in Xcode → Runner → Signing & Capabilities (Personal Team).
-DEVELOPMENT_TEAM = 3Y8BA6ZL5H
+// Set in Xcode → Runner → Signing & Capabilities (Organization Team).
+DEVELOPMENT_TEAM = 468BFM5WRZ
 CODE_SIGN_IDENTITY = Apple Development
 CODE_SIGN_STYLE = Automatic
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 1001746423 Ontario Inc. All rights reserved.

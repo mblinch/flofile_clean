@@ -8,7 +8,7 @@
 /// Also add `GIDClientID` and `CFBundleURLTypes` to `macos/Runner/Info.plist`
 /// per [docs/FIREBASE_AUTH_SETUP.md](../docs/FIREBASE_AUTH_SETUP.md).
 const String? kGoogleSignInClientId =
-    '737938045380-1om7uanapjhddrt8l9lncbmhmd1k2q0p.apps.googleusercontent.com';
+    '737938045380-glsi10g9l570m64k8d9nepvekb6fm629.apps.googleusercontent.com';
 
 /// Resolves the OAuth client ID from [kGoogleSignInClientId] or dart-define.
 String? get googleOAuthClientId {

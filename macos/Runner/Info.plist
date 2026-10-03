@@ -39,7 +39,7 @@
 	<key>SUPublicEDKey</key>
 	<string>4yqvvc7eAvcggD6+srm+dBvCpwIaaYHZyaDoMc9mfVs=</string>
 	<key>GIDClientID</key>
-	<string>737938045380-1om7uanapjhddrt8l9lncbmhmd1k2q0p.apps.googleusercontent.com</string>
+	<string>737938045380-glsi10g9l570m64k8d9nepvekb6fm629.apps.googleusercontent.com</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -47,7 +47,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.737938045380-1om7uanapjhddrt8l9lncbmhmd1k2q0p</string>
+				<string>com.googleusercontent.apps.737938045380-glsi10g9l570m64k8d9nepvekb6fm629</string>
 			</array>
 		</dict>
 	</array>

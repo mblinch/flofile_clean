@@ -1,2 +1,7 @@
 #include "../../Flutter/Flutter-Release.xcconfig"
 #include "Warnings.xcconfig"
+
+// macOS 26+ lipo rejects multi-arch `-verify_arch` (Flutter release_unpack_macos).
+// Apple Silicon–only is fine for FloFile distribution on current Macs.
+ARCHS = arm64
+ONLY_ACTIVE_ARCH = YES
