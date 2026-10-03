@@ -173,6 +173,8 @@ class RosterFirestoreService {
     final adds = <MapEntry<String, Player>>[];
     final updates = <MapEntry<String, Player>>[];
     final removes = <String>[];
+    // Doc ids whose jersey was kept from a prior manual verification.
+    final preservedManualJersey = <String>{};
 
     target.forEach((id, p) {
       final cur = existing[id];
@@ -180,8 +182,12 @@ class RosterFirestoreService {
         adds.add(MapEntry(id, p));
         return;
       }
-      if (_playerChanged(cur, p)) {
-        updates.add(MapEntry(id, p));
+      final effective = _withPreservedManualJersey(cur, p);
+      if (effective.jerseyNumber != p.jerseyNumber) {
+        preservedManualJersey.add(id);
+      }
+      if (_playerChanged(cur, effective)) {
+        updates.add(MapEntry(id, effective));
       }
     });
     for (final id in existing.keys) {
@@ -226,6 +232,9 @@ class RosterFirestoreService {
         final ref = playersCol.doc(op.id);
         if (op.isSet) {
           final p = op.player!;
+          final keepManual = preservedManualJersey.contains(op.id);
+          final incomingHasJersey =
+              (p.jerseyNumber ?? '').trim().isNotEmpty && !keepManual;
           batch.set(
             ref,
             {
@@ -235,6 +244,8 @@ class RosterFirestoreService {
               'displayName': p.displayName,
               if (p.playerId != null) 'playerId': p.playerId,
               if (p.position != null) 'position': p.position,
+              if (keepManual) 'jerseySource': 'manual',
+              if (incomingHasJersey) 'jerseySource': 'tank01',
               'updatedAt': FieldValue.serverTimestamp(),
             },
             SetOptions(merge: true),
@@ -298,6 +309,27 @@ class RosterFirestoreService {
     final slug =
         p.fullName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '_');
     return j.isEmpty ? slug : '${j}_$slug';
+  }
+
+  /// Keeps a manually verified jersey when the incoming sync has a blank one.
+  static Player _withPreservedManualJersey(
+    Map<String, dynamic> cur,
+    Player incoming,
+  ) {
+    final incomingJersey = (incoming.jerseyNumber ?? '').trim();
+    if (incomingJersey.isNotEmpty) return incoming;
+    final source = (cur['jerseySource'] as String?)?.trim() ?? '';
+    if (source != 'manual') return incoming;
+    final existingJersey = (cur['jerseyNumber'] as String?)?.trim() ?? '';
+    if (existingJersey.isEmpty) return incoming;
+    return Player(
+      fullName: incoming.fullName,
+      firstName: incoming.firstName,
+      jerseyNumber: existingJersey,
+      displayName: '${incoming.fullName} #$existingJersey',
+      playerId: incoming.playerId,
+      position: incoming.position,
+    );
   }
 
   static bool _playerChanged(Map<String, dynamic> cur, Player p) {

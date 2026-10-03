@@ -5,7 +5,9 @@ import 'dart:convert';
 
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
+import '../caption_style/sport_verb_categories.dart';
 import '../caption_style/verb_defaults_bundle.dart';
+import '../caption_style/verb_sort_mode.dart';
 import 'app_defaults_firestore_service.dart';
 import 'iptc_template_apply_service.dart';
 import 'user_preferences_firestore_service.dart';
@@ -47,6 +49,10 @@ class PreferencesService {
   /// Per-verb reset baselines (phrases / flags / subOptions), like caption wire defaults.
   static const String _keyVerbWordingDefaults = 'verb_wording_defaults';
   static const String _keyDeletedVerbs = 'deleted_verbs'; // For tracking deleted built-in verbs
+  /// Caption V2 verb list ordering: alphabetical | mostUsed | custom.
+  static const String _keyVerbSortMode = 'verb_sort_mode';
+  /// Per-sport map of verb key → usage count (synced via user Firebase prefs).
+  static const String _keyVerbUsageCounts = 'verb_usage_counts';
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
   static const String _keySyncServerUrl = 'sync_server_url';
   static const String _keySyncAccountId = 'sync_account_id';
@@ -1307,6 +1313,100 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
+  Future<VerbSortMode> getVerbSortMode() async {
+    final prefs = await _getPrefs();
+    return VerbSortModeX.fromStorage(prefs.getString(_keyVerbSortMode));
+  }
+
+  Future<void> saveVerbSortMode(VerbSortMode mode) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyVerbSortMode, mode.storageValue);
+    _afterLocalPreferencesChanged();
+  }
+
+  /// Usage counts keyed as `"$sport::$verbKey"` so sports stay independent.
+  Future<Map<String, int>> getVerbUsageCounts() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyVerbUsageCounts);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! Map) return {};
+      return decoded.map(
+        (key, value) => MapEntry(
+          key.toString(),
+          value is int ? value : (value is num ? value.toInt() : 0),
+        ),
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> saveVerbUsageCounts(Map<String, int> counts) async {
+    final prefs = await _getPrefs();
+    if (counts.isEmpty) {
+      await prefs.remove(_keyVerbUsageCounts);
+    } else {
+      await prefs.setString(_keyVerbUsageCounts, json.encode(counts));
+    }
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<int> incrementVerbUsage(String sport, String verbKey) async {
+    final key = '${sport.toLowerCase().trim()}::${verbKey.trim()}';
+    if (key.endsWith('::')) return 0;
+    final counts = await getVerbUsageCounts();
+    final next = (counts[key] ?? 0) + 1;
+    counts[key] = next;
+    await saveVerbUsageCounts(counts);
+    return next;
+  }
+
+  Future<Map<String, int>> getVerbUsageCountsForSport(String sport) async {
+    final prefix = '${sport.toLowerCase().trim()}::';
+    final all = await getVerbUsageCounts();
+    final out = <String, int>{};
+    all.forEach((key, value) {
+      if (key.startsWith(prefix)) {
+        out[key.substring(prefix.length)] = value;
+      }
+    });
+    return out;
+  }
+
+  /// Wipe local verb catalog for [sport] and reseeds factory category/order.
+  Future<void> resetSportVerbsToFactory(String sport) async {
+    final prefs = await _getPrefs();
+    final normalized = sport.toLowerCase().trim();
+    final factory = SportVerbCategories.copyForSport(normalized);
+    final categoryOrder = <String>[
+      for (final entry in factory.entries)
+        if (entry.value.any((label) => label.trim().isNotEmpty)) entry.key,
+    ];
+    final verbOrder = <String, List<String>>{
+      for (final entry in factory.entries)
+        if (entry.value.any((label) => label.trim().isNotEmpty))
+          entry.key: [
+            for (final label in entry.value)
+              if (label.trim().isNotEmpty) label.trim(),
+          ],
+    };
+
+    await prefs.remove(_getVerbOverridesKey(normalized));
+    await prefs.remove(_getCustomVerbsKey(normalized));
+    await prefs.remove(_getCustomVerbWordingsKey(normalized));
+    await prefs.remove(_getVerbWordingDefaultsKey(normalized));
+    await prefs.remove(_getDeletedVerbsKey(normalized));
+    await prefs.remove(_getVerbCatalogCompleteKey(normalized));
+    await prefs.remove(_getSportDefaultKey(normalized));
+    await saveCategoryOrder(categoryOrder, sport: normalized);
+    await saveVerbOrder(verbOrder, sport: normalized);
+    await saveFavoriteVerbs(<String>{}, sport: normalized);
+    await saveVerbSortMode(VerbSortMode.alphabetical);
+    _afterLocalPreferencesChanged();
+  }
+
   Future<Set<String>> getDeletedVerbs({String sport = 'hockey'}) async {
     final prefs = await _getPrefs();
     final key = _getDeletedVerbsKey(sport);
@@ -1534,6 +1634,8 @@ class PreferencesService {
       'version': 2,
       'currentSport': await getCurrentSport(),
       'verbSettingsBySport': verbSettingsBySport,
+      'verbSortMode': (await getVerbSortMode()).storageValue,
+      'verbUsageCounts': await getVerbUsageCounts(),
       'categoryOrder': await getCategoryOrder(),
       'favoriteVerbs': (await getFavoriteVerbs()).toList(),
       'favoriteTeams': (await getFavoriteTeams()).toList(),
@@ -1680,6 +1782,20 @@ class PreferencesService {
     }
     if (preferences.containsKey('currentSport')) {
       await saveCurrentSport(preferences['currentSport'] as String);
+    }
+    // Sort mode is session UI state (always A–Z on launch). Do not import it.
+    if (preferences.containsKey('verbUsageCounts')) {
+      final raw = preferences['verbUsageCounts'];
+      if (raw is Map) {
+        await saveVerbUsageCounts(
+          raw.map(
+            (key, value) => MapEntry(
+              key.toString(),
+              value is int ? value : (value is num ? value.toInt() : 0),
+            ),
+          ),
+        );
+      }
     }
     if (preferences.containsKey('syncServerUrl')) {
       await setSyncServerUrl(preferences['syncServerUrl'] as String? ?? '');

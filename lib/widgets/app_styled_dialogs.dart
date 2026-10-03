@@ -54,10 +54,13 @@ TextStyle appDialogFieldTextStyleOf(
 TextStyle appDialogFieldLabelStyleOf(BuildContext context) {
   final t = appDialogTokens(context);
   if (t != null) {
-    return t.microStyle.copyWith(
-      fontWeight: FontWeight.w500,
-      letterSpacing: -0.2,
+    return TextStyle(
+      fontFamily: FfTokens.labelFamily,
+      fontSize: 11,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 0.2,
       height: 1.2,
+      color: t.text.withValues(alpha: 0.72),
     );
   }
   return kAppDialogFieldLabelStyle;
@@ -277,11 +280,13 @@ class AppDialogControlShell extends StatelessWidget {
     required this.child,
     this.onTap,
     this.enabled = true,
+    this.height = kAppDialogControlHeight,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final bool enabled;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -299,7 +304,7 @@ class AppDialogControlShell extends StatelessWidget {
       shadowColor: const Color(0x33000000),
       borderRadius: BorderRadius.circular(radius),
       child: Container(
-        height: kAppDialogControlHeight,
+        height: height,
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         alignment: Alignment.centerLeft,
@@ -345,33 +350,38 @@ class AppDialogLabeledField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final showLabel = label.trim().isNotEmpty ||
+        labelLeading != null ||
+        labelTrailing != null;
     return Padding(
       padding: EdgeInsets.only(bottom: bottomGap),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            height: kAppDialogLabelRowHeight,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (labelLeading != null) ...[
-                  labelLeading!,
-                  const SizedBox(width: 6),
-                ],
-                Expanded(
-                  child: Text(
-                    label,
-                    style: appDialogFieldLabelStyleOf(context),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+          if (showLabel) ...[
+            SizedBox(
+              height: kAppDialogLabelRowHeight,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  if (labelLeading != null) ...[
+                    labelLeading!,
+                    const SizedBox(width: 6),
+                  ],
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: appDialogFieldLabelStyleOf(context),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
-                if (labelTrailing != null) labelTrailing!,
-              ],
+                  if (labelTrailing != null) labelTrailing!,
+                ],
+              ),
             ),
-          ),
-          SizedBox(height: spacing),
+            SizedBox(height: spacing),
+          ],
           child,
         ],
       ),

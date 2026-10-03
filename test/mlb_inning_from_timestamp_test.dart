@@ -43,4 +43,43 @@ void main() {
     );
     expect(after.phase, MlbPhotoGametimePhase.postgame);
   });
+
+  test('a photo hours before first pitch is pregame, not last night', () {
+    final tonight = [
+      _play('2026-09-24T23:10:00Z', '2026-09-24T23:12:00Z', 1),
+      _play('2026-09-25T02:00:00Z', '2026-09-25T02:02:00Z', 9),
+    ];
+    // 08:00Z is the same date as tonight's first pitch and is before it,
+    // so the caption is pregame even though last night's final out is closer.
+    final beforeFirstPitch = MlbInningFromTimestampService.timelineForPhoto(
+      [night, tonight],
+      DateTime.parse('2026-09-24T08:00:00Z'),
+      photoCalendarDay: DateTime(2026, 9, 24),
+      gameCalendarDays: [
+        DateTime(2026, 9, 23),
+        DateTime(2026, 9, 24),
+      ],
+    );
+    expect(beforeFirstPitch.phase, MlbPhotoGametimePhase.pregame);
+  });
+
+  test('a photo after the last logged play stays in that inning while live', () {
+    final inProgress = [
+      _play('2026-09-23T23:05:00Z', '2026-09-23T23:08:00Z', 4),
+    ];
+    final duringBreak = MlbInningFromTimestampService.timelineForPhoto(
+      [inProgress],
+      DateTime.parse('2026-09-23T23:20:00Z'),
+      gameIsFinal: const [false],
+    );
+    expect(duringBreak.phase, MlbPhotoGametimePhase.live);
+    expect(duringBreak.inningNumber, 4);
+
+    final finished = MlbInningFromTimestampService.timelineForPhoto(
+      [inProgress],
+      DateTime.parse('2026-09-23T23:20:00Z'),
+      gameIsFinal: const [true],
+    );
+    expect(finished.phase, MlbPhotoGametimePhase.postgame);
+  });
 }

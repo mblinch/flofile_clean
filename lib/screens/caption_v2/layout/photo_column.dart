@@ -41,6 +41,14 @@ class PhotoColumn extends StatefulWidget {
   State<PhotoColumn> createState() => _PhotoColumnState();
 }
 
+String _twelveHourTime(DateTime value) {
+  final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+  final minute = value.minute.toString().padLeft(2, '0');
+  final second = value.second.toString().padLeft(2, '0');
+  final suffix = value.hour >= 12 ? 'PM' : 'AM';
+  return '$hour:$minute:$second $suffix';
+}
+
 class _PhotoColumnState extends State<PhotoColumn> {
   static const double _handleHeight = 14;
   double _previewFraction = 0.6;
@@ -807,10 +815,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
   String _captureTime(String path) {
     final value = controller.captureByPath[path];
     if (value == null) return '';
-    final hour = value.hour.toString().padLeft(2, '0');
-    final minute = value.minute.toString().padLeft(2, '0');
-    final second = value.second.toString().padLeft(2, '0');
-    return '$hour:$minute:$second';
+    return _twelveHourTime(value);
   }
 
   @override

@@ -82,6 +82,59 @@ void main() {
     );
   });
 
+  test('hockey keeps goalie plays and post-game reactions in their categories',
+      () {
+    final catalog = EffectiveVerbCatalog.merge(
+      sport: 'hockey',
+      categoryOrder: const [
+        'Offense',
+        'Defense',
+        'Non Game-Action',
+        'Goalie',
+      ],
+      verbOrder: const {
+        'Offense': [
+          'Skates',
+          'makes a save',
+          'guards the net',
+          'celebrates after the win',
+        ],
+        'Non Game-Action': ['Looks On'],
+        'Goalie': ['Saves', 'Handles the Puck'],
+        'Reactions': ['Post Game Win', 'Post Game Loss', 'Dejection'],
+      },
+      favorites: const {},
+      customVerbs: const [],
+      customWordings: const {},
+      overrides: const {
+        'makes a save': {
+          'label': 'Saves',
+          'category': 'Offense',
+          'verbPhrase': 'makes a save',
+        },
+        'celebrates after the win': {
+          'label': 'Post Game Win',
+          'category': 'Offense',
+          'verbPhrase': 'celebrates after their team defeated',
+        },
+      },
+      deletedVerbs: const {},
+    );
+
+    expect(
+      catalog.verbsByCategory['Goalie']!.map((verb) => verb.key),
+      containsAll(['Saves', 'Handles the Puck', 'Stands in Net', 'Guards the Net']),
+    );
+    expect(
+      catalog.verbsByCategory['Reactions']!.map((verb) => verb.key),
+      containsAll(['Post Game Win', 'Post Game Loss', 'Dejection']),
+    );
+    expect(
+      catalog.verbsByCategory['Offense']!.map((verb) => verb.key),
+      isNot(contains('Saves')),
+    );
+  });
+
   test('falls back to complete sport factory catalog', () {
     final catalog = EffectiveVerbCatalog.factory('hockey');
 

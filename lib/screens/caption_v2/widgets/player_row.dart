@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../caption_style/caption_text_normalize.dart';
 import '../../../theme/ff_tokens.dart';
+import 'verb_tile.dart';
 
 /// Roster row: monospace jersey badge + name.
 ///
 /// Selected: accent tint fill, 1px accent@50% border, badge inverted to accent
 /// fill with [FfTokens.inkOnAccent] text, trailing check.
+/// Pin icon appears only when [pinned]; Cmd-click / [onPinTap] toggles pin.
 class PlayerRow extends StatelessWidget {
   const PlayerRow({
     super.key,
@@ -17,9 +19,12 @@ class PlayerRow extends StatelessWidget {
     this.usageCount,
     this.selectionRole,
     this.focused = false,
+    this.pinned = false,
     this.firebarSelected = false,
     this.highlightQuery = '',
     this.onTap,
+    this.onPinTap,
+    this.onSecondaryTapDown,
   });
 
   final String jersey;
@@ -29,14 +34,17 @@ class PlayerRow extends StatelessWidget {
   final int? usageCount;
   final String? selectionRole;
   final bool focused;
+  final bool pinned;
   final bool firebarSelected;
   final String highlightQuery;
   final VoidCallback? onTap;
+  final VoidCallback? onPinTap;
+  final GestureTapDownCallback? onSecondaryTapDown;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final enabled = onTap != null;
+    final enabled = onTap != null || onPinTap != null;
     final isMobile = MediaQuery.sizeOf(context).width < 1100;
     final rowHeight = height ?? (isMobile ? 44.0 : 28.0);
     final veryCompact = rowHeight < 24;
@@ -49,8 +57,10 @@ class PlayerRow extends StatelessWidget {
       selected: selected,
       child: MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        child: GestureDetector(
+        child: CmdClick(
           onTap: onTap,
+          onCmdTap: onPinTap,
+          onSecondaryTapDown: onSecondaryTapDown,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
             curve: Curves.easeOut,
@@ -125,6 +135,29 @@ class PlayerRow extends StatelessWidget {
                       fontWeight: FfTokens.weightMedium,
                     ),
                   ),
+                ],
+                if (pinned) ...[
+                  const SizedBox(width: 3),
+                  if (onPinTap != null)
+                    IconButton(
+                      onPressed: onPinTap,
+                      tooltip: 'Unpin for next frames',
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints.tightFor(
+                        width: veryCompact ? 24 : 28,
+                        height: veryCompact ? 20 : 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      iconSize: veryCompact ? 12 : 14,
+                      color: t.accent,
+                      icon: const Icon(Icons.push_pin_rounded),
+                    )
+                  else
+                    Icon(
+                      Icons.push_pin_rounded,
+                      size: veryCompact ? 12 : 13,
+                      color: t.accent,
+                    ),
                 ],
                 if (selected) ...[
                   const SizedBox(width: 4),

@@ -909,6 +909,59 @@ void main() {
     expect(controller.selectedVerb, isNull);
   });
 
+  test('pinned player survives frame navigation while unpinned player clears',
+      () {
+    final bo = player('Bo Bichette', '11');
+    final vlad = player('Vladimir Guerrero Jr.', '27');
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg']
+      ..homeRoster = [bo, vlad];
+
+    controller.selectPlayer(bo, isHome: true);
+    controller.goToIndex(1);
+    expect(controller.selectedPlayers, isEmpty);
+
+    controller.goToIndex(0);
+    controller.togglePlayerPin(vlad, isHome: true);
+    expect(controller.isPlayerPinned(vlad, isHome: true), isTrue);
+    expect(controller.isPlayerSelected(vlad, isHome: true), isTrue);
+
+    controller.selectPlayer(bo, isHome: true);
+    expect(controller.selectedPlayers, hasLength(2));
+    expect(controller.isPlayerPinned(vlad, isHome: true), isTrue);
+
+    controller.goToIndex(1);
+    expect(controller.isPlayerPinned(vlad, isHome: true), isTrue);
+    expect(controller.selectedPlayers, hasLength(1));
+    expect(controller.selectedPlayer?.fullName, 'Vladimir Guerrero Jr.');
+    expect(controller.captionSelectionStarted, isTrue);
+
+    controller.unpinPlayer();
+    controller.goToIndex(0);
+    expect(controller.selectedPlayers, isEmpty);
+  });
+
+  test('pinned player stays pinned after selecting another player', () {
+    final bo = player('Bo Bichette', '11');
+    final vlad = player('Vladimir Guerrero Jr.', '27');
+    final controller = CaptionV2Controller()
+      ..imagePaths = ['/one.jpg', '/two.jpg']
+      ..homeRoster = [bo, vlad];
+
+    controller.togglePlayerPin(bo, isHome: true);
+    expect(controller.isPlayerPinned(bo, isHome: true), isTrue);
+    expect(controller.isPlayerSelected(bo, isHome: true), isTrue);
+
+    controller.selectPlayer(vlad, isHome: true);
+    expect(controller.isPlayerPinned(bo, isHome: true), isTrue);
+    expect(controller.selectedPlayers, hasLength(2));
+
+    controller.goToIndex(1);
+    expect(controller.isPlayerPinned(bo, isHome: true), isTrue);
+    expect(controller.selectedPlayers, hasLength(1));
+    expect(controller.selectedPlayer?.fullName, 'Bo Bichette');
+  });
+
   test('pinned catalog verb stays pinned after selecting another verb', () {
     final controller = CaptionV2Controller()
       ..imagePaths = ['/one.jpg', '/two.jpg'];

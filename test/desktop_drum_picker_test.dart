@@ -53,7 +53,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('desktop-drum-picker')), findsOneWidget);
-    expect(find.byKey(const ValueKey('drum-scroll-toggle')), findsOneWidget);
+    expect(find.byKey(const ValueKey('verb-view-mode')), findsOneWidget);
     expect(find.byKey(const ValueKey('scroll-list-verbs')), findsNothing);
 
     await tester.tap(
@@ -212,6 +212,45 @@ void main() {
     );
   });
 
+  testWidgets('verb row right-click offers add/remove favorites',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final controller = CaptionV2Controller()
+      ..homeRoster = [_player('Home Player', '1')]
+      ..awayRoster = [_player('Away Player', '2')];
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 1200,
+            height: 620,
+            child: DesktopDrumPicker(
+              controller: controller,
+              onExit: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final verb = controller.verbDefinitionsByCategory['Offense']!.first;
+    final row = find.byKey(ValueKey('verb-accordion-row-${verb.key}'));
+    expect(row, findsOneWidget);
+
+    await tester.tap(row, buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add to Favorites'), findsOneWidget);
+    expect(find.text('Pin Verb'), findsOneWidget);
+    expect(find.text('Edit verb…'), findsOneWidget);
+  });
+
   testWidgets('scroll mode uses a compact standard roster list',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 700);
@@ -337,6 +376,11 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('verb-view-mode')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Side panel list').last);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('verb-side-list')), findsOneWidget);

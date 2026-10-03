@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../caption_style/verb_sort_mode.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
@@ -43,11 +44,14 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
     const preferred = [
       'Favorites',
       'Offense',
-      'Running',
       'Defense',
+      'Goalie',
+      'Goalkeeper',
+      'Pitching',
+      'Running',
+      'Set Pieces',
       'Non Game-Action',
       'Reactions',
-      'Pitching',
     ];
     final ordered = <String>[
       for (final name in preferred)
@@ -84,7 +88,12 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
   void didUpdateWidget(covariant DefaultVerbAccordion oldWidget) {
     super.didUpdateWidget(oldWidget);
     final categories = _categories;
-    if (!categories.contains(_openCategory) && categories.isNotEmpty) {
+    final current = controller.verbCategory;
+    if (current != null &&
+        categories.contains(current) &&
+        current != _openCategory) {
+      _openCategory = current;
+    } else if (!categories.contains(_openCategory) && categories.isNotEmpty) {
       _openCategory =
           categories.contains('Offense') ? 'Offense' : categories.first;
     }
@@ -198,6 +207,8 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                     color: t.text.withValues(alpha: 0.70),
                   ),
                 ),
+                const Spacer(),
+                _VerbSortMenu(controller: controller, tokens: t),
               ],
             ),
           ),
@@ -256,6 +267,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                         verbRowH: verbRowH,
                         verbs: const <EffectiveVerb>[],
                         twoUp: false,
+                        rearrangeable: false,
                         tokens: t,
                         controller: controller,
                         onOpen: () => _open(category),
@@ -273,7 +285,13 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                           headerH: headerH,
                           verbRowH: verbRowH,
                           verbs: openVerbs,
-                          twoUp: twoUp,
+                          // Custom arrange needs a single column for drag order.
+                          twoUp: controller.verbSortMode == VerbSortMode.custom
+                              ? false
+                              : twoUp,
+                          rearrangeable:
+                              controller.verbSortMode == VerbSortMode.custom &&
+                                  category != 'Favorites',
                           tokens: t,
                           controller: controller,
                           onOpen: () => _open(category),
@@ -291,6 +309,84 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
   }
 }
 
+class _VerbSortMenu extends StatelessWidget {
+  const _VerbSortMenu({
+    required this.controller,
+    required this.tokens,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+
+  String get _shortLabel {
+    switch (controller.verbSortMode) {
+      case VerbSortMode.alphabetical:
+        return 'A–Z';
+      case VerbSortMode.mostUsed:
+        return 'Most used';
+      case VerbSortMode.custom:
+        return 'Custom';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Verb sort',
+      padding: EdgeInsets.zero,
+      offset: const Offset(0, 24),
+      onSelected: (value) async {
+        switch (value) {
+          case 'alphabetical':
+            await controller.setVerbSortMode(VerbSortMode.alphabetical);
+            break;
+          case 'mostUsed':
+            await controller.setVerbSortMode(VerbSortMode.mostUsed);
+            break;
+          case 'custom':
+            await controller.setVerbSortMode(VerbSortMode.custom);
+            break;
+          case 'reset':
+            await controller.resetVerbsToFactoryDefaults();
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        for (final mode in VerbSortMode.values)
+          CheckedPopupMenuItem<String>(
+            value: mode.storageValue,
+            checked: controller.verbSortMode == mode,
+            child: Text(mode.menuLabel),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem<String>(
+          value: 'reset',
+          child: Text('Reset verbs to defaults'),
+        ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            _shortLabel,
+            style: TextStyle(
+              fontFamily: FfTokens.labelFamily,
+              fontWeight: FontWeight.w500,
+              fontSize: 10.5,
+              color: tokens.text.withValues(alpha: 0.62),
+            ),
+          ),
+          Icon(
+            Icons.arrow_drop_down_rounded,
+            size: 16,
+            color: tokens.text.withValues(alpha: 0.55),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _AccordionSection extends StatelessWidget {
   const _AccordionSection({
     required this.category,
@@ -301,6 +397,7 @@ class _AccordionSection extends StatelessWidget {
     required this.verbRowH,
     required this.verbs,
     required this.twoUp,
+    required this.rearrangeable,
     required this.tokens,
     required this.controller,
     required this.onOpen,
@@ -318,6 +415,7 @@ class _AccordionSection extends StatelessWidget {
   final double verbRowH;
   final List<EffectiveVerb> verbs;
   final bool twoUp;
+  final bool rearrangeable;
   final FfTokens tokens;
   final CaptionV2Controller controller;
   final VoidCallback onOpen;
@@ -342,9 +440,11 @@ class _AccordionSection extends StatelessWidget {
     }
 
     final board = _VerbBoard(
+      category: category,
       verbs: verbs,
       rowHeight: verbRowH,
       twoUp: twoUp,
+      rearrangeable: rearrangeable,
       tokens: tokens,
       controller: controller,
       onEditVerb: onEditVerb,
@@ -363,9 +463,11 @@ class _AccordionSection extends StatelessWidget {
       children: [
         header,
         Expanded(
-          child: SingleChildScrollView(
-            child: board,
-          ),
+          child: rearrangeable
+              ? board
+              : SingleChildScrollView(
+                  child: board,
+                ),
         ),
       ],
     );
@@ -463,22 +565,33 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
 
 class _VerbBoard extends StatelessWidget {
   const _VerbBoard({
+    required this.category,
     required this.verbs,
     required this.rowHeight,
     required this.twoUp,
+    required this.rearrangeable,
     required this.tokens,
     required this.controller,
     required this.onEditVerb,
     this.onVerbArmed,
   });
 
+  final String category;
   final List<EffectiveVerb> verbs;
   final double rowHeight;
   final bool twoUp;
+  final bool rearrangeable;
   final FfTokens tokens;
   final CaptionV2Controller controller;
   final ValueChanged<String> onEditVerb;
   final VoidCallback? onVerbArmed;
+
+  Future<void> _onReorderItem(int oldIndex, int newIndex) async {
+    final keys = verbs.map((verb) => verb.key).toList();
+    final moved = keys.removeAt(oldIndex);
+    keys.insert(newIndex, moved);
+    await controller.rearrangeVerbsInCategory(category, keys);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -486,6 +599,30 @@ class _VerbBoard extends StatelessWidget {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text('No verbs', style: tokens.metaStyle),
+      );
+    }
+    if (rearrangeable) {
+      return ReorderableListView.builder(
+        buildDefaultDragHandles: false,
+        itemCount: verbs.length,
+        onReorderItem: _onReorderItem,
+        itemBuilder: (context, index) {
+          final verb = verbs[index];
+          return ReorderableDragStartListener(
+            key: ValueKey(verb.key),
+            index: index,
+            child: _AccordionVerbRow(
+              controller: controller,
+              verb: verb,
+              index: index,
+              rowHeight: rowHeight,
+              tokens: tokens,
+              onEditVerb: onEditVerb,
+              onVerbArmed: onVerbArmed,
+              showDragHandle: true,
+            ),
+          );
+        },
       );
     }
     if (!twoUp) {
@@ -557,6 +694,7 @@ class _AccordionVerbRow extends StatefulWidget {
     required this.tokens,
     required this.onEditVerb,
     this.onVerbArmed,
+    this.showDragHandle = false,
   });
 
   final CaptionV2Controller controller;
@@ -566,6 +704,7 @@ class _AccordionVerbRow extends StatefulWidget {
   final FfTokens tokens;
   final ValueChanged<String> onEditVerb;
   final VoidCallback? onVerbArmed;
+  final bool showDragHandle;
 
   @override
   State<_AccordionVerbRow> createState() => _AccordionVerbRowState();
@@ -593,7 +732,11 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
       items: [
         PopupMenuItem(
           value: 'favorite',
-          child: Text(verb.isFavorite ? 'Remove favorite' : 'Add favorite'),
+          child: Text(
+            verb.isFavorite
+                ? 'Remove from Favorites'
+                : 'Add to Favorites',
+          ),
         ),
         PopupMenuItem(
           value: 'pin',
@@ -662,22 +805,32 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                 ),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: 10,
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          width: 4,
-                          height: 4,
-                          decoration: verb.isFavorite
-                              ? BoxDecoration(
-                                  color: tokens.accent,
-                                  shape: BoxShape.circle,
-                                )
-                              : null,
+                    if (widget.showDragHandle)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Icon(
+                          Icons.drag_handle_rounded,
+                          size: 14,
+                          color: tokens.text.withValues(alpha: 0.40),
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        width: 10,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Container(
+                            width: 4,
+                            height: 4,
+                            decoration: verb.isFavorite
+                                ? BoxDecoration(
+                                    color: tokens.accent,
+                                    shape: BoxShape.circle,
+                                  )
+                                : null,
+                          ),
                         ),
                       ),
-                    ),
                     Expanded(
                       child: Text(
                         verb.label,
@@ -693,6 +846,19 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                         ),
                       ),
                     ),
+                    if (controller.verbSortMode == VerbSortMode.mostUsed &&
+                        controller.verbUsageCount(verb.key) > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Text(
+                          '${controller.verbUsageCount(verb.key)}',
+                          style: TextStyle(
+                            fontFamily: FfTokens.monoFamily,
+                            fontSize: 9.5,
+                            color: tokens.text.withValues(alpha: 0.45),
+                          ),
+                        ),
+                      ),
                     if (armed)
                       Text(
                         '⏎',
@@ -702,25 +868,18 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                           color: tokens.accent,
                         ),
                       ),
-                    IconButton(
-                      onPressed: () => controller.toggleVerbPin(verb.key),
-                      tooltip: controller.isVerbPinned(verb.key)
-                          ? 'Unpin for next frames'
-                          : 'Pin for next frames',
-                      padding: EdgeInsets.zero,
-                      constraints:
-                          const BoxConstraints.tightFor(width: 28, height: 24),
-                      visualDensity: VisualDensity.compact,
-                      iconSize: 14,
-                      color: controller.isVerbPinned(verb.key)
-                          ? tokens.accent
-                          : tokens.textSecondary.withValues(alpha: 0.55),
-                      icon: Icon(
-                        controller.isVerbPinned(verb.key)
-                            ? Icons.push_pin_rounded
-                            : Icons.push_pin_outlined,
+                    if (controller.isVerbPinned(verb.key))
+                      IconButton(
+                        onPressed: () => controller.toggleVerbPin(verb.key),
+                        tooltip: 'Unpin for next frames',
+                        padding: EdgeInsets.zero,
+                        constraints:
+                            const BoxConstraints.tightFor(width: 28, height: 24),
+                        visualDensity: VisualDensity.compact,
+                        iconSize: 14,
+                        color: tokens.accent,
+                        icon: const Icon(Icons.push_pin_rounded),
                       ),
-                    ),
                   ],
                 ),
               ),

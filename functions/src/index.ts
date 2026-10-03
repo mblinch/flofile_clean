@@ -65,6 +65,8 @@ interface Tank01SyncConfig {
 
 type SyncTrigger = "scheduled" | "manual";
 const MAX_CHANGED_PLAYERS_IN_EMAIL = 120;
+const MAX_MISSING_JERSEY_IN_EMAIL = 80;
+const MAX_DUPLICATE_JERSEY_IN_EMAIL = 80;
 const TANK01_EMAIL_DEFAULT_TO = "dev@flofilecaptions.com";
 
 function formatDurationHuman(ms: number): string {
@@ -326,9 +328,14 @@ async function sendTank01SummaryEmail(
   ).trim();
 
   const totals = summary.totals;
-  const subject = summary.ok
-    ? `[Tank01 Sync] ${summary.trigger} run complete`
-    : `[Tank01 Sync] ${summary.trigger} run: ${summary.reason}`;
+  const missingCount = totals?.missingJersey ?? 0;
+  const duplicateCount = totals?.duplicateJersey ?? 0;
+  const issueCount = missingCount + duplicateCount;
+  const subject = !summary.ok
+    ? `[Tank01 Sync] ${summary.trigger} run: ${summary.reason}`
+    : issueCount > 0
+      ? `[Tank01 Sync] ${issueCount} jersey issue(s) — verify in app`
+      : `[Tank01 Sync] ${summary.trigger} run complete`;
   const durationPretty = formatDurationHuman(summary.durationMs);
   const perSportLines = totals
     ? Object.entries(totals.bySport)
@@ -340,6 +347,8 @@ async function sendTank01SummaryEmail(
           `      Players added: ${s.added}`,
           `      Players updated: ${s.updated}`,
           `      Players removed: ${s.removed}`,
+          `      Missing jersey: ${s.missingJersey ?? 0}`,
+          `      Duplicate jersey: ${s.duplicateJersey ?? 0}`,
           ...(s.errors.length ? [`      Errors: ${s.errors.length}`] : []),
         ])
     : [];
@@ -362,6 +371,51 @@ async function sendTank01SummaryEmail(
               (c) =>
                 `      ${c.teamName}: ${c.changeType.toUpperCase()} ${c.playerName}`,
             ),
+          ]);
+  const missing = totals?.missingJerseyPlayers ?? [];
+  const shownMissing = missing.slice(0, MAX_MISSING_JERSEY_IN_EMAIL);
+  const missingBySport = new Map<string, typeof shownMissing>();
+  for (const m of shownMissing) {
+    const list = missingBySport.get(m.sportId) ?? [];
+    list.push(m);
+    missingBySport.set(m.sportId, list);
+  }
+  const missingLines =
+    shownMissing.length === 0
+      ? ["  - none"]
+      : Array.from(missingBySport.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .flatMap(([sport, rows]) => [
+            `  - ${formatSportName(sport)}:`,
+            ...rows.map((m) => {
+              const pos = (m.position ?? "").trim();
+              return `      ${m.teamName}: ${m.playerName}${
+                pos ? ` (${pos})` : ""
+              }`;
+            }),
+          ]);
+  const duplicates = totals?.duplicateJerseyPlayers ?? [];
+  const shownDuplicates = duplicates.slice(0, MAX_DUPLICATE_JERSEY_IN_EMAIL);
+  const duplicateBySport = new Map<string, typeof shownDuplicates>();
+  for (const d of shownDuplicates) {
+    const list = duplicateBySport.get(d.sportId) ?? [];
+    list.push(d);
+    duplicateBySport.set(d.sportId, list);
+  }
+  const duplicateLines =
+    shownDuplicates.length === 0
+      ? ["  - none"]
+      : Array.from(duplicateBySport.entries())
+          .sort(([a], [b]) => a.localeCompare(b))
+          .flatMap(([sport, rows]) => [
+            `  - ${formatSportName(sport)}:`,
+            ...rows.map((d) => {
+              const pos = (d.position ?? "").trim();
+              const also = (d.alsoWornBy ?? "").trim();
+              return `      ${d.teamName}: #${d.jerseyNumber} ${d.playerName}${
+                pos ? ` (${pos})` : ""
+              }${also ? ` — also ${also}` : ""}`;
+            }),
           ]);
   const errorLines =
     totals?.errors?.length
@@ -386,11 +440,35 @@ async function sendTank01SummaryEmail(
           `  - Players added: ${totals.added}`,
           `  - Players updated: ${totals.updated}`,
           `  - Players removed: ${totals.removed}`,
+          `  - Missing jersey: ${missingCount}`,
+          `  - Duplicate jersey: ${duplicateCount}`,
         ]
       : ["  - n/a"]),
     "",
     "By sport:",
     ...(perSportLines.length > 0 ? perSportLines : ["  - n/a"]),
+    "",
+    `Players missing jersey (${missing.length}):`,
+    "  Verify / enter numbers in Admin → Roster Issues.",
+    ...missingLines,
+    ...(missing.length > MAX_MISSING_JERSEY_IN_EMAIL
+      ? [
+          `  - ... truncated ${
+            missing.length - MAX_MISSING_JERSEY_IN_EMAIL
+          } additional players`,
+        ]
+      : []),
+    "",
+    `Players with duplicate jersey (${duplicates.length}):`,
+    "  Verify / change numbers in Admin → Roster Issues.",
+    ...duplicateLines,
+    ...(duplicates.length > MAX_DUPLICATE_JERSEY_IN_EMAIL
+      ? [
+          `  - ... truncated ${
+            duplicates.length - MAX_DUPLICATE_JERSEY_IN_EMAIL
+          } additional players`,
+        ]
+      : []),
     "",
     `Changed players (${changed.length}):`,
     ...changedLines,

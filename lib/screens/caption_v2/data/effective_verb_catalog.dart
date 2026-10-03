@@ -17,6 +17,8 @@ class EffectiveVerb {
     required this.ingPhrase,
     required this.keywords,
     required this.wantsOpponent,
+    required this.omitAgainst,
+    required this.opponentJoiner,
     required this.subOptions,
     required this.authoring,
     required this.hasAuthoredModifiers,
@@ -32,6 +34,10 @@ class EffectiveVerb {
   final String ingPhrase;
   final List<String> keywords;
   final bool wantsOpponent;
+  /// Legacy: true when [opponentJoiner] is intentionally blank.
+  final bool omitAgainst;
+  /// Exact connector before the opponent (default `against`).
+  final String opponentJoiner;
   final VerbSubOptions subOptions;
   final VerbAuthoringData authoring;
   final bool hasAuthoredModifiers;
@@ -206,11 +212,24 @@ class EffectiveVerbCatalog {
     for (final entry in verbOrder.entries) {
       if (!categoryKeys.containsKey(entry.key)) continue;
       for (final value in entry.value) {
-        final key = resolveFavorite(value) ?? value;
-        if (records.containsKey(key) &&
-            !categoryKeys.values.any((keys) => keys.contains(key))) {
-          categoryKeys[entry.key]!.add(key);
+        final trimmed = value.trim();
+        if (trimmed.isEmpty) continue;
+        final resolved = resolveFavorite(trimmed);
+        final key = resolved ?? trimmed;
+        if (!records.containsKey(key) ||
+            categoryKeys.values.any((keys) => keys.contains(key))) {
+          continue;
         }
+        // Phrase aliases ("makes a save") must not pull a verb into a
+        // different category than the one stored on the verb itself.
+        if (resolved != null && resolved != trimmed) {
+          final home = (records[key]!['category'] ??
+                  factoryCategory[key] ??
+                  '')
+              .toString();
+          if (home.isNotEmpty && home != entry.key) continue;
+        }
+        categoryKeys[entry.key]!.add(key);
       }
     }
     for (final entry in records.entries) {
@@ -255,7 +274,9 @@ class EffectiveVerbCatalog {
           ? VerbCaptionWording.defaultWording(entry.key)
           : singular;
       final usePlural = raw['usePluralPhrase'] != false;
+      final hasPlural = raw.containsKey('pluralPhrase');
       final savedPlural = (raw['pluralPhrase'] ?? '').toString().trim();
+      final hasIng = raw.containsKey('ingPhrase');
       final savedIng = (raw['ingPhrase'] ?? '').toString().trim();
       final keywords = (raw['keywords'] is List)
           ? List<String>.from(raw['keywords'] as List)
@@ -265,6 +286,17 @@ class EffectiveVerbCatalog {
         verbLabel: entry.key,
         sport: sport,
       );
+      // Respect intentional clears: empty stored plural stays empty. When plural
+      // is disabled, fall back to singular so multi-player captions don't invent
+      // a plural phrase.
+      final resolvedPlural = !usePlural
+          ? effectiveSingular
+          : hasPlural
+              ? savedPlural
+              : VerbCaptionWording.defaultPluralWording(
+                  entry.key,
+                  effectiveSingular,
+                );
       byKey[entry.key] = EffectiveVerb(
         key: entry.key,
         label: label.isEmpty ? entry.key : label,
@@ -273,13 +305,8 @@ class EffectiveVerbCatalog {
                 (orderedCategories.isEmpty ? 'Other' : orderedCategories.first))
             .toString(),
         singularPhrase: effectiveSingular,
-        pluralPhrase: usePlural && savedPlural.isNotEmpty
-            ? savedPlural
-            : VerbCaptionWording.defaultPluralWording(
-                entry.key,
-                effectiveSingular,
-              ),
-        ingPhrase: savedIng.isNotEmpty
+        pluralPhrase: resolvedPlural,
+        ingPhrase: hasIng
             ? savedIng
             : VerbCaptionWording.defaultIngWording(
                 entry.key,
@@ -289,6 +316,8 @@ class EffectiveVerbCatalog {
         wantsOpponent: raw['wantsOpponent'] is bool
             ? raw['wantsOpponent'] as bool
             : entry.key != 'Post Game Win' && entry.key != 'Post Game Loss',
+        omitAgainst: raw['omitAgainst'] == true,
+        opponentJoiner: _opponentJoinerFromRecord(raw),
         subOptions: subOptions,
         authoring: VerbAuthoringData.fromRecord(
           raw,
@@ -323,6 +352,14 @@ class EffectiveVerbCatalog {
       byKey: Map.unmodifiable(byKey),
       favoriteKeys: Set.unmodifiable(favoriteKeys),
     );
+  }
+
+  /// Prefer stored joiner text; legacy omitAgainst → blank; else `against`.
+  static String _opponentJoinerFromRecord(Map raw) {
+    if (raw.containsKey('opponentJoiner')) {
+      return (raw['opponentJoiner'] ?? '').toString();
+    }
+    return raw['omitAgainst'] == true ? '' : 'against';
   }
 }
 

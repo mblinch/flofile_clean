@@ -471,9 +471,16 @@ class _FirebarChip extends StatelessWidget {
               ),
             ),
           ),
-          if (result.kind == FirebarResultKind.verb &&
-              result.verbKey != null &&
-              controller.isVerbPinned(result.verbKey!)) ...[
+          if ((result.kind == FirebarResultKind.verb &&
+                  result.verbKey != null &&
+                  controller.isVerbPinned(result.verbKey!)) ||
+              (result.kind == FirebarResultKind.player &&
+                  player != null &&
+                  result.isHome != null &&
+                  controller.isPlayerPinned(
+                    player,
+                    isHome: result.isHome!,
+                  ))) ...[
             const SizedBox(width: 4),
             Icon(
               Icons.push_pin_rounded,

@@ -54,10 +54,11 @@ class _CaptionV2ThumbnailOverviewState
   String _captureTime(String path) {
     final value = widget.controller.captureByPath[path];
     if (value == null) return '';
-    final hour = value.hour.toString().padLeft(2, '0');
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
     final minute = value.minute.toString().padLeft(2, '0');
     final second = value.second.toString().padLeft(2, '0');
-    return '$hour:$minute:$second';
+    final suffix = value.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute:$second $suffix';
   }
 
   @override

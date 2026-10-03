@@ -17,7 +17,9 @@ import '../services/auth_service.dart';
 import '../config/tank01_config.dart';
 import '../services/preferences_service.dart';
 import '../services/roster_compare_service.dart';
+import '../services/roster_issues_service.dart';
 import '../services/tank01_roster_sync_service.dart';
+import '../services/verb_user_catalog_service.dart';
 import '../caption_style/verb_sub_options.dart';
 import '../caption_style/verb_defaults_bundle.dart';
 import '../theme/ff_tokens.dart';
@@ -28,7 +30,7 @@ import 'verb_edit_plural_field.dart';
 import 'verb_edit_sub_options_section.dart';
 import 'caption_layout_builder_dialog.dart';
 
-enum _AdminSection { verbs, captionStructures, rosterCompare }
+enum _AdminSection { verbs, captionStructures, rosterCompare, rosterIssues }
 
 /// Admin console for editing app originals (verbs + caption structures).
 class AdminScreen extends StatefulWidget {
@@ -94,6 +96,14 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _tank01SyncRunning = false;
   String? _tank01SyncStatus;
 
+  final _issuesService = RosterIssuesService();
+  List<RosterIssue> _rosterIssues = const [];
+  bool _issuesScanning = false;
+  bool _issuesSaving = false;
+  String? _issuesError;
+  String? _issuesStatus;
+  String _issuesSportFilter = 'all';
+
   static const _sports = AppDefaultsFirestoreService.catalogSports;
   static const _dialogWidth = 1180.0;
   static const _dialogHeight = 780.0;
@@ -123,7 +133,7 @@ class _AdminScreenState extends State<AdminScreen> {
       _catalog = AppDefaultsFirestoreService.getCachedCatalog();
       _verbBundles.clear();
       for (final sport in _sports) {
-        _verbBundles[sport] = _sportBundleFromCatalog(sport);
+        _verbBundles[sport] = await _sportBundleForAdmin(sport);
       }
       _captionDrafts.clear();
       _gameIdDrafts.clear();
@@ -178,6 +188,137 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() => _compareError = 'Failed to load $_compareSport teams: $e');
     } finally {
       if (mounted) setState(() => _compareLoadingTeams = false);
+    }
+  }
+
+  Future<void> _scanRosterIssues() async {
+    setState(() {
+      _issuesScanning = true;
+      _issuesError = null;
+      _issuesStatus =
+          'Scanning sports_tank01 for missing and duplicate jersey numbers…';
+    });
+    try {
+      final sport =
+          _issuesSportFilter == 'all' ? null : _issuesSportFilter;
+      final issues = await _issuesService.scanIssues(sportId: sport);
+      if (!mounted) return;
+      final missing = issues
+          .where((i) => i.kind == RosterIssueKind.missingJersey)
+          .length;
+      final duplicates = issues
+          .where((i) => i.kind == RosterIssueKind.duplicateJersey)
+          .length;
+      setState(() {
+        _rosterIssues = issues;
+        if (issues.isEmpty) {
+          _issuesStatus = 'No jersey issues found.';
+        } else {
+          final parts = <String>[];
+          if (missing > 0) {
+            parts.add('$missing missing');
+          }
+          if (duplicates > 0) {
+            parts.add('$duplicates duplicate');
+          }
+          _issuesStatus =
+              'Found ${issues.length} issue(s): ${parts.join(', ')}.';
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _issuesError = e.toString();
+        _issuesStatus = null;
+      });
+    } finally {
+      if (mounted) setState(() => _issuesScanning = false);
+    }
+  }
+
+  Future<void> _fixJerseyIssue(RosterIssue issue) async {
+    final controller = TextEditingController(
+      text: issue.jerseyNumber?.trim() ?? '',
+    );
+    final jersey = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final t = Theme.of(ctx).extension<FfTokens>() ?? FfTokens.dark;
+        return AlertDialog(
+          backgroundColor: t.surface,
+          title: Text('Set jersey number', style: TextStyle(color: t.text)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${issue.teamName} · ${issue.fullName}',
+                style: t.metaStyle.copyWith(color: t.textSecondary),
+              ),
+              if (issue.detail != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  issue.detail!,
+                  style: t.metaStyle.copyWith(color: t.textSecondary),
+                ),
+              ],
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: InputDecoration(
+                  labelText: 'Jersey number',
+                  hintText: issue.kind == RosterIssueKind.duplicateJersey
+                      ? 'Enter a unique number'
+                      : 'e.g. 27',
+                ),
+                onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+    if (jersey == null || jersey.isEmpty || !mounted) return;
+
+    setState(() {
+      _issuesSaving = true;
+      _issuesError = null;
+    });
+    try {
+      await _issuesService.setVerifiedJersey(
+        issue: issue,
+        jerseyNumber: jersey,
+      );
+      if (!mounted) return;
+      final savedMsg =
+          'Saved #$jersey for ${issue.fullName}. Sync will keep this number.';
+      await _scanRosterIssues();
+      if (!mounted) return;
+      setState(() {
+        final scan = _issuesStatus;
+        _issuesStatus = scan == null || scan.isEmpty
+            ? savedMsg
+            : '$savedMsg $scan';
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _issuesError = e.toString());
+    } finally {
+      if (mounted) setState(() => _issuesSaving = false);
     }
   }
 
@@ -265,12 +406,69 @@ class _AdminScreenState extends State<AdminScreen> {
   Map<String, dynamic> _sportBundleFromCatalog(String sport) {
     final fromCatalog = _catalog?.sportVerbSettings(sport);
     if (fromCatalog != null && fromCatalog.isNotEmpty) {
-      return VerbDefaultsBundle.ensureComplete(
-        Map<String, dynamic>.from(fromCatalog),
-        sport,
-      );
+      final raw = Map<String, dynamic>.from(fromCatalog);
+      if (VerbDefaultsBundle.looksCollapsedIntoOneCategory(raw, sport)) {
+        return VerbDefaultsBundle.resetToFactoryPreservingCustoms(raw, sport);
+      }
+      return VerbDefaultsBundle.ensureComplete(raw, sport);
     }
     return VerbDefaultsBundle.buildFactory(sport);
+  }
+
+  /// Firebase catalog plus unpublished local customs/order/deletes from prefs.
+  Future<Map<String, dynamic>> _sportBundleForAdmin(String sport) async {
+    final bundle = _sportBundleFromCatalog(sport);
+    final localCustoms = await _prefs.getCustomVerbs(sport: sport);
+    final localDeleted = await _prefs.getDeletedVerbs(sport: sport);
+    final localFavorites = await _prefs.getFavoriteVerbs(sport: sport);
+    final localOrder = await _prefs.getVerbOrder(sport: sport);
+
+    final customsByKey = <String, Map<String, dynamic>>{};
+    for (final raw in ((bundle['customVerbs'] as List?) ?? const [])) {
+      if (raw is! Map) continue;
+      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
+      if (key.isEmpty) continue;
+      customsByKey[key] = Map<String, dynamic>.from(raw);
+    }
+    for (final raw in localCustoms) {
+      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
+      if (key.isEmpty) continue;
+      customsByKey[key] = Map<String, dynamic>.from(raw);
+    }
+    bundle['customVerbs'] = customsByKey.values.toList();
+
+    final deleted = <String>{
+      for (final value in ((bundle['deletedVerbs'] as List?) ?? const []))
+        value.toString(),
+      ...localDeleted.map((value) => value.toString()),
+    };
+    bundle['deletedVerbs'] = deleted.toList();
+
+    final favorites = <String>{
+      for (final value in ((bundle['favoriteVerbs'] as List?) ?? const []))
+        value.toString(),
+      ...localFavorites,
+    };
+    bundle['favoriteVerbs'] = favorites.toList();
+
+    final order = <String, List<String>>{};
+    final catalogOrder = bundle['verbOrder'];
+    if (catalogOrder is Map) {
+      catalogOrder.forEach((key, value) {
+        order[key.toString()] = value is List
+            ? value.map((item) => item.toString()).toList()
+            : <String>[];
+      });
+    }
+    localOrder.forEach((category, keys) {
+      final list = order.putIfAbsent(category, () => <String>[]);
+      for (final key in keys) {
+        if (!list.contains(key)) list.add(key);
+      }
+    });
+    bundle['verbOrder'] = order;
+
+    return VerbDefaultsBundle.ensureComplete(bundle, sport);
   }
 
   Map<String, dynamic> _emptySportBundle(String sport) =>
@@ -291,51 +489,12 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> _persistAdminVerbBundleLocally(
     String sport,
     Map<String, dynamic> bundle,
-  ) async {
-    final complete = VerbDefaultsBundle.ensureComplete(bundle, sport);
-    final categories = ((complete['categoryOrder'] as List?) ?? const [])
-        .map((value) => value.toString())
-        .where((value) => value != 'Favorites')
-        .toList();
-    final favorites = ((complete['favoriteVerbs'] as List?) ?? const [])
-        .map((value) => value.toString())
-        .toSet();
-    final deleted = ((complete['deletedVerbs'] as List?) ?? const [])
-        .map((value) => value.toString())
-        .toSet();
-    final custom = ((complete['customVerbs'] as List?) ?? const [])
-        .whereType<Map>()
-        .map(Map<String, dynamic>.from)
-        .toList();
-    final order = <String, List<String>>{};
-    final rawOrder = complete['verbOrder'];
-    if (rawOrder is Map) {
-      rawOrder.forEach((key, value) {
-        order[key.toString()] = value is List
-            ? value.map((item) => item.toString()).toList()
-            : <String>[];
-      });
-    }
-    final overrides = <String, Map<String, dynamic>>{};
-    final rawOverrides = complete['verbOverrides'];
-    if (rawOverrides is Map) {
-      rawOverrides.forEach((key, value) {
-        if (value is Map) {
-          overrides[key.toString()] = Map<String, dynamic>.from(value);
-        }
-      });
-    }
-
-    await Future.wait([
-      _prefs.saveCategoryOrder(categories, sport: sport),
-      _prefs.saveFavoriteVerbs(favorites, sport: sport),
-      _prefs.saveDeletedVerbs(deleted, sport: sport),
-      _prefs.saveVerbOrder(order, sport: sport),
-      _prefs.saveCustomVerbs(custom, sport: sport),
-      _prefs.saveVerbCatalogComplete(true, sport: sport),
-      for (final entry in overrides.entries)
-        _prefs.saveVerbOverride(entry.key, entry.value, sport: sport),
-    ]);
+  ) {
+    return VerbUserCatalogService.persistBundle(
+      prefs: _prefs,
+      sport: sport,
+      bundle: bundle,
+    );
   }
 
   Future<void> _importLocalVerbsForSport() async {
@@ -427,53 +586,36 @@ class _AdminScreenState extends State<AdminScreen> {
     await _flushCaptionBuilder?.call();
   }
 
-  Future<void> _saveCurrentVerb({
-    required String key,
-    required Map<String, dynamic> record,
-    required bool isCustom,
-  }) async {
+  Future<void> _writeActiveVerbBundleAsDefaults({String? successLabel}) async {
+    if (!mounted) return;
     setState(() => _busy = true);
     try {
-      final bundle = Map<String, dynamic>.from(_activeVerbBundle);
-      if (isCustom) {
-        final list = ((bundle['customVerbs'] as List?) ?? const [])
-            .whereType<Map>()
-            .map(Map<String, dynamic>.from)
-            .toList();
-        final index = list.indexWhere(
-          (item) => (item['key'] ?? item['label']).toString() == key,
-        );
-        if (index < 0) {
-          list.add(record);
-        } else {
-          list[index] = record;
-        }
-        bundle['customVerbs'] = list;
-        await _prefs.saveCustomVerbs(list, sport: _verbSport);
-      } else {
-        final overrides = Map<String, dynamic>.from(
-          (bundle['verbOverrides'] as Map?) ?? const {},
-        );
-        overrides[key] = record;
-        bundle['verbOverrides'] = overrides;
-        await _prefs.saveVerbOverride(key, record, sport: _verbSport);
-      }
+      final bundle = VerbDefaultsBundle.ensureComplete(
+        Map<String, dynamic>.from(_activeVerbBundle),
+        _verbSport,
+      );
       _setActiveVerbBundle(bundle);
+      await AppDefaultsFirestoreService.publishVerbsForSport(_verbSport, bundle);
+      await _persistAdminVerbBundleLocally(_verbSport, bundle);
+      _catalog = AppDefaultsFirestoreService.getCachedCatalog();
+      _verbBundles[_verbSport] = await _sportBundleForAdmin(_verbSport);
       if (!mounted) return;
-      final label = (record['label'] ?? key).toString();
+      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Saved “$label” on this machine'
-            '${AuthService.instance.isSignedIn ? ' (syncing to your account…)' : ''}.',
+            successLabel == null
+                ? 'Saved $_verbSport verb defaults.'
+                : '$successLabel to app defaults.',
           ),
+          backgroundColor: kFloTealLight,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Save failed: $e'),
+          content: Text('Failed to write defaults: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -511,62 +653,39 @@ class _AdminScreenState extends State<AdminScreen> {
       context: context,
       title: 'Publish “$label” as default?',
       message:
-          'Updates Firebase app originals for this one verb only. '
-          'Other verbs stay as they are.',
+          'Updates Firebase app originals for this sport’s verb catalog '
+          '(including this verb).',
       confirmLabel: 'Publish',
     );
     if (ok != true || !mounted) return;
 
-    setState(() => _busy = true);
-    try {
-      final existing = _catalog?.sportVerbSettings(_verbSport) ??
-          Map<String, dynamic>.from(_activeVerbBundle);
-      final bundle = VerbDefaultsBundle.ensureComplete(
-        Map<String, dynamic>.from(existing),
-        _verbSport,
+    // Merge the flushed verb into the in-editor catalog, then publish that.
+    final bundle = Map<String, dynamic>.from(_activeVerbBundle);
+    if (isCustom) {
+      final list = ((bundle['customVerbs'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(Map<String, dynamic>.from)
+          .toList();
+      final index = list.indexWhere(
+        (item) => (item['key'] ?? item['label']).toString() == key,
       );
-      if (isCustom) {
-        final list = ((bundle['customVerbs'] as List?) ?? const [])
-            .whereType<Map>()
-            .map(Map<String, dynamic>.from)
-            .toList();
-        final index = list.indexWhere(
-          (item) => (item['key'] ?? item['label']).toString() == key,
-        );
-        if (index < 0) {
-          list.add(record);
-        } else {
-          list[index] = record;
-        }
-        bundle['customVerbs'] = list;
+      if (index < 0) {
+        list.add(record);
       } else {
-        final overrides = Map<String, dynamic>.from(
-          (bundle['verbOverrides'] as Map?) ?? const {},
-        );
-        overrides[key] = record;
-        bundle['verbOverrides'] = overrides;
+        list[index] = record;
       }
-      _setActiveVerbBundle(bundle);
-      await AppDefaultsFirestoreService.publishVerbsForSport(_verbSport, bundle);
-      _catalog = AppDefaultsFirestoreService.getCachedCatalog();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Published “$label” as app default.'),
-          backgroundColor: kFloTealLight,
-        ),
+      bundle['customVerbs'] = list;
+    } else {
+      final overrides = Map<String, dynamic>.from(
+        (bundle['verbOverrides'] as Map?) ?? const {},
       );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Publish failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      overrides[key] = record;
+      bundle['verbOverrides'] = overrides;
     }
+    _setActiveVerbBundle(bundle);
+    await _writeActiveVerbBundleAsDefaults(
+      successLabel: 'Published “$label”',
+    );
   }
 
   Future<void> _publishVerbs({bool allSports = false}) async {
@@ -837,6 +956,7 @@ class _AdminScreenState extends State<AdminScreen> {
           usePluralPhrase: meta?['usePluralPhrase'] as bool? ?? true,
           category: meta?['category']?.toString() ?? category,
           wantsOpponent: meta?['wantsOpponent'] == true,
+          omitAgainst: meta?['omitAgainst'] == true,
           keywords: ((meta?['keywords'] as List?) ?? [])
               .map((e) => e.toString())
               .join(', '),
@@ -1357,8 +1477,8 @@ class _AdminScreenState extends State<AdminScreen> {
       embedded: true,
       onSportChanged: (sport) => setState(() => _verbSport = sport),
       onBundleChanged: _onAdminVerbBundleChanged,
-      onSaveCurrentVerb: _saveCurrentVerb,
       onPublishCurrentVerb: _publishCurrentVerb,
+      onWriteSportDefaults: _writeActiveVerbBundleAsDefaults,
     );
   }
 
@@ -1610,6 +1730,16 @@ class _AdminScreenState extends State<AdminScreen> {
                                         _AdminSection.rosterCompare,
                                         'Roster Compare',
                                       ),
+                                      Divider(
+                                        height: 1,
+                                        thickness: 1,
+                                        color: t.divider,
+                                      ),
+                                      _sidebarTile(
+                                        t,
+                                        _AdminSection.rosterIssues,
+                                        'Roster Issues',
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -1634,9 +1764,15 @@ class _AdminScreenState extends State<AdminScreen> {
                                                 padding: const EdgeInsets.all(
                                                   _contentPadding,
                                                 ),
-                                                child: _buildRosterCompareContent(
-                                                  t,
-                                                ),
+                                                child: _section ==
+                                                        _AdminSection
+                                                            .rosterIssues
+                                                    ? _buildRosterIssuesContent(
+                                                        t,
+                                                      )
+                                                    : _buildRosterCompareContent(
+                                                        t,
+                                                      ),
                                               ),
                                   ),
                                 ),
@@ -1649,6 +1785,204 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  static const _issuesSportIds = [
+    'all',
+    'baseball',
+    'basketball',
+    'hockey',
+    'wnba',
+  ];
+
+  String _issuesSportLabel(String sportId) =>
+      sportId == 'all' ? 'All' : SportVerbCategories.displayLabel(sportId);
+
+  String? _issuesSportIdFromLabel(String label) {
+    for (final id in _issuesSportIds) {
+      if (_issuesSportLabel(id) == label) return id;
+    }
+    return null;
+  }
+
+  Widget _issuesSportDropdown(FfTokens t) {
+    final labels = _issuesSportIds.map(_issuesSportLabel).toList();
+    final selected = _issuesSportLabel(_issuesSportFilter);
+    return DropdownFlutter<String>(
+      key: ValueKey('issues-sport-$selected'),
+      hintText: 'Sport',
+      initialItem: selected,
+      items: labels,
+      closedHeaderPadding:
+          const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      expandedHeaderPadding:
+          const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      listItemPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: CustomDropdownDecoration(
+        closedFillColor: t.sunken,
+        expandedFillColor: t.surface,
+        closedBorder: Border.all(color: t.divider),
+        expandedBorder: Border.all(color: t.divider),
+        closedBorderRadius: BorderRadius.circular(6),
+        expandedBorderRadius: BorderRadius.circular(8),
+        closedShadow: [
+          BoxShadow(
+            color: t.bg.withValues(alpha: 0.2),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+        expandedShadow: [
+          BoxShadow(
+            color: t.bg.withValues(alpha: 0.55),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        hintStyle: TextStyle(fontSize: 11, color: t.textSecondary),
+        headerStyle: TextStyle(fontSize: 11, color: t.text),
+        listItemStyle: TextStyle(fontSize: 11, color: t.text),
+        listItemDecoration: ListItemDecoration(
+          selectedColor: t.selectedFill,
+        ),
+        closedSuffixIcon: Icon(
+          Icons.arrow_drop_down,
+          size: 16,
+          color: t.textSecondary,
+        ),
+        expandedSuffixIcon: Icon(
+          Icons.arrow_drop_up,
+          size: 16,
+          color: t.textSecondary,
+        ),
+      ),
+      onChanged: (label) {
+        if (label == null) return;
+        final id = _issuesSportIdFromLabel(label);
+        if (id == null) return;
+        setState(() => _issuesSportFilter = id);
+      },
+    );
+  }
+
+  Widget _buildRosterIssuesContent(FfTokens t) {
+    final bySport = <String, List<RosterIssue>>{};
+    for (final issue in _rosterIssues) {
+      (bySport[issue.sportId] ??= []).add(issue);
+    }
+    final sportKeys = bySport.keys.toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Roster issues (Tank01 mirror)',
+          style: t.labelStyle.copyWith(fontSize: 14, color: t.text),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Players in sports_tank01 with missing or duplicate jersey numbers. '
+          'Enter a verified number here — it is saved as a manual override so '
+          'the next Tank01 sync will not wipe it. Sync summary emails also '
+          'list these.',
+          style: t.metaStyle.copyWith(height: 1.35),
+        ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            SizedBox(
+              width: 160,
+              child: _issuesSportDropdown(t),
+            ),
+            const SizedBox(width: 10),
+            ElevatedGreyButton(
+              label: _issuesScanning ? 'Scanning…' : 'Scan jersey issues',
+              fontSize: 11,
+              icon: Icons.search,
+              onPressed: _issuesScanning || _issuesSaving
+                  ? null
+                  : _scanRosterIssues,
+            ),
+          ],
+        ),
+        if (_issuesStatus != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            _issuesStatus!,
+            style: t.metaStyle.copyWith(color: t.accent),
+          ),
+        ],
+        if (_issuesError != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            _issuesError!,
+            style: t.metaStyle.copyWith(color: const Color(0xFFE57373)),
+          ),
+        ],
+        const SizedBox(height: 16),
+        if (_rosterIssues.isEmpty && !_issuesScanning)
+          Text(
+            'Run a scan to list missing and duplicate jersey numbers.',
+            style: t.metaStyle.copyWith(color: t.textSecondary),
+          )
+        else
+          ...sportKeys.map((sport) {
+            final rows = bySport[sport]!;
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: t.surface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: t.divider),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${SportVerbCategories.displayLabel(sport)} · ${rows.length} issue(s)',
+                    style: t.labelStyle.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: t.text,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  for (var i = 0; i < rows.length; i++) ...[
+                    if (i > 0) Divider(height: 1, color: t.divider),
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        rows[i].label,
+                        style: t.labelStyle.copyWith(
+                          fontSize: 13,
+                          color: t.text,
+                        ),
+                      ),
+                      subtitle: Text(
+                        [
+                          rows[i].teamName,
+                          rows[i].kindLabel,
+                          if (rows[i].detail != null) rows[i].detail!,
+                        ].join(' · '),
+                        style: t.metaStyle.copyWith(color: t.textSecondary),
+                      ),
+                      trailing: TextButton(
+                        onPressed: _issuesSaving
+                            ? null
+                            : () => _fixJerseyIssue(rows[i]),
+                        child: const Text('Set #'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+      ],
     );
   }
 
@@ -1938,6 +2272,7 @@ class _AdminVerbRow {
     this.usePluralPhrase = true,
     required this.category,
     this.wantsOpponent = true,
+    this.omitAgainst = false,
     this.keywords = '',
     this.subOptions = const VerbSubOptions(),
     this.sport = 'baseball',
@@ -1951,6 +2286,7 @@ class _AdminVerbRow {
   final bool usePluralPhrase;
   final String category;
   final bool wantsOpponent;
+  final bool omitAgainst;
   final String keywords;
   final VerbSubOptions subOptions;
   final String sport;
@@ -1963,6 +2299,7 @@ class _AdminVerbRow {
         'usePluralPhrase': usePluralPhrase,
         'category': category,
         'wantsOpponent': wantsOpponent,
+        'omitAgainst': omitAgainst,
         'isCustom': false,
         if (keywords.trim().isNotEmpty)
           'keywords': keywords
@@ -2006,6 +2343,7 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
   late final TextEditingController _keywords;
   late String _category;
   late bool _wantsOpponent;
+  late bool _omitAgainst;
   late bool _usePluralPhrase;
   late VerbSubOptions _subOptions;
 
@@ -2018,6 +2356,7 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
     _keywords = TextEditingController(text: widget.initial.keywords);
     _category = widget.initial.category;
     _wantsOpponent = widget.initial.wantsOpponent;
+    _omitAgainst = widget.initial.omitAgainst;
     _usePluralPhrase = widget.initial.usePluralPhrase;
     _subOptions = widget.initial.subOptions;
   }
@@ -2040,6 +2379,7 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
         usePluralPhrase: _usePluralPhrase,
         category: _category,
         wantsOpponent: _wantsOpponent,
+        omitAgainst: _omitAgainst,
         keywords: _keywords.text.trim(),
         subOptions: _subOptions,
         sport: widget.sport,
@@ -2177,8 +2517,19 @@ class _VerbEditDialogState extends State<_VerbEditDialog> {
                       _captionFlagRow(
                         value: _wantsOpponent,
                         label: 'Wants opponent',
-                        onChanged: (v) => setState(() => _wantsOpponent = v),
+                        onChanged: (v) => setState(() {
+                          _wantsOpponent = v;
+                          if (!v) _omitAgainst = false;
+                        }),
                       ),
+                      if (_wantsOpponent) ...[
+                        const SizedBox(height: 8),
+                        _captionFlagRow(
+                          value: _omitAgainst,
+                          label: 'Omit "against"',
+                          onChanged: (v) => setState(() => _omitAgainst = v),
+                        ),
+                      ],
                     ],
                   ),
                 ),

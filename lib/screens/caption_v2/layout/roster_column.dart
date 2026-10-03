@@ -6,6 +6,7 @@ import '../../../services/mlb_api_service.dart';
 import '../data/caption_v2_controller.dart';
 import '../widgets/custom_name_entry.dart';
 import '../widgets/player_row.dart';
+import 'caption_v2_verb_editor.dart';
 
 enum RosterViewMode { classic, wheel, infinite }
 
@@ -96,6 +97,57 @@ class _RosterColumnState extends State<RosterColumn> {
     }
   }
 
+  Future<void> _playerContextMenu(
+    BuildContext context,
+    CaptionV2Controller c,
+    Player player,
+    Offset position,
+  ) async {
+    final pinned = c.isPlayerPinned(player, isHome: widget.isHome);
+    final action = await showCaptionV2PopupMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'pin',
+          child: Text(pinned ? 'Unpin Player' : 'Pin Player'),
+        ),
+        const PopupMenuItem(value: 'edit', child: Text('Edit player…')),
+      ],
+    );
+    if (action == null || !mounted) return;
+    if (action == 'pin') {
+      c.togglePlayerPin(player, isHome: widget.isHome);
+      return;
+    }
+    if (action != 'edit') return;
+    final result = await showCustomNameEntryDialog(
+      context: context,
+      teamLabel: widget.isHome ? c.homeAbbr : c.awayAbbr,
+      title: 'Edit player',
+      confirmLabel: 'Save',
+      initialName: player.fullName,
+      initialJersey: player.jerseyNumber,
+    );
+    if (!mounted || result == null) return;
+    final error = c.updatePlayer(
+      isHome: widget.isHome,
+      original: player,
+      fullName: result.name,
+      jerseyNumber: result.jersey,
+    );
+    if (error != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -162,6 +214,36 @@ class _RosterColumnState extends State<RosterColumn> {
           ),
           child: Column(
             children: [
+              if (!firebarActive)
+                _RosterPlayerIssuesBar(
+                  roster: roster,
+                  tokens: t,
+                  onEditPlayer: (player) async {
+                    final result = await showCustomNameEntryDialog(
+                      context: context,
+                      teamLabel: abbr,
+                      title: 'Set jersey number',
+                      confirmLabel: 'Save',
+                      initialName: player.fullName,
+                      initialJersey: player.jerseyNumber,
+                    );
+                    if (!mounted || result == null) return;
+                    final error = c.updatePlayer(
+                      isHome: widget.isHome,
+                      original: player,
+                      fullName: result.name,
+                      jerseyNumber: result.jersey,
+                    );
+                    if (error != null && mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(error),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                ),
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {
@@ -269,6 +351,8 @@ class _RosterColumnState extends State<RosterColumn> {
                           jersey: pl.jerseyNumber ?? '—',
                           name: c.playerListName(pl),
                           selected: firebarActive ? false : selected,
+                          pinned: !firebarActive &&
+                              c.isPlayerPinned(pl, isHome: widget.isHome),
                           firebarSelected: firebarActive &&
                               firebarResult?.key == selectedResult?.key,
                           highlightQuery: firebarActive
@@ -291,6 +375,18 @@ class _RosterColumnState extends State<RosterColumn> {
                                   }
                                 }
                               : () => c.selectPlayer(pl, isHome: widget.isHome),
+                          onPinTap: firebarActive
+                              ? null
+                              : () => c.togglePlayerPin(
+                                    pl,
+                                    isHome: widget.isHome,
+                                  ),
+                          onSecondaryTapDown: (details) => _playerContextMenu(
+                            context,
+                            c,
+                            pl,
+                            details.globalPosition,
+                          ),
                         );
                       },
                     );
@@ -843,6 +939,173 @@ class _RosterHeaderBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _RosterPlayerIssueRow {
+  const _RosterPlayerIssueRow({
+    required this.player,
+    required this.summary,
+  });
+
+  final Player player;
+  final String summary;
+}
+
+/// Expandable strip for missing / duplicate jersey numbers on this roster.
+class _RosterPlayerIssuesBar extends StatefulWidget {
+  const _RosterPlayerIssuesBar({
+    required this.roster,
+    required this.tokens,
+    required this.onEditPlayer,
+  });
+
+  final List<Player> roster;
+  final FfTokens tokens;
+  final Future<void> Function(Player player) onEditPlayer;
+
+  @override
+  State<_RosterPlayerIssuesBar> createState() => _RosterPlayerIssuesBarState();
+}
+
+class _RosterPlayerIssuesBarState extends State<_RosterPlayerIssuesBar> {
+  bool _expanded = false;
+
+  List<_RosterPlayerIssueRow> _issues() {
+    final missing = <_RosterPlayerIssueRow>[];
+    final byJersey = <String, List<Player>>{};
+    for (final player in widget.roster) {
+      final jersey = (player.jerseyNumber ?? '').trim();
+      if (jersey.isEmpty) {
+        missing.add(_RosterPlayerIssueRow(
+          player: player,
+          summary: 'Missing jersey',
+        ));
+        continue;
+      }
+      byJersey.putIfAbsent(jersey, () => []).add(player);
+    }
+    final duplicates = <_RosterPlayerIssueRow>[];
+    final jerseyKeys = byJersey.keys.toList()
+      ..sort((a, b) {
+        final ai = int.tryParse(a) ?? 999;
+        final bi = int.tryParse(b) ?? 999;
+        return ai.compareTo(bi);
+      });
+    for (final jersey in jerseyKeys) {
+      final group = byJersey[jersey]!;
+      if (group.length < 2) continue;
+      for (final player in group) {
+        final others = group
+            .where((p) => !identical(p, player))
+            .map((p) => p.fullName)
+            .join(', ');
+        duplicates.add(_RosterPlayerIssueRow(
+          player: player,
+          summary: others.isEmpty
+              ? 'Duplicate #$jersey'
+              : 'Duplicate #$jersey · also $others',
+        ));
+      }
+    }
+    return [...missing, ...duplicates];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = _issues();
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final t = widget.tokens;
+    final missingCount =
+        rows.where((r) => r.summary.startsWith('Missing')).length;
+    final duplicateCount = rows.length - missingCount;
+    final parts = <String>[];
+    if (missingCount > 0) {
+      parts.add(
+        '$missingCount missing jersey${missingCount == 1 ? '' : 's'}',
+      );
+    }
+    if (duplicateCount > 0) {
+      parts.add(
+        '$duplicateCount duplicate number'
+        '${duplicateCount == 1 ? '' : 's'}',
+      );
+    }
+
+    return Material(
+      color: t.accent.withValues(alpha: 0.08),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 14,
+                    color: t.accent,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      parts.join(' · '),
+                      style: t.metaStyle.copyWith(
+                        color: t.accent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: t.textSecondary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_expanded)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 160),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.fromLTRB(10, 0, 6, 8),
+                itemCount: rows.length,
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  color: t.divider,
+                ),
+                itemBuilder: (context, i) {
+                  final row = rows[i];
+                  return ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    visualDensity: VisualDensity.compact,
+                    title: Text(
+                      row.player.fullName,
+                      style: t.labelStyle.copyWith(fontSize: 12),
+                    ),
+                    subtitle: Text(
+                      row.summary,
+                      style: t.metaStyle.copyWith(
+                        fontSize: 10,
+                        color: t.textSecondary,
+                      ),
+                    ),
+                    trailing: TextButton(
+                      onPressed: () => widget.onEditPlayer(row.player),
+                      child: const Text('Set #'),
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

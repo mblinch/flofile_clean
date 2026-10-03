@@ -194,33 +194,28 @@ class VerbTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (onPinTap != null)
-                  IconButton(
-                    onPressed: onPinTap,
-                    tooltip: pinned
-                        ? 'Unpin for next frames'
-                        : 'Pin for next frames',
-                    padding: EdgeInsets.zero,
-                    constraints: BoxConstraints.tightFor(
-                      width: veryCompact ? 24 : 28,
-                      height: veryCompact ? 20 : 24,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    iconSize: veryCompact ? 12 : 14,
-                    color: pinned
-                        ? (dimmed ? t.text.withValues(alpha: 0.38) : t.accent)
-                        : t.textSecondary.withValues(alpha: 0.55),
-                    icon: Icon(
-                      pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                    ),
-                  )
-                else if (pinned) ...[
+                if (pinned) ...[
                   const SizedBox(width: 3),
-                  Icon(
-                    Icons.push_pin_rounded,
-                    size: 13,
-                    color: dimmed ? t.text.withValues(alpha: 0.38) : t.accent,
-                  ),
+                  if (onPinTap != null)
+                    IconButton(
+                      onPressed: onPinTap,
+                      tooltip: 'Unpin for next frames',
+                      padding: EdgeInsets.zero,
+                      constraints: BoxConstraints.tightFor(
+                        width: veryCompact ? 24 : 28,
+                        height: veryCompact ? 20 : 24,
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      iconSize: veryCompact ? 12 : 14,
+                      color: dimmed ? t.text.withValues(alpha: 0.38) : t.accent,
+                      icon: const Icon(Icons.push_pin_rounded),
+                    )
+                  else
+                    Icon(
+                      Icons.push_pin_rounded,
+                      size: 13,
+                      color: dimmed ? t.text.withValues(alpha: 0.38) : t.accent,
+                    ),
                 ],
               ],
             ),

@@ -18,6 +18,8 @@ enum DrumLane { home, verbs, away }
 
 enum DrumPickerMode { scroll, infinite }
 
+enum _VerbLaneMode { cascade, sidePanel }
+
 /// Desktop shows all three lanes; mobile swipes one lane at a time.
 enum DrumLayout { sideBySide, paged }
 
@@ -61,6 +63,7 @@ class _DrumPickerState extends State<DrumPicker> {
   bool _homeNumberMode = false;
   bool _awayNumberMode = false;
   bool _verbAccordionCollapsed = false;
+  _VerbLaneMode _verbLaneMode = _VerbLaneMode.cascade;
   final _homeFilter = TextEditingController();
   final _awayFilter = TextEditingController();
   final _customVerbController = TextEditingController();
@@ -79,16 +82,41 @@ class _DrumPickerState extends State<DrumPicker> {
                   .isNotEmpty,
         )
         .toList();
-    const order = {
-      'favorites': -1,
-      'offense': 0,
-      'running': 1,
-      'defense': 2,
-      'nongameaction': 3,
-      'nongame': 3,
-      'reactions': 4,
-      'pitching': 5,
-    };
+    final sport = controller.sport.toLowerCase();
+    final Map<String, int> order;
+    if (sport == 'hockey') {
+      order = const {
+        'favorites': -1,
+        'offense': 0,
+        'defense': 1,
+        'goalie': 2,
+        'reactions': 3,
+        'nongameaction': 4,
+        'nongame': 4,
+      };
+    } else if (sport == 'soccer') {
+      order = const {
+        'favorites': -1,
+        'offense': 0,
+        'defense': 1,
+        'goalkeeper': 2,
+        'setpieces': 3,
+        'reactions': 4,
+        'nongameaction': 5,
+        'nongame': 5,
+      };
+    } else {
+      order = const {
+        'favorites': -1,
+        'offense': 0,
+        'running': 1,
+        'defense': 2,
+        'nongameaction': 3,
+        'nongame': 3,
+        'reactions': 4,
+        'pitching': 5,
+      };
+    }
     int rank(String category) {
       final key = category.toLowerCase().replaceAll(RegExp(r'[\s_-]'), '');
       return order[key] ?? order.length;
@@ -263,7 +291,7 @@ class _DrumPickerState extends State<DrumPicker> {
     final length = _lengthFor(lane);
     if (length == 0) return;
     if (lane == DrumLane.verbs) {
-      if (widget.mode == DrumPickerMode.infinite) {
+      if (_verbLaneMode != _VerbLaneMode.cascade) {
         final next = (_verbIndex + delta).clamp(0, length - 1);
         if (next == _verbIndex) return;
         _setIndex(lane, next);
@@ -723,48 +751,13 @@ class _DrumPickerState extends State<DrumPicker> {
               ),
             ),
           ],
-          if (lane == DrumLane.verbs &&
-              widget.onModeChanged != null &&
-              widget.layout == DrumLayout.sideBySide) ...[
-            Tooltip(
-              message: 'Default',
-              child: InkWell(
-                key: const ValueKey('drum-scroll-toggle'),
-                onTap: () => widget.onModeChanged?.call(DrumPickerMode.scroll),
-                child: SizedBox(
-                  width: 26,
-                  height: 26,
-                  child: Icon(
-                    Icons.swap_vert,
-                    size: 14,
-                    color: widget.mode == DrumPickerMode.scroll
-                        ? tokens.accent
-                        : tokens.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-            Tooltip(
-              message: 'Drum wheel',
-              child: InkWell(
-                key: const ValueKey('drum-infinite-toggle'),
-                onTap: () =>
-                    widget.onModeChanged?.call(DrumPickerMode.infinite),
-                child: SizedBox(
-                  width: 26,
-                  height: 26,
-                  child: Icon(
-                    Icons.all_inclusive,
-                    size: 14,
-                    color: widget.mode == DrumPickerMode.infinite
-                        ? tokens.accent
-                        : tokens.textSecondary,
-                  ),
-                ),
-              ),
-            ),
+          if (lane == DrumLane.verbs) ...[
             const SizedBox(width: 4),
-            const Spacer(),
+            _VerbModeMenu(
+              mode: _verbLaneMode,
+              tokens: tokens,
+              onSelected: (mode) => setState(() => _verbLaneMode = mode),
+            ),
           ],
         ],
       ),
@@ -825,6 +818,12 @@ class _DrumPickerState extends State<DrumPicker> {
                     ),
                     onCommit: (player) =>
                         _commit(lane, rosterIndexOf(player)),
+                    onSecondaryTap: (player, position) => _editRosterPlayer(
+                      context,
+                      player: player,
+                      isHome: lane == DrumLane.home,
+                      position: position,
+                    ),
                   )
                 : widget.mode == DrumPickerMode.scroll && letterFilter != null
                 ? _FilteredPlayerList(
@@ -840,6 +839,12 @@ class _DrumPickerState extends State<DrumPicker> {
                       }
                     }),
                     onSelect: (player) => _commit(lane, rosterIndexOf(player)),
+                    onEdit: (player, position) => _editRosterPlayer(
+                      context,
+                      player: player,
+                      isHome: lane == DrumLane.home,
+                      position: position,
+                    ),
                   )
                 : widget.mode == DrumPickerMode.scroll
                     ? _HoverPlayerList(
@@ -858,6 +863,12 @@ class _DrumPickerState extends State<DrumPicker> {
                             lane, rosterIndexOf(visiblePlayers[index])),
                         onCommit: (index) =>
                             _commit(lane, rosterIndexOf(visiblePlayers[index])),
+                        onEditPlayer: (player, position) => _editRosterPlayer(
+                          context,
+                          player: player,
+                          isHome: lane == DrumLane.home,
+                          position: position,
+                        ),
                       )
                     : _DrumWheel<Player>(
                         laneKey: lane.name,
@@ -935,6 +946,57 @@ class _DrumPickerState extends State<DrumPicker> {
     );
   }
 
+  Future<void> _editRosterPlayer(
+    BuildContext context, {
+    required Player player,
+    required bool isHome,
+    required Offset position,
+  }) async {
+    final pinned = controller.isPlayerPinned(player, isHome: isHome);
+    final action = await showCaptionV2PopupMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'pin',
+          child: Text(pinned ? 'Unpin Player' : 'Pin Player'),
+        ),
+        const PopupMenuItem(value: 'edit', child: Text('Edit player…')),
+      ],
+    );
+    if (action == null || !context.mounted) return;
+    if (action == 'pin') {
+      controller.togglePlayerPin(player, isHome: isHome);
+      return;
+    }
+    if (action != 'edit') return;
+    final result = await showCustomNameEntryDialog(
+      context: context,
+      teamLabel: isHome ? controller.homeAbbr : controller.awayAbbr,
+      title: 'Edit player',
+      confirmLabel: 'Save',
+      initialName: player.fullName,
+      initialJersey: player.jerseyNumber,
+    );
+    if (result == null || !context.mounted) return;
+    final error = controller.updatePlayer(
+      isHome: isHome,
+      original: player,
+      fullName: result.name,
+      jerseyNumber: result.jersey,
+    );
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
+      );
+    }
+  }
+
   Future<void> _openCustomNameDialog(DrumLane lane) async {
     final isHome = lane == DrumLane.home;
     final result = await showCustomNameEntryDialog(
@@ -1009,70 +1071,72 @@ class _DrumPickerState extends State<DrumPicker> {
     );
 
     Widget verbBody() {
-      if (widget.mode == DrumPickerMode.infinite) {
-        final scrubber = _VerbCategoryScrubber(
-          categories: _categories,
-          activeCategory: _category,
-          armed: armed,
-          tokens: tokens,
-          labelFor: _displayCategory,
-          onSelect: _jumpToVerbCategory,
-        );
-        if (categoryVerbs.isEmpty) {
+      final scrubber = _VerbCategoryScrubber(
+        categories: _categories,
+        activeCategory: _category,
+        armed: armed,
+        tokens: tokens,
+        labelFor: _displayCategory,
+        onSelect: _jumpToVerbCategory,
+      );
+      switch (_verbLaneMode) {
+        case _VerbLaneMode.sidePanel:
+          if (categoryVerbs.isEmpty) {
+            return Row(
+              children: [
+                scrubber,
+                Expanded(
+                  child: Center(
+                    child: Text('No verbs', style: tokens.metaStyle),
+                  ),
+                ),
+              ],
+            );
+          }
           return Row(
             children: [
               scrubber,
               Expanded(
-                child: Center(
-                  child: Text('No verbs', style: tokens.metaStyle),
+                child: _VerbRows(
+                  key: const ValueKey('verb-side-list'),
+                  controller: controller,
+                  verbs: categoryVerbs,
+                  selectedIndex: verbIndex,
+                  selectedVerbKey: selectedKey,
+                  armed: armed,
+                  tokens: tokens,
+                  leadingPadding: 10,
+                  scrollable: true,
+                  onVerbArmed: (index) {
+                    _arm(DrumLane.verbs);
+                    _setIndex(DrumLane.verbs, index);
+                    _commit(DrumLane.verbs, index);
+                  },
+                  onToggleFavorite: _toggleVerbFavorite,
                 ),
               ),
             ],
           );
-        }
-        return Row(
-          children: [
-            scrubber,
-            Expanded(
-              child: _VerbRows(
-                key: const ValueKey('verb-side-list'),
-                controller: controller,
-                verbs: categoryVerbs,
-                selectedIndex: verbIndex,
-                selectedVerbKey: selectedKey,
-                armed: armed,
-                tokens: tokens,
-                leadingPadding: 10,
-                scrollable: true,
-                onVerbArmed: (index) {
-                  _arm(DrumLane.verbs);
-                  _setIndex(DrumLane.verbs, index);
-                  _commit(DrumLane.verbs, index);
-                },
-                onToggleFavorite: _toggleVerbFavorite,
-              ),
-            ),
-          ],
-        );
+        case _VerbLaneMode.cascade:
+          return _VerbAccordion(
+            controller: controller,
+            categories: _categories,
+            verbsByCategory: orderedVerbsByCategory,
+            selectedCategory: _category,
+            collapsed: _verbAccordionCollapsed,
+            selectedIndex: _verbIndex,
+            selectedVerbKey: selectedKey,
+            armed: armed,
+            tokens: tokens,
+            onCategorySelected: _selectCategory,
+            onVerbArmed: (index) {
+              _arm(DrumLane.verbs);
+              _setIndex(DrumLane.verbs, index);
+              _commit(DrumLane.verbs, index);
+            },
+            onToggleFavorite: _toggleVerbFavorite,
+          );
       }
-      return _VerbAccordion(
-        controller: controller,
-        categories: _categories,
-        verbsByCategory: orderedVerbsByCategory,
-        selectedCategory: _category,
-        collapsed: _verbAccordionCollapsed,
-        selectedIndex: _verbIndex,
-        selectedVerbKey: selectedKey,
-        armed: armed,
-        tokens: tokens,
-        onCategorySelected: _selectCategory,
-        onVerbArmed: (index) {
-          _arm(DrumLane.verbs);
-          _setIndex(DrumLane.verbs, index);
-          _commit(DrumLane.verbs, index);
-        },
-        onToggleFavorite: _toggleVerbFavorite,
-      );
     }
 
     return Column(
@@ -1849,87 +1913,75 @@ class _VerbAccordionRow extends StatelessWidget {
     final bright = selected || hovered;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: CmdClick(
+        key: ValueKey('verb-accordion-row-${verb.key}'),
+        useInkWell: true,
+        onTap: onTap,
+        onCmdTap: () => controller.toggleVerbPin(verb.key),
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
-        onLongPressStart: (details) =>
-            _showContextMenu(context, details.globalPosition),
-        child: CmdClick(
-          key: ValueKey('verb-accordion-row-${verb.key}'),
-          useInkWell: true,
-          onTap: onTap,
-          onCmdTap: () => controller.toggleVerbPin(verb.key),
-          child: Container(
-            height: _VerbAccordion.rowHeight,
-            padding: EdgeInsets.only(left: leadingPadding, right: 4),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 10,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      width: 4,
-                      height: 4,
-                      decoration: verb.isFavorite
-                          ? BoxDecoration(
-                              color: tokens.accent,
-                              shape: BoxShape.circle,
-                            )
-                          : null,
-                    ),
+        child: Container(
+          height: _VerbAccordion.rowHeight,
+          padding: EdgeInsets.only(left: leadingPadding, right: 4),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 10,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    width: 4,
+                    height: 4,
+                    decoration: verb.isFavorite
+                        ? BoxDecoration(
+                            color: tokens.accent,
+                            shape: BoxShape.circle,
+                          )
+                        : null,
                   ),
                 ),
-                Expanded(
-                  child: AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 40),
-                    curve: Curves.easeOut,
-                    style: TextStyle(
-                      fontFamily: FfTokens.labelFamily,
-                      fontSize: bright ? fontSize + 1.5 : fontSize,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: bright ? -0.25 : 0,
-                      color: bright
-                          ? tokens.text
-                          : tokens.text.withValues(alpha: 0.68),
-                    ),
-                    child: Text(
-                      verb.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+              ),
+              Expanded(
+                child: AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 40),
+                  curve: Curves.easeOut,
+                  style: TextStyle(
+                    fontFamily: FfTokens.labelFamily,
+                    fontSize: bright ? fontSize + 1.5 : fontSize,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: bright ? -0.25 : 0,
+                    color: bright
+                        ? tokens.text
+                        : tokens.text.withValues(alpha: 0.68),
+                  ),
+                  child: Text(
+                    verb.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (committed) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.check,
-                    size: 12,
-                    color: tokens.accent,
-                  ),
-                ],
-                IconButton(
-                  onPressed: () => controller.toggleVerbPin(verb.key),
-                  tooltip: controller.isVerbPinned(verb.key)
-                      ? 'Unpin for next frames'
-                      : 'Pin for next frames',
-                  padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints.tightFor(width: 28, height: 24),
-                  visualDensity: VisualDensity.compact,
-                  iconSize: 14,
-                  color: controller.isVerbPinned(verb.key)
-                      ? tokens.accent
-                      : tokens.textSecondary.withValues(alpha: 0.55),
-                  icon: Icon(
-                    controller.isVerbPinned(verb.key)
-                        ? Icons.push_pin_rounded
-                        : Icons.push_pin_outlined,
-                  ),
+              ),
+              if (committed) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.check,
+                  size: 12,
+                  color: tokens.accent,
                 ),
               ],
-            ),
+                if (controller.isVerbPinned(verb.key))
+                  IconButton(
+                    onPressed: () => controller.toggleVerbPin(verb.key),
+                    tooltip: 'Unpin for next frames',
+                    padding: EdgeInsets.zero,
+                    constraints:
+                        const BoxConstraints.tightFor(width: 28, height: 24),
+                    visualDensity: VisualDensity.compact,
+                    iconSize: 14,
+                    color: tokens.accent,
+                    icon: const Icon(Icons.push_pin_rounded),
+                  ),
+            ],
           ),
         ),
       ),
@@ -1952,7 +2004,9 @@ class _VerbAccordionRow extends StatelessWidget {
         PopupMenuItem(
           value: 'favorite',
           child: Text(
-            verb.isFavorite ? 'Remove favorite' : 'Add favorite',
+            verb.isFavorite
+                ? 'Remove from Favorites'
+                : 'Add to Favorites',
           ),
         ),
         PopupMenuItem(
@@ -1990,6 +2044,7 @@ class _FilteredPlayerList extends StatelessWidget {
     required this.nameFor,
     required this.onBack,
     required this.onSelect,
+    this.onEdit,
   });
 
   final String letter;
@@ -1998,6 +2053,7 @@ class _FilteredPlayerList extends StatelessWidget {
   final String Function(Player) nameFor;
   final VoidCallback onBack;
   final ValueChanged<Player> onSelect;
+  final void Function(Player player, Offset globalPosition)? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -2034,6 +2090,9 @@ class _FilteredPlayerList extends StatelessWidget {
               final player = players[index];
               return InkWell(
                 onTap: () => onSelect(player),
+                onSecondaryTapDown: onEdit == null
+                    ? null
+                    : (details) => onEdit!(player, details.globalPosition),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   child: Row(
@@ -2072,18 +2131,80 @@ class _FilteredPlayerList extends StatelessWidget {
   }
 }
 
+class _VerbModeMenu extends StatelessWidget {
+  const _VerbModeMenu({
+    required this.mode,
+    required this.tokens,
+    required this.onSelected,
+  });
+
+  final _VerbLaneMode mode;
+  final FfTokens tokens;
+  final ValueChanged<_VerbLaneMode> onSelected;
+
+  static String label(_VerbLaneMode mode) {
+    switch (mode) {
+      case _VerbLaneMode.cascade:
+        return 'Cascade list';
+      case _VerbLaneMode.sidePanel:
+        return 'Side panel list';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_VerbLaneMode>(
+      key: const ValueKey('verb-view-mode'),
+      tooltip: 'Verb view',
+      color: tokens.surface,
+      surfaceTintColor: tokens.surface,
+      position: PopupMenuPosition.under,
+      onSelected: onSelected,
+      itemBuilder: (context) => [
+        for (final value in _VerbLaneMode.values)
+          PopupMenuItem(
+            value: value,
+            height: 32,
+            child: Text(
+              label(value),
+              style: tokens.metaStyle.copyWith(
+                color: value == mode ? tokens.accent : tokens.text,
+                fontWeight: value == mode ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label(mode),
+            style: tokens.metaStyle.copyWith(
+              color: tokens.text,
+              fontSize: 12,
+            ),
+          ),
+          Icon(Icons.arrow_drop_down, size: 16, color: tokens.textSecondary),
+        ],
+      ),
+    );
+  }
+}
+
 class _NumberRoster extends StatelessWidget {
   const _NumberRoster({
     required this.players,
     required this.tokens,
     required this.isSelected,
     required this.onCommit,
+    this.onSecondaryTap,
   });
 
   final List<Player> players;
   final FfTokens tokens;
   final bool Function(Player player) isSelected;
   final ValueChanged<Player> onCommit;
+  final void Function(Player player, Offset globalPosition)? onSecondaryTap;
 
   static int? _jersey(Player player) =>
       int.tryParse(player.jerseyNumber?.trim() ?? '');
@@ -2129,43 +2250,63 @@ class _NumberRoster extends StatelessWidget {
       if (other.isNotEmpty) _NumberRow('Other', other),
     ];
 
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
-      itemCount: rows.length,
-      separatorBuilder: (_, __) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Divider(height: 1, color: tokens.divider),
-      ),
-      itemBuilder: (context, index) {
-        final row = rows[index];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              row.label,
-              style: tokens.microStyle.copyWith(fontSize: 9),
-            ),
-            const SizedBox(height: 2),
-            Row(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cellWidth =
+            ((constraints.maxWidth - 12) / columns).clamp(18.0, 64.0);
+        final scale = cellWidth / 52.0;
+        final cellHeight = (44 * scale).clamp(22.0, 50.0);
+        final nameSize = (12 * scale).clamp(7.0, 13.0);
+        final jerseySize = (11 * scale).clamp(7.0, 12.0);
+        final labelSize = (9 * scale).clamp(7.0, 10.0);
+        return ListView.separated(
+          padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+          itemCount: rows.length,
+          separatorBuilder: (_, __) => Padding(
+            padding: EdgeInsets.symmetric(vertical: 3 * scale),
+            child: Divider(height: 1, color: tokens.divider),
+          ),
+          itemBuilder: (context, index) {
+            final row = rows[index];
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (var slot = 0; slot < columns; slot++)
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 1),
-                      child: slot < row.players.length
-                          ? _NumberCell(
-                              player: row.players[slot],
-                              lastName: _lastName(row.players[slot]),
-                              selected: isSelected(row.players[slot]),
-                              tokens: tokens,
-                              onTap: () => onCommit(row.players[slot]),
-                            )
-                          : const SizedBox(height: 36),
-                    ),
-                  ),
+                Text(
+                  row.label,
+                  style: tokens.microStyle.copyWith(fontSize: labelSize),
+                ),
+                SizedBox(height: 2 * scale),
+                Row(
+                  children: [
+                    for (var slot = 0; slot < columns; slot++)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 1),
+                          child: slot < row.players.length
+                              ? _NumberCell(
+                                  player: row.players[slot],
+                                  lastName: _lastName(row.players[slot]),
+                                  selected: isSelected(row.players[slot]),
+                                  tokens: tokens,
+                                  height: cellHeight,
+                                  nameSize: nameSize,
+                                  jerseySize: jerseySize,
+                                  onTap: () => onCommit(row.players[slot]),
+                                  onSecondaryTap: onSecondaryTap == null
+                                      ? null
+                                      : (position) => onSecondaryTap!(
+                                            row.players[slot],
+                                            position,
+                                          ),
+                                )
+                              : SizedBox(height: cellHeight),
+                        ),
+                      ),
+                  ],
+                ),
               ],
-            ),
-          ],
+            );
+          },
         );
       },
     );
@@ -2185,14 +2326,22 @@ class _NumberCell extends StatelessWidget {
     required this.lastName,
     required this.selected,
     required this.tokens,
+    required this.height,
+    required this.nameSize,
+    required this.jerseySize,
     required this.onTap,
+    this.onSecondaryTap,
   });
 
   final Player player;
   final String lastName;
   final bool selected;
   final FfTokens tokens;
+  final double height;
+  final double nameSize;
+  final double jerseySize;
   final VoidCallback onTap;
+  final ValueChanged<Offset>? onSecondaryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -2203,9 +2352,12 @@ class _NumberCell extends StatelessWidget {
       borderRadius: BorderRadius.circular(4),
       child: InkWell(
         onTap: onTap,
+        onSecondaryTapDown: onSecondaryTap == null
+            ? null
+            : (details) => onSecondaryTap!(details.globalPosition),
         borderRadius: BorderRadius.circular(4),
         child: Container(
-          height: 36,
+          height: height,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(4),
@@ -2221,12 +2373,12 @@ class _NumberCell extends StatelessWidget {
                 player.jerseyNumber ?? '—',
                 maxLines: 1,
                 style: tokens.jerseyStyle.copyWith(
-                  fontSize: 11,
+                  fontSize: jerseySize,
                   height: 1,
                   color: selected ? tokens.accent : tokens.text,
                 ),
               ),
-              const SizedBox(height: 2),
+              SizedBox(height: (height * 0.04).clamp(1.0, 2.0)),
               Text(
                 lastName,
                 maxLines: 1,
@@ -2234,8 +2386,9 @@ class _NumberCell extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: FfTokens.labelFamily,
-                  fontSize: 9,
+                  fontSize: nameSize,
                   height: 1,
+                  fontWeight: FontWeight.w500,
                   color: selected ? tokens.text : tokens.textSecondary,
                 ),
               ),
@@ -2258,6 +2411,7 @@ class _HoverPlayerList extends StatefulWidget {
     required this.isSelected,
     required this.onTarget,
     required this.onCommit,
+    this.onEditPlayer,
   });
 
   final String laneKey;
@@ -2269,6 +2423,7 @@ class _HoverPlayerList extends StatefulWidget {
   final bool Function(Player) isSelected;
   final ValueChanged<int> onTarget;
   final ValueChanged<int> onCommit;
+  final void Function(Player player, Offset globalPosition)? onEditPlayer;
 
   @override
   State<_HoverPlayerList> createState() => _HoverPlayerListState();
@@ -2349,6 +2504,10 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
               widget.onTarget(index);
               widget.onCommit(index);
             },
+            onSecondaryTapDown: widget.onEditPlayer == null
+                ? null
+                : (details) =>
+                    widget.onEditPlayer!(player, details.globalPosition),
             child: AnimatedContainer(
               key: ValueKey(
                 'scroll-${widget.laneKey}-player-$index',

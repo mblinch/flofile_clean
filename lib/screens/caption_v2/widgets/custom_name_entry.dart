@@ -12,11 +12,21 @@ class CustomNameEntryResult {
 Future<CustomNameEntryResult?> showCustomNameEntryDialog({
   required BuildContext context,
   required String teamLabel,
+  String title = 'Custom name',
+  String confirmLabel = 'Add',
+  String? initialName,
+  String? initialJersey,
 }) {
   return showDialog<CustomNameEntryResult>(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.55),
-    builder: (ctx) => _CustomNameDialog(teamLabel: teamLabel),
+    builder: (ctx) => _CustomNameDialog(
+      teamLabel: teamLabel,
+      title: title,
+      confirmLabel: confirmLabel,
+      initialName: initialName,
+      initialJersey: initialJersey,
+    ),
   );
 }
 
@@ -71,17 +81,34 @@ class CustomNameEntryButton extends StatelessWidget {
 }
 
 class _CustomNameDialog extends StatefulWidget {
-  const _CustomNameDialog({required this.teamLabel});
+  const _CustomNameDialog({
+    required this.teamLabel,
+    required this.title,
+    required this.confirmLabel,
+    this.initialName,
+    this.initialJersey,
+  });
 
   final String teamLabel;
+  final String title;
+  final String confirmLabel;
+  final String? initialName;
+  final String? initialJersey;
 
   @override
   State<_CustomNameDialog> createState() => _CustomNameDialogState();
 }
 
 class _CustomNameDialogState extends State<_CustomNameDialog> {
-  final _nameCtrl = TextEditingController();
-  final _jerseyCtrl = TextEditingController();
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _jerseyCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.initialName ?? '');
+    _jerseyCtrl = TextEditingController(text: widget.initialJersey ?? '');
+  }
 
   @override
   void dispose() {
@@ -143,7 +170,7 @@ class _CustomNameDialogState extends State<_CustomNameDialog> {
                         ),
                       ),
                       child: Text(
-                        'Custom name · ${widget.teamLabel}',
+                        '${widget.title} · ${widget.teamLabel}',
                         style: t.labelStyle.copyWith(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
@@ -249,7 +276,7 @@ class _CustomNameDialogState extends State<_CustomNameDialog> {
                           ),
                           const SizedBox(width: 8),
                           ElevatedGreyButton(
-                            label: 'Add',
+                            label: widget.confirmLabel,
                             fontSize: 11,
                             isPrimary: true,
                             onPressed: canAdd ? _submit : null,

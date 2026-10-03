@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../caption_style/verb_sub_options.dart';
 import '../flo_layout_constants.dart';
-import 'app_compact_checkbox.dart';
+import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
 
 /// RBI + celebration modifiers for the verb editor (app + admin).
 ///
-/// RBI is baseball-only. Celebration is cross-sport. Returns [SizedBox.shrink]
-/// when neither block applies to the current verb/sport.
-/// Caption previews live in the main editor's variant menu.
+/// RBI is baseball-only and shown for every baseball verb (defaults off for
+/// non-hits). Celebration is always available in baseball; other sports keep
+/// hit / celebration / custom rules. Returns [SizedBox.shrink] when neither
+/// block applies. Caption previews live in the main editor's variant menu.
 class VerbEditSubOptionsSection extends StatefulWidget {
   const VerbEditSubOptionsSection({
     super.key,
@@ -78,6 +79,7 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
     final showCelebration = VerbSubOptions.showCelebrationEditor(
       verbLabel: widget.verbLabel,
       value: widget.value,
+      sport: widget.sport,
     );
     if (!showRbi && !showCelebration) {
       return const SizedBox.shrink();
@@ -101,13 +103,16 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
     final rbiBlock = showRbi
         ? _optionBlock(
             label: isHomeRun ? 'Home run' : 'RBI',
+            explanation: isHomeRun
+                ? 'Style — default for all run situations'
+                : 'Style — default for all RBI situations',
             enabled: widget.value.rbiEnabled,
             defaultOn: defaults.rbiEnabled,
             onEnabledChanged: (v) => _patch((o) => o.copyWith(rbiEnabled: v)),
             children: [
               if (isHomeRun)
                 AppDialogLabeledDropdown<HomeRunCaptionStyle>(
-                  label: 'Style — default for all run situations',
+                  label: '',
                   value: widget.value.homeRunStyle,
                   items: HomeRunCaptionStyle.values
                       .map(
@@ -128,7 +133,7 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
                 )
               else
                 AppDialogLabeledDropdown<RbiCaptionStyle>(
-                  label: 'RBI style — default for all RBI situations',
+                  label: '',
                   value: widget.value.rbiStyle,
                   items: RbiCaptionStyle.values
                       .map(
@@ -154,16 +159,17 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
     final celebrationBlock = showCelebration
         ? _optionBlock(
             label: 'Reactions',
+            explanation: 'Comma-separated phrases',
             enabled: widget.value.celebrationEnabled,
             defaultOn: defaults.celebrationEnabled,
             onEnabledChanged: (v) =>
                 _patch((o) => o.copyWith(celebrationEnabled: v)),
             children: [
               AppDialogLabeledTextField(
-                label: 'Reaction phrases (comma-separated)',
+                label: '',
                 controller: _celebrationPhrase,
                 hintText: VerbSubOptions.suggestedReactionPhrases,
-                maxLines: 2,
+                maxLines: 1,
                 enabled: widget.value.celebrationEnabled,
                 bottomGap: showCelebrationTypes ? 8 : 0,
                 onChanged: (_) => _patch(
@@ -173,10 +179,10 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
               ),
               if (showCelebrationTypes)
                 AppDialogLabeledTextField(
-                  label: 'Celebration chips (comma-separated)',
+                  label: '',
                   controller: _celebrationTypes,
                   hintText: chipsHint,
-                  maxLines: 2,
+                  maxLines: 1,
                   enabled: widget.value.celebrationEnabled,
                   bottomGap: 0,
                   onChanged: (_) => _patch(
@@ -186,16 +192,27 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
                 )
               else if (!isHit) ...[
                 const SizedBox(height: 4),
-                Text(
-                  VerbSubOptions.isBaseballSport(widget.sport)
-                      ? 'Each reaction becomes a chip in Keyboard Fire (Cele, React, …).'
-                      : 'Each reaction becomes a chip when this verb is selected.',
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 9,
-                    color: Color(0xFF999999),
-                    height: 1.3,
-                  ),
+                Builder(
+                  builder: (context) {
+                    final tokens = appDialogTokens(context);
+                    return Text(
+                      VerbSubOptions.isBaseballSport(widget.sport)
+                          ? 'Each reaction becomes a chip in Keyboard Fire (Cele, React, …).'
+                          : 'Each reaction becomes a chip when this verb is selected.',
+                      style: tokens != null
+                          ? tokens.metaStyle.copyWith(
+                              fontSize: 9,
+                              color: tokens.textSecondary,
+                              height: 1.3,
+                            )
+                          : const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 9,
+                              color: Color(0xFF999999),
+                              height: 1.3,
+                            ),
+                    );
+                  },
                 ),
               ],
             ],
@@ -204,13 +221,15 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
 
     final Widget blocks;
     if (rbiBlock != null && celebrationBlock != null && !widget.showBorder) {
-      blocks = Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(child: rbiBlock),
-          const SizedBox(width: 12),
-          Expanded(child: celebrationBlock),
-        ],
+      blocks = IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: rbiBlock),
+            const SizedBox(width: 12),
+            Expanded(child: celebrationBlock),
+          ],
+        ),
       );
     } else if (rbiBlock != null && celebrationBlock != null) {
       blocks = Column(
@@ -226,20 +245,34 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
       blocks = rbiBlock ?? celebrationBlock!;
     }
 
+    final t = appDialogTokens(context);
     final body = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text('Modifiers', style: kAppDialogFieldLabelStyle),
+        Text(
+          'MODIFIERS',
+          style: t != null
+              ? FfTokens.railLabel.copyWith(
+                  color: t.text.withValues(alpha: 0.70),
+                )
+              : kAppDialogFieldLabelStyle,
+        ),
         const SizedBox(height: 4),
         Text(
           blurb,
-          style: const TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 10,
-            color: Color(0xFF888888),
-            height: 1.35,
-          ),
+          style: t != null
+              ? t.metaStyle.copyWith(
+                  fontSize: 10,
+                  color: t.textSecondary,
+                  height: 1.35,
+                )
+              : const TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 10,
+                  color: Color(0xFF888888),
+                  height: 1.35,
+                ),
         ),
         const SizedBox(height: 6),
         blocks,
@@ -270,68 +303,117 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
 
   Widget _optionBlock({
     required String label,
+    required String explanation,
     required bool enabled,
     required bool defaultOn,
     required ValueChanged<bool> onEnabledChanged,
     required List<Widget> children,
   }) {
-    final header = Row(
-      children: [
-        AppCompactCheckbox(
-          value: enabled,
-          accentColor: kFloTealLight,
-          onChanged: onEnabledChanged,
-        ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: kAppDialogFieldTextStyle.copyWith(
+    final t = appDialogTokens(context);
+    final accent = t?.accent ?? kFloTealLight;
+    final labelStyle = t != null
+        ? TextStyle(
+            fontFamily: FfTokens.labelFamily,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.1,
+            color: enabled ? t.text : t.text.withValues(alpha: 0.42),
+          )
+        : kAppDialogFieldTextStyle.copyWith(
             fontWeight: FontWeight.w600,
             fontSize: 11,
+            color: enabled ? null : const Color(0xFFB0B0B0),
+          );
+    final explanationStyle = t != null
+        ? t.metaStyle.copyWith(
+            fontSize: 10.5,
+            color: enabled
+                ? t.textSecondary
+                : t.text.withValues(alpha: 0.32),
+          )
+        : TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 10.5,
+            color: enabled ? const Color(0xFF888888) : const Color(0xFFB0B0B0),
+          );
+
+    final header = Row(
+      children: [
+        SizedBox(
+          width: 34,
+          height: 20,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: Switch.adaptive(
+              value: enabled,
+              onChanged: onEnabledChanged,
+              activeThumbColor: Colors.white,
+              activeTrackColor: accent,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
           ),
         ),
+        const SizedBox(width: 8),
+        Text(label, style: labelStyle),
         if (enabled != defaultOn) ...[
           const SizedBox(width: 4),
-          const Text(
+          Text(
             '*',
             style: TextStyle(
               fontFamily: 'Inter',
               fontSize: 10,
-              color: kFloTealDark,
+              color: t != null ? t.accent : kFloTealDark,
               fontWeight: FontWeight.w600,
             ),
           ),
         ],
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            explanation,
+            style: explanationStyle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
     );
 
-    return DecoratedBox(
-      decoration: enabled
-          ? BoxDecoration(
-              color: const Color(0xFFF9FAFB),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFE4E4E4)),
-            )
-          : const BoxDecoration(),
-      child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: enabled ? 8 : 0,
-          vertical: enabled ? 8 : 2,
+    final fill = t != null
+        ? (enabled ? t.surface : t.surface.withValues(alpha: 0.45))
+        : (enabled ? const Color(0xFFF9FAFB) : const Color(0xFFF0F0F0));
+    final border = t != null
+        ? (enabled ? t.divider : t.divider.withValues(alpha: 0.55))
+        : (enabled ? const Color(0xFFE4E4E4) : const Color(0xFFE8E8E8));
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(
+          t != null ? FfTokens.radiusChip : 6,
         ),
-        child: enabled
-            ? Column(
+        border: Border.all(color: border),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          header,
+          const SizedBox(height: 8),
+          Opacity(
+            opacity: enabled ? 1 : 0.45,
+            child: IgnorePointer(
+              ignoring: !enabled,
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  header,
-                  const SizedBox(height: 8),
-                  ...children,
-                ],
-              )
-            : SizedBox(
-                height: 28,
-                child: Align(alignment: Alignment.centerLeft, child: header),
+                children: children,
               ),
+            ),
+          ),
+        ],
       ),
     );
   }

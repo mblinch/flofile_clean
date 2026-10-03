@@ -26,7 +26,7 @@ class SportVerbCategories {
       '',
     ],
     'Pitching': [
-      'Pitching',
+      'Pitches',
       'Pitching Change',
       'Mound Visit',
       '',
@@ -172,50 +172,49 @@ class SportVerbCategories {
     ],
   };
 
+  /// Hockey factory defaults.
+  ///
+  /// Each verb lives in exactly one category. Display order within a category
+  /// is alphabetical unless the user chooses Custom arrange / Most used.
   static const Map<String, List<String>> hockey = {
     'Offense': [
-      'Skates',
-      'Shoots',
       'Battles',
-      'Scores',
-      'Goes to the Net',
       'Faceoff',
-      'Celebrates a Goal',
-      'Celebrates',
+      'Goes to the Net',
+      'Scores',
+      'Shoots',
+      'Skates',
     ],
     'Defense': [
       'Blocks',
-      'Clears',
       'Checks',
-      'Fights',
+      'Clears',
       'Defends',
+      'Fights',
     ],
     'Goalie': [
-      'Saves',
-      'Handles the Puck',
-      'Stands in Net',
       'Guards the Net',
+      'Handles the Puck',
+      'Saves',
+      'Stands in Net',
     ],
     'Non Game-Action': [
-      'Looks On',
-      'Warm Ups',
       'Arrivals',
-      'Takes the Ice',
-      'Walks to the Ice',
+      'Bench',
       'Comes Off the Ice',
+      'Looks On',
       'National Anthem',
       'Stretching',
-      'Bench',
-      'Post Game Win',
-      'Post Game Loss',
-      'Dejection',
+      'Takes the Ice',
+      'Walks to the Ice',
+      'Warm Ups',
     ],
     'Reactions': [
       'Celebrates',
       'Celebrates a Goal',
       'Dejection',
-      'Post Game Win',
       'Post Game Loss',
+      'Post Game Win',
     ],
   };
 

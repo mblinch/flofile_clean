@@ -59,6 +59,8 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
+    required bool omitAgainst,
+    required String opponentJoiner,
     required String selectedCategory,
     required VerbSubOptions subOptions,
     required bool asDefault,
@@ -79,6 +81,8 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
+    required bool omitAgainst,
+    required String opponentJoiner,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   })? onCreateCustomVerb;
@@ -91,6 +95,8 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
+    required bool omitAgainst,
+    required String opponentJoiner,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   })? onUpdateCustomVerb;
@@ -126,7 +132,9 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   late final TextEditingController _celebrationTypes;
   late final TextEditingController _grandSlamPhrase;
   late final TextEditingController _reactionPhraseDraft;
+  late final TextEditingController _opponentJoiner;
   late bool _wantsOpponent;
+  late bool _omitAgainst;
 
   /// Preview-only: starts off when the dialog opens; toggling syncs [_wantsOpponent].
   bool _previewIncludeOpponent = false;
@@ -181,6 +189,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _plural = TextEditingController();
     _ing = TextEditingController();
     _keywords = TextEditingController();
+    _opponentJoiner = TextEditingController();
     _celebrationPhrase = TextEditingController();
     _celebrationTypes = TextEditingController();
     _grandSlamPhrase = TextEditingController();
@@ -203,6 +212,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _plural.dispose();
     _ing.dispose();
     _keywords.dispose();
+    _opponentJoiner.dispose();
     _celebrationPhrase.dispose();
     _celebrationTypes.dispose();
     _grandSlamPhrase.dispose();
@@ -456,6 +466,11 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _setText(_ing, ing);
     _lastAutoIng = VerbCaptionWording.defaultIngWording(verb, singular);
     _wantsOpponent = initial['wantsOpponent'] as bool? ?? true;
+    _omitAgainst = initial['omitAgainst'] as bool? ?? false;
+    _setText(
+      _opponentJoiner,
+      (initial['opponentJoiner'] ?? '').toString(),
+    );
     _previewIncludeOpponent = false;
     _usePluralPhrase = initial['usePluralPhrase'] as bool? ?? true;
     final rawKw = initial['keywords'];
@@ -519,6 +534,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       'ing': _ing.text.trim(),
       'keywords': _keywords.text.trim(),
       'wantsOpponent': _wantsOpponent,
+      'omitAgainst': _omitAgainst,
+      'opponentJoiner': _opponentJoiner.text.trim(),
       'usePluralPhrase': _usePluralPhrase,
       'category': _assignedCategory,
       'subOptions': _liveSubOptions.toJson(),
@@ -591,16 +608,16 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       variants.add(const _CaptionVariant(id: 'plural', label: '2+ players'));
     }
 
-    final showRbi = !_isCustomContext &&
-        VerbSubOptions.showRbiEditor(
-          sport: widget.sport,
-          verbLabel: _verbLabelForMods,
-          value: _liveSubOptions,
-        );
+    final showRbi = VerbSubOptions.showRbiEditor(
+      sport: widget.sport,
+      verbLabel: _verbLabelForMods,
+      value: _liveSubOptions,
+    );
     final showCele = VerbSubOptions.showCelebrationEditor(
       verbLabel: _verbLabelForMods,
       value: _liveSubOptions,
       isCustom: _isCustomContext,
+      sport: widget.sport,
     );
     final isHit = !_isCustomContext &&
         (VerbSubOptions.isHitVerb(_currentVerb) ||
@@ -665,23 +682,33 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     return '$p1Name #$p1Jersey and $p2Name #$p2Jersey of the ${widget.homeTeamName}';
   }
 
+  String _opponentConnector() {
+    final joiner = _omitAgainst && _opponentJoiner.text.trim().isEmpty
+        ? ''
+        : (_opponentJoiner.text.trim().isEmpty
+            ? 'against'
+            : _opponentJoiner.text.trim());
+    if (joiner.isEmpty) return '';
+    return ' $joiner';
+  }
+
   String _withOpponent(String base) {
     if (!_previewIncludeOpponent) return base;
-    const againstText = ' against';
+    final connector = _opponentConnector();
     final selectedOpp = widget.selectedAwayPlayerLabel?.trim();
     if (selectedOpp != null && selectedOpp.isNotEmpty) {
-      return '$base$againstText $selectedOpp of the ${widget.awayTeamName}';
+      return '$base$connector $selectedOpp of the ${widget.awayTeamName}';
     }
     if (widget.awaySampleName != null) {
-      return '$base$againstText ${widget.awaySampleName} '
+      return '$base$connector ${widget.awaySampleName} '
           '#${widget.awaySampleJersey ?? '00'} of the ${widget.awayTeamName}';
     }
-    return '$base$againstText the ${widget.awayTeamName}';
+    return '$base$connector the ${widget.awayTeamName}';
   }
 
   /// Team only — no opposing player name (e.g. "… against the Yankees").
   String _withOpposingTeamOnly(String base) {
-    return '$base against the ${widget.awayTeamName}';
+    return '$base${_opponentConnector()} the ${widget.awayTeamName}';
   }
 
   String _actionPhraseForVariant(String id) {
@@ -935,6 +962,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         ..add(cat);
       _isFavorite = false;
       _wantsOpponent = true;
+      _omitAgainst = false;
+      _setText(_opponentJoiner, '');
       _previewIncludeOpponent = false;
       _usePluralPhrase = true;
       _subOptions = const VerbSubOptions(
@@ -1014,6 +1043,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           usePluralPhrase: _usePluralPhrase,
           keywords: parseVerbKeywordsField(_keywords.text),
           wantsOpponent: _wantsOpponent,
+          omitAgainst: _omitAgainst,
+          opponentJoiner: _omitAgainst ? _opponentJoiner.text.trim() : '',
           selectedCategory: _assignedCategory,
           subOptions: sub,
         );
@@ -1044,6 +1075,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           usePluralPhrase: _usePluralPhrase,
           keywords: parseVerbKeywordsField(_keywords.text),
           wantsOpponent: _wantsOpponent,
+          omitAgainst: _omitAgainst,
+          opponentJoiner: _omitAgainst ? _opponentJoiner.text.trim() : '',
           selectedCategory: _assignedCategory,
           subOptions: sub,
         );
@@ -1074,6 +1107,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           usePluralPhrase: _usePluralPhrase,
           keywords: parseVerbKeywordsField(_keywords.text),
           wantsOpponent: _wantsOpponent,
+          omitAgainst: _omitAgainst,
+          opponentJoiner: _omitAgainst ? _opponentJoiner.text.trim() : '',
           selectedCategory: _assignedCategory,
           subOptions: sub,
           asDefault: asDefault || asAppDefault,
@@ -1785,16 +1820,16 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   }
 
   Widget _buildEditor() {
-    final showRbi = !_isCustomContext &&
-        VerbSubOptions.showRbiEditor(
-          sport: widget.sport,
-          verbLabel: _verbLabelForMods,
-          value: _subOptions,
-        );
+    final showRbi = VerbSubOptions.showRbiEditor(
+      sport: widget.sport,
+      verbLabel: _verbLabelForMods,
+      value: _subOptions,
+    );
     final showCele = VerbSubOptions.showCelebrationEditor(
       verbLabel: _verbLabelForMods,
       value: _subOptions,
       isCustom: _isCustomContext,
+      sport: widget.sport,
     );
     final showCeleTypes = showCele &&
         !_isCustomContext &&
@@ -1916,9 +1951,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           bottomGap: 10,
         ),
         AppDialogLabeledTextField(
-          label: '-ing form',
+          label: 'Wording for reactions',
           controller: _ing,
-          hintText: 'e.g., hitting a single',
           maxLines: 1,
           bottomGap: 0,
           onChanged: (_) => setState(() {}),
@@ -1936,17 +1970,42 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         _sectionDivider(),
         _sectionHeader(
           'Preview',
-          trailing: _optionCheckbox(
-            value: _previewIncludeOpponent,
-            label: 'Include opponent',
-            onChanged: (v) => setState(() {
-              _previewIncludeOpponent = v;
-              _wantsOpponent = v;
-            }),
-            compact: true,
-            textColor: _v2?.textSecondary ?? Colors.white,
+          trailing: Wrap(
+            spacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _optionCheckbox(
+                value: _previewIncludeOpponent,
+                label: 'Include opponent',
+                onChanged: (v) => setState(() {
+                  _previewIncludeOpponent = v;
+                  _wantsOpponent = v;
+                  if (!v) _omitAgainst = false;
+                }),
+                compact: true,
+                textColor: _v2?.textSecondary ?? Colors.white,
+              ),
+              if (_previewIncludeOpponent)
+                _optionCheckbox(
+                  value: _omitAgainst,
+                  label: 'Custom joiner',
+                  onChanged: (v) => setState(() => _omitAgainst = v),
+                  compact: true,
+                  textColor: _v2?.textSecondary ?? Colors.white,
+                ),
+            ],
           ),
         ),
+        if (_previewIncludeOpponent && _omitAgainst) ...[
+          const SizedBox(height: 8),
+          AppDialogLabeledTextField(
+            label: 'Opponent joiner',
+            controller: _opponentJoiner,
+            hintText: 'e.g., after defeating  (blank = none)',
+            bottomGap: 0,
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
         const SizedBox(height: 8),
         _buildCaptionPreview(),
         _sectionDivider(),

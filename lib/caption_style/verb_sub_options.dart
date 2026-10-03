@@ -395,22 +395,29 @@ class VerbSubOptions {
       celebrationVerbs.contains(verbLabel);
 
   /// Baseball-only RBI block in the verb editor.
+  ///
+  /// Shown for every baseball verb (including customs) so users can opt in;
+  /// non-hit defaults keep [rbiEnabled] off via [defaultsFor].
   static bool showRbiEditor({
     required String? sport,
     required String verbLabel,
     VerbSubOptions? value,
   }) {
     if (!isBaseballSport(sport)) return false;
-    return isHitVerb(verbLabel) || (value?.rbiEnabled ?? false);
+    return true;
   }
 
-  /// Celebration block when the verb is celebration-related, already enabled,
-  /// or a custom verb (customs may opt into Cele; they never get RBI).
+  /// Celebration block in the verb editor.
+  ///
+  /// Always shown for baseball (any verb can opt in; defaults stay off for
+  /// non-hit / non-celebration verbs). Other sports keep the prior rules.
   static bool showCelebrationEditor({
     required String verbLabel,
     VerbSubOptions? value,
     bool isCustom = false,
+    String? sport,
   }) {
+    if (isBaseballSport(sport)) return true;
     return isCustom ||
         isHitVerb(verbLabel) ||
         isCelebrationVerb(verbLabel) ||
@@ -423,20 +430,17 @@ class VerbSubOptions {
     VerbSubOptions? value,
     bool isCustom = false,
   }) {
-    if (isCustom) {
-      // Custom verbs: Celebration only — never RBI.
-      return showCelebrationEditor(
-        verbLabel: verbLabel,
-        value: value,
-        isCustom: true,
-      );
-    }
     return showRbiEditor(
           sport: sport,
           verbLabel: verbLabel,
           value: value,
         ) ||
-        showCelebrationEditor(verbLabel: verbLabel, value: value);
+        showCelebrationEditor(
+          verbLabel: verbLabel,
+          value: value,
+          isCustom: isCustom,
+          sport: sport,
+        );
   }
 
   static String defaultCelebrationTypesForSport(String? sport) {
@@ -698,6 +702,7 @@ class VerbSubOptions {
   static bool legacyInningSelector(String verbLabel) {
     const verbs = {
       'At Bat',
+      'Pitches',
       'Pitching',
       'Swings',
       'Bunts',

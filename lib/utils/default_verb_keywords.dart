@@ -96,7 +96,9 @@ final Map<String, List<String>> _defaults = {
   'Bunts': ['bunt', 'bunts', 'bunting'],
   'Hit by Pitch': ['hbp', 'hit by pitch', 'plunked'],
   // Baseball — Defense
-  'Pitching': ['pitch', 'pitcher', 'pitching', 'mound'],
+  'Pitches': ['pitches', 'pitch', 'pitcher', 'pitching', 'mound'],
+  // Legacy label kept for older catalogs / keyboard aliases.
+  'Pitching': ['pitches', 'pitch', 'pitcher', 'pitching', 'mound'],
   'Mound Visit': ['mound visit', 'mound', 'visit', 'coach visit'],
   'Catches': ['catch', 'catches', 'catching', 'receiver'],
   'Throws': ['throw', 'throws', 'throwing', 'arm'],

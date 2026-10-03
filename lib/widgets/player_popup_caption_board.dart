@@ -2702,6 +2702,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
         text: effectiveVerb.pluralPhrase ?? effectiveVerb.verbPhrase);
     bool usePluralPhrase = effectiveVerb.usePluralPhrase;
     bool wantsOpponent = effectiveVerb.wantsOpponent;
+    bool omitAgainst = effectiveVerb.omitAgainst;
+    String opponentJoiner = effectiveVerb.opponentJoiner;
     bool removePlayerFromExample = false;
     String selectedCategory =
         targetCategory ?? verb.category ?? _verbCategories.keys.first;
@@ -2731,7 +2733,13 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     String buildExampleCaption(String verbPhrase, int playerCount) {
       final player1Name = homePlayer1?.fullName ?? 'Player One';
       final player2Name = homePlayer2?.fullName ?? 'Player Two';
-      const againstText = ' against';
+      final connector = omitAgainst
+          ? (opponentJoiner.trim().isEmpty
+              ? ''
+              : (opponentJoiner.trim().startsWith(' ')
+                  ? opponentJoiner.trim()
+                  : ' ${opponentJoiner.trim()}'))
+          : ' against';
 
       String subjects(int count) => count == 1
           ? '$player1Name #${homePlayer1?.jerseyNumber ?? '00'} of the $homeTeamName'
@@ -2739,12 +2747,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
 
       if (removePlayerFromExample) {
         // No opposing player — show team fallback (matches live captions).
-        return '${subjects(playerCount)}$verbPhrase$againstText the $awayTeamName';
+        return '${subjects(playerCount)}$verbPhrase$connector the $awayTeamName';
       }
       if (awayPlayer == null) {
-        return '${subjects(playerCount)}$verbPhrase$againstText [no opposing player selected]';
+        return '${subjects(playerCount)}$verbPhrase$connector [no opposing player selected]';
       }
-      return '${subjects(playerCount)}$verbPhrase$againstText ${awayPlayer.fullName} #${awayPlayer.jerseyNumber} of the $awayTeamName';
+      return '${subjects(playerCount)}$verbPhrase$connector ${awayPlayer.fullName} #${awayPlayer.jerseyNumber} of the $awayTeamName';
     }
 
     showDialog(
@@ -2884,6 +2892,31 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             AppCompactCheckbox(
+                              value: omitAgainst,
+                              accentColor: kFloTealLight,
+                              onChanged: (value) {
+                                setDialogState(() => omitAgainst = value);
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Omit "against"',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 11,
+                                  color: Colors.grey.shade700,
+                                ),
+                                softWrap: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AppCompactCheckbox(
                               value: removePlayerFromExample,
                               accentColor: kFloTealLight,
                               onChanged: (value) {
@@ -2945,6 +2978,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                     : pluralController.text,
                                 usePluralPhrase,
                                 wantsOpponent,
+                                omitAgainst,
+                                opponentJoiner,
                                 parseVerbKeywordsField(
                                     keywordsController.text),
                                 selectedCategory,
@@ -2972,6 +3007,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
     String? newPlural,
     bool usePluralPhrase,
     bool wantsOpponent,
+    bool omitAgainst,
+    String opponentJoiner,
     List<String> newKeywords,
     String category,
   ) async {
@@ -2996,6 +3033,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
       usePluralPhrase: usePluralPhrase,
       keywords: newKeywords,
       wantsOpponent: wantsOpponent,
+      omitAgainst: omitAgainst,
+      opponentJoiner: omitAgainst ? opponentJoiner.trim() : '',
       isCustom: originalVerb.isCustom,
       category: category,
     );
@@ -4035,6 +4074,8 @@ class VerbOption {
   /// IPTC-style search terms for this verb (comma-separated in editors).
   final List<String> keywords;
   final bool wantsOpponent;
+  final bool omitAgainst;
+  final String opponentJoiner;
   final bool isCustom;
   final String? category; // Category this verb belongs to
 
@@ -4045,6 +4086,8 @@ class VerbOption {
     this.usePluralPhrase = true,
     List<String>? keywords,
     this.wantsOpponent = true,
+    this.omitAgainst = false,
+    this.opponentJoiner = '',
     this.isCustom = false,
     this.category,
   }) : keywords = keywords ?? const [];
@@ -4068,6 +4111,8 @@ class VerbOption {
     bool? usePluralPhrase,
     List<String>? keywords,
     bool? wantsOpponent,
+    bool? omitAgainst,
+    String? opponentJoiner,
     bool? isCustom,
     String? category,
   }) {
@@ -4078,6 +4123,8 @@ class VerbOption {
       usePluralPhrase: usePluralPhrase ?? this.usePluralPhrase,
       keywords: keywords ?? this.keywords,
       wantsOpponent: wantsOpponent ?? this.wantsOpponent,
+      omitAgainst: omitAgainst ?? this.omitAgainst,
+      opponentJoiner: opponentJoiner ?? this.opponentJoiner,
       isCustom: isCustom ?? this.isCustom,
       category: category ?? this.category,
     );
@@ -4092,6 +4139,8 @@ class VerbOption {
       'usePluralPhrase': usePluralPhrase,
       'keywords': keywords,
       'wantsOpponent': wantsOpponent,
+      'omitAgainst': omitAgainst,
+      'opponentJoiner': opponentJoiner,
       'isCustom': isCustom,
       'category': category,
     };
@@ -4106,6 +4155,8 @@ class VerbOption {
       usePluralPhrase: json['usePluralPhrase'] as bool? ?? true,
       keywords: verbKeywordsFromJson(json['keywords']),
       wantsOpponent: json['wantsOpponent'] as bool? ?? true,
+      omitAgainst: json['omitAgainst'] as bool? ?? false,
+      opponentJoiner: (json['opponentJoiner'] ?? '').toString(),
       isCustom: json['isCustom'] as bool? ?? true,
       category: json['category'] as String?,
     );

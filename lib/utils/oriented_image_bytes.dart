@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:typed_data';
@@ -16,6 +17,9 @@ class OrientedImageBytes {
 
   static const _cacheVersion = 'macos-ci-srgb-v2';
   static const _maxCacheBytes = 32 * 1024 * 1024;
+  static const _maxDecodes = 2;
+  static int _decodesInFlight = 0;
+  static final List<Completer<void>> _decodeWaiters = [];
 
   static String _cacheKey(String path, int? maxWidth) =>
       '$_cacheVersion|$path|${maxWidth ?? 0}';
@@ -50,6 +54,45 @@ class OrientedImageBytes {
     final hit = _readCache(key);
     if (hit != null) return hit;
 
+    final priority = maxWidth != null && maxWidth >= 800;
+    await _acquireDecode(priority: priority);
+    try {
+      final again = _readCache(key);
+      if (again != null) return again;
+      return await _decodeUncached(file, path, maxWidth, key);
+    } finally {
+      _releaseDecode();
+    }
+  }
+
+  static Future<void> _acquireDecode({required bool priority}) {
+    if (_decodesInFlight < _maxDecodes) {
+      _decodesInFlight++;
+      return Future.value();
+    }
+    final waiter = Completer<void>();
+    if (priority) {
+      _decodeWaiters.insert(0, waiter);
+    } else {
+      _decodeWaiters.add(waiter);
+    }
+    return waiter.future;
+  }
+
+  static void _releaseDecode() {
+    if (_decodeWaiters.isNotEmpty) {
+      _decodeWaiters.removeAt(0).complete();
+      return;
+    }
+    _decodesInFlight--;
+  }
+
+  static Future<Uint8List?> _decodeUncached(
+    File file,
+    String path,
+    int? maxWidth,
+    String key,
+  ) async {
     final maxPx = maxWidth != null && maxWidth > 0 ? maxWidth : 4096;
 
     if (ColorManagedPreviewChannel.supported) {

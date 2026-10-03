@@ -20,6 +20,7 @@ class VerbCaptionWording {
         return 'grand slam';
       case 'At Bat':
         return 'takes an at bat in his batting stance';
+      case 'Pitches':
       case 'Pitching':
         return 'delivers a pitch';
       case 'Mound Visit':
@@ -199,6 +200,7 @@ class VerbCaptionWording {
       'Grand Slam': 'hit a grand slam',
       'Sacrifice Fly': 'hits a sacrifice fly',
       'At Bat': 'take an at bat in their batting stance',
+      'Pitches': 'deliver a pitch',
       'Pitching': 'deliver a pitch',
       'Swings': 'swing',
       'Bunts': 'bunt',
@@ -263,6 +265,7 @@ class VerbCaptionWording {
       'Runs': 'running to a base',
       'Rounds': 'rounding a base',
       'At Bat': 'taking an at bat in his batting stance',
+      'Pitches': 'delivering a pitch',
       'Pitching': 'delivering a pitch',
       'Swings': 'swinging',
       'Catches': 'catching a ball',

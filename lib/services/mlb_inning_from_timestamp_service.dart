@@ -95,6 +95,19 @@ class MlbInningFromTimestampService {
     required String userAwayName,
     required DateTime calendarDay,
   }) async {
+    final games = await _findScheduledGames(
+      userHomeName: userHomeName,
+      userAwayName: userAwayName,
+      calendarDay: calendarDay,
+    );
+    return [for (final game in games) game.gamePk];
+  }
+
+  Future<List<_ScheduledGame>> _findScheduledGames({
+    required String userHomeName,
+    required String userAwayName,
+    required DateTime calendarDay,
+  }) async {
     final home = await _mlb.findTeamByName(userHomeName);
     final away = await _mlb.findTeamByName(userAwayName);
     if (home == null || away == null) return const [];
@@ -119,7 +132,8 @@ class MlbInningFromTimestampService {
     final awayId = int.tryParse(away.id);
     if (homeId == null || awayId == null) return const [];
 
-    final pks = <int>{};
+    final games = <_ScheduledGame>[];
+    final seen = <int>{};
     for (final teamId in {home.id, away.id}) {
       final list = await gamesForTeam(teamId);
       for (final g in list) {
@@ -137,11 +151,30 @@ class MlbInningFromTimestampService {
         if ((h == homeId && a == awayId) || (h == awayId && a == homeId)) {
           final pk = g['gamePk'];
           final id = pk is int ? pk : int.tryParse(pk?.toString() ?? '');
-          if (id != null) pks.add(id);
+          if (id != null && seen.add(id)) {
+            games.add(_ScheduledGame(gamePk: id, isFinal: _gameIsFinal(g)));
+          }
         }
       }
     }
-    return pks.toList();
+    return games;
+  }
+
+  /// `null` when the schedule payload has no usable status.
+  static bool? _gameIsFinal(Map<String, dynamic> game) {
+    final status = game['status'];
+    if (status is! Map) return null;
+    final abstract = status['abstractGameState']?.toString().trim() ?? '';
+    if (abstract == 'Final') return true;
+    if (abstract == 'Live' || abstract == 'Preview') return false;
+    final detailed = status['detailedState']?.toString().toLowerCase() ?? '';
+    if (detailed.contains('final') ||
+        detailed.contains('game over') ||
+        detailed.contains('completed')) {
+      return true;
+    }
+    if (abstract.isEmpty && detailed.isEmpty) return null;
+    return false;
   }
 
   /// Finds [gamePk] where the two franchises match (home/away may be swapped
@@ -232,10 +265,17 @@ class MlbInningFromTimestampService {
   ///
   /// A doubleheader produces two timelines. The earlier game must not steal a
   /// photo taken during the later one.
+  ///
+  /// [gameIsFinal] aligns with [games]. `false` means the game is still in
+  /// progress, so a photo after the last logged play stays in that inning
+  /// instead of "following the game". `null` uses a short grace window.
   static MlbPhotoInningLookup timelineForPhoto(
     List<List<MlbPlayStart>> games,
-    DateTime photoTimeUtc,
-  ) {
+    DateTime photoTimeUtc, {
+    DateTime? photoCalendarDay,
+    List<DateTime?>? gameCalendarDays,
+    List<bool?>? gameIsFinal,
+  }) {
     if (games.isEmpty) {
       return const MlbPhotoInningLookup(
         hasScheduleMatch: false,
@@ -243,9 +283,19 @@ class MlbInningFromTimestampService {
       );
     }
     final scored = <_ScoredTimeline>[];
-    for (final plays in games) {
+    for (var i = 0; i < games.length; i++) {
+      final plays = games[i];
       if (plays.isEmpty) continue;
-      scored.add(_scoreTimeline(plays, photoTimeUtc));
+      scored.add(_scoreTimeline(
+        plays,
+        photoTimeUtc,
+        gameCalendarDay: gameCalendarDays != null && i < gameCalendarDays.length
+            ? gameCalendarDays[i]
+            : null,
+        gameIsFinal: gameIsFinal != null && i < gameIsFinal.length
+            ? gameIsFinal[i]
+            : null,
+      ));
     }
     if (scored.isEmpty) {
       return const MlbPhotoInningLookup(
@@ -254,17 +304,74 @@ class MlbInningFromTimestampService {
       );
     }
     scored.sort((a, b) {
-      final liveCmp = (a.inside ? 0 : 1).compareTo(b.inside ? 0 : 1);
-      if (liveCmp != 0) return liveCmp;
+      final cover = a.coverRank.compareTo(b.coverRank);
+      if (cover != 0) return cover;
       return a.distance.compareTo(b.distance);
     });
-    return scored.first.lookup;
+    if (scored.first.inside) return scored.first.lookup;
+    return _pickOutsideGame(
+      scored,
+      photoTimeUtc,
+      photoCalendarDay: photoCalendarDay,
+    );
   }
+
+  /// A photo taken before first pitch of the game on the same date uses the
+  /// pregame caption. Another date's finished game does not turn it into
+  /// "following the game".
+  static MlbPhotoInningLookup _pickOutsideGame(
+    List<_ScoredTimeline> scored,
+    DateTime photoTimeUtc, {
+    DateTime? photoCalendarDay,
+  }) {
+    bool sameDate(_ScoredTimeline item) {
+      final pitch = item.firstPitch.toUtc();
+      final photo = photoTimeUtc.toUtc();
+      if (_sameYmd(pitch, photo)) return true;
+      if (photoCalendarDay != null && _sameYmd(pitch, photoCalendarDay)) {
+        return true;
+      }
+      if (item.gameCalendarDay != null &&
+          photoCalendarDay != null &&
+          _sameYmd(item.gameCalendarDay!, photoCalendarDay)) {
+        return true;
+      }
+      return false;
+    }
+
+    final sameDay = scored.where(sameDate).toList();
+    final pool = sameDay.isNotEmpty ? sameDay : scored;
+    final pre = pool
+        .where((item) => item.lookup.phase == MlbPhotoGametimePhase.pregame)
+        .toList()
+      ..sort((a, b) => a.distance.compareTo(b.distance));
+    if (sameDay.isNotEmpty && pre.isNotEmpty) return pre.first.lookup;
+
+    final post = pool
+        .where((item) => item.lookup.phase == MlbPhotoGametimePhase.postgame)
+        .toList()
+      ..sort((a, b) => a.distance.compareTo(b.distance));
+    if (pre.isEmpty) return post.first.lookup;
+    if (post.isEmpty) return pre.first.lookup;
+    return post.first.distance <= pre.first.distance
+        ? post.first.lookup
+        : pre.first.lookup;
+  }
+
+  static bool _sameYmd(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
+
+  /// How long after the last logged play a photo can still be that inning when
+  /// the schedule didn't say the game is live. Covers the gap between pitches
+  /// and inning breaks without calling the next morning "the 9th inning".
+  static const Duration liveGraceAfterLastPlay = Duration(minutes: 45);
 
   static _ScoredTimeline _scoreTimeline(
     List<MlbPlayStart> plays,
-    DateTime photoTimeUtc,
-  ) {
+    DateTime photoTimeUtc, {
+    DateTime? gameCalendarDay,
+    bool? gameIsFinal,
+  }) {
     final firstStart = plays.first.startUtc;
     final endBound = gameEndUtc(plays);
     if (photoTimeUtc.isBefore(firstStart)) {
@@ -275,10 +382,33 @@ class MlbInningFromTimestampService {
           phase: MlbPhotoGametimePhase.pregame,
         ),
         inside: false,
+        coverRank: 2,
         distance: firstStart.difference(photoTimeUtc),
+        boundary: firstStart,
+        firstPitch: firstStart,
+        gameCalendarDay: gameCalendarDay,
       );
     }
     if (photoTimeUtc.isAfter(endBound)) {
+      final sinceLastPlay = photoTimeUtc.difference(endBound);
+      final stillLive = gameIsFinal == false ||
+          (gameIsFinal != true && sinceLastPlay <= liveGraceAfterLastPlay);
+      if (stillLive) {
+        return _ScoredTimeline(
+          lookup: MlbPhotoInningLookup(
+            hasScheduleMatch: true,
+            hasPlayByPlay: true,
+            phase: MlbPhotoGametimePhase.live,
+            inningNumber: plays.last.inning,
+          ),
+          inside: true,
+          coverRank: 1,
+          distance: sinceLastPlay,
+          boundary: endBound,
+          firstPitch: firstStart,
+          gameCalendarDay: gameCalendarDay,
+        );
+      }
       return _ScoredTimeline(
         lookup: const MlbPhotoInningLookup(
           hasScheduleMatch: true,
@@ -286,7 +416,11 @@ class MlbInningFromTimestampService {
           phase: MlbPhotoGametimePhase.postgame,
         ),
         inside: false,
-        distance: photoTimeUtc.difference(endBound),
+        coverRank: 2,
+        distance: sinceLastPlay,
+        boundary: endBound,
+        firstPitch: firstStart,
+        gameCalendarDay: gameCalendarDay,
       );
     }
     return _ScoredTimeline(
@@ -297,7 +431,11 @@ class MlbInningFromTimestampService {
         inningNumber: inningAtUtc(plays, photoTimeUtc),
       ),
       inside: true,
+      coverRank: 0,
       distance: Duration.zero,
+      boundary: photoTimeUtc,
+      firstPitch: firstStart,
+      gameCalendarDay: gameCalendarDay,
     );
   }
 
@@ -319,25 +457,36 @@ class MlbInningFromTimestampService {
     addAround(gameCalendarDay);
     if (photoCalendarDay != null) addAround(photoCalendarDay);
 
-    final pks = <int>{};
+    final timelines = <List<MlbPlayStart>>[];
+    final gameDays = <DateTime?>[];
+    final finals = <bool?>[];
+    final seenPks = <int>{};
     for (final day in days) {
-      pks.addAll(await findGamePksForTeamsOnDate(
+      final scheduled = await _findScheduledGames(
         userHomeName: userHomeName,
         userAwayName: userAwayName,
         calendarDay: day,
-      ));
+      );
+      for (final game in scheduled) {
+        if (!seenPks.add(game.gamePk)) continue;
+        timelines.add(await _loadTimeline(game.gamePk));
+        gameDays.add(DateTime(day.year, day.month, day.day));
+        finals.add(game.isFinal);
+      }
     }
-    if (pks.isEmpty) {
+    if (seenPks.isEmpty) {
       return const MlbPhotoInningLookup(
         hasScheduleMatch: false,
         hasPlayByPlay: false,
       );
     }
-    final timelines = <List<MlbPlayStart>>[];
-    for (final pk in pks) {
-      timelines.add(await _loadTimeline(pk));
-    }
-    return timelineForPhoto(timelines, photoTimeUtc);
+    return timelineForPhoto(
+      timelines,
+      photoTimeUtc,
+      photoCalendarDay: photoCalendarDay ?? gameCalendarDay,
+      gameCalendarDays: gameDays,
+      gameIsFinal: finals,
+    );
   }
 
   Future<int?> resolveInning({
@@ -362,12 +511,38 @@ class _ScoredTimeline {
   const _ScoredTimeline({
     required this.lookup,
     required this.inside,
+    required this.coverRank,
     required this.distance,
+    required this.boundary,
+    required this.firstPitch,
+    this.gameCalendarDay,
   });
 
   final MlbPhotoInningLookup lookup;
   final bool inside;
+
+  /// 0 = photo falls inside logged plays, 1 = game still live after the last
+  /// logged play, 2 = before first pitch or after a finished game.
+  final int coverRank;
   final Duration distance;
+
+  /// First pitch when [lookup] is pregame, last play when postgame.
+  final DateTime boundary;
+
+  /// First pitch of this game, used to match the photo's calendar date.
+  final DateTime firstPitch;
+
+  /// Schedule date this timeline was loaded for, when known.
+  final DateTime? gameCalendarDay;
+}
+
+class _ScheduledGame {
+  const _ScheduledGame({required this.gamePk, required this.isFinal});
+
+  final int gamePk;
+
+  /// `true` when the schedule says the game is final. `null` if unknown.
+  final bool? isFinal;
 }
 
 class MlbPlayStart {

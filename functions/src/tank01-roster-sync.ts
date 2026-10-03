@@ -71,12 +71,34 @@ const LEAGUES: LeagueSpec[] = [
 
 export const TANK01_ROOT = "sports_tank01";
 
+export interface Tank01MissingJerseyPlayer {
+  sportId: string;
+  teamId: string;
+  teamName: string;
+  playerName: string;
+  playerId: string | null;
+  position: string | null;
+}
+
+export interface Tank01DuplicateJerseyPlayer {
+  sportId: string;
+  teamId: string;
+  teamName: string;
+  playerName: string;
+  jerseyNumber: string;
+  alsoWornBy: string;
+  playerId: string | null;
+  position: string | null;
+}
+
 export interface Tank01SportTotals {
   teams: number;
   playersWritten: number;
   added: number;
   updated: number;
   removed: number;
+  missingJersey: number;
+  duplicateJersey: number;
   errors: string[];
 }
 
@@ -87,6 +109,8 @@ export interface Tank01SyncTotals {
   added: number;
   updated: number;
   removed: number;
+  missingJersey: number;
+  duplicateJersey: number;
   bySport: Record<string, Tank01SportTotals>;
   changedPlayers: Array<{
     sportId: string;
@@ -95,6 +119,8 @@ export interface Tank01SyncTotals {
     changeType: "added" | "updated" | "removed";
     playerName: string;
   }>;
+  missingJerseyPlayers: Tank01MissingJerseyPlayer[];
+  duplicateJerseyPlayers: Tank01DuplicateJerseyPlayer[];
   errors: string[];
 }
 
@@ -117,6 +143,33 @@ function playerChanged(
     if (cur[key] !== p[key]) return true;
   }
   return false;
+}
+
+/** Keep manually verified jerseys when Tank01 still returns blank. */
+function withPreservedManualJersey(
+  cur: Record<string, unknown>,
+  incoming: Tank01Player,
+): { player: Tank01Player; keptManual: boolean } {
+  const incomingJersey = (incoming.jerseyNumber ?? "").toString().trim();
+  if (incomingJersey) {
+    return { player: incoming, keptManual: false };
+  }
+  const source = String(cur.jerseySource ?? "").trim();
+  if (source !== "manual") {
+    return { player: incoming, keptManual: false };
+  }
+  const existingJersey = String(cur.jerseyNumber ?? "").trim();
+  if (!existingJersey) {
+    return { player: incoming, keptManual: false };
+  }
+  return {
+    player: {
+      ...incoming,
+      jerseyNumber: existingJersey,
+      displayName: `${incoming.fullName} #${existingJersey}`,
+    },
+    keptManual: true,
+  };
 }
 
 async function tank01GetJson(
@@ -231,6 +284,8 @@ async function reconcileTeamPlayers(
   updated: number;
   removed: number;
   changedPlayers: Tank01SyncTotals["changedPlayers"];
+  missingJerseyPlayers: Tank01MissingJerseyPlayer[];
+  duplicateJerseyPlayers: Tank01DuplicateJerseyPlayer[];
 }> {
   const teamRef = db
     .collection(TANK01_ROOT)
@@ -255,11 +310,14 @@ async function reconcileTeamPlayers(
   const updates: Array<[string, Tank01Player]> = [];
   const removes: string[] = [];
   const changedPlayers: Tank01SyncTotals["changedPlayers"] = [];
+  const preservedManual = new Set<string>();
+  const effectiveById = new Map<string, Tank01Player>();
 
   for (const [id, p] of target) {
     const cur = existing.get(id);
     if (!cur) {
       adds.push([id, p]);
+      effectiveById.set(id, p);
       changedPlayers.push({
         sportId,
         teamId: teamAbv,
@@ -269,14 +327,17 @@ async function reconcileTeamPlayers(
       });
       continue;
     }
-    if (playerChanged(cur, p)) {
-      updates.push([id, p]);
+    const { player: effective, keptManual } = withPreservedManualJersey(cur, p);
+    if (keptManual) preservedManual.add(id);
+    effectiveById.set(id, effective);
+    if (playerChanged(cur, effective)) {
+      updates.push([id, effective]);
       changedPlayers.push({
         sportId,
         teamId: teamAbv,
         teamName: teamDisplayName,
         changeType: "updated",
-        playerName: p.fullName,
+        playerName: effective.fullName,
       });
     }
   }
@@ -290,6 +351,46 @@ async function reconcileTeamPlayers(
         teamName: teamDisplayName,
         changeType: "removed",
         playerName: name,
+      });
+    }
+  }
+
+  const missingJerseyPlayers: Tank01MissingJerseyPlayer[] = [];
+  const byJersey = new Map<string, Tank01Player[]>();
+  for (const p of effectiveById.values()) {
+    const jersey = (p.jerseyNumber ?? "").toString().trim();
+    if (!jersey) {
+      missingJerseyPlayers.push({
+        sportId,
+        teamId: teamAbv,
+        teamName: teamDisplayName,
+        playerName: p.fullName,
+        playerId: p.playerId,
+        position: p.position,
+      });
+      continue;
+    }
+    const list = byJersey.get(jersey) ?? [];
+    list.push(p);
+    byJersey.set(jersey, list);
+  }
+  const duplicateJerseyPlayers: Tank01DuplicateJerseyPlayer[] = [];
+  for (const [jersey, players] of byJersey) {
+    if (players.length < 2) continue;
+    for (const p of players) {
+      const others = players
+        .filter((x) => x !== p)
+        .map((x) => x.fullName)
+        .join(", ");
+      duplicateJerseyPlayers.push({
+        sportId,
+        teamId: teamAbv,
+        teamName: teamDisplayName,
+        playerName: p.fullName,
+        jerseyNumber: jersey,
+        alsoWornBy: others,
+        playerId: p.playerId,
+        position: p.position,
       });
     }
   }
@@ -311,7 +412,14 @@ async function reconcileTeamPlayers(
     removes.length === 0 &&
     Object.keys(teamDocPatch).length === 0
   ) {
-    return { added: 0, updated: 0, removed: 0, changedPlayers: [] };
+    return {
+      added: 0,
+      updated: 0,
+      removed: 0,
+      changedPlayers: [],
+      missingJerseyPlayers,
+      duplicateJerseyPlayers,
+    };
   }
 
   const chunkSize = 400;
@@ -326,7 +434,14 @@ async function reconcileTeamPlayers(
 
   if (ops.length === 0) {
     await teamRef.set(teamDocPatch, { merge: true });
-    return { added: 0, updated: 0, removed: 0, changedPlayers: [] };
+    return {
+      added: 0,
+      updated: 0,
+      removed: 0,
+      changedPlayers: [],
+      missingJerseyPlayers,
+      duplicateJerseyPlayers,
+    };
   }
 
   for (let i = 0; i < ops.length; i += chunkSize) {
@@ -338,6 +453,9 @@ async function reconcileTeamPlayers(
       const ref = playersCol.doc(op.id);
       if (op.type === "set") {
         const p = op.player;
+        const keepManual = preservedManual.has(op.id);
+        const incomingHasJersey =
+          !!(p.jerseyNumber ?? "").toString().trim() && !keepManual;
         batch.set(
           ref,
           {
@@ -347,6 +465,8 @@ async function reconcileTeamPlayers(
             displayName: p.displayName,
             ...(p.playerId ? { playerId: p.playerId } : {}),
             ...(p.position ? { position: p.position } : {}),
+            ...(keepManual ? { jerseySource: "manual" } : {}),
+            ...(incomingHasJersey ? { jerseySource: "tank01" } : {}),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
@@ -363,6 +483,8 @@ async function reconcileTeamPlayers(
     updated: updates.length,
     removed: removes.length,
     changedPlayers,
+    missingJerseyPlayers,
+    duplicateJerseyPlayers,
   };
 }
 
@@ -379,8 +501,12 @@ export async function syncAllTank01Rosters(
     added: 0,
     updated: 0,
     removed: 0,
+    missingJersey: 0,
+    duplicateJersey: 0,
     bySport: {},
     changedPlayers: [],
+    missingJerseyPlayers: [],
+    duplicateJerseyPlayers: [],
     errors: [],
   };
 
@@ -391,6 +517,8 @@ export async function syncAllTank01Rosters(
       added: 0,
       updated: 0,
       removed: 0,
+      missingJersey: 0,
+      duplicateJersey: 0,
       errors: [],
     };
     logger.info(`Tank01 sync: fetching ${league.label} teams`);
@@ -420,7 +548,11 @@ export async function syncAllTank01Rosters(
         sportTotals.added += result.added;
         sportTotals.updated += result.updated;
         sportTotals.removed += result.removed;
+        sportTotals.missingJersey += result.missingJerseyPlayers.length;
+        sportTotals.duplicateJersey += result.duplicateJerseyPlayers.length;
         totals.changedPlayers.push(...result.changedPlayers);
+        totals.missingJerseyPlayers.push(...result.missingJerseyPlayers);
+        totals.duplicateJerseyPlayers.push(...result.duplicateJerseyPlayers);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         sportTotals.errors.push(`${team.name} (${team.abv}): ${msg}`);
@@ -437,6 +569,8 @@ export async function syncAllTank01Rosters(
     totals.added += sportTotals.added;
     totals.updated += sportTotals.updated;
     totals.removed += sportTotals.removed;
+    totals.missingJersey += sportTotals.missingJersey;
+    totals.duplicateJersey += sportTotals.duplicateJersey;
     totals.bySport[league.sportId] = sportTotals;
     logger.info(`Tank01 sync: ${league.label} done`, sportTotals);
   }

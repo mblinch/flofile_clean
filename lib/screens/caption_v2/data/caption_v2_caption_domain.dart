@@ -161,11 +161,15 @@ class CaptionV2CaptionDomain {
   /// Joins an action to a selected opponent or the opposing team.
   ///
   /// V1 gives a few verbs a more precise participant role than "against".
+  /// For the default case, [opponentJoiner] is used exactly (trimmed);
+  /// empty means no joiner word. Defaults to `against`.
   static String withOpponent({
     required String verb,
     required String action,
     required String opponentTeam,
     String? opposingPlayers,
+    bool omitAgainst = false,
+    String opponentJoiner = 'against',
   }) {
     final named = opposingPlayers?.trim();
     final target = named != null && named.isNotEmpty
@@ -182,8 +186,22 @@ class CaptionV2CaptionDomain {
       case 'Contests':
         return '$action by $target';
       default:
-        return '$action against $target';
+        // Legacy: omitAgainst with no joiner text → no connector.
+        final joiner = opponentJoiner.trim().isEmpty && omitAgainst
+            ? ''
+            : opponentJoiner;
+        return '$action${opponentConnector(opponentJoiner: joiner)} $target';
     }
+  }
+
+  /// Leading connector before the opponent target — strictly [opponentJoiner].
+  /// Empty / whitespace-only → no connector word.
+  static String opponentConnector({
+    String opponentJoiner = 'against',
+  }) {
+    final joiner = opponentJoiner.trim();
+    if (joiner.isEmpty) return '';
+    return ' $joiner';
   }
 
   static String _v1DefaultWording(String verb, String sport) {

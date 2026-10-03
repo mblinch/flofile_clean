@@ -14,6 +14,7 @@ import '../../../caption_style/caption_text_normalize.dart';
 import '../../../caption_style/game_info.dart';
 import '../../../caption_style/verb_authoring_model.dart';
 import '../../../caption_style/verb_caption_wording.dart';
+import '../../../caption_style/verb_sort_mode.dart';
 import '../../../caption_style/verb_sub_options.dart';
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/api_manager.dart';
@@ -245,6 +246,8 @@ class CaptionV2Controller extends ChangeNotifier {
   PreferencesService? _prefs;
   EffectiveVerbRepository? _verbRepository;
   EffectiveVerbCatalog _verbCatalog = EffectiveVerbCatalog.factory('baseball');
+  VerbSortMode verbSortMode = VerbSortMode.alphabetical;
+  Map<String, int> _verbUsageCounts = {};
 
   // --- Game / teams ---
   String homeTeam = '';
@@ -318,6 +321,7 @@ class CaptionV2Controller extends ChangeNotifier {
   bool captionSelectionStarted = false;
   String? celebrationType;
   String? pinnedVerb;
+  RosterHit? pinnedPlayer;
   String? verbCategory = 'Offense';
   String personality = '';
   String? manualCaptionOverride;
@@ -954,14 +958,50 @@ class CaptionV2Controller extends ChangeNotifier {
   EffectiveVerbCatalog get verbCatalog => _verbCatalog;
   List<String> get verbCategories => _verbCatalog.categoryOrder;
   Map<String, List<String>> get verbsByCategory => {
-        for (final entry in _verbCatalog.verbsByCategory.entries)
+        for (final entry in verbDefinitionsByCategory.entries)
           entry.key: entry.value.map((verb) => verb.key).toList(),
       };
-  Map<String, List<EffectiveVerb>> get verbDefinitionsByCategory =>
-      _verbCatalog.verbsByCategory;
+  Map<String, List<EffectiveVerb>> get verbDefinitionsByCategory {
+    final sorted = <String, List<EffectiveVerb>>{};
+    for (final entry in _verbCatalog.verbsByCategory.entries) {
+      sorted[entry.key] = _sortedVerbs(entry.value);
+    }
+    return sorted;
+  }
+
+  List<EffectiveVerb> _sortedVerbs(List<EffectiveVerb> verbs) {
+    if (verbs.length <= 1) return List<EffectiveVerb>.from(verbs);
+    switch (verbSortMode) {
+      case VerbSortMode.custom:
+        return List<EffectiveVerb>.from(verbs);
+      case VerbSortMode.mostUsed:
+        final ranked = List<EffectiveVerb>.from(verbs);
+        ranked.sort((a, b) {
+          final byCount =
+              (_verbUsageCounts[b.key] ?? 0).compareTo(_verbUsageCounts[a.key] ?? 0);
+          if (byCount != 0) return byCount;
+          return a.label.toLowerCase().compareTo(b.label.toLowerCase());
+        });
+        return ranked;
+      case VerbSortMode.alphabetical:
+        final ranked = List<EffectiveVerb>.from(verbs);
+        ranked.sort(
+          (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+        );
+        return ranked;
+    }
+  }
+
   EffectiveVerb? verbDefinition(String key) => _verbCatalog.byKey[key];
   bool isVerbFavorite(String key) => _verbCatalog.favoriteKeys.contains(key);
   bool isVerbPinned(String key) => pinnedVerb == key;
+  int verbUsageCount(String key) => _verbUsageCounts[key] ?? 0;
+
+  bool isPlayerPinned(Player player, {required bool isHome}) {
+    final pinned = pinnedPlayer;
+    if (pinned == null || pinned.isHome != isHome) return false;
+    return _samePlayer(pinned.player, player);
+  }
 
   List<String> get verbsInCategory {
     final cat = verbCategory ?? verbsByCategory.keys.first;
@@ -1502,7 +1542,9 @@ class CaptionV2Controller extends ChangeNotifier {
       }
     }
 
-    if (hasOpponentTeam &&
+    final includeOpponent = definition?.wantsOpponent ?? true;
+    if (includeOpponent &&
+        hasOpponentTeam &&
         !action.toLowerCase().contains(opponentTeam.trim().toLowerCase())) {
       action = CaptionV2CaptionDomain.withOpponent(
         verb: verb,
@@ -1511,6 +1553,8 @@ class CaptionV2Controller extends ChangeNotifier {
         opposingPlayers: opposingPlayers.isEmpty
             ? null
             : _formatPlayersWithTeam(opposingPlayers, captionTemplate),
+        omitAgainst: definition?.omitAgainst ?? false,
+        opponentJoiner: definition?.opponentJoiner ?? 'against',
       );
     }
 
@@ -1679,6 +1723,10 @@ class CaptionV2Controller extends ChangeNotifier {
     _prefs = await PreferencesService.getInstance();
     _verbRepository = EffectiveVerbRepository(_prefs!);
     sport = await _prefs!.getCurrentSport();
+    // Always open A–Z; usage counts + custom verbOrder still persist.
+    verbSortMode = VerbSortMode.alphabetical;
+    await _prefs!.saveVerbSortMode(VerbSortMode.alphabetical);
+    _verbUsageCounts = await _prefs!.getVerbUsageCountsForSport(sport);
     await _loadVerbCatalog();
     // V2 always auto-detects bursts from capture times; no session toggle.
     burstDetectionEnabled = true;
@@ -1740,6 +1788,10 @@ class CaptionV2Controller extends ChangeNotifier {
     final repository = _verbRepository;
     if (repository == null) return;
     _verbCatalog = await repository.load(sport);
+    final prefs = _prefs;
+    if (prefs != null) {
+      _verbUsageCounts = await prefs.getVerbUsageCountsForSport(sport);
+    }
     if (!_verbCatalog.verbsByCategory.containsKey(verbCategory)) {
       verbCategory = _verbCatalog.categoryOrder.isEmpty
           ? null
@@ -1820,6 +1872,7 @@ class CaptionV2Controller extends ChangeNotifier {
     this.countryCode = countryCode;
     burstDetectionEnabled = true;
     pinnedVerb = null;
+    pinnedPlayer = null;
     customVerbPhrase = '';
     lastCustomVerbPhrase = '';
     customVerbPinned = false;
@@ -1897,20 +1950,14 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void _reconcileSelectedPlayersAfterRosterChange() {
+    pinnedPlayer = _resolvePinnedPlayer();
     if (selectedPlayers.isEmpty) {
       _syncPrimaryPlayer();
       return;
     }
     final kept = <RosterHit>[];
     for (final row in selectedPlayers) {
-      final roster = row.isHome ? homeRoster : awayRoster;
-      Player? match;
-      for (final player in roster) {
-        if (_samePlayer(player, row.player)) {
-          match = player;
-          break;
-        }
-      }
+      final match = _findRosterPlayer(row.player, isHome: row.isHome);
       if (match != null) {
         kept.add(RosterHit(player: match, isHome: row.isHome));
       }
@@ -1924,6 +1971,22 @@ class CaptionV2Controller extends ChangeNotifier {
     _syncPrimaryPlayer();
     _syncPersonality();
     _syncKeywords();
+  }
+
+  Player? _findRosterPlayer(Player player, {required bool isHome}) {
+    final roster = isHome ? homeRoster : awayRoster;
+    for (final candidate in roster) {
+      if (_samePlayer(candidate, player)) return candidate;
+    }
+    return null;
+  }
+
+  RosterHit? _resolvePinnedPlayer() {
+    final pinned = pinnedPlayer;
+    if (pinned == null) return null;
+    final match = _findRosterPlayer(pinned.player, isHome: pinned.isHome);
+    if (match == null) return null;
+    return RosterHit(player: match, isHome: pinned.isHome);
   }
 
   void resetToStartup() {
@@ -1943,6 +2006,7 @@ class CaptionV2Controller extends ChangeNotifier {
     selectedPlayer = null;
     selectedVerb = null;
     pinnedVerb = null;
+    pinnedPlayer = null;
     customVerbPhrase = '';
     lastCustomVerbPhrase = '';
     customVerbPinned = false;
@@ -2084,24 +2148,8 @@ class CaptionV2Controller extends ChangeNotifier {
       _fileLength.clear();
       _fileModifiedMs.clear();
       _fileChangedMs.clear();
-      await _loadCaptureTimes();
-      if (generation != _folderWatchGeneration) return;
-      final marked = await FloCaptionMark.savedPaths(imagePaths);
-      savedImages.addAll(marked);
-      captionedImages.addAll(marked);
-      await _restoreSavedPrefs(dirPath);
-      await _applyIptcTemplateOnImportIfEnabled();
-      await _refreshFrameIptc();
-      if (generation != _folderWatchGeneration) return;
-      for (final path in imagePaths) {
-        try {
-          final stat = await File(path).stat();
-          _fileLength[path] = stat.size;
-          _fileModifiedMs[path] = stat.modified.millisecondsSinceEpoch;
-          _fileChangedMs[path] = stat.changed.millisecondsSinceEpoch;
-        } catch (_) {}
-      }
       _startFolderWatch(dirPath, generation);
+      unawaited(_finishFolderMetadata(dirPath, generation));
       unawaited(_ingestFolderAdditions(generation));
       for (final path in pending) {
         unawaited(_addImageWhenReady(path, generation));
@@ -2112,6 +2160,35 @@ class CaptionV2Controller extends ChangeNotifier {
         notifyListeners();
       }
     }
+  }
+
+  /// Capture times, saved-caption marks, and an on-import IPTC template run
+  /// after the pictures are already on screen.
+  Future<void> _finishFolderMetadata(String dirPath, int generation) async {
+    if (generation != _folderWatchGeneration) return;
+    final keep = currentPath;
+    await _loadCaptureTimes();
+    if (generation != _folderWatchGeneration) return;
+    imagePaths.sort((a, b) {
+      final ta = captureByPath[a];
+      final tb = captureByPath[b];
+      if (ta != null && tb != null) return ta.compareTo(tb);
+      return a.compareTo(b);
+    });
+    if (keep != null) {
+      final index = imagePaths.indexOf(keep);
+      if (index >= 0) currentIndex = index;
+    }
+    notifyListeners();
+    final marked = await FloCaptionMark.savedPaths(List<String>.from(imagePaths));
+    if (generation != _folderWatchGeneration) return;
+    savedImages.addAll(marked);
+    captionedImages.addAll(marked);
+    await _restoreSavedPrefs(dirPath);
+    await _applyIptcTemplateOnImportIfEnabled();
+    if (generation != _folderWatchGeneration) return;
+    await _refreshFrameIptc();
+    notifyListeners();
   }
 
   bool _isSessionImagePath(String path) {
@@ -2185,45 +2262,64 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     var added = 0;
     var updated = 0;
+    var removed = 0;
     try {
       final listed = await _listSessionImages(folder);
       final current = currentPath;
-      for (final path in listed) {
-        if (!imagePaths.contains(path)) {
-          if (!await isImageFileComplete(path)) continue;
-          await _insertCompletedImage(path);
-          added++;
-          continue;
+      removed = await _dropImagesMissingFrom(listed);
+      var currentChanged = false;
+      const batchSize = 32;
+      for (var start = 0; start < listed.length; start += batchSize) {
+        final end = start + batchSize > listed.length
+            ? listed.length
+            : start + batchSize;
+        final stats = await Future.wait(
+          listed.sublist(start, end).map((path) async {
+            try {
+              return MapEntry<String, FileStat?>(path, await File(path).stat());
+            } catch (_) {
+              return MapEntry<String, FileStat?>(path, null);
+            }
+          }),
+        );
+        for (final entry in stats) {
+          final path = entry.key;
+          final stat = entry.value;
+          if (stat == null) continue;
+          if (!imagePaths.contains(path)) {
+            if (!await isImageFileComplete(path)) continue;
+            await _insertCompletedImage(path);
+            _rememberFileSig(path, stat);
+            added++;
+            continue;
+          }
+          final hadSig = _fileLength.containsKey(path);
+          final modifiedMs = stat.modified.millisecondsSinceEpoch;
+          // Caption writes keep the original clock (-P) and only change
+          // size. A new picture from Photo Mechanic changes the clock.
+          // Reloading on size alone re-decodes every photo you just saved.
+          final mtimeChanged =
+              hadSig && _fileModifiedMs[path] != modifiedMs;
+          final sizeChanged = hadSig && _fileLength[path] != stat.size;
+          final pixelsChanged =
+              mtimeChanged || (announce && sizeChanged);
+          _rememberFileSig(path, stat);
+          if (!pixelsChanged) continue;
+          _imageContentStamp[path] = imageContentStamp(path) + 1;
+          updated++;
+          if (path == current) currentChanged = true;
         }
-        FileStat stat;
-        try {
-          stat = await File(path).stat();
-        } catch (_) {
-          continue;
-        }
-        final modifiedMs = stat.modified.millisecondsSinceEpoch;
-        final changedMs = stat.changed.millisecondsSinceEpoch;
-        final changed = !_fileLength.containsKey(path) ||
-            _fileLength[path] != stat.size ||
-            _fileModifiedMs[path] != modifiedMs ||
-            _fileChangedMs[path] != changedMs;
-        _fileLength[path] = stat.size;
-        _fileModifiedMs[path] = modifiedMs;
-        _fileChangedMs[path] = changedMs;
-        if (!changed && !announce) continue;
-        _imageContentStamp[path] = imageContentStamp(path) + 1;
-        updated++;
       }
       if (current != null) {
         final index = imagePaths.indexOf(current);
         if (index >= 0) currentIndex = index;
-        if (announce || updated > 0) {
+        if (announce || currentChanged || removed > 0) {
           await _refreshFrameIptc();
         }
       }
       if (announce) {
         statusMessage = added == 0
-            ? 'Photos refreshed'
+            ? (removed == 0 ? 'Photos refreshed' : 'Removed $removed photo${removed == 1 ? '' : 's'}')
             : 'Added $added photo${added == 1 ? '' : 's'}';
       }
     } catch (_) {
@@ -2231,11 +2327,51 @@ class CaptionV2Controller extends ChangeNotifier {
     } finally {
       _folderScanInFlight = false;
       if (announce) refreshingFolder = false;
-      if (announce || added > 0 || updated > 0) notifyListeners();
+      if (announce || added > 0 || updated > 0 || removed > 0) notifyListeners();
       if (_folderScanAgain) {
         _folderScanAgain = false;
         unawaited(_scanOpenFolder(announce: announce));
       }
+    }
+  }
+
+  /// Drops session photos that Photo Mechanic (or Finder) removed from the
+  /// folder, so the filmstrip does not keep a blank frame.
+  Future<int> _dropImagesMissingFrom(List<String> listed) async {
+    final present = listed.toSet();
+    final gone = <String>[];
+    for (final path in imagePaths) {
+      if (present.contains(path)) continue;
+      if (await File(path).exists()) continue;
+      gone.add(path);
+    }
+    if (gone.isEmpty) return 0;
+    for (final path in gone) {
+      _forgetImage(path);
+    }
+    await _persistSaved();
+    return gone.length;
+  }
+
+  void _forgetImage(String path) {
+    final removedIndex = imagePaths.indexOf(path);
+    imagePaths.remove(path);
+    captureByPath.remove(path);
+    _imageContentStamp.remove(path);
+    _fileLength.remove(path);
+    _fileModifiedMs.remove(path);
+    _fileChangedMs.remove(path);
+    _pendingIngest.remove(path);
+    savedImages.remove(path);
+    captionedImages.remove(path);
+    sentImages.remove(path);
+    selectedImagePaths.remove(path);
+    if (imagePaths.isEmpty) {
+      currentIndex = 0;
+    } else if (removedIndex >= 0 && removedIndex < currentIndex) {
+      currentIndex--;
+    } else if (currentIndex >= imagePaths.length) {
+      currentIndex = imagePaths.length - 1;
     }
   }
 
@@ -2319,7 +2455,8 @@ class CaptionV2Controller extends ChangeNotifier {
       _fileModifiedMs[path] = modifiedMs;
       return;
     }
-    if (_fileLength[path] == stat.size && _fileModifiedMs[path] == modifiedMs) {
+    if (_fileModifiedMs[path] == modifiedMs) {
+      _fileLength[path] = stat.size;
       return;
     }
     if (!_pendingIngest.add(path)) return;
@@ -2448,8 +2585,12 @@ class CaptionV2Controller extends ChangeNotifier {
       final preset = await _loadSelectedIptcPreset();
       final cleared = await _loadIptcClearedFields();
       if (preset.isEmpty && cleared.isEmpty) return;
-      sessionLoadingLabel =
-          'Writing IPTC template to ${imagePaths.length} images…';
+      final label = 'Writing IPTC template to ${imagePaths.length} images…';
+      if (sessionLoading) {
+        sessionLoadingLabel = label;
+      } else {
+        statusMessage = label;
+      }
       notifyListeners();
       var i = 0;
       for (final path in imagePaths) {
@@ -2494,8 +2635,22 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> _loadCaptureTimes() async {
-    for (final path in imagePaths) {
-      await _recordCaptureTime(path);
+    final paths = List<String>.from(imagePaths);
+    const chunk = 40;
+    for (var i = 0; i < paths.length; i += chunk) {
+      final end = i + chunk > paths.length ? paths.length : i + chunk;
+      final slice = paths.sublist(i, end);
+      final parsed = await _captureTimesFor(slice);
+      for (final path in slice) {
+        final captured = parsed[path];
+        if (captured != null) {
+          captureByPath[path] = captured;
+          continue;
+        }
+        try {
+          captureByPath[path] = await File(path).lastModified();
+        } catch (_) {}
+      }
     }
     // Re-sort by capture time when available.
     imagePaths.sort((a, b) {
@@ -2504,6 +2659,40 @@ class CaptionV2Controller extends ChangeNotifier {
       if (ta != null && tb != null) return ta.compareTo(tb);
       return a.compareTo(b);
     });
+  }
+
+  /// One ExifTool process reads capture times for a batch of photos.
+  Future<Map<String, DateTime>> _captureTimesFor(List<String> paths) async {
+    if (paths.isEmpty) return const {};
+    try {
+      final proc = await ExiftoolHelper.run([
+        '-j',
+        '-DateTimeOriginal',
+        '-d',
+        '%Y:%m:%d %H:%M:%S',
+        ...paths,
+      ]);
+      if (!proc.isSuccess || proc.stdoutText.trim().isEmpty) return const {};
+      final decoded = jsonDecode(proc.stdoutText);
+      if (decoded is! List) return const {};
+      final found = <String, DateTime>{};
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final source = item['SourceFile']?.toString();
+        final parsed = _parseExifDate(item['DateTimeOriginal']?.toString() ?? '');
+        if (source == null || source.isEmpty || parsed == null) continue;
+        found[source] = parsed;
+      }
+      return found;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  void _rememberFileSig(String path, FileStat stat) {
+    _fileLength[path] = stat.size;
+    _fileModifiedMs[path] = stat.modified.millisecondsSinceEpoch;
+    _fileChangedMs[path] = stat.changed.millisecondsSinceEpoch;
   }
 
   Future<void> _recordCaptureTime(String path) async {
@@ -2642,6 +2831,61 @@ class CaptionV2Controller extends ChangeNotifier {
     } else {
       notifyListeners();
     }
+    return null;
+  }
+
+  /// Replaces [original] on the home or away roster. Jersey conflicts with a
+  /// different player are rejected. Selection follows the renamed player.
+  String? updatePlayer({
+    required bool isHome,
+    required Player original,
+    required String fullName,
+    String? jerseyNumber,
+  }) {
+    final name = fullName.trim();
+    if (name.isEmpty) return 'Enter a player name.';
+    final jersey = jerseyNumber?.trim();
+    final jerseyKey = (jersey == null || jersey.isEmpty) ? null : jersey;
+    final roster = isHome ? homeRoster : awayRoster;
+    if (jerseyKey != null) {
+      final taken = roster.any(
+        (player) =>
+            (player.jerseyNumber ?? '').trim() == jerseyKey &&
+            !_samePlayer(player, original),
+      );
+      if (taken) return 'Jersey #$jerseyKey is already on this team.';
+    }
+    final updated = Player(
+      fullName: name,
+      firstName: name.split(RegExp(r'\s+')).first,
+      jerseyNumber: jerseyKey,
+      displayName: jerseyKey == null ? name : '$name #$jerseyKey',
+      playerId: original.playerId,
+      position: original.position,
+    );
+    final next = _sortPlayers([
+      for (final player in roster)
+        _samePlayer(player, original) ? updated : player,
+    ]);
+    if (isHome) {
+      homeRoster = next;
+    } else {
+      awayRoster = next;
+    }
+    for (var i = 0; i < selectedPlayers.length; i++) {
+      final row = selectedPlayers[i];
+      if (row.isHome == isHome && _samePlayer(row.player, original)) {
+        selectedPlayers[i] = RosterHit(player: updated, isHome: isHome);
+      }
+    }
+    if (pinnedPlayer != null &&
+        pinnedPlayer!.isHome == isHome &&
+        _samePlayer(pinnedPlayer!.player, original)) {
+      pinnedPlayer = RosterHit(player: updated, isHome: isHome);
+    }
+    _syncPrimaryPlayer();
+    manualCaptionOverride = null;
+    notifyListeners();
     return null;
   }
 
@@ -2935,6 +3179,52 @@ class CaptionV2Controller extends ChangeNotifier {
       selectedBase = null;
     }
     _syncKeywords();
+    unawaited(_recordVerbUsage(verb));
+    notifyListeners();
+  }
+
+  Future<void> _recordVerbUsage(String verb) async {
+    final prefs = _prefs;
+    if (prefs == null || verb.trim().isEmpty) return;
+    final next = await prefs.incrementVerbUsage(sport, verb);
+    _verbUsageCounts[verb] = next;
+    if (verbSortMode == VerbSortMode.mostUsed) {
+      notifyListeners();
+    }
+  }
+
+  Future<void> setVerbSortMode(VerbSortMode mode) async {
+    if (verbSortMode == mode) return;
+    verbSortMode = mode;
+    await _prefs?.saveVerbSortMode(mode);
+    notifyListeners();
+  }
+
+  /// Persist a new within-category order and switch to Custom arrange.
+  Future<void> rearrangeVerbsInCategory(
+    String category,
+    List<String> orderedKeys,
+  ) async {
+    final prefs = _prefs;
+    if (prefs == null || category == 'Favorites') return;
+    final order = {
+      for (final entry in _verbCatalog.verbsByCategory.entries)
+        if (entry.key != 'Favorites')
+          entry.key: entry.value.map((item) => item.key).toList(),
+    };
+    order[category] = List<String>.from(orderedKeys);
+    await prefs.saveVerbOrder(order, sport: sport);
+    await prefs.saveVerbSortMode(VerbSortMode.custom);
+    verbSortMode = VerbSortMode.custom;
+    await _loadVerbCatalog();
+    notifyListeners();
+  }
+
+  Future<void> resetVerbsToFactoryDefaults() async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    await prefs.resetSportVerbsToFactory(sport);
+    await _loadVerbCatalog();
     notifyListeners();
   }
 
@@ -3076,6 +3366,28 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
+  void togglePlayerPin(Player player, {required bool isHome}) {
+    if (isPlayerPinned(player, isHome: isHome)) {
+      pinnedPlayer = null;
+      notifyListeners();
+      return;
+    }
+    pinnedPlayer = RosterHit(player: player, isHome: isHome);
+    // Pinning also selects that player for the current frame, but selecting a
+    // *different* player later must leave [pinnedPlayer] untouched.
+    if (!isPlayerSelected(player, isHome: isHome)) {
+      selectPlayer(player, isHome: isHome);
+    } else {
+      notifyListeners();
+    }
+  }
+
+  void unpinPlayer() {
+    if (pinnedPlayer == null) return;
+    pinnedPlayer = null;
+    notifyListeners();
+  }
+
   void _stashCustomVerbIfNeeded() {
     final custom = customVerbPhrase.trim();
     if (custom.isNotEmpty) {
@@ -3206,6 +3518,8 @@ class CaptionV2Controller extends ChangeNotifier {
       'usePluralPhrase': true,
       'keywords': definition.keywords,
       'wantsOpponent': definition.wantsOpponent,
+      'omitAgainst': definition.omitAgainst,
+      'opponentJoiner': definition.opponentJoiner,
       'category': definition.category,
       'subOptions': definition.subOptions,
     };
@@ -3219,6 +3533,8 @@ class CaptionV2Controller extends ChangeNotifier {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
+    required bool omitAgainst,
+    required String opponentJoiner,
     required String category,
     required VerbSubOptions subOptions,
     required bool isCustom,
@@ -3231,6 +3547,8 @@ class CaptionV2Controller extends ChangeNotifier {
       'usePluralPhrase': usePluralPhrase,
       'keywords': keywords,
       'wantsOpponent': wantsOpponent,
+      'omitAgainst': omitAgainst,
+      'opponentJoiner': opponentJoiner,
       'category': category,
       'isCustom': isCustom,
       'subOptions': subOptions.toJson(),
@@ -3245,6 +3563,8 @@ class CaptionV2Controller extends ChangeNotifier {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
+    required bool omitAgainst,
+    required String opponentJoiner,
     required String category,
     required VerbSubOptions subOptions,
   }) async {
@@ -3259,6 +3579,8 @@ class CaptionV2Controller extends ChangeNotifier {
         usePluralPhrase: usePluralPhrase,
         keywords: keywords,
         wantsOpponent: wantsOpponent,
+        omitAgainst: omitAgainst,
+        opponentJoiner: opponentJoiner,
         category: category,
         subOptions: subOptions.copyWith(rbiEnabled: false),
         isCustom: true,
@@ -3286,6 +3608,8 @@ class CaptionV2Controller extends ChangeNotifier {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
+    required bool omitAgainst,
+    required String opponentJoiner,
     required String category,
     required VerbSubOptions subOptions,
   }) async {
@@ -3300,6 +3624,8 @@ class CaptionV2Controller extends ChangeNotifier {
       usePluralPhrase: usePluralPhrase,
       keywords: keywords,
       wantsOpponent: wantsOpponent,
+      omitAgainst: omitAgainst,
+      opponentJoiner: opponentJoiner,
       category: category,
       subOptions: subOptions.copyWith(rbiEnabled: false),
       isCustom: true,
@@ -3341,6 +3667,8 @@ class CaptionV2Controller extends ChangeNotifier {
     required bool usePluralPhrase,
     required List<String> keywords,
     required bool wantsOpponent,
+    required bool omitAgainst,
+    required String opponentJoiner,
     required String category,
     required VerbSubOptions subOptions,
     required bool asDefault,
@@ -3355,6 +3683,8 @@ class CaptionV2Controller extends ChangeNotifier {
       usePluralPhrase: usePluralPhrase,
       keywords: keywords,
       wantsOpponent: wantsOpponent,
+      omitAgainst: omitAgainst,
+      opponentJoiner: opponentJoiner,
       category: category,
       subOptions: subOptions,
       isCustom: false,
@@ -3396,6 +3726,7 @@ class CaptionV2Controller extends ChangeNotifier {
           verbLabel: verb,
           value: options,
           isCustom: definition?.isCustom ?? false,
+          sport: sport,
         ) &&
         options.celebrationEnabled;
   }
@@ -3677,6 +4008,8 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void _mlbTimestampFailure(String message, bool userInitiated) {
     mlbTimestampMatchedPath = null;
+    preGame = false;
+    postGame = false;
     if (userInitiated) statusMessage = message;
     notifyListeners();
   }
@@ -4950,7 +5283,7 @@ class CaptionV2Controller extends ChangeNotifier {
       savedImages.addAll(succeeded);
       if (generatedCaption || manualCaption) {
         captionedImages.addAll(succeeded);
-        await FloCaptionMark.markSaved(succeeded);
+        unawaited(FloCaptionMark.markSaved(succeeded));
       }
       await _persistSaved();
       metadataDirty = false;
@@ -5062,22 +5395,37 @@ class CaptionV2Controller extends ChangeNotifier {
     manualCaptionOverride = null;
     rbi = 0;
     selectedBase = null;
-    // Pinned verb is restored for the next frame, but caption writing waits
-    // until a player is selected.
-    captionSelectionStarted = false;
+    // Pinned player always comes back on the next frame, even if the user
+    // picked a different player for the frame they just saved.
+    pinnedPlayer = _resolvePinnedPlayer();
+    if (pinnedPlayer != null) {
+      selectedPlayers.add(pinnedPlayer!);
+      _syncPrimaryPlayer();
+    }
+    // Pinned verb alone waits for a player; a pinned player starts the caption.
+    captionSelectionStarted = selectedPlayers.isNotEmpty;
     _firebarCommitted
         .removeWhere((item) => item.kind == FirebarResultKind.player);
+    if (pinnedPlayer != null) {
+      final playerChip = FirebarResult.player(
+        player: pinnedPlayer!.player,
+        isHome: pinnedPlayer!.isHome,
+      );
+      if (!_firebarCommitted.any((item) => item.key == playerChip.key)) {
+        _firebarCommitted.add(playerChip);
+      }
+    }
     if (pinnedVerb != null) {
       _firebarCommitted
           .removeWhere((item) => item.kind == FirebarResultKind.verb);
       if (!_firebarCommitted.any((item) => item.verbKey == pinnedVerb)) {
         _firebarCommitted.add(FirebarResult.verb(pinnedVerb));
       }
-      // A favorite pinned from the Favorites list should stay there. Saving
-      // must not jump back to the verb's home category.
-      final stayingOnFavorites =
-          verbCategory == 'Favorites' && isVerbFavorite(pinnedVerb!);
-      if (!stayingOnFavorites) {
+      // A pinned favorite always comes back on the Favorites panel, even if
+      // the user was browsing another category when they saved.
+      if (isVerbFavorite(pinnedVerb!)) {
+        verbCategory = 'Favorites';
+      } else {
         final category = _categoryForVerb(pinnedVerb!);
         if (category != null) verbCategory = category;
       }

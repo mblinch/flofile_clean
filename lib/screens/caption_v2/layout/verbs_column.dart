@@ -965,7 +965,11 @@ class _VerbListItem extends StatelessWidget {
                 controller.isVerbPinned(verb.key) ? 'Unpin Verb' : 'Pin Verb')),
         PopupMenuItem(
             value: 'favorite',
-            child: Text(verb.isFavorite ? 'Remove favorite' : 'Add favorite')),
+            child: Text(
+              verb.isFavorite
+                  ? 'Remove from Favorites'
+                  : 'Add to Favorites',
+            )),
         const PopupMenuItem(value: 'edit', child: Text('Edit verb…')),
         if (index > 0) const PopupMenuItem(value: 'up', child: Text('Move up')),
         if (index <
