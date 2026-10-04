@@ -37,6 +37,10 @@ class _RosterColumnState extends State<RosterColumn> {
   final _filter = TextEditingController();
   final _columnFocusNode = FocusNode(debugLabel: 'Roster column');
   final _scrollController = ScrollController();
+  final _customNameController = TextEditingController();
+  final _customJerseyController = TextEditingController();
+  final _customNameFocusNode = FocusNode(debugLabel: 'Custom name');
+  final _customJerseyFocusNode = FocusNode(debugLabel: 'Custom jersey');
   RosterViewMode _viewMode = RosterViewMode.classic;
   String? _lastFirebarSelectionKey;
   int _seenPlayerSearchClearGeneration = -1;
@@ -47,6 +51,7 @@ class _RosterColumnState extends State<RosterColumn> {
     _seenPlayerSearchClearGeneration =
         widget.controller.playerSearchClearGeneration;
     widget.controller.addListener(_onController);
+    _syncCustomNameFromPin();
   }
 
   @override
@@ -57,6 +62,7 @@ class _RosterColumnState extends State<RosterColumn> {
       widget.controller.addListener(_onController);
       _seenPlayerSearchClearGeneration =
           widget.controller.playerSearchClearGeneration;
+      _syncCustomNameFromPin();
     }
   }
 
@@ -66,11 +72,16 @@ class _RosterColumnState extends State<RosterColumn> {
     _columnFocusNode.dispose();
     _scrollController.dispose();
     _filter.dispose();
+    _customNameController.dispose();
+    _customJerseyController.dispose();
+    _customNameFocusNode.dispose();
+    _customJerseyFocusNode.dispose();
     super.dispose();
   }
 
   void _onController() {
     if (!mounted) return;
+    _syncCustomNameFromPin();
     final generation = widget.controller.playerSearchClearGeneration;
     if (generation == _seenPlayerSearchClearGeneration) return;
     _seenPlayerSearchClearGeneration = generation;
@@ -79,22 +90,80 @@ class _RosterColumnState extends State<RosterColumn> {
     setState(() {});
   }
 
-  Future<void> _openCustomNameDialog(CaptionV2Controller c) async {
-    final result = await showCustomNameEntryDialog(
-      context: context,
-      teamLabel: widget.isHome ? c.homeAbbr : c.awayAbbr,
-    );
-    if (!mounted || result == null) return;
-    final error = c.addCustomPlayer(
+  bool get _customNamePinned {
+    final name = _customNameController.text.trim();
+    if (name.isEmpty) return false;
+    final jersey = _customJerseyController.text.trim();
+    final player = widget.controller.findRosterPlayer(
       isHome: widget.isHome,
-      fullName: result.name,
-      jerseyNumber: result.jersey,
+      fullName: name,
+      jerseyNumber: jersey.isEmpty ? null : jersey,
     );
-    if (error != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
-      );
+    if (player == null) return false;
+    return widget.controller.isPlayerPinned(player, isHome: widget.isHome);
+  }
+
+  void _syncCustomNameFromPin() {
+    final pinned = widget.controller.pinnedPlayer;
+    if (pinned == null || pinned.isHome != widget.isHome) return;
+    if (_customNameFocusNode.hasFocus || _customJerseyFocusNode.hasFocus) {
+      return;
     }
+    final name = pinned.player.fullName;
+    final jersey = pinned.player.jerseyNumber ?? '';
+    if (_customNameController.text == name &&
+        _customJerseyController.text == jersey) {
+      return;
+    }
+    _customNameController.text = name;
+    _customJerseyController.text = jersey;
+  }
+
+  void _showCustomNameError(String? error) {
+    if (error == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  void _submitCustomName() {
+    final name = _customNameController.text.trim();
+    if (name.isEmpty) return;
+    final jersey = _customJerseyController.text.trim();
+    final error = widget.controller.commitCustomPlayer(
+      isHome: widget.isHome,
+      fullName: name,
+      jerseyNumber: jersey.isEmpty ? null : jersey,
+    );
+    _showCustomNameError(error);
+    setState(() {});
+  }
+
+  void _useLastCustomName() {
+    final c = widget.controller;
+    if (!c.canUseLastCustomPlayer) return;
+    _customNameController.text = c.lastCustomPlayerName;
+    _customJerseyController.text = c.lastCustomPlayerJersey;
+    setState(() {});
+    _customNameFocusNode.requestFocus();
+  }
+
+  void _toggleCustomNamePin() {
+    final name = _customNameController.text.trim();
+    final jersey = _customJerseyController.text.trim();
+    if (name.isEmpty && widget.controller.canUseLastCustomPlayer) {
+      _customNameController.text = widget.controller.lastCustomPlayerName;
+      _customJerseyController.text = widget.controller.lastCustomPlayerJersey;
+    }
+    final error = widget.controller.toggleCustomPlayerPin(
+      isHome: widget.isHome,
+      fullName: _customNameController.text,
+      jerseyNumber: _customJerseyController.text.trim().isEmpty
+          ? null
+          : _customJerseyController.text.trim(),
+    );
+    _showCustomNameError(error);
+    setState(() {});
   }
 
   Future<void> _playerContextMenu(
@@ -394,9 +463,18 @@ class _RosterColumnState extends State<RosterColumn> {
                 ),
               ),
               if (!firebarActive)
-                CustomNameEntryButton(
+                CustomNameField(
+                  nameController: _customNameController,
+                  jerseyController: _customJerseyController,
+                  nameFocusNode: _customNameFocusNode,
+                  jerseyFocusNode: _customJerseyFocusNode,
                   tokens: t,
-                  onTap: () => _openCustomNameDialog(c),
+                  pinned: _customNamePinned,
+                  canUseLast: c.canUseLastCustomPlayer,
+                  onChanged: () => setState(() {}),
+                  onSubmit: _submitCustomName,
+                  onTogglePin: _toggleCustomNamePin,
+                  onUseLast: _useLastCustomName,
                 ),
             ],
           ),
@@ -434,19 +512,19 @@ class _RosterViewToggle extends StatelessWidget {
           onTap: () => onChanged(value),
           borderRadius: BorderRadius.circular(4),
           child: SizedBox(
-            width: 28,
-            height: 26,
+            width: 24,
+            height: 22,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   icon,
-                  size: 18,
+                  size: 16,
                   color: selected ? tokens.accent : tokens.textSecondary,
                 ),
                 const SizedBox(height: 1),
                 Container(
-                  width: 14,
+                  width: 12,
                   height: 1.5,
                   color: selected ? tokens.accent : Colors.transparent,
                 ),
@@ -470,7 +548,7 @@ class _RosterViewToggle extends StatelessWidget {
               color: tokens.textSecondary,
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 2),
           button(
             value: RosterViewMode.wheel,
             icon: Icons.swap_vert,
@@ -817,7 +895,8 @@ class _RosterHeaderBar extends StatelessWidget {
     this.onEditRosters,
   });
 
-  static const double _controlHeight = 24;
+  static const double _controlHeight = 22;
+  static const double headerHeight = 26;
 
   final String abbr;
   final TextEditingController filter;
@@ -832,113 +911,119 @@ class _RosterHeaderBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          abbr,
-          style: FfTokens.captionTitle.copyWith(
-            color: tokens.text,
-            fontSize: 15,
-            letterSpacing: -0.45,
-            height: 1,
-          ),
-          textHeightBehavior: const TextHeightBehavior(
-            applyHeightToFirstAscent: false,
-            applyHeightToLastDescent: false,
-          ),
-        ),
-        if (onEditRosters != null)
-          Padding(
-            padding: const EdgeInsets.only(left: 6, right: 4),
-            child: IconButton(
-              onPressed: onEditRosters,
-              tooltip: 'Edit rosters',
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints.tightFor(width: 24, height: 24),
-              visualDensity: VisualDensity.compact,
-              iconSize: 13,
-              color: tokens.textSecondary,
-              icon: const Icon(Icons.edit_outlined),
+    return SizedBox(
+      height: headerHeight,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            abbr,
+            style: FfTokens.captionTitle.copyWith(
+              color: tokens.text,
+              fontSize: 15,
+              letterSpacing: -0.45,
+              height: 1,
+            ),
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
             ),
           ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: Container(
+          if (onEditRosters != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 2),
+              child: IconButton(
+                onPressed: onEditRosters,
+                tooltip: 'Edit rosters',
+                padding: const EdgeInsets.all(2),
+                constraints:
+                    const BoxConstraints.tightFor(width: 22, height: 22),
+                visualDensity: VisualDensity.compact,
+                iconSize: 12,
+                color: tokens.textSecondary,
+                icon: const Icon(Icons.edit_outlined),
+              ),
+            ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Container(
+              height: _controlHeight,
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              decoration: BoxDecoration(
+                color: tokens.sunken,
+                borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+              ),
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                height: 14,
+                width: double.infinity,
+                child: TextField(
+                  controller: filter,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FfTokens.weightRegular,
+                    color: tokens.text,
+                    height: 1,
+                  ),
+                  cursorColor: tokens.accent,
+                  cursorHeight: 12,
+                  decoration: const InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  onChanged: (_) => onFilterChanged(),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(
             height: _controlHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            decoration: BoxDecoration(
-              color: tokens.sunken,
-              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-            ),
-            alignment: Alignment.centerLeft,
-            child: SizedBox(
-              height: 14,
-              width: double.infinity,
-              child: TextField(
-                controller: filter,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 12,
-                  fontWeight: FfTokens.weightRegular,
-                  color: tokens.text,
+            child: Center(child: trailing),
+          ),
+          const SizedBox(width: 2),
+          InkWell(
+            onTap: onSort,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              child: Text(
+                sortLabel,
+                style: tokens.metaStyle.copyWith(
+                  color: tokens.textSecondary,
                   height: 1,
+                  fontSize: 12,
                 ),
-                cursorColor: tokens.accent,
-                cursorHeight: 12,
-                decoration: const InputDecoration(
-                  isCollapsed: true,
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.zero,
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
                 ),
-                onChanged: (_) => onFilterChanged(),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 4),
-        SizedBox(
-          height: _controlHeight,
-          child: Center(child: trailing),
-        ),
-        const SizedBox(width: 2),
-        InkWell(
-          onTap: onSort,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-            child: Text(
-              sortLabel,
-              style: tokens.metaStyle.copyWith(
-                color: tokens.textSecondary,
-                height: 1,
-              ),
-              textHeightBehavior: const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
+          InkWell(
+            onTap: onSortDirection,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                sortDirectionLabel,
+                style: tokens.metaStyle.copyWith(
+                  color: tokens.textSecondary,
+                  height: 1,
+                  fontSize: 12,
+                ),
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
+                ),
               ),
             ),
           ),
-        ),
-        InkWell(
-          onTap: onSortDirection,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            child: Text(
-              sortDirectionLabel,
-              style: tokens.metaStyle.copyWith(
-                color: tokens.textSecondary,
-                height: 1,
-              ),
-              textHeightBehavior: const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
-              ),
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -1141,9 +1226,14 @@ class CaptionV2ColumnCard extends StatelessWidget {
         children: [
           if (showHeader)
             Container(
-              height: 40,
-              padding: const EdgeInsets.fromLTRB(8, 0, 5, 0),
+              height: _RosterHeaderBar.headerHeight,
+              padding: const EdgeInsets.fromLTRB(8, 0, 6, 0),
               alignment: Alignment.centerLeft,
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: t.divider),
+                ),
+              ),
               child: header,
             ),
           Expanded(

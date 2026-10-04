@@ -35,6 +35,7 @@ import '../caption_style/verb_sub_options.dart';
 import 'full_verb_edit_dialog.dart';
 import 'ftp_settings_panel.dart';
 import '../flo_layout_constants.dart';
+import '../theme/ff_tokens.dart';
 import '../services/admin_service.dart';
 
 // TextEditingController that can render inline highlights accurately inside the
@@ -20819,18 +20820,25 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
 
   void _showFtpSettings() {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
       builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
         child: Container(
-          width: 450,
-          constraints: const BoxConstraints(maxHeight: 500),
-          padding: const EdgeInsets.all(12),
+          width: 480,
+          constraints: const BoxConstraints(maxHeight: 640),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          decoration: BoxDecoration(
+            color: t.surface,
+            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+            border: Border.all(color: t.divider),
+          ),
           child: FtpSettingsPanel(
             embedded: false,
             onClose: () {
-              _loadFtpProfiles(); // sync current profile from storage
+              _loadFtpProfiles();
               Navigator.pop(context);
             },
             onProfilesChanged: () => _loadFtpProfiles(),

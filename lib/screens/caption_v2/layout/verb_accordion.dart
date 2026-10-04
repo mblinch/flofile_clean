@@ -27,6 +27,7 @@ class DefaultVerbAccordion extends StatefulWidget {
   static const headerH = 32.0;
   static const verbRowH = 24.0;
   static const laneHeaderH = 28.0;
+  static const pinnedBarH = 22.0;
   static const categoryFontSize = 15.0;
   static const verbFontSize = 13.5;
 
@@ -197,21 +198,11 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(
-          height: DefaultVerbAccordion.laneHeaderH,
+          height: 22,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               children: [
-                Text(
-                  'VERBS',
-                  style: TextStyle(
-                    fontFamily: FfTokens.labelFamily,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 11,
-                    letterSpacing: 1.5,
-                    color: t.text.withValues(alpha: 0.70),
-                  ),
-                ),
                 const Spacer(),
                 _VerbSortMenu(controller: controller, tokens: t),
               ],
@@ -236,7 +227,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
               }
 
               // Always show the pinned bar (title + verb on one row).
-              final pinnedH = headerH;
+              final pinnedH = DefaultVerbAccordion.pinnedBarH;
               final availableForVerbs =
                   (bodyH - categories.length * headerH - pinnedH)
                       .clamp(0.0, bodyH);
@@ -265,7 +256,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
               return Column(
                 children: [
                   _PinnedVerbSlot(
-                    height: headerH,
+                    height: pinnedH,
                     tokens: t,
                     controller: controller,
                     verb: pinned,
@@ -533,10 +524,10 @@ class _PinnedVerbSlot extends StatelessWidget {
         children: [
           Icon(
             hasVerb ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-            size: 11,
+            size: 10,
             color: pinnedTeal.withValues(alpha: hasVerb ? 0.95 : 0.50),
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: 4),
           Text(
             'Pinned',
             maxLines: 1,
@@ -544,56 +535,79 @@ class _PinnedVerbSlot extends StatelessWidget {
             style: TextStyle(
               fontFamily: FfTokens.labelFamily,
               fontWeight: FontWeight.w600,
-              fontSize: DefaultVerbAccordion.categoryFontSize,
-              letterSpacing: -0.2,
+              fontSize: 13,
+              height: 1.0,
+              letterSpacing: 0.1,
               color: pinnedTeal.withValues(alpha: hasVerb ? 1 : 0.55),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: hasVerb
-                ? MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: CmdClick(
-                      useInkWell: true,
-                      onTap: () {
-                        onVerbArmed?.call();
-                        controller.selectVerb(verb!.key);
-                      },
-                      onCmdTap: () {
-                        onVerbArmed?.call();
-                        controller.toggleVerbPin(verb!.key);
-                      },
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          verb!.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: FfTokens.labelFamily,
-                            fontWeight: FontWeight.w500,
-                            fontSize: DefaultVerbAccordion.verbFontSize,
-                            color: armed
-                                ? tokens.text
-                                : tokens.text.withValues(alpha: 0.78),
-                          ),
+                ? CmdClick(
+                    onTap: () {
+                      onVerbArmed?.call();
+                      controller.selectVerb(verb!.key);
+                    },
+                    onCmdTap: () {
+                      onVerbArmed?.call();
+                      controller.toggleVerbPin(verb!.key);
+                    },
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        verb!.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: FfTokens.labelFamily,
+                          fontWeight: FontWeight.w500,
+                          fontSize: DefaultVerbAccordion.verbFontSize,
+                          height: 1.0,
+                          color: armed
+                              ? tokens.text
+                              : tokens.text.withValues(alpha: 0.78),
                         ),
                       ),
                     ),
                   )
-                : Text(
-                    '⌘-click a verb to pin',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: FfTokens.labelFamily,
-                      fontWeight: FontWeight.w400,
-                      fontSize: DefaultVerbAccordion.verbFontSize,
-                      color: tokens.text.withValues(alpha: 0.38),
+                : Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '(CMD ⌘ click a verb in the menu to pin)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.labelFamily,
+                        fontWeight: FontWeight.w400,
+                        fontSize: 11,
+                        height: 1.0,
+                        color: tokens.text.withValues(alpha: 0.38),
+                      ),
                     ),
                   ),
           ),
+          if (hasVerb)
+            TextButton(
+              onPressed: () => controller.toggleVerbPin(verb!.key),
+              style: TextButton.styleFrom(
+                foregroundColor: pinnedTeal,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+              child: Text(
+                'Unpin',
+                style: TextStyle(
+                  fontFamily: FfTokens.labelFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.0,
+                  color: pinnedTeal.withValues(alpha: 0.95),
+                ),
+              ),
+            ),
         ],
       ),
     );

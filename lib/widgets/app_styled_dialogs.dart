@@ -335,6 +335,7 @@ class AppDialogLabeledField extends StatelessWidget {
     required this.child,
     this.labelLeading,
     this.labelTrailing,
+    this.required = false,
     this.spacing = 5,
     this.bottomGap = 12,
   });
@@ -345,6 +346,7 @@ class AppDialogLabeledField extends StatelessWidget {
   final Widget? labelLeading;
   /// Optional control beside the label (e.g. actions on the right).
   final Widget? labelTrailing;
+  final bool required;
   final double spacing;
   final double bottomGap;
 
@@ -352,7 +354,10 @@ class AppDialogLabeledField extends StatelessWidget {
   Widget build(BuildContext context) {
     final showLabel = label.trim().isNotEmpty ||
         labelLeading != null ||
-        labelTrailing != null;
+        labelTrailing != null ||
+        required;
+    final labelStyle = appDialogFieldLabelStyleOf(context);
+    final t = appDialogTokens(context);
     return Padding(
       padding: EdgeInsets.only(bottom: bottomGap),
       child: Column(
@@ -369,9 +374,21 @@ class AppDialogLabeledField extends StatelessWidget {
                     const SizedBox(width: 6),
                   ],
                   Expanded(
-                    child: Text(
-                      label,
-                      style: appDialogFieldLabelStyleOf(context),
+                    child: Text.rich(
+                      TextSpan(
+                        style: labelStyle,
+                        children: [
+                          TextSpan(text: label),
+                          if (required)
+                            TextSpan(
+                              text: ' *',
+                              style: labelStyle.copyWith(
+                                color: t?.accent ?? const Color(0xFFE25555),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                        ],
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -398,7 +415,10 @@ class AppDialogLabeledTextField extends StatelessWidget {
     this.onChanged,
     this.enabled = true,
     this.autofocus = false,
+    this.obscureText = false,
+    this.keyboardType,
     this.maxLines = 1,
+    this.required = false,
     this.bottomGap = 12,
   });
 
@@ -408,7 +428,10 @@ class AppDialogLabeledTextField extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final bool enabled;
   final bool autofocus;
+  final bool obscureText;
+  final TextInputType? keyboardType;
   final int maxLines;
+  final bool required;
   final double bottomGap;
 
   @override
@@ -419,7 +442,9 @@ class AppDialogLabeledTextField extends StatelessWidget {
       controller: controller,
       enabled: enabled,
       autofocus: autofocus,
-      maxLines: maxLines,
+      obscureText: obscureText,
+      keyboardType: keyboardType,
+      maxLines: obscureText ? 1 : maxLines,
       style: appDialogFieldTextStyleOf(context, enabled: enabled),
       onChanged: onChanged,
       decoration: appDialogBareFieldDecoration(hintText: hintText).copyWith(
@@ -429,6 +454,7 @@ class AppDialogLabeledTextField extends StatelessWidget {
     final radius = t != null ? FfTokens.radiusChip : 6.0;
     return AppDialogLabeledField(
       label: label,
+      required: required,
       bottomGap: bottomGap,
       child: maxLines == 1
           ? AppDialogControlShell(enabled: enabled, child: field)

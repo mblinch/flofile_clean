@@ -182,6 +182,19 @@ class _VerbsColumnState extends State<VerbsColumn> {
                       height: 26,
                       child: Row(
                         children: [
+                          Text(
+                            'VERBS',
+                            style: FfTokens.captionTitle.copyWith(
+                              color: t.text,
+                              fontSize: 15,
+                              letterSpacing: -0.45,
+                              height: 1,
+                            ),
+                            textHeightBehavior: const TextHeightBehavior(
+                              applyHeightToFirstAscent: false,
+                              applyHeightToLastDescent: false,
+                            ),
+                          ),
                           const Spacer(),
                           _VerbViewToggle(
                             wheelMode: _wheelMode,
@@ -354,19 +367,19 @@ class _VerbViewToggle extends StatelessWidget {
           onTap: () => onChanged(wheel),
           borderRadius: BorderRadius.circular(4),
           child: SizedBox(
-            width: 28,
-            height: 26,
+            width: 24,
+            height: 22,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
                   icon,
-                  size: 18,
+                  size: 16,
                   color: selected ? tokens.accent : tokens.textSecondary,
                 ),
                 const SizedBox(height: 1),
                 Container(
-                  width: 14,
+                  width: 12,
                   height: 1.5,
                   color: selected ? tokens.accent : Colors.transparent,
                 ),
@@ -388,7 +401,7 @@ class _VerbViewToggle extends StatelessWidget {
             color: tokens.textSecondary,
           ),
         ),
-        const SizedBox(width: 4),
+        const SizedBox(width: 2),
         button(
           wheel: true,
           icon: Icons.swap_vert,
@@ -402,11 +415,11 @@ class _VerbViewToggle extends StatelessWidget {
               onTap: onInfinite,
               borderRadius: BorderRadius.circular(4),
               child: SizedBox(
-                width: 28,
-                height: 26,
+                width: 24,
+                height: 22,
                 child: Icon(
                   Icons.all_inclusive,
-                  size: 18,
+                  size: 16,
                   color: tokens.textSecondary,
                 ),
               ),

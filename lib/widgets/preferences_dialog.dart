@@ -1028,7 +1028,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         // Full FTP Server Settings panel (same as the FTP settings dialog)
         FtpSettingsPanel(
           embedded: true,
-          onProfilesChanged: () => _loadCurrentPreferences(),
         ),
       ],
     );

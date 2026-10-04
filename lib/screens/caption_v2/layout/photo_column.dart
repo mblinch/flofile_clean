@@ -49,6 +49,33 @@ String _twelveHourTime(DateTime value) {
   return '$hour:$minute:$second $suffix';
 }
 
+/// EXIF `YYYY:MM:DD HH:MM:SS` → short numeric date + 12-hour time.
+String _formatExifDateTime(String raw) {
+  final match = RegExp(
+    r'^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})',
+  ).firstMatch(raw);
+  if (match == null) return raw;
+  final year = int.tryParse(match.group(1)!) ?? 0;
+  final month = int.tryParse(match.group(2)!) ?? 0;
+  final day = int.tryParse(match.group(3)!) ?? 0;
+  final hour24 = int.tryParse(match.group(4)!) ?? 0;
+  final minute = match.group(5)!;
+  final second = match.group(6)!;
+  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+  final suffix = hour24 >= 12 ? 'PM' : 'AM';
+  final yy = (year % 100).toString().padLeft(2, '0');
+  return '$month/$day/$yy $hour12:$minute:$second $suffix';
+}
+
+String _formatShutter(String raw) {
+  if (raw.isEmpty || raw.contains('/')) return raw;
+  final value = double.tryParse(raw);
+  if (value == null || value <= 0) return raw;
+  return value < 1
+      ? '1/${(1 / value).round()}s'
+      : '${value.toStringAsFixed(1)}s';
+}
+
 class _PhotoColumnState extends State<PhotoColumn> {
   static const double _handleHeight = 14;
   double _previewFraction = 0.6;
@@ -157,6 +184,106 @@ class _PhotoThumbnailResizeHandle extends StatelessWidget {
   }
 }
 
+class _PhotoInfoHeader extends StatelessWidget {
+  const _PhotoInfoHeader({
+    required this.controller,
+    required this.tokens,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+
+  String _meta(List<String> keys) {
+    for (final key in keys) {
+      final value = controller.currentIptcMeta[key]?.trim();
+      if (value != null && value.isNotEmpty) return value;
+    }
+    return '';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final path = controller.currentPath;
+    if (path == null || controller.imagePaths.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final date = _meta(const [
+      'DateTimeOriginal',
+      'CreateDate',
+      'ModifyDate',
+    ]);
+    final make = _meta(const ['Make']);
+    final model = _meta(const ['Model']);
+    final lens = _meta(const ['LensModel', 'Lens', 'LensID']);
+    final shutter = _formatShutter(_meta(const ['ShutterSpeed']));
+    final fNumber = double.tryParse(_meta(const ['FNumber']));
+    final focalRaw =
+        _meta(const ['FocalLength']).replaceAll(RegExp(r'm+$'), '').trim();
+    final focal = double.tryParse(focalRaw);
+    final iso = _meta(const ['ISO']);
+
+    final exposureDetails = <String>[
+      if (iso.isNotEmpty) 'ISO $iso',
+      if (shutter.isNotEmpty) shutter,
+      if (fNumber != null) 'f/${fNumber.toStringAsFixed(1)}',
+      if (focalRaw.isNotEmpty)
+        focal == null ? '${focalRaw}mm' : '${focal.toInt()}mm',
+    ];
+    final dateLabel = date.isEmpty ? '' : _formatExifDateTime(date);
+    final camera = '$make $model'.trim();
+
+    final detailSpans = <InlineSpan>[];
+    void addDetail(String value, {Color? color}) {
+      if (value.isEmpty) return;
+      if (detailSpans.isNotEmpty) {
+        detailSpans.add(
+          TextSpan(
+            text: '  ·  ',
+            style: TextStyle(
+              color: tokens.textSecondary.withValues(alpha: 0.55),
+            ),
+          ),
+        );
+      }
+      detailSpans.add(
+        TextSpan(
+          text: value,
+          style: TextStyle(color: color ?? tokens.textSecondary),
+        ),
+      );
+    }
+
+    if (exposureDetails.isNotEmpty) {
+      addDetail(exposureDetails.join(' · '), color: tokens.accent);
+    }
+    addDetail(dateLabel);
+    addDetail(camera);
+    addDetail(lens);
+
+    if (detailSpans.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      decoration: BoxDecoration(
+        color: tokens.sunken,
+        border: Border(bottom: BorderSide(color: tokens.divider)),
+      ),
+      child: RichText(
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        text: TextSpan(
+          style: tokens.metaStyle.copyWith(
+            fontSize: tokens.textSizeMicro,
+          ),
+          children: detailSpans,
+        ),
+      ),
+    );
+  }
+}
+
 class _PhotoCard extends StatelessWidget {
   const _PhotoCard({
     required this.controller,
@@ -208,6 +335,9 @@ class _PhotoCard extends StatelessWidget {
     final width = _meta(const ['ImageWidth', 'ExifImageWidth']);
     final height = _meta(const ['ImageHeight', 'ExifImageHeight']);
     final fileSize = path == null ? '' : _formatFileSize(path!);
+    final total = controller.imagePaths.length;
+    final counter =
+        path != null && total > 0 ? '${controller.currentIndex + 1}/$total' : '';
     final technicalInfo = [
       if (path != null) p.basename(path!),
       if (width.isNotEmpty && height.isNotEmpty) '$width×$height',
@@ -223,6 +353,7 @@ class _PhotoCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
+          if (path != null) _PhotoInfoHeader(controller: controller, tokens: tokens),
           Expanded(
             child: Stack(
               fit: StackFit.expand,
@@ -350,6 +481,27 @@ class _PhotoCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
+                  if (counter.isNotEmpty) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tokens.selectedFill,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        counter,
+                        style: tokens.monoMetaStyle.copyWith(
+                          color: tokens.accent,
+                          fontSize: tokens.textSizeMicro,
+                          fontWeight: FfTokens.weightMedium,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
                   Expanded(
                     child: Text(
                       technicalInfo,
@@ -1203,7 +1355,7 @@ class _ThumbnailToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final sizeProgress = (maxColumns - columnCount) / (maxColumns - 2);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: tokens.badgeFill,
         border: Border(
@@ -1216,23 +1368,23 @@ class _ThumbnailToolbar extends StatelessWidget {
             'Sort By:',
             style: TextStyle(
               color: tokens.textSecondary,
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w400,
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           _ThumbnailSortDropdown(
             tokens: tokens,
             sort: sort,
             onChanged: onSortChanged,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           _ThumbnailRefreshButton(
             tokens: tokens,
             refreshing: refreshing,
             onTap: onRefresh,
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           Expanded(
             child: Center(
               child: _ThumbnailOverviewButton(
@@ -1241,7 +1393,7 @@ class _ThumbnailToolbar extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           _ThumbnailZoomStepper(
             tokens: tokens,
             sizeProgress: sizeProgress,
@@ -1349,11 +1501,13 @@ class _ThumbnailSortDropdown extends StatelessWidget {
           ),
       ],
       child: Container(
-        width: 110,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        width: 104,
+        height: 22,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        alignment: Alignment.center,
         decoration: BoxDecoration(
           color: tokens.bg,
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(5),
           border: Border.all(color: tokens.divider),
         ),
         child: Row(
@@ -1364,14 +1518,15 @@ class _ThumbnailSortDropdown extends StatelessWidget {
                 softWrap: false,
                 style: TextStyle(
                   color: tokens.text,
-                  fontSize: 10.5,
+                  fontSize: 10,
                   fontWeight: FontWeight.w400,
+                  height: 1.1,
                 ),
               ),
             ),
             Icon(
               Icons.arrow_drop_down,
-              size: 15,
+              size: 14,
               color: tokens.textSecondary,
             ),
           ],
@@ -1536,11 +1691,13 @@ class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
             ),
         ],
         child: Container(
-          width: 118,
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          width: 108,
+          height: 22,
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             color: tokens.bg,
-            borderRadius: BorderRadius.circular(7),
+            borderRadius: BorderRadius.circular(5),
             border: Border.all(
               color: _focused ? tokens.accent : tokens.divider,
               width: _focused ? FfTokens.focusOutlineWidth : 1,
@@ -1554,15 +1711,16 @@ class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
                   softWrap: false,
                   style: TextStyle(
                     color: tokens.text,
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w400,
+                    height: 1.1,
                   ),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: 2),
               Icon(
                 Icons.arrow_drop_down,
-                size: 16,
+                size: 14,
                 color: tokens.textSecondary,
               ),
             ],
@@ -1789,17 +1947,17 @@ class _ThumbnailRefreshButton extends StatelessWidget {
           onTap: refreshing ? null : onTap,
           borderRadius: BorderRadius.circular(6),
           child: Container(
-            width: 34,
-            height: 27,
+            width: 26,
+            height: 22,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
               border: Border.all(color: tokens.divider),
             ),
             child: refreshing
                 ? SizedBox(
-                    width: 14,
-                    height: 14,
+                    width: 12,
+                    height: 12,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
                       color: tokens.accent,
@@ -1807,7 +1965,7 @@ class _ThumbnailRefreshButton extends StatelessWidget {
                   )
                 : Icon(
                     Icons.refresh_rounded,
-                    size: 18,
+                    size: 15,
                     color: tokens.accent,
                   ),
           ),
@@ -1837,16 +1995,16 @@ class _ThumbnailOverviewButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(6),
           child: Container(
-            width: 34,
-            height: 27,
+            width: 26,
+            height: 22,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(5),
               border: Border.all(color: tokens.divider),
             ),
             child: Icon(
               Icons.image_search_outlined,
-              size: 20,
+              size: 15,
               color: tokens.accent,
             ),
           ),
@@ -1881,14 +2039,14 @@ class _ThumbnailZoomStepper extends StatelessWidget {
           onTap: onSmaller,
         ),
         SizedBox(
-          width: 48,
+          width: 40,
           child: Tooltip(
             message: 'Thumbnail size',
             child: Center(
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(3),
                 child: Container(
-                  height: 5,
+                  height: 3,
                   color: tokens.text.withValues(alpha: 0.14),
                   alignment: Alignment.centerLeft,
                   child: AnimatedFractionallySizedBox(
@@ -1955,7 +2113,7 @@ class _ThumbnailScopeFooter extends StatelessWidget {
         break;
     }
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 5, 8, 7),
+      padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
       decoration: BoxDecoration(
         color: tokens.badgeFill,
         border: Border(top: BorderSide(color: tokens.divider)),
@@ -1966,11 +2124,11 @@ class _ThumbnailScopeFooter extends StatelessWidget {
             'Filter:',
             style: TextStyle(
               color: tokens.textSecondary,
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w400,
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           _ThumbnailScopeDropdown(
             tokens: tokens,
             scope: scope,
@@ -1979,7 +2137,7 @@ class _ThumbnailScopeFooter extends StatelessWidget {
             sentCount: sentCount,
             onChanged: onScopeChanged,
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               text,
@@ -1988,8 +2146,9 @@ class _ThumbnailScopeFooter extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: tokens.text.withValues(alpha: 0.45),
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: FontWeight.w400,
+                height: 1.1,
               ),
             ),
           ),
@@ -2022,8 +2181,8 @@ class _ThumbnailSizeButton extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(5),
           child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(icon, size: 14, color: tokens.textSecondary),
+            padding: const EdgeInsets.all(2),
+            child: Icon(icon, size: 13, color: tokens.textSecondary),
           ),
         ),
       ),

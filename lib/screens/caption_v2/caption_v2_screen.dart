@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as p;
 
 import '../../services/admin_service.dart';
@@ -1302,7 +1303,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       onKeywordsChanged: c.showKeywordsField ? c.setKeywords : null,
       onEditTap: () => _openCaptionStyleEditor(c),
       footer: SizedBox(
-        height: c.searchOpen ? 80 : 38,
+        height: c.searchOpen ? 72 : 32,
         child: CaptionV2SearchBar(
           controller: c,
           focusNode: _searchFocus,
@@ -1432,15 +1433,63 @@ class _TopChrome extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (c != null)
-            Expanded(
-              child: _TopPictureInfo(
-                controller: c,
-                tokens: t,
+          if (onResetSession != null)
+            Tooltip(
+              message: 'Start a new caption session',
+              waitDuration: const Duration(milliseconds: 400),
+              child: Material(
+                color: t.selectedFill,
+                borderRadius: BorderRadius.circular(999),
+                child: InkWell(
+                  onTap: onResetSession,
+                  borderRadius: BorderRadius.circular(999),
+                  child: Container(
+                    height: 24,
+                    padding: const EdgeInsets.fromLTRB(6, 0, 10, 0),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: t.accent.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: t.accent,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          alignment: Alignment.center,
+                          child: SvgPicture.asset(
+                            'assets/images/rocket_icon_white_only.svg',
+                            width: 11,
+                            height: 11,
+                            fit: BoxFit.contain,
+                            colorFilter: ColorFilter.mode(
+                              t.bg,
+                              BlendMode.srcIn,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Start New Session',
+                          style: t.metaStyle.copyWith(
+                            color: t.accent,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            )
-          else
-            const Spacer(),
+            ),
+          const Spacer(),
           if (c?.rostersLoading == true) ...[
             SizedBox(
               width: 14,
@@ -1451,22 +1500,6 @@ class _TopChrome extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-          ],
-          if (onResetSession != null) ...[
-            TextButton(
-              onPressed: onResetSession,
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              ),
-              child: Text(
-                'Start New Session',
-                style: t.metaStyle.copyWith(color: t.accent),
-              ),
-            ),
-            const SizedBox(width: 4),
           ],
           if (c != null) ...[
             _FtpModeToggle(
@@ -1524,30 +1557,6 @@ class _FtpModeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget seg(
-        {required String label, required bool selected, required bool on}) {
-      return Material(
-        color: selected ? const Color(0xFF3A4050) : Colors.transparent,
-        child: InkWell(
-          onTap: selected ? null : () => onChanged(on),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                height: 1.1,
-                fontWeight: FontWeight.w500,
-                color: selected
-                    ? tokens.text
-                    : tokens.text.withValues(alpha: 0.42),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
     return Tooltip(
       message: enabled
           ? 'FTP mode on — FTP buttons and shortcuts are available'
@@ -1560,208 +1569,19 @@ class _FtpModeToggle extends StatelessWidget {
             'FTP',
             style: tokens.metaStyle.copyWith(fontWeight: FontWeight.w600),
           ),
-          const SizedBox(width: 6),
-          Container(
-            decoration: BoxDecoration(
-              color: tokens.bg,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: tokens.divider),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                seg(label: 'On', selected: enabled, on: true),
-                Container(width: 1, height: 22, color: tokens.divider),
-                seg(label: 'Off', selected: !enabled, on: false),
-              ],
+          const SizedBox(width: 2),
+          Transform.scale(
+            scale: 0.55,
+            alignment: Alignment.centerLeft,
+            child: Switch.adaptive(
+              value: enabled,
+              onChanged: onChanged,
+              activeColor: tokens.accent,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _TopPictureInfo extends StatelessWidget {
-  const _TopPictureInfo({
-    required this.controller,
-    required this.tokens,
-  });
-
-  final CaptionV2Controller controller;
-  final FfTokens tokens;
-
-  String _meta(List<String> keys) {
-    for (final key in keys) {
-      final value = controller.currentIptcMeta[key]?.trim();
-      if (value != null && value.isNotEmpty) return value;
-    }
-    return '';
-  }
-
-  String _formatDateTime(String raw) {
-    final match = RegExp(
-      r'^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})',
-    ).firstMatch(raw);
-    if (match == null) return raw;
-    const months = [
-      'Jan',
-      'Feb',
-      'Mar',
-      'Apr',
-      'May',
-      'Jun',
-      'Jul',
-      'Aug',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dec',
-    ];
-    final month = int.tryParse(match.group(2)!) ?? 0;
-    final monthLabel =
-        month >= 1 && month <= 12 ? months[month - 1] : match.group(2)!;
-    final day = int.tryParse(match.group(3)!) ?? 0;
-    return '$monthLabel $day, ${match.group(1)} '
-        '${match.group(4)}:${match.group(5)}:${match.group(6)}';
-  }
-
-  String _formatShutter(String raw) {
-    if (raw.isEmpty || raw.contains('/')) return raw;
-    final value = double.tryParse(raw);
-    if (value == null || value <= 0) return raw;
-    return value < 1
-        ? '1/${(1 / value).round()}s'
-        : '${value.toStringAsFixed(1)}s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final path = controller.currentPath;
-    final total = controller.imagePaths.length;
-    if (path == null || total == 0) {
-      return Text('— / —', style: tokens.monoMetaStyle);
-    }
-
-    final date = _meta(const [
-      'DateTimeOriginal',
-      'CreateDate',
-      'ModifyDate',
-    ]);
-    final make = _meta(const ['Make']);
-    final model = _meta(const ['Model']);
-    final lens = _meta(const ['LensModel', 'Lens', 'LensID']);
-    final shutter = _formatShutter(_meta(const ['ShutterSpeed']));
-    final fNumber = double.tryParse(_meta(const ['FNumber']));
-    final focalRaw =
-        _meta(const ['FocalLength']).replaceAll(RegExp(r'm+$'), '').trim();
-    final focal = double.tryParse(focalRaw);
-    final iso = _meta(const ['ISO']);
-
-    final exposureDetails = <String>[
-      if (iso.isNotEmpty) 'ISO $iso',
-      if (shutter.isNotEmpty) shutter,
-      if (fNumber != null) 'f/${fNumber.toStringAsFixed(1)}',
-      if (focalRaw.isNotEmpty)
-        focal == null ? '${focalRaw}mm' : '${focal.toInt()}mm',
-    ];
-    final dateLabel = date.isEmpty ? '' : _formatDateTime(date);
-    final remainingSpans = <InlineSpan>[];
-    void addRemainingDetail(String value) {
-      if (value.isEmpty) return;
-      if (remainingSpans.isNotEmpty) {
-        remainingSpans.add(
-          TextSpan(
-            text: '  ·  ',
-            style: TextStyle(
-              color: tokens.textSecondary.withValues(alpha: 0.55),
-            ),
-          ),
-        );
-      }
-      remainingSpans.add(
-        TextSpan(
-          text: value,
-          style: TextStyle(color: tokens.textSecondary),
-        ),
-      );
-    }
-
-    addRemainingDetail('$make $model'.trim());
-    addRemainingDetail(lens);
-
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: tokens.selectedFill,
-            borderRadius: BorderRadius.circular(999),
-          ),
-          child: Text(
-            '${controller.currentIndex + 1}/$total',
-            style: tokens.monoMetaStyle.copyWith(
-              color: tokens.accent,
-              fontSize: tokens.textSizeMicro,
-              fontWeight: FfTokens.weightMedium,
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        if (exposureDetails.isNotEmpty) ...[
-          Text(
-            exposureDetails.join(' · '),
-            maxLines: 1,
-            style: tokens.metaStyle.copyWith(
-              color: tokens.accent,
-              fontSize: tokens.textSizeMicro,
-              fontWeight: FfTokens.weightMedium,
-            ),
-          ),
-        ],
-        if (dateLabel.isNotEmpty || remainingSpans.isNotEmpty) ...[
-          const SizedBox(width: 6),
-          Container(
-            width: 1,
-            height: 14,
-            color: tokens.accent.withValues(alpha: 0.45),
-          ),
-          const SizedBox(width: 6),
-        ],
-        if (dateLabel.isNotEmpty)
-          Text(
-            dateLabel,
-            maxLines: 1,
-            style: tokens.metaStyle.copyWith(
-              color: tokens.textSecondary,
-              fontSize: tokens.textSizeMicro,
-            ),
-          ),
-        if (dateLabel.isNotEmpty && remainingSpans.isNotEmpty) ...[
-          const SizedBox(width: 6),
-          Container(
-            width: 1,
-            height: 14,
-            color: tokens.accent.withValues(alpha: 0.45),
-          ),
-          const SizedBox(width: 6),
-        ],
-        if (remainingSpans.isNotEmpty)
-          Expanded(
-            child: RichText(
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              text: TextSpan(
-                style: tokens.metaStyle.copyWith(
-                  fontSize: tokens.textSizeMicro,
-                ),
-                children: remainingSpans,
-              ),
-            ),
-          ),
-        const SizedBox(width: 6),
-      ],
     );
   }
 }

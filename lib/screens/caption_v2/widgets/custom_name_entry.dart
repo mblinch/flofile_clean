@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
+import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/app_styled_dialogs.dart';
 
@@ -30,49 +32,165 @@ Future<CustomNameEntryResult?> showCustomNameEntryDialog({
   );
 }
 
-/// Compact footer control used under roster / drum lanes.
-class CustomNameEntryButton extends StatelessWidget {
-  const CustomNameEntryButton({
+/// Inline footer field matching the custom-verb bar: jersey + name + last + pin.
+class CustomNameField extends StatelessWidget {
+  const CustomNameField({
     super.key,
+    required this.nameController,
+    required this.jerseyController,
+    required this.nameFocusNode,
+    required this.jerseyFocusNode,
     required this.tokens,
-    required this.onTap,
+    required this.pinned,
+    required this.canUseLast,
+    required this.onSubmit,
+    required this.onTogglePin,
+    required this.onUseLast,
+    this.onChanged,
   });
 
+  final TextEditingController nameController;
+  final TextEditingController jerseyController;
+  final FocusNode nameFocusNode;
+  final FocusNode jerseyFocusNode;
   final FfTokens tokens;
+  final bool pinned;
+  final bool canUseLast;
+  final VoidCallback onSubmit;
+  final VoidCallback onTogglePin;
+  final VoidCallback onUseLast;
+  final VoidCallback? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final canPin = nameController.text.trim().isNotEmpty || pinned;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
+      child: Container(
+        height: 28,
+        decoration: BoxDecoration(
+          color: tokens.badgeFill,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: pinned ? tokens.accent : tokens.divider,
+          ),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 42,
+              child: TextField(
+                controller: jerseyController,
+                focusNode: jerseyFocusNode,
+                readOnly: pinned,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z]')),
+                  LengthLimitingTextInputFormatter(3),
+                ],
+                textAlign: TextAlign.center,
+                textInputAction: TextInputAction.next,
+                onChanged: (_) => onChanged?.call(),
+                onSubmitted: (_) => nameFocusNode.requestFocus(),
+                style: tokens.jerseyStyle.copyWith(
+                  fontSize: 12,
+                  color: tokens.text,
+                  height: 1.1,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: '#',
+                  hintStyle: tokens.jerseyStyle.copyWith(
+                    fontSize: 12,
+                    color: tokens.textSecondary,
+                    height: 1.1,
+                  ),
+                  contentPadding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
+            Container(width: 1, height: 16, color: tokens.divider),
+            Expanded(
+              child: TextField(
+                controller: nameController,
+                focusNode: nameFocusNode,
+                readOnly: pinned,
+                textInputAction: TextInputAction.done,
+                onChanged: (_) => onChanged?.call(),
+                onSubmitted: (_) => onSubmit(),
+                spellCheckConfiguration: floSpellCheckConfiguration(),
+                contextMenuBuilder: floSpellCheckContextMenuBuilder,
+                style: tokens.labelStyle.copyWith(
+                  fontSize: 11.5,
+                  color: tokens.text,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Custom name',
+                  hintStyle: tokens.labelStyle.copyWith(
+                    fontSize: 11.5,
+                    color: tokens.textSecondary,
+                  ),
+                  contentPadding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+                  border: InputBorder.none,
+                ),
+              ),
+            ),
+            _CustomNameAction(
+              icon: Icons.history,
+              tooltip: 'Use last custom name',
+              tokens: tokens,
+              enabled: canUseLast,
+              onTap: onUseLast,
+            ),
+            _CustomNameAction(
+              icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+              tooltip: pinned ? 'Unpin custom name' : 'Pin custom name',
+              tokens: tokens,
+              enabled: canPin,
+              selected: pinned,
+              onTap: onTogglePin,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomNameAction extends StatelessWidget {
+  const _CustomNameAction({
+    required this.icon,
+    required this.tooltip,
+    required this.tokens,
+    required this.enabled,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final FfTokens tokens;
+  final bool enabled;
+  final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-          child: Container(
-            height: 28,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: tokens.sunken,
-              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-              border: Border.all(color: tokens.divider),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.person_add_alt_1, size: 13, color: tokens.accent),
-                const SizedBox(width: 5),
-                Text(
-                  'Custom name',
-                  style: tokens.metaStyle.copyWith(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: tokens.accent,
-                  ),
-                ),
-              ],
-            ),
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        child: SizedBox(
+          width: 25,
+          height: 28,
+          child: Icon(
+            icon,
+            size: 14,
+            color: enabled
+                ? (selected ? tokens.accent : tokens.textSecondary)
+                : tokens.divider,
           ),
         ),
       ),

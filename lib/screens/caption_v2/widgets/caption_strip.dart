@@ -168,7 +168,7 @@ class CaptionStrip extends StatelessWidget {
               children: [
                 ConstrainedBox(
                   constraints: BoxConstraints(
-                    minHeight: t.textSizeCaption * 1.45 * 3,
+                    minHeight: t.textSizeCaption * 1.35 * 2,
                   ),
                   child: onCaptionChanged != null
                       ? _CaptionEditor(
@@ -183,7 +183,7 @@ class CaptionStrip extends StatelessWidget {
                           : Wrap(
                               crossAxisAlignment: WrapCrossAlignment.center,
                               spacing: 4,
-                              runSpacing: 6,
+                              runSpacing: 4,
                               children: [
                                 Text(leading, style: t.captionStyle),
                                 for (final chip
@@ -203,7 +203,7 @@ class CaptionStrip extends StatelessWidget {
                 if (inningLabel != null ||
                     onPreTap != null ||
                     onPostTap != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 5),
                   _InningCard(
                     inningLabel: inningLabel,
                     timingUnitLabel: timingUnitLabel,
@@ -236,15 +236,15 @@ class CaptionStrip extends StatelessWidget {
                   ),
                 ],
                 if (footer != null) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   footer!,
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 5),
                 ],
               ],
             ),
           ),
           if (onHeadlineChanged != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             _MetadataBar(
               label: 'HEADLINE',
               hintText: 'Enter headline',
@@ -254,7 +254,7 @@ class CaptionStrip extends StatelessWidget {
             ),
           ],
           if (onKeywordsChanged != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             _MetadataBar(
               label: 'KEYWORDS',
               hintText: 'Comma-separated keywords',
@@ -325,7 +325,7 @@ class _CaptionEditorState extends State<_CaptionEditor> {
       controller: _controller,
       focusNode: _focusNode,
       maxLines: null,
-      minLines: 3,
+      minLines: 2,
       keyboardType: TextInputType.multiline,
       textAlignVertical: TextAlignVertical.top,
       style: highlights.isEmpty
@@ -434,7 +434,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
   Widget build(BuildContext context) {
     final t = widget.tokens;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
+      padding: const EdgeInsets.fromLTRB(8, 5, 8, 0),
       decoration: BoxDecoration(
         color: t.bg,
         borderRadius: BorderRadius.circular(10),
@@ -462,17 +462,22 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            'Caption',
+                            'CAPTION',
                             style: FfTokens.captionTitle.copyWith(
-                              color: t.text.withValues(alpha: 0.72),
-                              fontSize: 26,
-                              letterSpacing: -0.78,
+                              color: t.text,
+                              fontSize: 15,
+                              letterSpacing: -0.45,
+                              height: 1,
+                            ),
+                            textHeightBehavior: const TextHeightBehavior(
+                              applyHeightToFirstAscent: false,
+                              applyHeightToLastDescent: false,
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 6),
                           PhosphorIcon(
                             PhosphorIconsRegular.notePencil,
-                            size: 19,
+                            size: 14,
                             color:
                                 t.text.withValues(alpha: _hovered ? 1 : 0.55),
                           ),
@@ -483,20 +488,20 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                 ),
               ),
               if (widget.headerTrailing != null) ...[
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Container(
                   width: 1,
-                  height: 22,
+                  height: 18,
                   color: t.divider,
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(child: widget.headerTrailing!),
               ],
             ],
           ),
           const SizedBox(height: 1),
           Divider(height: 1, thickness: 1, color: t.divider),
-          const SizedBox(height: 8),
+          const SizedBox(height: 5),
           widget.child,
         ],
       ),
@@ -684,7 +689,7 @@ class _InningCardState extends State<_InningCard> {
 
     return Container(
       width: double.infinity,
-      height: 38,
+      height: 32,
       padding: const EdgeInsets.fromLTRB(2, 0, 6, 0),
       decoration: BoxDecoration(
         color: t.surface,
@@ -700,12 +705,12 @@ class _InningCardState extends State<_InningCard> {
               children: [
                 Icon(
                   Icons.chevron_right,
-                  size: 17,
+                  size: 15,
                   color: timingOn
                       ? t.textSecondary
                       : t.textSecondary.withValues(alpha: 0.45),
                 ),
-                const SizedBox(width: 5),
+                const SizedBox(width: 4),
                 Expanded(
                   child: Tooltip(
                     message: timingOn
@@ -727,8 +732,9 @@ class _InningCardState extends State<_InningCard> {
                           color: timingOn
                               ? t.text
                               : t.textSecondary.withValues(alpha: 0.55),
-                          fontSize: widget.timingUnitLabel.length > 8 ? 13 : 16,
-                          letterSpacing: 0.5,
+                          fontSize: widget.timingUnitLabel.length > 8 ? 12 : 14,
+                          letterSpacing: 0.4,
+                          height: 1,
                         ),
                       ),
                     ),
@@ -750,8 +756,8 @@ class _InningCardState extends State<_InningCard> {
                               setState(() => _useStepper = !_useStepper),
                           borderRadius: BorderRadius.circular(5),
                           child: Container(
-                            width: 40,
-                            height: 26,
+                            width: 36,
+                            height: 22,
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
                               color: t.badgeFill,
@@ -840,26 +846,27 @@ class _MetadataBarState extends State<_MetadataBar> {
   Widget build(BuildContext context) {
     final t = widget.tokens;
     return SizedBox(
-      height: 28,
+      height: 24,
       child: TextField(
         controller: _controller,
         focusNode: _focusNode,
         maxLines: 1,
-        style: t.metaStyle.copyWith(color: t.text),
+        style: t.metaStyle.copyWith(color: t.text, fontSize: 12, height: 1.1),
         cursorColor: t.accent,
         spellCheckConfiguration: floSpellCheckConfiguration(),
         contextMenuBuilder: floSpellCheckContextMenuBuilder,
         decoration: InputDecoration(
+          isDense: true,
           prefixIcon: Padding(
-            padding: const EdgeInsets.only(left: 8, right: 8),
+            padding: const EdgeInsets.only(left: 7, right: 7),
             child: Text(widget.label, style: t.microStyle),
           ),
           prefixIconConstraints: const BoxConstraints(),
           hintText: widget.hintText,
-          hintStyle: t.metaStyle,
+          hintStyle: t.metaStyle.copyWith(fontSize: 12),
           filled: true,
           fillColor: t.sunken,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 7),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(6),
             borderSide: BorderSide(color: t.divider),
@@ -925,7 +932,7 @@ class _PersonalityBarState extends State<_PersonalityBar> {
   Widget build(BuildContext context) {
     final t = widget.tokens;
     return SizedBox(
-      height: 28,
+      height: 24,
       child: Row(
         children: [
           Text(
@@ -933,9 +940,10 @@ class _PersonalityBarState extends State<_PersonalityBar> {
             softWrap: false,
             style: FfTokens.railLabel.copyWith(
               color: t.text.withValues(alpha: 0.50),
+              fontSize: 10,
             ),
           ),
-          const SizedBox(width: 11),
+          const SizedBox(width: 8),
           Expanded(
             child: TextField(
               controller: _controller,
@@ -943,9 +951,10 @@ class _PersonalityBarState extends State<_PersonalityBar> {
               maxLines: 1,
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: FontWeight.w400,
                 color: t.text,
+                height: 1.1,
               ),
               cursorColor: t.accent,
               spellCheckConfiguration: floSpellCheckConfiguration(),

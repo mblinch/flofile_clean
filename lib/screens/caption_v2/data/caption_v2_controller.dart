@@ -326,6 +326,8 @@ class CaptionV2Controller extends ChangeNotifier {
   String customVerbPhrase = '';
   String lastCustomVerbPhrase = '';
   bool customVerbPinned = false;
+  String lastCustomPlayerName = '';
+  String lastCustomPlayerJersey = '';
   bool captionSelectionStarted = false;
   String? celebrationType;
   String? pinnedVerb;
@@ -1763,6 +1765,7 @@ class CaptionV2Controller extends ChangeNotifier {
     _prefs!.captionFieldVisibilityRevision.addListener(
       _onCaptionFieldVisibilityChanged,
     );
+    _prefs!.ftpProfilesRevision.addListener(_onFtpProfilesChanged);
     final syncId = await _prefs!.getSyncAccountId();
     mlbTimestampAvailable = MlbInningFeatureGate.isEnabled(syncId);
     final previous = await _prefs!.getLastSavedMetadata();
@@ -1899,6 +1902,8 @@ class CaptionV2Controller extends ChangeNotifier {
     customVerbPhrase = '';
     lastCustomVerbPhrase = '';
     customVerbPinned = false;
+    lastCustomPlayerName = '';
+    lastCustomPlayerJersey = '';
     captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
@@ -2033,6 +2038,8 @@ class CaptionV2Controller extends ChangeNotifier {
     customVerbPhrase = '';
     lastCustomVerbPhrase = '';
     customVerbPinned = false;
+    lastCustomPlayerName = '';
+    lastCustomPlayerJersey = '';
     personality = '';
     manualCaptionOverride = null;
     notifyListeners();
@@ -2786,6 +2793,13 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
+  void _onFtpProfilesChanged() {
+    unawaited(() async {
+      await _refreshFtpDestination();
+      notifyListeners();
+    }());
+  }
+
   // ---------------------------------------------------------------------------
   // Selection
   // ---------------------------------------------------------------------------
@@ -2806,6 +2820,37 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool get canUseLastCustomPlayer => lastCustomPlayerName.trim().isNotEmpty;
+
+  void rememberLastCustomPlayer({
+    required String fullName,
+    String? jerseyNumber,
+  }) {
+    final name = fullName.trim();
+    if (name.isEmpty) return;
+    lastCustomPlayerName = name;
+    lastCustomPlayerJersey = jerseyNumber?.trim() ?? '';
+  }
+
+  Player? findRosterPlayer({
+    required bool isHome,
+    required String fullName,
+    String? jerseyNumber,
+  }) {
+    final name = fullName.trim();
+    if (name.isEmpty) return null;
+    final jersey = jerseyNumber?.trim();
+    final jerseyKey = (jersey == null || jersey.isEmpty) ? null : jersey;
+    final roster = isHome ? homeRoster : awayRoster;
+    for (final player in roster) {
+      if (player.fullName.trim() != name) continue;
+      final playerJersey = (player.jerseyNumber ?? '').trim();
+      final playerKey = playerJersey.isEmpty ? null : playerJersey;
+      if (playerKey == jerseyKey) return player;
+    }
+    return null;
+  }
+
   /// Adds a typed custom name to the home/away roster and selects it.
   /// Returns an error message on jersey conflict; null on success.
   String? addCustomPlayer({
@@ -2819,6 +2864,20 @@ class CaptionV2Controller extends ChangeNotifier {
     final jersey = jerseyNumber?.trim();
     final jerseyKey = (jersey == null || jersey.isEmpty) ? null : jersey;
     final roster = isHome ? homeRoster : awayRoster;
+    final existing = findRosterPlayer(
+      isHome: isHome,
+      fullName: name,
+      jerseyNumber: jerseyKey,
+    );
+    if (existing != null) {
+      rememberLastCustomPlayer(fullName: name, jerseyNumber: jerseyKey);
+      if (!isPlayerSelected(existing, isHome: isHome)) {
+        selectPlayer(existing, isHome: isHome);
+      } else {
+        notifyListeners();
+      }
+      return null;
+    }
     if (jerseyKey != null) {
       final taken = roster.any(
         (p) => (p.jerseyNumber ?? '').trim() == jerseyKey,
@@ -2838,6 +2897,7 @@ class CaptionV2Controller extends ChangeNotifier {
     } else {
       awayRoster = next;
     }
+    rememberLastCustomPlayer(fullName: name, jerseyNumber: jerseyKey);
     // Always select the new custom name (don't toggle off if somehow present).
     final already = selectedPlayers.any(
       (row) => row.isHome == isHome && _samePlayer(row.player, player),
@@ -2848,6 +2908,62 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
     }
     return null;
+  }
+
+  /// Adds/selects a typed custom player. When [pin] is true, also pins them.
+  String? commitCustomPlayer({
+    required bool isHome,
+    required String fullName,
+    String? jerseyNumber,
+    bool pin = false,
+  }) {
+    final error = addCustomPlayer(
+      isHome: isHome,
+      fullName: fullName,
+      jerseyNumber: jerseyNumber,
+    );
+    if (error != null) return error;
+    if (!pin) return null;
+    final player = findRosterPlayer(
+      isHome: isHome,
+      fullName: fullName,
+      jerseyNumber: jerseyNumber,
+    );
+    if (player == null) return null;
+    if (!isPlayerPinned(player, isHome: isHome)) {
+      pinnedPlayer = RosterHit(player: player, isHome: isHome);
+      notifyListeners();
+    }
+    return null;
+  }
+
+  /// Toggle pin for the typed custom player (commits first if needed).
+  String? toggleCustomPlayerPin({
+    required bool isHome,
+    required String fullName,
+    String? jerseyNumber,
+  }) {
+    final name = fullName.trim();
+    if (name.isEmpty && lastCustomPlayerName.isEmpty) return null;
+    final effectiveName = name.isEmpty ? lastCustomPlayerName : name;
+    final effectiveJersey = name.isEmpty
+        ? (lastCustomPlayerJersey.isEmpty ? null : lastCustomPlayerJersey)
+        : jerseyNumber;
+    final existing = findRosterPlayer(
+      isHome: isHome,
+      fullName: effectiveName,
+      jerseyNumber: effectiveJersey,
+    );
+    if (existing != null && isPlayerPinned(existing, isHome: isHome)) {
+      unpinPlayer();
+      return null;
+    }
+    return commitCustomPlayer(
+      isHome: isHome,
+      fullName: effectiveName,
+      jerseyNumber: effectiveJersey,
+      pin: true,
+    );
   }
 
   /// Replaces [original] on the home or away roster. Jersey conflicts with a
@@ -6452,6 +6568,7 @@ class CaptionV2Controller extends ChangeNotifier {
     _prefs?.captionFieldVisibilityRevision.removeListener(
       _onCaptionFieldVisibilityChanged,
     );
+    _prefs?.ftpProfilesRevision.removeListener(_onFtpProfilesChanged);
     super.dispose();
   }
 }

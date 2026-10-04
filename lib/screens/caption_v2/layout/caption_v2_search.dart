@@ -137,7 +137,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
         widget.focusNode.requestFocus();
       },
       child: Container(
-        height: active ? 80 : 38,
+        height: active ? 72 : 32,
         padding: const EdgeInsets.fromLTRB(2, 0, 6, 0),
         decoration: BoxDecoration(
           color: tokens.surface,
@@ -146,7 +146,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
         child: Column(
           children: [
             SizedBox(
-              height: 36,
+              height: 32,
               child: Row(
                 children: [
                   SizedBox(
@@ -155,19 +155,19 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                       children: [
                         const Icon(
                           Icons.local_fire_department,
-                          size: 17,
+                          size: 15,
                           color: FfTokens.firebar,
                         ),
-                        const SizedBox(width: 5),
+                        const SizedBox(width: 4),
                         SizedBox(
-                          width: 58,
+                          width: 52,
                           child: Text(
                             'Firebar',
                             maxLines: 1,
                             softWrap: false,
                             style: FfTokens.captionTitle.copyWith(
-                              fontSize: 16,
-                              letterSpacing: 0.5,
+                              fontSize: 14,
+                              letterSpacing: 0.4,
                               height: 1,
                               foreground: Paint()
                                 ..shader = const LinearGradient(
@@ -183,8 +183,8 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                         ),
                         const SizedBox(width: 4),
                         Container(
-                          width: 40,
-                          height: 26,
+                          width: 34,
+                          height: 22,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: tokens.badgeFill,
@@ -193,18 +193,18 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                           child: Text(
                             '⌘K',
                             style: tokens.keyHintStyle.copyWith(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w700,
                               height: 1,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 4),
                       ],
                     ),
                   ),
-                  Container(width: 1, height: 18, color: tokens.divider),
-                  const SizedBox(width: 8),
+                  Container(width: 1, height: 16, color: tokens.divider),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Focus(
                       onKeyEvent: _handleKey,
@@ -216,19 +216,19 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                         maxLines: 1,
                         style: tokens.metaStyle.copyWith(
                           color: tokens.text,
-                          fontSize: 13,
+                          fontSize: 12,
                         ),
                         cursorColor: FfTokens.firebar,
                         decoration: InputDecoration(
                           border: InputBorder.none,
                           isDense: true,
                           contentPadding:
-                              const EdgeInsets.symmetric(vertical: 8),
+                              const EdgeInsets.symmetric(vertical: 6),
                           hintText: controller.firebarOptionPrompt ??
                               'Type a name, jersey number, or verb',
                           hintStyle: tokens.metaStyle.copyWith(
                             color: tokens.text.withValues(alpha: 0.38),
-                            fontSize: 13,
+                            fontSize: 12,
                           ),
                         ),
                         onChanged: controller.setSearchQuery,
@@ -265,7 +265,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    padding: const EdgeInsets.symmetric(vertical: 5),
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(

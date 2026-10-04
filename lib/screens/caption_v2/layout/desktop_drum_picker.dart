@@ -67,6 +67,14 @@ class _DrumPickerState extends State<DrumPicker> {
   final _awayFilter = TextEditingController();
   final _customVerbController = TextEditingController();
   final _customVerbFocusNode = FocusNode(debugLabel: 'Drum custom verb');
+  final _homeCustomNameController = TextEditingController();
+  final _homeCustomJerseyController = TextEditingController();
+  final _homeCustomNameFocus = FocusNode(debugLabel: 'Home custom name');
+  final _homeCustomJerseyFocus = FocusNode(debugLabel: 'Home custom jersey');
+  final _awayCustomNameController = TextEditingController();
+  final _awayCustomJerseyController = TextEditingController();
+  final _awayCustomNameFocus = FocusNode(debugLabel: 'Away custom name');
+  final _awayCustomJerseyFocus = FocusNode(debugLabel: 'Away custom jersey');
   int _seenPlayerSearchClearGeneration = -1;
 
   CaptionV2Controller get controller => widget.controller;
@@ -163,12 +171,22 @@ class _DrumPickerState extends State<DrumPicker> {
     _awayFilter.dispose();
     _customVerbController.dispose();
     _customVerbFocusNode.dispose();
+    _homeCustomNameController.dispose();
+    _homeCustomJerseyController.dispose();
+    _homeCustomNameFocus.dispose();
+    _homeCustomJerseyFocus.dispose();
+    _awayCustomNameController.dispose();
+    _awayCustomJerseyController.dispose();
+    _awayCustomNameFocus.dispose();
+    _awayCustomJerseyFocus.dispose();
     super.dispose();
   }
 
   void _onController() {
     if (!mounted) return;
     _syncCustomVerbField();
+    _syncCustomNameFromPin(isHome: true);
+    _syncCustomNameFromPin(isHome: false);
     final generation = controller.playerSearchClearGeneration;
     if (generation != _seenPlayerSearchClearGeneration) {
       _seenPlayerSearchClearGeneration = generation;
@@ -620,9 +638,10 @@ class _DrumPickerState extends State<DrumPicker> {
   ) {
     final armed = _armedLane == lane;
     final isRoster = lane != DrumLane.verbs;
+    const headerHeight = 26.0;
     return Container(
-      height: isRoster ? 34 : 30,
-      padding: EdgeInsets.symmetric(horizontal: isRoster ? 8 : 10),
+      height: headerHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: tokens.divider)),
@@ -630,31 +649,31 @@ class _DrumPickerState extends State<DrumPicker> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (isRoster) ...[
-            Text(
-              title,
-              style: FfTokens.captionTitle.copyWith(
-                color: armed ? tokens.accent : tokens.text,
-                fontSize: 15,
-                letterSpacing: -0.45,
-                height: 1,
-              ),
-              textHeightBehavior: const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
-              ),
+          Text(
+            title,
+            style: FfTokens.captionTitle.copyWith(
+              color: armed ? tokens.accent : tokens.text,
+              fontSize: 15,
+              letterSpacing: -0.45,
+              height: 1,
             ),
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
+            ),
+          ),
+          if (isRoster) ...[
             if (widget.onEditRosters != null)
               Padding(
-                padding: const EdgeInsets.only(left: 6, right: 4),
+                padding: const EdgeInsets.only(left: 4, right: 2),
                 child: IconButton(
                   onPressed: widget.onEditRosters,
                   tooltip: 'Edit rosters',
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.all(2),
                   constraints:
-                      const BoxConstraints.tightFor(width: 24, height: 24),
+                      const BoxConstraints.tightFor(width: 22, height: 22),
                   visualDensity: VisualDensity.compact,
-                  iconSize: 13,
+                  iconSize: 12,
                   color: tokens.textSecondary,
                   icon: const Icon(Icons.edit_outlined),
                 ),
@@ -663,7 +682,7 @@ class _DrumPickerState extends State<DrumPicker> {
             Expanded(
               child: Container(
                 height: 22,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 7),
                 decoration: BoxDecoration(
                   color: tokens.sunken,
                   borderRadius: BorderRadius.circular(FfTokens.radiusChip),
@@ -748,11 +767,11 @@ class _DrumPickerState extends State<DrumPicker> {
                 }),
                 borderRadius: BorderRadius.circular(6),
                 child: SizedBox(
-                  width: 26,
-                  height: 26,
+                  width: 22,
+                  height: 22,
                   child: Icon(
                     Icons.grid_view_rounded,
-                    size: 15,
+                    size: 14,
                     color: _numberMode
                         ? tokens.accent
                         : tokens.textSecondary,
@@ -760,9 +779,8 @@ class _DrumPickerState extends State<DrumPicker> {
                 ),
               ),
             ),
-          ],
-          if (lane == DrumLane.verbs) ...[
-            const SizedBox(width: 4),
+          ] else ...[
+            const Spacer(),
             _VerbModeMenu(
               mode: _verbLaneMode,
               tokens: tokens,
@@ -781,6 +799,7 @@ class _DrumPickerState extends State<DrumPicker> {
     required List<Player> players,
     required int selectedIndex,
   }) {
+    final isHome = lane == DrumLane.home;
     final letterFilter =
         lane == DrumLane.home ? _homeLetterFilter : _awayLetterFilter;
     final visiblePlayers = _visiblePlayersFor(lane);
@@ -948,13 +967,120 @@ class _DrumPickerState extends State<DrumPicker> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-          child: CustomNameEntryButton(
+          child: CustomNameField(
+            nameController: isHome
+                ? _homeCustomNameController
+                : _awayCustomNameController,
+            jerseyController: isHome
+                ? _homeCustomJerseyController
+                : _awayCustomJerseyController,
+            nameFocusNode:
+                isHome ? _homeCustomNameFocus : _awayCustomNameFocus,
+            jerseyFocusNode:
+                isHome ? _homeCustomJerseyFocus : _awayCustomJerseyFocus,
             tokens: tokens,
-            onTap: () => _openCustomNameDialog(lane),
+            pinned: _customNamePinned(isHome: isHome),
+            canUseLast: controller.canUseLastCustomPlayer,
+            onChanged: () => setState(() {}),
+            onSubmit: () => _submitCustomName(isHome: isHome),
+            onTogglePin: () => _toggleCustomNamePin(isHome: isHome),
+            onUseLast: () => _useLastCustomName(isHome: isHome),
           ),
         ),
       ],
     );
+  }
+
+  bool _customNamePinned({required bool isHome}) {
+    final nameController =
+        isHome ? _homeCustomNameController : _awayCustomNameController;
+    final jerseyController =
+        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
+    final name = nameController.text.trim();
+    if (name.isEmpty) return false;
+    final jersey = jerseyController.text.trim();
+    final player = controller.findRosterPlayer(
+      isHome: isHome,
+      fullName: name,
+      jerseyNumber: jersey.isEmpty ? null : jersey,
+    );
+    if (player == null) return false;
+    return controller.isPlayerPinned(player, isHome: isHome);
+  }
+
+  void _syncCustomNameFromPin({required bool isHome}) {
+    final pinned = controller.pinnedPlayer;
+    if (pinned == null || pinned.isHome != isHome) return;
+    final nameFocus = isHome ? _homeCustomNameFocus : _awayCustomNameFocus;
+    final jerseyFocus =
+        isHome ? _homeCustomJerseyFocus : _awayCustomJerseyFocus;
+    if (nameFocus.hasFocus || jerseyFocus.hasFocus) return;
+    final nameController =
+        isHome ? _homeCustomNameController : _awayCustomNameController;
+    final jerseyController =
+        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
+    final name = pinned.player.fullName;
+    final jersey = pinned.player.jerseyNumber ?? '';
+    if (nameController.text == name && jerseyController.text == jersey) return;
+    nameController.text = name;
+    jerseyController.text = jersey;
+  }
+
+  void _showCustomNameError(String? error) {
+    if (error == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
+    );
+  }
+
+  void _submitCustomName({required bool isHome}) {
+    final nameController =
+        isHome ? _homeCustomNameController : _awayCustomNameController;
+    final jerseyController =
+        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
+    final name = nameController.text.trim();
+    if (name.isEmpty) return;
+    final jersey = jerseyController.text.trim();
+    final error = controller.commitCustomPlayer(
+      isHome: isHome,
+      fullName: name,
+      jerseyNumber: jersey.isEmpty ? null : jersey,
+    );
+    _showCustomNameError(error);
+    setState(() {});
+  }
+
+  void _useLastCustomName({required bool isHome}) {
+    if (!controller.canUseLastCustomPlayer) return;
+    final nameController =
+        isHome ? _homeCustomNameController : _awayCustomNameController;
+    final jerseyController =
+        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
+    final nameFocus = isHome ? _homeCustomNameFocus : _awayCustomNameFocus;
+    nameController.text = controller.lastCustomPlayerName;
+    jerseyController.text = controller.lastCustomPlayerJersey;
+    setState(() {});
+    nameFocus.requestFocus();
+  }
+
+  void _toggleCustomNamePin({required bool isHome}) {
+    final nameController =
+        isHome ? _homeCustomNameController : _awayCustomNameController;
+    final jerseyController =
+        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
+    if (nameController.text.trim().isEmpty &&
+        controller.canUseLastCustomPlayer) {
+      nameController.text = controller.lastCustomPlayerName;
+      jerseyController.text = controller.lastCustomPlayerJersey;
+    }
+    final jersey = jerseyController.text.trim();
+    final error = controller.toggleCustomPlayerPin(
+      isHome: isHome,
+      fullName: nameController.text,
+      jerseyNumber: jersey.isEmpty ? null : jersey,
+    );
+    _showCustomNameError(error);
+    setState(() {});
   }
 
   Future<void> _editRosterPlayer(
@@ -1005,47 +1131,6 @@ class _DrumPickerState extends State<DrumPicker> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
       );
-    }
-  }
-
-  Future<void> _openCustomNameDialog(DrumLane lane) async {
-    final isHome = lane == DrumLane.home;
-    final result = await showCustomNameEntryDialog(
-      context: context,
-      teamLabel: isHome ? controller.homeAbbr : controller.awayAbbr,
-    );
-    if (!mounted || result == null) return;
-    final error = controller.addCustomPlayer(
-      isHome: isHome,
-      fullName: result.name,
-      jerseyNumber: result.jersey,
-    );
-    if (error != null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
-      );
-      return;
-    }
-    final roster = isHome ? controller.homeRoster : controller.awayRoster;
-    final index = roster.indexWhere(
-      (player) =>
-          player.fullName == result.name.trim() &&
-          (player.jerseyNumber ?? '') == (result.jersey?.trim() ?? ''),
-    );
-    if (index >= 0) {
-      setState(() {
-        if (isHome) {
-          _homeIndex = index;
-          _homeLetterFilter = null;
-          if (_homeFilter.text.isNotEmpty) _homeFilter.clear();
-        } else {
-          _awayIndex = index;
-          _awayLetterFilter = null;
-          if (_awayFilter.text.isNotEmpty) _awayFilter.clear();
-        }
-        _armedLane = lane;
-      });
     }
   }
 
@@ -1314,6 +1399,7 @@ class _VerbAccordion extends StatelessWidget {
 
   static const preferredHeaderHeight = 34.0;
   static const minHeaderHeight = 28.0;
+  static const pinnedBarHeight = 22.0;
   static const rowHeight = 24.0;
   static const rbiExtrasHeight = 32.0;
   static const baseExtrasHeight = 32.0;
@@ -1385,7 +1471,7 @@ class _VerbAccordion extends StatelessWidget {
             ? _extrasHeightFor(selectedVerbKey, includeActions: false)
             : 0.0;
         // Always reserve the pinned bar (title + verb on one row).
-        final pinnedHeight = preferredHeaderHeight + pinnedExtras;
+        final pinnedHeight = pinnedBarHeight + pinnedExtras;
         final openBodyHeight = openVerbCount * rowHeight + extrasHeight;
         final minContentHeight = categories.length * minHeaderHeight +
             openBodyHeight +
@@ -1411,7 +1497,7 @@ class _VerbAccordion extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             _PinnedVerbSlot(
-              height: preferredHeaderHeight,
+              height: pinnedBarHeight,
               tokens: tokens,
               controller: controller,
               verb: pinned,
@@ -1779,77 +1865,99 @@ class _PinnedVerbSlot extends StatelessWidget {
         children: [
           Icon(
             hasVerb ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-            size: 12,
+            size: 10,
             color: pinnedTeal.withValues(alpha: hasVerb ? 0.95 : 0.50),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           Text(
             'Pinned',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontFamily: FfTokens.labelFamily,
-              fontSize: 15,
+              fontSize: 13,
               height: 1.0,
               fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
+              letterSpacing: 0.1,
               color: pinnedTeal.withValues(alpha: hasVerb ? 1 : 0.55),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
             child: hasVerb
-                ? MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: CmdClick(
-                      key: ValueKey('verb-pinned-inline-${verb!.key}'),
-                      useInkWell: true,
-                      onTap: onTap,
-                      onCmdTap: () => controller.toggleVerbPin(verb!.key),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                verb!.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontFamily: FfTokens.labelFamily,
-                                  fontSize: selected ? 14.5 : 13.5,
-                                  fontWeight: FontWeight.w500,
-                                  color: selected
-                                      ? tokens.text
-                                      : tokens.text.withValues(alpha: 0.78),
-                                ),
+                ? CmdClick(
+                    key: ValueKey('verb-pinned-inline-${verb!.key}'),
+                    onTap: onTap,
+                    onCmdTap: () => controller.toggleVerbPin(verb!.key),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              verb!.label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: FfTokens.labelFamily,
+                                fontSize: selected ? 14.5 : 13.5,
+                                height: 1.0,
+                                fontWeight: FontWeight.w500,
+                                color: selected
+                                    ? tokens.text
+                                    : tokens.text.withValues(alpha: 0.78),
                               ),
                             ),
-                            if (committed) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.check,
-                                size: 12,
-                                color: tokens.accent,
-                              ),
-                            ],
+                          ),
+                          if (committed) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.check,
+                              size: 12,
+                              color: tokens.accent,
+                            ),
                           ],
-                        ),
+                        ],
                       ),
                     ),
                   )
-                : Text(
-                    '⌘-click a verb to pin',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: FfTokens.labelFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      color: tokens.text.withValues(alpha: 0.38),
+                : Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '(CMD ⌘ click a verb in the menu to pin)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.labelFamily,
+                        fontSize: 11,
+                        height: 1.0,
+                        fontWeight: FontWeight.w400,
+                        color: tokens.text.withValues(alpha: 0.38),
+                      ),
                     ),
                   ),
           ),
+          if (hasVerb)
+            TextButton(
+              onPressed: () => controller.toggleVerbPin(verb!.key),
+              style: TextButton.styleFrom(
+                foregroundColor: pinnedTeal,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+              child: Text(
+                'Unpin',
+                style: TextStyle(
+                  fontFamily: FfTokens.labelFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  height: 1.0,
+                  color: pinnedTeal.withValues(alpha: 0.95),
+                ),
+              ),
+            ),
         ],
       ),
     );

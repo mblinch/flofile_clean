@@ -158,6 +158,9 @@ class PreferencesService {
   final StreamController<void> cloudPreferencesAppliedController =
       StreamController<void>.broadcast();
 
+  /// Bumped when FTP profiles or the current profile are saved.
+  final ValueNotifier<int> ftpProfilesRevision = ValueNotifier<int>(0);
+
   bool _suppressCloudSync = false;
 
   PreferencesService._();
@@ -804,6 +807,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     await prefs.setString(_keyFtpProfiles, json.encode(profiles));
     _afterLocalPreferencesChanged();
+    ftpProfilesRevision.value++;
   }
 
   // Current FTP Profile
@@ -820,6 +824,7 @@ class PreferencesService {
       await prefs.remove(_keyCurrentFtpProfile);
     }
     _afterLocalPreferencesChanged();
+    ftpProfilesRevision.value++;
   }
 
   // Firebar Position Preference

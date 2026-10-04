@@ -18,6 +18,112 @@ typedef FtpProgressCallback = void Function(
     String status, double progress, String? error);
 
 class FtpClientService {
+  /// Connect and authenticate only — no data transfer.
+  static Future<FtpUploadResult> testConnection({
+    required String host,
+    required String username,
+    required String password,
+    int port = 21,
+    String remotePath = '',
+    bool passiveMode = true,
+  }) async {
+    Socket? controlSocket;
+    StreamSubscription? subscription;
+    String buffer = '';
+    final responseCompleter = <Completer<String>>[];
+
+    try {
+      controlSocket = await Socket.connect(
+        host,
+        port,
+        timeout: const Duration(seconds: 15),
+      );
+
+      subscription = controlSocket.listen(
+        (data) {
+          buffer += utf8.decode(data);
+          while (buffer.contains('\r\n')) {
+            final lineEnd = buffer.indexOf('\r\n');
+            final response = buffer.substring(0, lineEnd);
+            buffer = buffer.substring(lineEnd + 2);
+            if (responseCompleter.isNotEmpty) {
+              final completer = responseCompleter.removeAt(0);
+              if (!completer.isCompleted) {
+                completer.complete(response);
+              }
+            }
+          }
+        },
+        onError: (error) {
+          for (final completer in responseCompleter) {
+            if (!completer.isCompleted) {
+              completer.completeError(error);
+            }
+          }
+          responseCompleter.clear();
+        },
+      );
+
+      Future<String> getNextResponse() {
+        final completer = Completer<String>();
+        responseCompleter.add(completer);
+        return completer.future.timeout(const Duration(seconds: 20));
+      }
+
+      var response = await getNextResponse();
+      if (!response.startsWith('220')) {
+        throw Exception('Unexpected welcome: $response');
+      }
+
+      controlSocket.write('USER $username\r\n');
+      response = await getNextResponse();
+      controlSocket.write('PASS $password\r\n');
+      response = await getNextResponse();
+      if (!response.startsWith('230')) {
+        throw Exception('Authentication failed: $response');
+      }
+
+      final path = remotePath.trim();
+      if (path.isNotEmpty && path != '/') {
+        controlSocket.write('CWD $path\r\n');
+        response = await getNextResponse();
+        if (!response.startsWith('250')) {
+          throw Exception('Remote path not found: $response');
+        }
+      }
+
+      // Passive mode probe without transferring data.
+      if (passiveMode) {
+        controlSocket.write('PASV\r\n');
+        response = await getNextResponse();
+        if (!response.startsWith('227')) {
+          throw Exception('Passive mode failed: $response');
+        }
+      }
+
+      return FtpUploadResult(
+        success: true,
+        details: passiveMode
+            ? 'Connected and authenticated (passive OK).'
+            : 'Connected and authenticated.',
+      );
+    } catch (e) {
+      return FtpUploadResult(
+        success: false,
+        error: 'Connection failed',
+        details: e.toString(),
+      );
+    } finally {
+      subscription?.cancel();
+      if (controlSocket != null) {
+        try {
+          controlSocket.write('QUIT\r\n');
+          controlSocket.close();
+        } catch (_) {}
+      }
+    }
+  }
+
   static Future<FtpUploadResult> uploadFile({
     required String host,
     required String username,

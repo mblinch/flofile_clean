@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quick_cap/caption_style/caption_template.dart';
 import 'package:quick_cap/screens/caption_v2/data/caption_transfer_payload.dart';
 import 'package:quick_cap/screens/caption_v2/data/caption_v2_controller.dart';
+import 'package:quick_cap/screens/caption_v2/data/team_abbrev.dart';
 import 'package:quick_cap/screens/caption_v2/data/effective_verb_catalog.dart';
 import 'package:quick_cap/screens/caption_v2/data/iptc_caption_writer.dart';
 import 'package:quick_cap/services/mlb_api_service.dart';
@@ -1457,6 +1458,14 @@ void main() {
     expect(controller.homeAbbr, 'TOR');
     expect(controller.selectedPlayers.single.player, same(bo));
     expect(controller.displayedCaption.toLowerCase(), contains('bichette'));
+  });
+
+  test('team titles use three-letter abbreviations', () {
+    expect(mlbTeamAbbreviation('Toronto Blue Jays'), 'TOR');
+    expect(mlbTeamAbbreviation('Toronto Maple Leafs'), 'TOR');
+    expect(mlbTeamAbbreviation('Maple Leafs'), 'TOR');
+    expect(mlbTeamAbbreviation('Los Angeles Lakers'), 'LAL');
+    expect(mlbTeamAbbreviation('New York Liberty'), 'NYL');
   });
 
   test('Firebar unique player match applies caption immediately', () {
