@@ -10184,6 +10184,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'wantsOpponent':
             o['wantsOpponent'] as bool? ?? _defaultWantsOpponentForVerb(verb),
         'omitAgainst': o['omitAgainst'] as bool? ?? false,
+        'withTeammates': o['withTeammates'] as bool? ??
+            (verb == 'Celebrates a Goal' || label == 'Celebrates a Goal'),
         'category': o['category'] as String? ?? _findVerbCategory(verb),
         'subOptions': VerbSubOptions.fromJson(
           o['subOptions'],
@@ -10219,6 +10221,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           'wantsOpponent':
               c['wantsOpponent'] as bool? ?? _defaultWantsOpponentForVerb(verb),
           'omitAgainst': c['omitAgainst'] as bool? ?? false,
+          'withTeammates': c['withTeammates'] as bool? ?? false,
           'category': c['category'] as String? ?? _findVerbCategory(verb),
           'isCustom': true,
           'subOptions': VerbSubOptions.fromJson(
@@ -10261,6 +10264,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         'wantsOpponent': wordingDefault['wantsOpponent'] as bool? ??
             _defaultWantsOpponentForVerb(verb),
         'omitAgainst': wordingDefault['omitAgainst'] as bool? ?? false,
+        'withTeammates': wordingDefault['withTeammates'] as bool? ??
+            (verb == 'Celebrates a Goal' || label == 'Celebrates a Goal'),
         'category': wordingDefault['category'] as String? ??
             category ??
             (verbCategories.isNotEmpty ? verbCategories.keys.first : null),
@@ -10284,6 +10289,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'keywords': defaultKeywordsForVerbLabel(verb),
       'wantsOpponent': _defaultWantsOpponentForVerb(verb),
       'omitAgainst': false,
+      'withTeammates': verb == 'Celebrates a Goal',
       'category': category ??
           (verbCategories.isNotEmpty ? verbCategories.keys.first : null),
       'subOptions': VerbSubOptions.defaultsFor(verb, sport: _currentSport),
@@ -10336,6 +10342,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool wantsOpponent,
     required bool omitAgainst,
     required String opponentJoiner,
+    required bool withTeammates,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   }) {
@@ -10356,6 +10363,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'wantsOpponent': wantsOpponent,
       'omitAgainst': omitAgainst,
       'opponentJoiner': opponentJoiner,
+      'withTeammates': withTeammates,
       'isCustom': false,
       'category': selectedCategory,
       if (subOptions.differsFromDefaults(newLabel, sport: _currentSport))
@@ -10377,6 +10385,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'keywords': defaultKeywordsForVerbLabel(verb),
       'wantsOpponent': _defaultWantsOpponentForVerb(verb),
       'omitAgainst': false,
+      'withTeammates': verb == 'Celebrates a Goal',
       'isCustom': false,
       'category': category ??
           (verbCategories.isNotEmpty ? verbCategories.keys.first : ''),
@@ -10531,6 +10540,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             required bool wantsOpponent,
             required bool omitAgainst,
             required String opponentJoiner,
+            required bool withTeammates,
             required String selectedCategory,
             required VerbSubOptions subOptions,
           }) async {
@@ -10544,6 +10554,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               wantsOpponent: wantsOpponent,
               omitAgainst: omitAgainst,
               opponentJoiner: opponentJoiner,
+              withTeammates: withTeammates,
               selectedCategory: selectedCategory,
               subOptions: subOptions,
             );
@@ -10559,6 +10570,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             required bool wantsOpponent,
             required bool omitAgainst,
             required String opponentJoiner,
+            required bool withTeammates,
             required String selectedCategory,
             required VerbSubOptions subOptions,
           }) async {
@@ -10573,6 +10585,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               wantsOpponent: wantsOpponent,
               omitAgainst: omitAgainst,
               opponentJoiner: opponentJoiner,
+              withTeammates: withTeammates,
               selectedCategory: selectedCategory,
               subOptions: subOptions,
             );
@@ -10603,6 +10616,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             required bool wantsOpponent,
             required bool omitAgainst,
             required String opponentJoiner,
+            required bool withTeammates,
             required String selectedCategory,
             required VerbSubOptions subOptions,
             required bool asDefault,
@@ -10619,6 +10633,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               wantsOpponent: wantsOpponent,
               omitAgainst: omitAgainst,
               opponentJoiner: opponentJoiner,
+              withTeammates: withTeammates,
               selectedCategory: selectedCategory,
               subOptions: subOptions,
             );
@@ -10650,6 +10665,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool wantsOpponent,
     required bool omitAgainst,
     required String opponentJoiner,
+    required bool withTeammates,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   }) {
@@ -10670,6 +10686,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'wantsOpponent': wantsOpponent,
       'omitAgainst': omitAgainst,
       'opponentJoiner': opponentJoiner,
+      'withTeammates': withTeammates,
       'isCustom': true,
       'category': selectedCategory,
       if (celeOnly.differsFromDefaults(label, sport: _currentSport) ||
@@ -10688,6 +10705,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool wantsOpponent,
     required bool omitAgainst,
     required String opponentJoiner,
+    required bool withTeammates,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   }) async {
@@ -10701,6 +10719,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       wantsOpponent: wantsOpponent,
       omitAgainst: omitAgainst,
       opponentJoiner: opponentJoiner,
+      withTeammates: withTeammates,
       selectedCategory: selectedCategory,
       subOptions: subOptions,
     );
@@ -10724,6 +10743,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     required bool wantsOpponent,
     required bool omitAgainst,
     required String opponentJoiner,
+    required bool withTeammates,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   }) async {
@@ -10737,6 +10757,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       wantsOpponent: wantsOpponent,
       omitAgainst: omitAgainst,
       opponentJoiner: opponentJoiner,
+      withTeammates: withTeammates,
       selectedCategory: selectedCategory,
       subOptions: subOptions,
     );

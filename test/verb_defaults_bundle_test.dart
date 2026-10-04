@@ -39,6 +39,169 @@ void main() {
     expect(overrides.containsKey('battles against'), isFalse);
   });
 
+  test('drops hockey phrase-alias overrides that dump into Offense', () {
+    final mixed = <String, dynamic>{
+      'catalogComplete': true,
+      'verbOverrides': {
+        'Battles': {
+          'label': 'Battles',
+          'category': 'Offense',
+          'verbPhrase': 'battles',
+        },
+        'battles against': {
+          'label': 'Battles',
+          'category': 'Offense',
+          'verbPhrase': 'battles',
+        },
+        'Defends': {
+          'label': 'Defends',
+          'category': 'Defense',
+          'verbPhrase': 'defends',
+        },
+        'makes a save': {
+          'label': 'Saves',
+          'category': 'Offense',
+          'verbPhrase': 'makes a save',
+        },
+        'reacts with dejection': {
+          'label': 'Reacts',
+          'category': 'Offense',
+          'verbPhrase': 'reacts with dejection',
+        },
+        'Celebrates': {
+          'label': 'Celebrates',
+          'category': 'Reactions',
+          'verbPhrase': 'celebrates',
+        },
+      },
+      'verbOrder': {
+        'Offense': ['Battles', 'battles against', 'reacts with dejection'],
+        'Defense': ['Defends'],
+        'Reactions': ['Celebrates'],
+      },
+    };
+
+    final fixed = VerbDefaultsBundle.ensureComplete(mixed, 'hockey');
+    final overrides = Map<String, dynamic>.from(fixed['verbOverrides'] as Map);
+    expect(overrides.containsKey('battles against'), isFalse);
+    expect(overrides.containsKey('reacts with dejection'), isFalse);
+    expect(overrides.containsKey('makes a save'), isFalse);
+    expect(overrides['Saves']?['category'], 'Goalie');
+    expect(overrides['Dejection']?['category'], 'Reactions');
+
+    final offense = List<String>.from(
+      (fixed['verbOrder'] as Map)['Offense'] as List,
+    );
+    expect(offense, isNot(contains('battles against')));
+    expect(offense, isNot(contains('reacts with dejection')));
+    expect(offense, contains('Battles'));
+  });
+
+  test('heals misfiled hockey factory verbs into factory categories', () {
+    final misfiled = <String, dynamic>{
+      'catalogComplete': true,
+      'verbOverrides': {
+        'Celebrates': {
+          'label': 'Celebrates',
+          'category': 'Offense',
+          'verbPhrase': 'celebrates',
+        },
+        'Celebrates a Goal': {
+          'label': 'Celebrates a Goal',
+          'category': 'Offense',
+          'verbPhrase': 'celebrates a goal',
+        },
+        'Defends': {
+          'label': 'Defends',
+          'category': 'Offense',
+          'verbPhrase': 'defends',
+        },
+        'Saves': {
+          'label': 'Saves',
+          'category': 'Offense',
+          'verbPhrase': 'makes a save',
+        },
+        'Skates': {
+          'label': 'Skates',
+          'category': 'Offense',
+          'verbPhrase': 'skates',
+        },
+        'Post Game Win': {
+          'label': 'Post Game Win',
+          'category': 'Non Game-Action',
+          'verbPhrase': 'celebrates',
+        },
+      },
+      'categoryOrder': ['Offense', 'Defense', 'Goalie', 'Non Game-Action'],
+      'verbOrder': {
+        'Offense': [
+          'Celebrates',
+          'Celebrates a Goal',
+          'Defends',
+          'Saves',
+          'Skates',
+        ],
+        'Non Game-Action': ['Post Game Win'],
+      },
+    };
+
+    final fixed = VerbDefaultsBundle.ensureComplete(misfiled, 'hockey');
+    final overrides = Map<String, dynamic>.from(fixed['verbOverrides'] as Map);
+    expect(overrides['Celebrates']?['category'], 'Reactions');
+    expect(overrides['Celebrates a Goal']?['category'], 'Reactions');
+    expect(overrides['Post Game Win']?['category'], 'Reactions');
+    expect(overrides['Defends']?['category'], 'Defense');
+    expect(overrides['Saves']?['category'], 'Goalie');
+    expect(overrides['Skates']?['category'], 'Offense');
+
+    final order = Map<String, List<dynamic>>.from(
+      (fixed['verbOrder'] as Map).map(
+        (key, value) => MapEntry(key.toString(), List<dynamic>.from(value as List)),
+      ),
+    );
+    expect(order['Reactions'], containsAll(['Celebrates', 'Celebrates a Goal']));
+    expect(order['Defense'], contains('Defends'));
+    expect(order['Goalie'], contains('Saves'));
+  });
+
+  test('heals poisoned wantsOpponent when joiner text remains', () {
+    final poisoned = <String, dynamic>{
+      'catalogComplete': true,
+      'verbOverrides': {
+        'Stands in Net': {
+          'label': 'Stands in Net',
+          'category': 'Goalie',
+          'verbPhrase': 'stands in net',
+          'wantsOpponent': false,
+          'omitAgainst': false,
+          'opponentJoiner': 'against',
+        },
+        'Walks to the Ice': {
+          'label': 'Walks to the Ice',
+          'category': 'Non Game-Action',
+          'verbPhrase': 'walks to the ice',
+          'wantsOpponent': false,
+          'omitAgainst': false,
+          'opponentJoiner': 'against',
+        },
+        'Post Game Win': {
+          'label': 'Post Game Win',
+          'category': 'Reactions',
+          'verbPhrase': 'celebrates',
+          'wantsOpponent': false,
+          'omitAgainst': false,
+          'opponentJoiner': 'against',
+        },
+      },
+    };
+
+    final fixed = VerbDefaultsBundle.ensureComplete(poisoned, 'hockey');
+    final overrides = Map<String, dynamic>.from(fixed['verbOverrides'] as Map);
+    expect(overrides['Stands in Net']?['wantsOpponent'], isTrue);
+    expect(overrides['Walks to the Ice']?['wantsOpponent'], isTrue);
+    expect(overrides['Post Game Win']?['wantsOpponent'], isFalse);
+  });
+
   test('renames legacy Pitching verb to Pitches and migrates hide list', () {
     final legacy = <String, dynamic>{
       'verbOverrides': {

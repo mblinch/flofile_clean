@@ -4,7 +4,7 @@
  * - `nightlyRosterSync`: scheduled daily at 06:00 America/New_York (DST-safe).
  * - `runRosterSyncNow`: callable trigger for manual runs from `firebase functions:shell`
  *    or the Firebase console. Requires an authenticated caller (admin-only by default).
- * - `tank01RosterSync`: Tank01 → sports_tank01, 2×/day (06:00 / 16:00 ET); emails
+ * - `tank01RosterSync`: Tank01 → sports_tank01, daily at 11:00 ET; emails
  *    `dev@flofilecaptions.com` (same Resend setup as nightly roster sync).
  * - `runTank01RosterSyncNow`: admin callable for a manual Tank01 mirror run.
  *
@@ -692,11 +692,11 @@ export const nightlyRosterSync = onSchedule(
 );
 
 /**
- * Tank01 → sports_tank01, twice daily (6am / 4pm ET).
+ * Tank01 → sports_tank01, once daily at 11:00 ET.
  */
 export const tank01RosterSync = onSchedule(
   {
-    schedule: "0 6,16 * * *",
+    schedule: "0 11 * * *",
     timeZone: "America/New_York",
     memory: "512MiB",
     timeoutSeconds: 540,

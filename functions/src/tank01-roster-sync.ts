@@ -1,6 +1,6 @@
 /**
  * Tank01 RapidAPI → Firestore `sports_tank01/{sport}/teams/{teamAbv}/players/...`
- * used by the scheduled 4×/day Cloud Function.
+ * used by the scheduled daily (11:00 ET) Cloud Function.
  */
 
 import { FieldValue, Firestore } from "firebase-admin/firestore";

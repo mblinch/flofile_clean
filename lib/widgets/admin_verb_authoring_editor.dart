@@ -12,6 +12,7 @@ import '../caption_style/verb_sub_options.dart';
 import '../screens/caption_v2/data/caption_v2_caption_domain.dart';
 import '../theme/ff_tokens.dart';
 import '../utils/default_verb_keywords.dart';
+import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 import 'verb_edit_sub_options_section.dart';
 
@@ -489,6 +490,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       wantsOpponent: true,
       omitAgainst: false,
       opponentJoiner: 'against',
+      withTeammates: false,
       subOptions: VerbSubOptions.defaultsFor(key, sport: widget.sport),
       isCustom: true,
       authoring: const VerbAuthoringData(
@@ -559,6 +561,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       wantsOpponent: source.wantsOpponent,
       omitAgainst: source.omitAgainst,
       opponentJoiner: source.opponentJoiner,
+      withTeammates: source.withTeammates,
       subOptions: source.subOptions,
       isCustom: true,
       authoring: source.authoring,
@@ -1767,6 +1770,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
   late VerbAuthoringData _authoring;
   late bool _useSingularPhrase;
   late bool _usePluralPhrase;
+  late bool _withTeammates;
   late VerbSubOptions _subOptions;
   final Map<String, String?> _selections = {};
   String _lastAutoIng = '';
@@ -1786,6 +1790,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
     _authoring = verb.authoring;
     _useSingularPhrase = verb.useSingularPhrase;
     _usePluralPhrase = verb.usePluralPhrase;
+    _withTeammates = verb.withTeammates;
     final storedJoiner = verb.opponentJoiner.trim();
     // Always put real text in the box (not hint). Default is "against".
     _opponentJoiner.value = TextEditingValue(
@@ -1859,6 +1864,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
       // Legacy flag: only true when the box is intentionally blank.
       omitAgainst: _opponentJoiner.text.trim().isEmpty,
       opponentJoiner: _opponentJoiner.text.trim(),
+      withTeammates: _withTeammates,
       subOptions: _subOptions,
       authoring: authoring ?? _authoring,
     );
@@ -2171,6 +2177,27 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      AppCompactCheckbox(
+                        value: _withTeammates,
+                        accentColor: t.accent,
+                        onChanged: (value) {
+                          setState(() => _withTeammates = value);
+                          _emitDraft();
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'With teammates — first pick does the action; '
+                          'other same-team picks are named after “with”',
+                          style: appDialogFieldLabelStyleOf(context),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
                   Divider(height: 1, color: t.divider),
                   const SizedBox(height: 12),
@@ -2215,6 +2242,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                     sampleIndex: widget.sampleIndex,
                     omitAgainst: _opponentJoiner.text.trim().isEmpty,
                     opponentJoiner: _opponentJoiner.text.trim(),
+                    withTeammates: _withTeammates,
                     subOptions: _subOptions,
                   ),
                   const SizedBox(height: 12),
@@ -2323,6 +2351,7 @@ class _ResolvedPreview extends StatefulWidget {
     required this.sampleIndex,
     required this.omitAgainst,
     required this.opponentJoiner,
+    required this.withTeammates,
     required this.subOptions,
   });
 
@@ -2338,6 +2367,7 @@ class _ResolvedPreview extends StatefulWidget {
   final int sampleIndex;
   final bool omitAgainst;
   final String opponentJoiner;
+  final bool withTeammates;
   final VerbSubOptions subOptions;
 
   @override
@@ -2415,7 +2445,9 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
       if (widget.useSingularPhrase)
         const _PreviewVariant('base', 'Single Player'),
     ];
-    if (widget.usePluralPhrase) {
+    if (widget.withTeammates) {
+      variants.add(const _PreviewVariant('with_teammates', 'With teammates'));
+    } else if (widget.usePluralPhrase) {
       variants.add(const _PreviewVariant('plural', 'Two or more players'));
     }
     if (showRbi && live.rbiEnabled) {
@@ -2475,6 +2507,8 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
         return widget.pluralPhrase.trim().isEmpty
             ? phrase
             : widget.pluralPhrase.trim();
+      case 'with_teammates':
+        return '$phrase with Dunkin Deuces #8';
       case 'rbi':
         return live.hitClauseWithRbi(
           leadIn: 'hits a',
@@ -2539,7 +2573,8 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
     if (oldWidget.verbKey != widget.verbKey ||
         oldWidget.subOptions != widget.subOptions ||
         oldWidget.useSingularPhrase != widget.useSingularPhrase ||
-        oldWidget.usePluralPhrase != widget.usePluralPhrase) {
+        oldWidget.usePluralPhrase != widget.usePluralPhrase ||
+        oldWidget.withTeammates != widget.withTeammates) {
       final id = _resolvedVariantId;
       if (id != _variantId) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -2671,6 +2706,7 @@ class _VerbDraft {
     required this.wantsOpponent,
     required this.omitAgainst,
     required this.opponentJoiner,
+    required this.withTeammates,
     required this.subOptions,
     required this.isCustom,
     this.isHidden = false,
@@ -2690,6 +2726,7 @@ class _VerbDraft {
   final bool wantsOpponent;
   final bool omitAgainst;
   final String opponentJoiner;
+  final bool withTeammates;
   final VerbSubOptions subOptions;
   final bool isCustom;
   final bool isHidden;
@@ -2753,6 +2790,9 @@ class _VerbDraft {
         }
         return record['omitAgainst'] == true ? '' : 'against';
       }(),
+      withTeammates: record['withTeammates'] is bool
+          ? record['withTeammates'] as bool
+          : key == 'Celebrates a Goal',
       subOptions: subOptions,
       isCustom: isCustom,
       isHidden: isHidden,
@@ -2780,6 +2820,7 @@ class _VerbDraft {
     bool? wantsOpponent,
     bool? omitAgainst,
     String? opponentJoiner,
+    bool? withTeammates,
     VerbSubOptions? subOptions,
     bool? isHidden,
     VerbAuthoringData? authoring,
@@ -2797,6 +2838,7 @@ class _VerbDraft {
       wantsOpponent: wantsOpponent ?? this.wantsOpponent,
       omitAgainst: omitAgainst ?? this.omitAgainst,
       opponentJoiner: opponentJoiner ?? this.opponentJoiner,
+      withTeammates: withTeammates ?? this.withTeammates,
       subOptions: subOptions ?? this.subOptions,
       isCustom: isCustom,
       isHidden: isHidden ?? this.isHidden,
@@ -2818,6 +2860,7 @@ class _VerbDraft {
         'wantsOpponent': wantsOpponent,
         'omitAgainst': omitAgainst,
         'opponentJoiner': opponentJoiner,
+        'withTeammates': withTeammates,
         'subOptions': subOptions.toJson(),
         'category': category,
         'isCustom': isCustom,

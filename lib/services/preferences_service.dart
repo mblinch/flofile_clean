@@ -1063,26 +1063,49 @@ class PreferencesService {
     return {};
   }
 
-  Future<void> saveVerbOverride(String originalVerbPhrase, Map<String, dynamic> override, {String sport = 'hockey'}) async {
+  /// Local overrides only — never falls back to app-default sport catalogs.
+  /// Mutating via [getVerbOverrides] can re-import poisoned phrase-key aliases
+  /// after a key is cleared.
+  Future<Map<String, Map<String, dynamic>>> _localVerbOverrides({
+    String sport = 'hockey',
+  }) async {
     final prefs = await _getPrefs();
     final key = _getVerbOverridesKey(sport);
-    final overrides = await getVerbOverrides(sport: sport);
-    overrides[originalVerbPhrase] = override;
-    await prefs.setString(key, json.encode(overrides));
-    _afterLocalPreferencesChanged();
+    final jsonString = prefs.getString(key);
+    if (jsonString == null) return {};
+    try {
+      final Map<String, dynamic> decoded = json.decode(jsonString);
+      return decoded.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v)));
+    } catch (e) {
+      print('Error parsing verb overrides for $sport: $e');
+      return {};
+    }
   }
 
-  Future<void> removeVerbOverride(String originalVerbPhrase, {String sport = 'hockey'}) async {
+  Future<void> saveVerbOverrides(
+    Map<String, Map<String, dynamic>> overrides, {
+    String sport = 'hockey',
+  }) async {
     final prefs = await _getPrefs();
     final key = _getVerbOverridesKey(sport);
-    final overrides = await getVerbOverrides(sport: sport);
-    overrides.remove(originalVerbPhrase);
     if (overrides.isEmpty) {
       await prefs.remove(key);
     } else {
       await prefs.setString(key, json.encode(overrides));
     }
     _afterLocalPreferencesChanged();
+  }
+
+  Future<void> saveVerbOverride(String originalVerbPhrase, Map<String, dynamic> override, {String sport = 'hockey'}) async {
+    final overrides = await _localVerbOverrides(sport: sport);
+    overrides[originalVerbPhrase] = override;
+    await saveVerbOverrides(overrides, sport: sport);
+  }
+
+  Future<void> removeVerbOverride(String originalVerbPhrase, {String sport = 'hockey'}) async {
+    final overrides = await _localVerbOverrides(sport: sport);
+    overrides.remove(originalVerbPhrase);
+    await saveVerbOverrides(overrides, sport: sport);
   }
 
   // Verb wording defaults (reset baselines for Edit Verb — mirror of caption wire defaults)
@@ -1731,14 +1754,14 @@ class PreferencesService {
           }
         }
         if (data.containsKey('verbOverrides')) {
-          final existing = await getVerbOverrides(sport: sport);
-          for (final k in existing.keys) {
-            await removeVerbOverride(k, sport: sport);
-          }
           final overrides = data['verbOverrides'] as Map<String, dynamic>;
-          for (final o in overrides.entries) {
-            await saveVerbOverride(o.key, Map<String, dynamic>.from(o.value as Map<String, dynamic>), sport: sport);
-          }
+          await saveVerbOverrides(
+            {
+              for (final o in overrides.entries)
+                o.key: Map<String, dynamic>.from(o.value as Map),
+            },
+            sport: sport,
+          );
         }
         if (data.containsKey('verbWordingDefaults')) {
           final existing = await getVerbWordingDefaults(sport: sport);

@@ -501,6 +501,21 @@ class AppDefaultsFirestoreService {
     await fetchAndCacheAppDefaults(forceNetwork: true);
   }
 
+  /// Admin: heal factory categories for [sport] from the cached/cloud catalog
+  /// (or factory seed), then publish that sport slice to app defaults.
+  static Future<Map<String, dynamic>> publishHealedSportVerbs(
+    String sport,
+  ) async {
+    final normalized = sport.toLowerCase().trim();
+    final cached = await getCachedSportVerbSettings(normalized);
+    final base = cached != null && cached.isNotEmpty
+        ? Map<String, dynamic>.from(cached)
+        : VerbDefaultsBundle.buildFactory(normalized);
+    final healed = VerbDefaultsBundle.ensureComplete(base, normalized);
+    await publishVerbsForSport(normalized, healed);
+    return healed;
+  }
+
   /// Admin: publish verb settings for all [catalogSports] from export maps.
   static Future<void> publishAllVerbs(
     Map<String, Map<String, dynamic>> bySport,

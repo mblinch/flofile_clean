@@ -256,7 +256,15 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Session has one roster only ([homeTeam]); captions omit opponent clauses.
   bool singleTeamMode = false;
 
-  bool get hasOpponentTeam => !singleTeamMode && awayTeam.trim().isNotEmpty;
+  /// True when captions can name an opposing team for the current subjects.
+  bool get hasOpponentTeam {
+    if (singleTeamMode) return false;
+    final subjects = subjectPlayers;
+    final subjectIsHome =
+        subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
+    final opponent = subjectIsHome ? awayTeam : homeTeam;
+    return opponent.trim().isNotEmpty;
+  }
 
   String venue = '';
   String sport = 'baseball';
@@ -970,26 +978,35 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   List<EffectiveVerb> _sortedVerbs(List<EffectiveVerb> verbs) {
-    if (verbs.length <= 1) return List<EffectiveVerb>.from(verbs);
+    if (verbs.isEmpty) return const [];
+    late final List<EffectiveVerb> ranked;
     switch (verbSortMode) {
       case VerbSortMode.custom:
-        return List<EffectiveVerb>.from(verbs);
+        ranked = List<EffectiveVerb>.from(verbs);
+        break;
       case VerbSortMode.mostUsed:
-        final ranked = List<EffectiveVerb>.from(verbs);
+        ranked = List<EffectiveVerb>.from(verbs);
         ranked.sort((a, b) {
           final byCount =
               (_verbUsageCounts[b.key] ?? 0).compareTo(_verbUsageCounts[a.key] ?? 0);
           if (byCount != 0) return byCount;
           return a.label.toLowerCase().compareTo(b.label.toLowerCase());
         });
-        return ranked;
+        break;
       case VerbSortMode.alphabetical:
-        final ranked = List<EffectiveVerb>.from(verbs);
+        ranked = List<EffectiveVerb>.from(verbs);
         ranked.sort(
           (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
         );
-        return ranked;
+        break;
     }
+    return ranked;
+  }
+
+  EffectiveVerb? get pinnedVerbDefinition {
+    final key = pinnedVerb;
+    if (key == null) return null;
+    return verbDefinition(key);
   }
 
   EffectiveVerb? verbDefinition(String key) => _verbCatalog.byKey[key];
@@ -1472,9 +1489,10 @@ class CaptionV2Controller extends ChangeNotifier {
     final rows = subjectPlayers.isEmpty
         ? [RosterHit(player: selectedPlayer!, isHome: selectedIsHome)]
         : subjectPlayers;
-    // Celebrates a Goal: first pick is the scorer; teammates follow as "with…".
+    // With-teammates verbs: first pick is the subject; later same-team picks
+    // are named in a trailing "with …" clause.
     final leadRows =
-        _verbUsesScoringLeadWithTeammates(selectedVerb) ? [rows.first] : rows;
+        _verbUsesLeadWithTeammates(selectedVerb) ? [rows.first] : rows;
     var teamName = leadRows.first.isHome ? homeTeam : awayTeam;
     final playerLabels = leadRows.map((row) {
       var playerName = row.player.fullName;
@@ -1502,8 +1520,10 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Verbs where the first same-team pick is the action subject and later
   /// same-team picks are named in a trailing "with …" clause.
-  static bool _verbUsesScoringLeadWithTeammates(String? verb) =>
-      verb == 'Celebrates a Goal';
+  bool _verbUsesLeadWithTeammates(String? verb) {
+    if (verb == null || verb.trim().isEmpty) return false;
+    return verbDefinition(verb)?.withTeammates ?? verb == 'Celebrates a Goal';
+  }
 
   String _actionPhrase() {
     final verb = selectedVerb!;
@@ -1512,8 +1532,8 @@ class CaptionV2Controller extends ChangeNotifier {
     final subjectIsHome =
         subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
     final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
-    final scoringLead = _verbUsesScoringLeadWithTeammates(verb);
-    final plural = scoringLead ? false : subjects.length > 1;
+    final withTeammates = _verbUsesLeadWithTeammates(verb);
+    final plural = withTeammates ? false : subjects.length > 1;
     // Live captioning uses classic RBI / celebration controls. Authored
     // modifier phrases are edited in Admin → Verb authoring only for now.
     var action = CaptionV2CaptionDomain.actionCore(
@@ -1534,7 +1554,7 @@ class CaptionV2Controller extends ChangeNotifier {
       subOptions: definition?.subOptions,
     );
 
-    if (scoringLead && subjects.length > 1) {
+    if (withTeammates && subjects.length > 1) {
       final teammates = subjects.skip(1).toList(growable: false);
       final names = _formatPlayerNamesOnly(teammates, captionTemplate);
       if (names.isNotEmpty) {
@@ -1543,18 +1563,20 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     final includeOpponent = definition?.wantsOpponent ?? true;
+    final opponentName = opponentTeam.trim();
     if (includeOpponent &&
-        hasOpponentTeam &&
-        !action.toLowerCase().contains(opponentTeam.trim().toLowerCase())) {
+        opponentName.isNotEmpty &&
+        !action.toLowerCase().contains(opponentName.toLowerCase())) {
+      final joiner = (definition?.opponentJoiner ?? 'against').trim();
       action = CaptionV2CaptionDomain.withOpponent(
         verb: verb,
         action: action,
-        opponentTeam: opponentTeam,
+        opponentTeam: opponentName,
         opposingPlayers: opposingPlayers.isEmpty
             ? null
             : _formatPlayersWithTeam(opposingPlayers, captionTemplate),
         omitAgainst: definition?.omitAgainst ?? false,
-        opponentJoiner: definition?.opponentJoiner ?? 'against',
+        opponentJoiner: joiner.isEmpty ? 'against' : joiner,
       );
     }
 
@@ -1573,21 +1595,22 @@ class CaptionV2Controller extends ChangeNotifier {
 
   String _customActionPhrase() {
     var action = customVerbPhrase.trim();
-    if (hasOpponentTeam) {
-      final subjects = subjectPlayers;
-      final subjectIsHome =
-          subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
-      final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
+    final subjects = subjectPlayers;
+    final subjectIsHome =
+        subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
+    final opponentName =
+        (subjectIsHome ? awayTeam : homeTeam).trim();
+    if (opponentName.isNotEmpty) {
       final lower = action.toLowerCase();
-      if (!lower.contains(opponentTeam.trim().toLowerCase())) {
+      if (!lower.contains(opponentName.toLowerCase())) {
         final alreadyJoined =
             lower.contains(' against ') || lower.contains(' playing ');
         action = alreadyJoined
-            ? '$action the ${opponentTeam.trim()}'
+            ? '$action the $opponentName'
             : CaptionV2CaptionDomain.withOpponent(
                 verb: action,
                 action: action,
-                opponentTeam: opponentTeam,
+                opponentTeam: opponentName,
                 opposingPlayers: opposingPlayers.isEmpty
                     ? null
                     : _formatPlayersWithTeam(opposingPlayers, captionTemplate),
@@ -2166,19 +2189,12 @@ class CaptionV2Controller extends ChangeNotifier {
   /// after the pictures are already on screen.
   Future<void> _finishFolderMetadata(String dirPath, int generation) async {
     if (generation != _folderWatchGeneration) return;
-    final keep = currentPath;
     await _loadCaptureTimes();
     if (generation != _folderWatchGeneration) return;
-    imagePaths.sort((a, b) {
-      final ta = captureByPath[a];
-      final tb = captureByPath[b];
-      if (ta != null && tb != null) return ta.compareTo(tb);
-      return a.compareTo(b);
-    });
-    if (keep != null) {
-      final index = imagePaths.indexOf(keep);
-      if (index >= 0) currentIndex = index;
-    }
+    // [_loadCaptureTimes] re-sorts by capture time. Always keep the first
+    // frame selected — restoring the pre-sort path jumped into the middle
+    // when the alphabetically-first file wasn't the earliest capture.
+    currentIndex = 0;
     notifyListeners();
     final marked = await FloCaptionMark.savedPaths(List<String>.from(imagePaths));
     if (generation != _folderWatchGeneration) return;

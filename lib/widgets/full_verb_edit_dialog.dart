@@ -61,6 +61,7 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool wantsOpponent,
     required bool omitAgainst,
     required String opponentJoiner,
+    required bool withTeammates,
     required String selectedCategory,
     required VerbSubOptions subOptions,
     required bool asDefault,
@@ -83,6 +84,7 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool wantsOpponent,
     required bool omitAgainst,
     required String opponentJoiner,
+    required bool withTeammates,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   })? onCreateCustomVerb;
@@ -97,6 +99,7 @@ class FullVerbEditDialog extends StatefulWidget {
     required bool wantsOpponent,
     required bool omitAgainst,
     required String opponentJoiner,
+    required bool withTeammates,
     required String selectedCategory,
     required VerbSubOptions subOptions,
   })? onUpdateCustomVerb;
@@ -135,6 +138,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   late final TextEditingController _opponentJoiner;
   late bool _wantsOpponent;
   late bool _omitAgainst;
+  late bool _withTeammates;
 
   /// Preview-only: starts off when the dialog opens; toggling syncs [_wantsOpponent].
   bool _previewIncludeOpponent = false;
@@ -467,6 +471,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
     _lastAutoIng = VerbCaptionWording.defaultIngWording(verb, singular);
     _wantsOpponent = initial['wantsOpponent'] as bool? ?? true;
     _omitAgainst = initial['omitAgainst'] as bool? ?? false;
+    _withTeammates = initial['withTeammates'] as bool? ??
+        (verb == 'Celebrates a Goal');
     _setText(
       _opponentJoiner,
       (initial['opponentJoiner'] ?? '').toString(),
@@ -536,6 +542,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       'wantsOpponent': _wantsOpponent,
       'omitAgainst': _omitAgainst,
       'opponentJoiner': _opponentJoiner.text.trim(),
+      'withTeammates': _withTeammates,
       'usePluralPhrase': _usePluralPhrase,
       'category': _assignedCategory,
       'subOptions': _liveSubOptions.toJson(),
@@ -963,6 +970,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
       _isFavorite = false;
       _wantsOpponent = true;
       _omitAgainst = false;
+      _withTeammates = false;
       _setText(_opponentJoiner, '');
       _previewIncludeOpponent = false;
       _usePluralPhrase = true;
@@ -1045,6 +1053,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           wantsOpponent: _wantsOpponent,
           omitAgainst: _omitAgainst,
           opponentJoiner: _omitAgainst ? _opponentJoiner.text.trim() : '',
+          withTeammates: _withTeammates,
           selectedCategory: _assignedCategory,
           subOptions: sub,
         );
@@ -1077,6 +1086,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           wantsOpponent: _wantsOpponent,
           omitAgainst: _omitAgainst,
           opponentJoiner: _omitAgainst ? _opponentJoiner.text.trim() : '',
+          withTeammates: _withTeammates,
           selectedCategory: _assignedCategory,
           subOptions: sub,
         );
@@ -1109,6 +1119,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
           wantsOpponent: _wantsOpponent,
           omitAgainst: _omitAgainst,
           opponentJoiner: _omitAgainst ? _opponentJoiner.text.trim() : '',
+          withTeammates: _withTeammates,
           selectedCategory: _assignedCategory,
           subOptions: sub,
           asDefault: asDefault || asAppDefault,
@@ -2006,6 +2017,15 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
             onChanged: (_) => setState(() {}),
           ),
         ],
+        const SizedBox(height: 8),
+        _optionCheckbox(
+          value: _withTeammates,
+          label:
+              'With teammates (first pick acts; other same-team picks after “with”)',
+          onChanged: (v) => setState(() => _withTeammates = v),
+          compact: true,
+          textColor: _v2?.textSecondary ?? Colors.white,
+        ),
         const SizedBox(height: 8),
         _buildCaptionPreview(),
         _sectionDivider(),

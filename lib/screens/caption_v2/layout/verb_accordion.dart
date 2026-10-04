@@ -62,8 +62,12 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
     return ordered;
   }
 
-  List<EffectiveVerb> _verbsFor(String category) =>
-      controller.verbDefinitionsByCategory[category] ?? const [];
+  List<EffectiveVerb> _verbsFor(String category) {
+    return controller.verbDefinitionsByCategory[category] ??
+        const <EffectiveVerb>[];
+  }
+
+  EffectiveVerb? get _pinnedVerb => controller.pinnedVerbDefinition;
 
   @override
   void initState() {
@@ -187,6 +191,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final categories = _categories;
     final openVerbs = _verbsFor(_openCategory);
+    final pinned = _pinnedVerb;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -230,8 +235,11 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                 verbRowH = 20;
               }
 
+              // Always show the pinned bar (title + verb on one row).
+              final pinnedH = headerH;
               final availableForVerbs =
-                  (bodyH - categories.length * headerH).clamp(0.0, bodyH);
+                  (bodyH - categories.length * headerH - pinnedH)
+                      .clamp(0.0, bodyH);
               final maxRowsOneUp =
                   verbRowH <= 0 ? 0 : (availableForVerbs / verbRowH).floor();
               final twoUp =
@@ -256,6 +264,14 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
 
               return Column(
                 children: [
+                  _PinnedVerbSlot(
+                    height: headerH,
+                    tokens: t,
+                    controller: controller,
+                    verb: pinned,
+                    onEditVerb: widget.onEditVerb,
+                    onVerbArmed: widget.onVerbArmed,
+                  ),
                   for (final category in categories)
                     if (category != _openCategory)
                       _AccordionSection(
@@ -431,6 +447,7 @@ class _AccordionSection extends StatelessWidget {
       height: headerH,
       tokens: tokens,
       onTap: onOpen,
+      gold: category == 'Favorites',
     );
     if (!open) {
       return Column(
@@ -474,6 +491,136 @@ class _AccordionSection extends StatelessWidget {
   }
 }
 
+class _PinnedVerbSlot extends StatelessWidget {
+  const _PinnedVerbSlot({
+    required this.height,
+    required this.tokens,
+    required this.controller,
+    required this.verb,
+    required this.onEditVerb,
+    this.onVerbArmed,
+  });
+
+  final double height;
+  final FfTokens tokens;
+  final CaptionV2Controller controller;
+  final EffectiveVerb? verb;
+  final ValueChanged<String> onEditVerb;
+  final VoidCallback? onVerbArmed;
+
+  @override
+  Widget build(BuildContext context) {
+    const pinnedTeal = Color(0xFF6EC8C4);
+    final hasVerb = verb != null;
+    final armed = hasVerb && controller.selectedVerb == verb!.key;
+    final showRbi = armed && controller.verbNeedsRbi(verb!.key);
+    final showBase = armed && controller.verbNeedsBase(verb!.key);
+    final showCelebration =
+        armed && controller.verbNeedsCelebration(verb!.key);
+
+    final bar = Container(
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: pinnedTeal.withValues(alpha: hasVerb ? 0.12 : 0.06),
+        border: Border(
+          bottom: BorderSide(
+            color: pinnedTeal.withValues(alpha: hasVerb ? 0.32 : 0.18),
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            hasVerb ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+            size: 11,
+            color: pinnedTeal.withValues(alpha: hasVerb ? 0.95 : 0.50),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            'Pinned',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: FfTokens.labelFamily,
+              fontWeight: FontWeight.w600,
+              fontSize: DefaultVerbAccordion.categoryFontSize,
+              letterSpacing: -0.2,
+              color: pinnedTeal.withValues(alpha: hasVerb ? 1 : 0.55),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: hasVerb
+                ? MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: CmdClick(
+                      useInkWell: true,
+                      onTap: () {
+                        onVerbArmed?.call();
+                        controller.selectVerb(verb!.key);
+                      },
+                      onCmdTap: () {
+                        onVerbArmed?.call();
+                        controller.toggleVerbPin(verb!.key);
+                      },
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          verb!.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: FfTokens.labelFamily,
+                            fontWeight: FontWeight.w500,
+                            fontSize: DefaultVerbAccordion.verbFontSize,
+                            color: armed
+                                ? tokens.text
+                                : tokens.text.withValues(alpha: 0.78),
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                : Text(
+                    '⌘-click a verb to pin',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: FfTokens.labelFamily,
+                      fontWeight: FontWeight.w400,
+                      fontSize: DefaultVerbAccordion.verbFontSize,
+                      color: tokens.text.withValues(alpha: 0.38),
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+
+    return ColoredBox(
+      color: const Color(0xFF6EC8C4).withValues(alpha: 0.06),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          bar,
+          if (armed && (showRbi || showBase || showCelebration))
+            VerbExtrasPanel(
+              controller: controller,
+              verbKey: verb!.key,
+              showRbi: showRbi,
+              showBase: showBase,
+              showCelebration: showCelebration,
+              showSaveActions: false,
+              tokens: tokens,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _CategoryHeader extends StatefulWidget {
   const _CategoryHeader({
     required this.label,
@@ -482,6 +629,7 @@ class _CategoryHeader extends StatefulWidget {
     required this.height,
     required this.tokens,
     required this.onTap,
+    this.gold = false,
   });
 
   final String label;
@@ -490,6 +638,7 @@ class _CategoryHeader extends StatefulWidget {
   final double height;
   final FfTokens tokens;
   final VoidCallback onTap;
+  final bool gold;
 
   @override
   State<_CategoryHeader> createState() => _CategoryHeaderState();
@@ -500,8 +649,11 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
 
   @override
   Widget build(BuildContext context) {
+    const favoritesGold = Color(0xFFFFD166);
     final t = widget.tokens;
     final open = widget.open;
+    final gold = widget.gold;
+    final headerColor = gold ? favoritesGold : t.accent;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -514,13 +666,19 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
             color: open
-                ? t.accent.withValues(alpha: 0.13)
+                ? headerColor.withValues(alpha: 0.13)
                 : (_hovered
                     ? t.text.withValues(alpha: 0.06)
-                    : Colors.transparent),
+                    : (gold
+                        ? favoritesGold.withValues(alpha: 0.07)
+                        : Colors.transparent)),
             border: Border(
               bottom: BorderSide(
-                color: open ? t.accent.withValues(alpha: 0.34) : t.divider,
+                color: open
+                    ? headerColor.withValues(alpha: 0.34)
+                    : (gold
+                        ? favoritesGold.withValues(alpha: 0.22)
+                        : t.divider),
               ),
             ),
           ),
@@ -529,7 +687,9 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
               Icon(
                 open ? Icons.keyboard_arrow_down : Icons.chevron_right,
                 size: 11,
-                color: open ? t.accent : t.text.withValues(alpha: 0.38),
+                color: open || gold
+                    ? headerColor.withValues(alpha: open ? 1 : 0.72)
+                    : t.text.withValues(alpha: 0.38),
               ),
               const SizedBox(width: 5),
               Expanded(
@@ -543,7 +703,9 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                     fontWeight: open ? FontWeight.w600 : FontWeight.w400,
                     fontSize: DefaultVerbAccordion.categoryFontSize,
                     letterSpacing: open ? -0.2 : 0,
-                    color: open ? t.accent : t.text.withValues(alpha: 0.76),
+                    color: open || gold
+                        ? headerColor.withValues(alpha: open ? 1 : 0.78)
+                        : t.text.withValues(alpha: 0.76),
                   ),
                 ),
               ),
@@ -552,7 +714,9 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                 style: TextStyle(
                   fontFamily: FfTokens.monoFamily,
                   fontSize: 10,
-                  color: open ? t.accent : t.text.withValues(alpha: 0.44),
+                  color: open || gold
+                      ? headerColor.withValues(alpha: open ? 1 : 0.62)
+                      : t.text.withValues(alpha: 0.44),
                 ),
               ),
             ],
@@ -695,6 +859,7 @@ class _AccordionVerbRow extends StatefulWidget {
     required this.onEditVerb,
     this.onVerbArmed,
     this.showDragHandle = false,
+    this.showSaveActions = true,
   });
 
   final CaptionV2Controller controller;
@@ -705,6 +870,7 @@ class _AccordionVerbRow extends StatefulWidget {
   final ValueChanged<String> onEditVerb;
   final VoidCallback? onVerbArmed;
   final bool showDragHandle;
+  final bool showSaveActions;
 
   @override
   State<_AccordionVerbRow> createState() => _AccordionVerbRowState();
@@ -816,20 +982,17 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                       )
                     else
                       SizedBox(
-                        width: 10,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            width: 4,
-                            height: 4,
-                            decoration: verb.isFavorite
-                                ? BoxDecoration(
-                                    color: tokens.accent,
-                                    shape: BoxShape.circle,
-                                  )
-                                : null,
-                          ),
-                        ),
+                        width: 16,
+                        child: controller.isVerbPinned(verb.key)
+                            ? Padding(
+                                padding: const EdgeInsets.only(right: 4),
+                                child: Icon(
+                                  Icons.push_pin_rounded,
+                                  size: 10,
+                                  color: tokens.text.withValues(alpha: 0.22),
+                                ),
+                              )
+                            : null,
                       ),
                     Expanded(
                       child: Text(
@@ -868,31 +1031,24 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                           color: tokens.accent,
                         ),
                       ),
-                    if (controller.isVerbPinned(verb.key))
-                      IconButton(
-                        onPressed: () => controller.toggleVerbPin(verb.key),
-                        tooltip: 'Unpin for next frames',
-                        padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints.tightFor(width: 28, height: 24),
-                        visualDensity: VisualDensity.compact,
-                        iconSize: 14,
-                        color: tokens.accent,
-                        icon: const Icon(Icons.push_pin_rounded),
-                      ),
                   ],
                 ),
               ),
             ),
           ),
         ),
-        if (armed)
+        if (armed &&
+            (showRbi ||
+                showBase ||
+                showCelebration ||
+                widget.showSaveActions))
           VerbExtrasPanel(
             controller: controller,
             verbKey: verb.key,
             showRbi: showRbi,
             showBase: showBase,
             showCelebration: showCelebration,
+            showSaveActions: widget.showSaveActions,
             tokens: tokens,
           ),
       ],
@@ -914,6 +1070,7 @@ class VerbExtrasPanel extends StatelessWidget {
     required this.showBase,
     required this.showCelebration,
     required this.tokens,
+    this.showSaveActions = true,
   });
 
   final CaptionV2Controller controller;
@@ -921,6 +1078,7 @@ class VerbExtrasPanel extends StatelessWidget {
   final bool showRbi;
   final bool showBase;
   final bool showCelebration;
+  final bool showSaveActions;
   final FfTokens tokens;
 
   bool get _hasOptionRows => showRbi || showBase || showCelebration;
@@ -940,7 +1098,11 @@ class VerbExtrasPanel extends StatelessWidget {
     final homeRun = verbKey == 'Home Run';
     final reactionChips = controller.reactionOptionsFor(verbKey);
     final celebrationTypes = controller.celebrationTypeOptionsFor(verbKey);
-    final showActions = !_hasOptionRows || _optionsComplete;
+    final showActions =
+        showSaveActions && (!_hasOptionRows || _optionsComplete);
+    if (!_hasOptionRows && !showActions) {
+      return const SizedBox.shrink();
+    }
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 10, 8),

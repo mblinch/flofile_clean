@@ -19,6 +19,7 @@ class EffectiveVerb {
     required this.wantsOpponent,
     required this.omitAgainst,
     required this.opponentJoiner,
+    required this.withTeammates,
     required this.subOptions,
     required this.authoring,
     required this.hasAuthoredModifiers,
@@ -38,6 +39,8 @@ class EffectiveVerb {
   final bool omitAgainst;
   /// Exact connector before the opponent (default `against`).
   final String opponentJoiner;
+  /// First same-team pick is the subject; later same-team picks become "with …".
+  final bool withTeammates;
   final VerbSubOptions subOptions;
   final VerbAuthoringData authoring;
   final bool hasAuthoredModifiers;
@@ -313,11 +316,10 @@ class EffectiveVerbCatalog {
                 effectiveSingular,
               ),
         keywords: keywords,
-        wantsOpponent: raw['wantsOpponent'] is bool
-            ? raw['wantsOpponent'] as bool
-            : entry.key != 'Post Game Win' && entry.key != 'Post Game Loss',
+        wantsOpponent: _wantsOpponentFromRecord(raw, entry.key),
         omitAgainst: raw['omitAgainst'] == true,
         opponentJoiner: _opponentJoinerFromRecord(raw),
+        withTeammates: _withTeammatesFromRecord(raw, entry.key),
         subOptions: subOptions,
         authoring: VerbAuthoringData.fromRecord(
           raw,
@@ -359,7 +361,33 @@ class EffectiveVerbCatalog {
     if (raw.containsKey('opponentJoiner')) {
       return (raw['opponentJoiner'] ?? '').toString();
     }
+    if (raw['wantsOpponent'] == false) return '';
     return raw['omitAgainst'] == true ? '' : 'against';
+  }
+
+  /// Explicit [withTeammates] wins. Legacy Celebrates a Goal always used
+  /// lead-player + named "with …" teammates.
+  static bool _withTeammatesFromRecord(Map raw, String key) {
+    if (raw['withTeammates'] is bool) return raw['withTeammates'] as bool;
+    return key == 'Celebrates a Goal';
+  }
+
+  /// Opponent joiner text is the source of truth for most verbs: a non-empty
+  /// joiner (usually `against`) means attach an opponent clause. Post Game
+  /// Win/Loss never take an opponent unless explicitly enabled.
+  ///
+  /// This also heals poisoned overrides that kept `opponentJoiner: against`
+  /// while `wantsOpponent` was left `false` (e.g. Stands in Net, Walks to the
+  /// Ice), which previously dropped the against-team clause.
+  static bool _wantsOpponentFromRecord(Map raw, String key) {
+    if (key == 'Post Game Win' || key == 'Post Game Loss') {
+      return raw['wantsOpponent'] == true;
+    }
+    if (raw.containsKey('opponentJoiner')) {
+      return (raw['opponentJoiner'] ?? '').toString().trim().isNotEmpty;
+    }
+    if (raw['wantsOpponent'] is bool) return raw['wantsOpponent'] as bool;
+    return _opponentJoinerFromRecord(raw).trim().isNotEmpty;
   }
 }
 
@@ -404,6 +432,62 @@ class EffectiveVerbRepository {
       }
     }
 
+    // Fold phrase-alias override keys (e.g. "battles against") and restore
+    // factory categories so complete catalogs cannot dump junk into Offense.
+    if (catalogComplete || overrides.isNotEmpty) {
+      final beforeOverrides = {
+        for (final entry in overrides.entries)
+          entry.key: Map<String, dynamic>.from(entry.value),
+      };
+      final healed = VerbDefaultsBundle.ensureComplete(
+        {
+          VerbDefaultsBundle.catalogCompleteKey: catalogComplete,
+          'categoryOrder': categoryOrder,
+          'verbOrder': verbOrder,
+          'favoriteVerbs': favorites.toList(),
+          'customVerbs': customVerbs,
+          'customVerbWordings': customWordings,
+          'verbOverrides': overrides,
+          'deletedVerbs': deletedVerbs.toList(),
+        },
+        sport,
+      );
+      final healedOverrides = <String, Map<String, dynamic>>{
+        for (final entry
+            in ((healed['verbOverrides'] as Map?) ?? const {}).entries)
+          if (entry.value is Map)
+            entry.key.toString(): Map<String, dynamic>.from(entry.value as Map),
+      };
+      final healedOrder = <String, List<String>>{
+        for (final entry in ((healed['verbOrder'] as Map?) ?? const {}).entries)
+          entry.key.toString(): [
+            for (final value in ((entry.value as List?) ?? const []))
+              value.toString(),
+          ],
+      };
+      final healedCategories = [
+        for (final value in ((healed['categoryOrder'] as List?) ?? const []))
+          value.toString(),
+      ];
+      final changed = !_sameOverrideMaps(beforeOverrides, healedOverrides) ||
+          !_sameStringListMap(verbOrder, healedOrder);
+
+      categoryOrder = healedCategories;
+      verbOrder = healedOrder;
+      overrides = healedOverrides;
+      deletedVerbs = {
+        for (final value in ((healed['deletedVerbs'] as List?) ?? const []))
+          value.toString(),
+      };
+      catalogComplete = true;
+
+      if (changed) {
+        await preferences.importPreferences({
+          'verbSettingsBySport': {sport: healed},
+        });
+      }
+    }
+
     return EffectiveVerbCatalog.merge(
       sport: sport,
       categoryOrder: categoryOrder,
@@ -415,5 +499,54 @@ class EffectiveVerbRepository {
       deletedVerbs: deletedVerbs,
       catalogComplete: catalogComplete,
     );
+  }
+
+  static bool _sameStringListMap(
+    Map<String, List<String>> a,
+    Map<String, List<String>> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      final other = b[entry.key];
+      if (other == null || other.length != entry.value.length) return false;
+      for (var i = 0; i < entry.value.length; i++) {
+        if (other[i] != entry.value[i]) return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _sameOverrideMaps(
+    Map<String, Map<String, dynamic>> a,
+    Map<String, Map<String, dynamic>> b,
+  ) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      final other = b[entry.key];
+      if (other == null) return false;
+      if (!_sameJsonish(entry.value, other)) return false;
+    }
+    return true;
+  }
+
+  static bool _sameJsonish(Object? a, Object? b) {
+    if (identical(a, b)) return true;
+    if (a is Map && b is Map) {
+      if (a.length != b.length) return false;
+      for (final key in a.keys) {
+        if (!b.containsKey(key) || !_sameJsonish(a[key], b[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (a is List && b is List) {
+      if (a.length != b.length) return false;
+      for (var i = 0; i < a.length; i++) {
+        if (!_sameJsonish(a[i], b[i])) return false;
+      }
+      return true;
+    }
+    return a == b;
   }
 }

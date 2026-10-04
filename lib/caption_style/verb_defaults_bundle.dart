@@ -119,6 +119,27 @@ class VerbDefaultsBundle {
       for (final key in factoryOverrides.keys) key.toLowerCase(): key,
       // Renamed factory verbs (old key → current factory key).
       'pitching': 'Pitches',
+      // Legacy phrase-keys that used to be stored as override ids (hockey).
+      'battles against': 'Battles',
+      'goes to the net against': 'Goes to the Net',
+      'takes a faceoff': 'Faceoff',
+      'blocks a shot': 'Blocks',
+      'clears the puck': 'Clears',
+      'makes a save': 'Saves',
+      'guards the net': 'Guards the Net',
+      'handles the puck': 'Handles the Puck',
+      'stands in net': 'Stands in Net',
+      'celebrates a goal': 'Celebrates a Goal',
+      'celebrates after the win': 'Post Game Win',
+      'reacts with dejection': 'Dejection',
+      'reacts': 'Dejection',
+      'on the bench': 'Bench',
+      'stretches prior to play': 'Stretching',
+      'takes the ice prior to play': 'Takes the Ice',
+      'warms up prior to play': 'Warm Ups',
+      'walks to the ice': 'Walks to the Ice',
+      'looks on': 'Looks On',
+      'looks on during the national anthem prior to play': 'National Anthem',
     };
 
     String? resolveFactoryKey(String key, Map<String, dynamic> record) {
@@ -144,8 +165,8 @@ class VerbDefaultsBundle {
         final key = rawKey.toString();
         final factoryKey = resolveFactoryKey(key, record);
         if (factoryKey == null) {
-          // Non-factory override key: keep only if it looks intentionally custom.
-          overrides[key] = record;
+          // Drop legacy phrase-key / junk overrides. Real user-created verbs
+          // live in customVerbs; keeping these keys re-poisons Offense.
           return;
         }
         final canonical = key.toLowerCase() == factoryKey.toLowerCase();
@@ -175,12 +196,21 @@ class VerbDefaultsBundle {
             value.toString().trim().toLowerCase(),
         }..removeWhere((value) => value.isEmpty);
         merged['keywords'] = {...factoryKeywords, ...existingKeywords}.toList();
+        _normalizeOpponentFields(entry.key, merged);
         overrides[entry.key] = merged;
       }
       for (final entry in canonicalEdits.entries) {
+        final factoryRecord = factoryOverrides[entry.key]!;
         final merged = Map<String, dynamic>.from(overrides[entry.key]!)
           ..addAll(entry.value);
         merged['key'] = entry.key;
+        // Factory verbs always keep their factory category so legacy catalogs
+        // (e.g. hockey Celebrates stuck under Offense) heal on load.
+        merged['category'] = factoryRecord['category'];
+        if ((merged['label'] ?? '').toString().trim().isEmpty) {
+          merged['label'] = factoryRecord['label'] ?? entry.key;
+        }
+        _normalizeOpponentFields(entry.key, merged);
         overrides[entry.key] = merged;
       }
     }
@@ -297,6 +327,25 @@ class VerbDefaultsBundle {
     return next;
   }
 
+  /// Keep wantsOpponent / omitAgainst aligned with opponentJoiner text.
+  /// Post Game Win/Loss stay opponent-free even when a legacy joiner remains.
+  static void _normalizeOpponentFields(String key, Map<String, dynamic> merged) {
+    if (key == 'Post Game Win' || key == 'Post Game Loss') {
+      merged['wantsOpponent'] = false;
+      return;
+    }
+    final joiner = (merged['opponentJoiner'] ?? 'against').toString().trim();
+    if (joiner.isNotEmpty) {
+      merged['opponentJoiner'] = joiner;
+      merged['wantsOpponent'] = true;
+      merged['omitAgainst'] = false;
+    } else {
+      merged['opponentJoiner'] = '';
+      merged['wantsOpponent'] = false;
+      merged['omitAgainst'] = true;
+    }
+  }
+
   static Map<String, dynamic> factoryVerbRecord(
     String key,
     String category,
@@ -324,6 +373,7 @@ class VerbDefaultsBundle {
       'wantsOpponent': key != 'Post Game Win' && key != 'Post Game Loss',
       'omitAgainst': false,
       'opponentJoiner': 'against',
+      'withTeammates': key == 'Celebrates a Goal',
       'isCustom': false,
       'subOptions': subOptions.toJson(),
       ...authoring.toRecordFields(),

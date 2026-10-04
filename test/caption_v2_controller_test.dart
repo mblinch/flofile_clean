@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:quick_cap/caption_style/caption_template.dart';
 import 'package:quick_cap/screens/caption_v2/data/caption_transfer_payload.dart';
 import 'package:quick_cap/screens/caption_v2/data/caption_v2_controller.dart';
+import 'package:quick_cap/screens/caption_v2/data/effective_verb_catalog.dart';
 import 'package:quick_cap/screens/caption_v2/data/iptc_caption_writer.dart';
 import 'package:quick_cap/services/mlb_api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -92,6 +93,34 @@ void main() {
     expect(body, contains('Mitch Marner'));
     expect(body, contains('against the Montreal Canadiens'));
     expect(body.toLowerCase(), isNot(contains('teammate')));
+  });
+
+  test('withTeammates catalog flag shapes Speaks captions like Celebrates a Goal',
+      () {
+    final catalog = EffectiveVerbCatalog.merge(
+      sport: 'hockey',
+      categoryOrder: const ['Reactions'],
+      verbOrder: const {
+        'Reactions': ['Speaks'],
+      },
+      favorites: const {},
+      customVerbs: const [
+        {
+          'label': 'Speaks',
+          'verbPhrase': 'speaks',
+          'pluralPhrase': 'speak',
+          'category': 'Reactions',
+          'withTeammates': true,
+          'wantsOpponent': true,
+          'isCustom': true,
+        },
+      ],
+      customWordings: const {},
+      overrides: const {},
+      deletedVerbs: const {},
+      catalogComplete: true,
+    );
+    expect(catalog.byKey['Speaks']!.withTeammates, isTrue);
   });
 
   test('single team mode omits opponent clause from captions', () {
@@ -1625,4 +1654,5 @@ void main() {
     controller.setSelectedBase('Home');
     expect(controller.buildCaptionBody(), contains('slides into home plate'));
   });
+
 }

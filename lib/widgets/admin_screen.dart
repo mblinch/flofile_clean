@@ -149,9 +149,13 @@ class _AdminScreenState extends State<AdminScreen> {
         }
         _gameIdDrafts[w] = bySport;
       }
+      final currentSport = (await _prefs.getCurrentSport()).toLowerCase().trim();
+      final sport = _sports.contains(currentSport) ? currentSport : 'baseball';
+      _verbSport = sport;
+      _captionSport = sport;
+      _compareSport = sport;
       _applyGameIdToCaptionDraft(_captionWire, _captionSport);
       _captionBuilderRevision++;
-      _compareSport = await _prefs!.getCurrentSport();
       if (_compareTeamNames.isEmpty) {
         unawaited(_loadTeamsForCompare());
       }
