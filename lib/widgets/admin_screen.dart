@@ -154,7 +154,8 @@ class _AdminScreenState extends State<AdminScreen> {
         }
         _gameIdDrafts[w] = bySport;
       }
-      final currentSport = (await _prefs.getCurrentSport()).toLowerCase().trim();
+      final currentSport =
+          (await _prefs.getCurrentSport()).toLowerCase().trim();
       final sport = _sports.contains(currentSport) ? currentSport : 'baseball';
       _verbSport = sport;
       _captionSport = sport;
@@ -208,16 +209,13 @@ class _AdminScreenState extends State<AdminScreen> {
           'Scanning sports_tank01 for missing and duplicate jersey numbers…';
     });
     try {
-      final sport =
-          _issuesSportFilter == 'all' ? null : _issuesSportFilter;
+      final sport = _issuesSportFilter == 'all' ? null : _issuesSportFilter;
       final issues = await _issuesService.scanIssues(sportId: sport);
       if (!mounted) return;
-      final missing = issues
-          .where((i) => i.kind == RosterIssueKind.missingJersey)
-          .length;
-      final duplicates = issues
-          .where((i) => i.kind == RosterIssueKind.duplicateJersey)
-          .length;
+      final missing =
+          issues.where((i) => i.kind == RosterIssueKind.missingJersey).length;
+      final duplicates =
+          issues.where((i) => i.kind == RosterIssueKind.duplicateJersey).length;
       setState(() {
         _rosterIssues = issues;
         if (issues.isEmpty) {
@@ -301,7 +299,8 @@ class _AdminScreenState extends State<AdminScreen> {
                             IconButton(
                               tooltip: 'Cancel',
                               onPressed: () => Navigator.of(ctx).pop(),
-                              icon: PhosphorIcon(PhosphorIconsRegular.x,
+                              icon: PhosphorIcon(
+                                PhosphorIconsRegular.x,
                                 size: 16,
                                 color: t.text.withValues(alpha: 0.55),
                               ),
@@ -411,14 +410,13 @@ class _AdminScreenState extends State<AdminScreen> {
       );
       if (!mounted) return;
       final savedMsg =
-          'Saved #$jersey for ${issue.fullName}. Sync will keep this number.';
+          'Saved #$jersey for ${issue.fullName}. Sync keeps this number until they change teams.';
       await _scanRosterIssues();
       if (!mounted) return;
       setState(() {
         final scan = _issuesStatus;
-        _issuesStatus = scan == null || scan.isEmpty
-            ? savedMsg
-            : '$savedMsg $scan';
+        _issuesStatus =
+            scan == null || scan.isEmpty ? savedMsg : '$savedMsg $scan';
       });
     } catch (e) {
       if (!mounted) return;
@@ -510,8 +508,8 @@ class _AdminScreenState extends State<AdminScreen> {
 
   Future<void> _syncTank01ToFirestore({required bool allSports}) async {
     if (!tank01SupportsSport(_compareSport) && !allSports) {
-      setState(() => _compareError =
-          'Tank01 sync is not available for $_compareSport.');
+      setState(() =>
+          _compareError = 'Tank01 sync is not available for $_compareSport.');
       return;
     }
     setState(() {
@@ -724,7 +722,8 @@ class _AdminScreenState extends State<AdminScreen> {
         _verbSport,
       );
       _setActiveVerbBundle(bundle);
-      await AppDefaultsFirestoreService.publishVerbsForSport(_verbSport, bundle);
+      await AppDefaultsFirestoreService.publishVerbsForSport(
+          _verbSport, bundle);
       await _persistAdminVerbBundleLocally(_verbSport, bundle);
       _catalog = AppDefaultsFirestoreService.getCachedCatalog();
       _verbBundles[_verbSport] = await _sportBundleForAdmin(_verbSport);
@@ -780,8 +779,7 @@ class _AdminScreenState extends State<AdminScreen> {
 
     final ok = await _confirmAdminPublish(
       title: 'Publish “$label” as default?',
-      message:
-          'Updates Firebase app originals for this sport’s verb catalog '
+      message: 'Updates Firebase app originals for this sport’s verb catalog '
           '(including this verb).',
     );
     if (!ok) return;
@@ -1491,8 +1489,9 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
           ),
           _iconAction(
-            icon:
-                _verbHasRecordedDefault(v.key) ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
+            icon: _verbHasRecordedDefault(v.key)
+                ? PhosphorIconsFill.star
+                : PhosphorIconsRegular.star,
             tooltip: _verbHasRecordedDefault(v.key)
                 ? 'Already a recorded default — click to update from current wording'
                 : 'Set as default for app originals',
@@ -1705,7 +1704,8 @@ class _AdminScreenState extends State<AdminScreen> {
             borderRadius: BorderRadius.circular(4),
             child: Padding(
               padding: const EdgeInsets.all(4),
-              child: PhosphorIcon(PhosphorIconsRegular.x,
+              child: PhosphorIcon(
+                PhosphorIconsRegular.x,
                 size: 20,
                 color: t.textSecondary,
               ),
@@ -1975,11 +1975,13 @@ class _AdminScreenState extends State<AdminScreen> {
         listItemDecoration: ListItemDecoration(
           selectedColor: t.selectedFill,
         ),
-        closedSuffixIcon: PhosphorIcon(PhosphorIconsRegular.caretDown,
+        closedSuffixIcon: PhosphorIcon(
+          PhosphorIconsRegular.caretDown,
           size: 16,
           color: t.textSecondary,
         ),
-        expandedSuffixIcon: PhosphorIcon(PhosphorIconsRegular.caretUp,
+        expandedSuffixIcon: PhosphorIcon(
+          PhosphorIconsRegular.caretUp,
           size: 16,
           color: t.textSecondary,
         ),
@@ -2027,9 +2029,8 @@ class _AdminScreenState extends State<AdminScreen> {
               label: _issuesScanning ? 'Scanning…' : 'Scan jersey issues',
               fontSize: 11,
               icon: PhosphorIconsRegular.magnifyingGlass,
-              onPressed: _issuesScanning || _issuesSaving
-                  ? null
-                  : _scanRosterIssues,
+              onPressed:
+                  _issuesScanning || _issuesSaving ? null : _scanRosterIssues,
             ),
           ],
         ),
@@ -2160,9 +2161,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   : () => _syncTank01ToFirestore(allSports: false),
             ),
             ElevatedGreyButton(
-              label: _tank01SyncRunning
-                  ? 'Syncing…'
-                  : 'Sync all Tank01 sports',
+              label: _tank01SyncRunning ? 'Syncing…' : 'Sync all Tank01 sports',
               fontSize: 11,
               icon: PhosphorIconsRegular.arrowsClockwise,
               onPressed: _tank01SyncRunning || _compareRunning
@@ -2778,8 +2777,7 @@ class _OutlinedAccentButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = onPressed != null;
-    final color =
-        enabled ? tokens.accent : tokens.text.withValues(alpha: 0.28);
+    final color = enabled ? tokens.accent : tokens.text.withValues(alpha: 0.28);
     return SizedBox(
       height: 32,
       child: OutlinedButton(

@@ -18,6 +18,7 @@ import '../../../services/app_defaults_firestore_service.dart';
 import '../../../services/current_user_service.dart';
 import '../../../services/iptc_template_apply_service.dart';
 import '../../../services/iptc_template_import_service.dart';
+import '../../../services/jersey_ocr_channel.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
@@ -118,6 +119,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool _scanningIptc = false;
   int _iptcScanGen = 0;
   bool _ftpModeEnabled = true;
+  /// On-device jersey/name OCR + folder pre-scan (macOS). Same pref as the
+  /// session header toggle.
+  bool _jerseyOcrEnabled = false;
 
   CaptionStyleCatalog? _styleCatalog;
   CaptionTemplate? _captionTemplate;
@@ -254,6 +258,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       }
       _iptcStatus = await _iptcStatusFromPrefs();
       _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
+      _jerseyOcrEnabled = JerseyOcrChannel.supported &&
+          await _prefs!.getJerseyOcrEnabled();
       await _loadCaptionStyles();
       await _refreshIptcCaptionWarning();
       if (!mounted) return;
@@ -672,6 +678,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     await _prefs?.saveFtpModeEnabled(enabled);
     if (!mounted) return;
     setState(() => _ftpModeEnabled = enabled);
+  }
+
+  Future<void> _setJerseyOcr(bool enabled) async {
+    if (enabled == _jerseyOcrEnabled) return;
+    await _prefs?.saveJerseyOcrEnabled(enabled);
+    if (!mounted) return;
+    setState(() => _jerseyOcrEnabled = enabled);
   }
 
   Future<void> _openIptc() async {
@@ -1438,6 +1451,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           value: _ftpModeEnabled,
           onChanged: _setFtpMode,
         ),
+        if (JerseyOcrChannel.supported) ...[
+          const SizedBox(height: 6),
+          _OptionRow(
+            title: 'Text Recognition',
+            description:
+                'Reads jersey numbers and names, and pre-loads the folder '
+                'in the background so each frame is ready',
+            value: _jerseyOcrEnabled,
+            onChanged: _setJerseyOcr,
+          ),
+        ],
       ],
       ),
     );

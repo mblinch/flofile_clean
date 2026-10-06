@@ -20,17 +20,24 @@ class OrientedPrefetchJob {
 
 /// Decodes a photo and applies EXIF orientation so pixels match how the shot
 /// should be displayed (Lightroom, Finder, etc.).
+///
+/// Thumbs and large previews live in **separate** LRU budgets so scrolling the
+/// filmstrip to the bottom keeps its thumbs even after big preview decodes.
 class OrientedImageBytes {
   OrientedImageBytes._();
 
-  static final LinkedHashMap<String, Uint8List> _cache = LinkedHashMap();
-  static int _cacheBytes = 0;
+  static final LinkedHashMap<String, Uint8List> _thumbCache = LinkedHashMap();
+  static final LinkedHashMap<String, Uint8List> _previewCache = LinkedHashMap();
+  static int _thumbCacheBytes = 0;
+  static int _previewCacheBytes = 0;
 
   static const _cacheVersion = 'macos-ci-srgb-v2';
-  /// Session RAM budget for decoded previews/thumbs (LRU).
-  static const _maxCacheBytes = 256 * 1024 * 1024;
-  /// Parallel native/JPEG decodes. Higher fills the cache faster on folder open.
-  static const _maxDecodes = 5;
+  /// Grid thumbs — sized for a full shoot (~2–4k frames at ~80KB each).
+  static const _maxThumbCacheBytes = 384 * 1024 * 1024;
+  /// Main preview / loupe — independent of the thumb budget.
+  static const _maxPreviewCacheBytes = 256 * 1024 * 1024;
+  /// Parallel native/JPEG decodes. Higher fills the thumb strip faster.
+  static const _maxDecodes = 8;
   static int _decodesInFlight = 0;
   static final List<Completer<void>> _decodeWaiters = [];
 
@@ -43,24 +50,47 @@ class OrientedImageBytes {
   /// Default grid thumb width (3-column layout).
   static const int thumbMaxWidth = 320;
 
+  /// Entries at or below this width use the thumb cache (never evicted by
+  /// preview loads).
+  static const int _thumbBudgetMaxWidth = 400;
+
+  static bool _isThumbSize(int? maxWidth) =>
+      maxWidth != null && maxWidth > 0 && maxWidth <= _thumbBudgetMaxWidth;
+
   static String _cacheKey(String path, int? maxWidth) =>
       '$_cacheVersion|$path|${maxWidth ?? 0}';
 
-  static Uint8List? _readCache(String key) {
-    final hit = _cache.remove(key);
+  static Uint8List? _readCache(String key, {required bool thumb}) {
+    final map = thumb ? _thumbCache : _previewCache;
+    final hit = map.remove(key);
     if (hit == null) return null;
-    _cache[key] = hit;
+    map[key] = hit;
     return hit;
   }
 
-  static void _writeCache(String key, Uint8List bytes) {
-    final old = _cache.remove(key);
-    if (old != null) _cacheBytes -= old.lengthInBytes;
-    _cache[key] = bytes;
-    _cacheBytes += bytes.lengthInBytes;
-    while (_cacheBytes > _maxCacheBytes && _cache.isNotEmpty) {
-      final evicted = _cache.remove(_cache.keys.first);
-      if (evicted != null) _cacheBytes -= evicted.lengthInBytes;
+  static void _writeCache(String key, Uint8List bytes, {required bool thumb}) {
+    final map = thumb ? _thumbCache : _previewCache;
+    final old = map.remove(key);
+    if (old != null) {
+      if (thumb) {
+        _thumbCacheBytes -= old.lengthInBytes;
+      } else {
+        _previewCacheBytes -= old.lengthInBytes;
+      }
+    }
+    map[key] = bytes;
+    if (thumb) {
+      _thumbCacheBytes += bytes.lengthInBytes;
+      while (_thumbCacheBytes > _maxThumbCacheBytes && map.isNotEmpty) {
+        final evicted = map.remove(map.keys.first);
+        if (evicted != null) _thumbCacheBytes -= evicted.lengthInBytes;
+      }
+    } else {
+      _previewCacheBytes += bytes.lengthInBytes;
+      while (_previewCacheBytes > _maxPreviewCacheBytes && map.isNotEmpty) {
+        final evicted = map.remove(map.keys.first);
+        if (evicted != null) _previewCacheBytes -= evicted.lengthInBytes;
+      }
     }
   }
 
@@ -69,11 +99,15 @@ class OrientedImageBytes {
     try {
       final mod = File(path).lastModifiedSync();
       final key = '${_cacheKey(path, maxWidth)}|${mod.millisecondsSinceEpoch}';
-      return _readCache(key);
+      return _readCache(key, thumb: _isThumbSize(maxWidth));
     } catch (_) {
       return null;
     }
   }
+
+  /// True when this path+size is already warm (no disk/decode needed).
+  static bool isCached(String path, {int? maxWidth}) =>
+      peekCached(path, maxWidth: maxWidth) != null;
 
   /// PNG/JPEG bytes suitable for [Image.memory]; cached per [path] + [maxWidth] + mtime.
   ///
@@ -88,16 +122,17 @@ class OrientedImageBytes {
     if (!await file.exists()) return null;
     final mod = await file.lastModified();
     final key = '${_cacheKey(path, maxWidth)}|${mod.millisecondsSinceEpoch}';
-    final hit = _readCache(key);
+    final thumb = _isThumbSize(maxWidth);
+    final hit = _readCache(key, thumb: thumb);
     if (hit != null) return hit;
 
     final isPriority = priority ??
         (maxWidth == null || maxWidth <= 0 || maxWidth >= 800);
     await _acquireDecode(priority: isPriority);
     try {
-      final again = _readCache(key);
+      final again = _readCache(key, thumb: thumb);
       if (again != null) return again;
-      return await _decodeUncached(file, path, maxWidth, key);
+      return await _decodeUncached(file, path, maxWidth, key, thumb: thumb);
     } finally {
       _releaseDecode();
     }
@@ -113,7 +148,7 @@ class OrientedImageBytes {
   }) async {
     if (jobs.isEmpty) return;
     // Kick off in waves so we don't create thousands of waiters at once.
-    const wave = 16;
+    const wave = 24;
     for (var i = 0; i < jobs.length; i += wave) {
       if (!isCurrent()) return;
       final end = (i + wave).clamp(0, jobs.length);
@@ -151,8 +186,9 @@ class OrientedImageBytes {
     File file,
     String path,
     int? maxWidth,
-    String key,
-  ) async {
+    String key, {
+    required bool thumb,
+  }) async {
     // `0` / negative = full resolution (no downscale). Null defaults to 4096.
     final fullRes = maxWidth != null && maxWidth <= 0;
     final maxPx = fullRes
@@ -166,7 +202,7 @@ class OrientedImageBytes {
           maxPixelDimension: maxPx,
         );
         if (png != null && png.isNotEmpty) {
-          _writeCache(key, png);
+          _writeCache(key, png, thumb: thumb);
           return png;
         }
       } catch (_) {}
@@ -197,9 +233,9 @@ class OrientedImageBytes {
       }
 
       final out = Uint8List.fromList(
-        img.encodeJpg(oriented, quality: 88),
+        img.encodeJpg(oriented, quality: thumb ? 82 : 88),
       );
-      _writeCache(key, out);
+      _writeCache(key, out, thumb: thumb);
       return out;
     } catch (_) {
       return null;
@@ -208,10 +244,15 @@ class OrientedImageBytes {
 
   static void evict(String path) {
     final prefix = '$_cacheVersion|$path|';
-    _cache.removeWhere((key, value) {
-      if (!key.startsWith(prefix)) return false;
-      _cacheBytes -= value.lengthInBytes;
-      return true;
-    });
+    void sweep(LinkedHashMap<String, Uint8List> map, void Function(int) debit) {
+      map.removeWhere((key, value) {
+        if (!key.startsWith(prefix)) return false;
+        debit(value.lengthInBytes);
+        return true;
+      });
+    }
+
+    sweep(_thumbCache, (n) => _thumbCacheBytes -= n);
+    sweep(_previewCache, (n) => _previewCacheBytes -= n);
   }
 }

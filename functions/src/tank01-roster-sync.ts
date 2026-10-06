@@ -145,22 +145,30 @@ function playerChanged(
   return false;
 }
 
-/** Keep manually verified jerseys when Tank01 still returns blank. */
+/**
+ * A manually entered jersey stays in force on this team, even when Tank01
+ * sends a different number. A player who moves teams is a new doc on the
+ * new team, so this does not follow them — Tank01's number is used there.
+ *
+ * When Tank01's number differs, `tank01Conflict` is that number so admins
+ * can review it. Null means clear any stored conflict on the player doc.
+ */
 function withPreservedManualJersey(
   cur: Record<string, unknown>,
   incoming: Tank01Player,
-): { player: Tank01Player; keptManual: boolean } {
-  const incomingJersey = (incoming.jerseyNumber ?? "").toString().trim();
-  if (incomingJersey) {
-    return { player: incoming, keptManual: false };
-  }
+): {
+  player: Tank01Player;
+  keptManual: boolean;
+  tank01Conflict: string | null;
+} {
   const source = String(cur.jerseySource ?? "").trim();
-  if (source !== "manual") {
-    return { player: incoming, keptManual: false };
-  }
   const existingJersey = String(cur.jerseyNumber ?? "").trim();
-  if (!existingJersey) {
-    return { player: incoming, keptManual: false };
+  const incomingJersey = (incoming.jerseyNumber ?? "").toString().trim();
+  if (source !== "manual" || !existingJersey) {
+    return { player: incoming, keptManual: false, tank01Conflict: null };
+  }
+  if (!incomingJersey || incomingJersey === existingJersey) {
+    return { player: incoming, keptManual: true, tank01Conflict: null };
   }
   return {
     player: {
@@ -169,6 +177,7 @@ function withPreservedManualJersey(
       displayName: `${incoming.fullName} #${existingJersey}`,
     },
     keptManual: true,
+    tank01Conflict: incomingJersey,
   };
 }
 
@@ -311,6 +320,10 @@ async function reconcileTeamPlayers(
   const removes: string[] = [];
   const changedPlayers: Tank01SyncTotals["changedPlayers"] = [];
   const preservedManual = new Set<string>();
+  /** Doc id → Tank01 number that differs from the manual override. */
+  const tank01Conflicts = new Map<string, string>();
+  /** Doc ids whose stored Tank01 conflict field should be cleared. */
+  const clearTank01Conflicts = new Set<string>();
   const effectiveById = new Map<string, Tank01Player>();
 
   for (const [id, p] of target) {
@@ -327,10 +340,20 @@ async function reconcileTeamPlayers(
       });
       continue;
     }
-    const { player: effective, keptManual } = withPreservedManualJersey(cur, p);
+    const { player: effective, keptManual, tank01Conflict } =
+      withPreservedManualJersey(cur, p);
     if (keptManual) preservedManual.add(id);
+    const curConflict = String(cur.tank01JerseyNumber ?? "").trim();
+    let conflictFieldChanged = false;
+    if (tank01Conflict) {
+      tank01Conflicts.set(id, tank01Conflict);
+      conflictFieldChanged = curConflict !== tank01Conflict;
+    } else if (curConflict) {
+      clearTank01Conflicts.add(id);
+      conflictFieldChanged = true;
+    }
     effectiveById.set(id, effective);
-    if (playerChanged(cur, effective)) {
+    if (playerChanged(cur, effective) || conflictFieldChanged) {
       updates.push([id, effective]);
       changedPlayers.push({
         sportId,
@@ -454,6 +477,8 @@ async function reconcileTeamPlayers(
       if (op.type === "set") {
         const p = op.player;
         const keepManual = preservedManual.has(op.id);
+        const conflict = tank01Conflicts.get(op.id);
+        const clearConflict = clearTank01Conflicts.has(op.id) || !keepManual;
         const incomingHasJersey =
           !!(p.jerseyNumber ?? "").toString().trim() && !keepManual;
         batch.set(
@@ -467,6 +492,11 @@ async function reconcileTeamPlayers(
             ...(p.position ? { position: p.position } : {}),
             ...(keepManual ? { jerseySource: "manual" } : {}),
             ...(incomingHasJersey ? { jerseySource: "tank01" } : {}),
+            ...(conflict
+              ? { tank01JerseyNumber: conflict }
+              : clearConflict
+                ? { tank01JerseyNumber: FieldValue.delete() }
+                : {}),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },

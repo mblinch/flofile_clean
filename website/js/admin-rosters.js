@@ -353,6 +353,11 @@
         .doc(state.teamId)
         .collection('players')
         .doc(playerId);
+      var snap = await ref.get();
+      var cur = (snap.exists && snap.data()) || {};
+      var oldJersey = (cur.jerseyNumber || '').trim();
+      var oldSource = (cur.jerseySource || '').trim();
+      var existingTank = (cur.tank01JerseyNumber || '').trim();
       var payload = {
         fullName: name,
         position: pos,
@@ -362,9 +367,22 @@
         payload.jerseyNumber = jersey;
         payload.displayName = name + ' #' + jersey;
         payload.jerseySource = 'manual';
+        var knownTank = existingTank
+          ? existingTank
+          : oldSource !== 'manual' && oldJersey
+            ? oldJersey
+            : '';
+        if (knownTank && knownTank !== jersey) {
+          payload.tank01JerseyNumber = knownTank;
+        } else {
+          payload.tank01JerseyNumber =
+            firebase.firestore.FieldValue.delete();
+        }
       } else {
         payload.jerseyNumber = '';
         payload.displayName = name;
+        payload.tank01JerseyNumber =
+          firebase.firestore.FieldValue.delete();
       }
       await ref.set(payload, { merge: true });
       setStatus('Saved ' + name);
@@ -445,6 +463,13 @@
     }
   }
 
+  function kindOrder(kind) {
+    if (kind === 'missing') return 0;
+    if (kind === 'duplicate') return 1;
+    if (kind === 'differs') return 2;
+    return 9;
+  }
+
   function jerseyKey(value) {
     return String(value || '')
       .trim()
@@ -478,12 +503,13 @@
           var teamName = (teamData.displayName || teamData.name || teamDoc.id).trim();
           var playersSnap = await teamDoc.ref.collection('players').get();
           var byJersey = {};
-          var rows = [];
           playersSnap.forEach(function (pDoc) {
             var data = pDoc.data() || {};
             var fullName = (data.fullName || '').trim();
             if (!fullName) return;
             var jersey = (data.jerseyNumber || '').trim();
+            var tankJersey = (data.tank01JerseyNumber || '').trim();
+            var source = (data.jerseySource || '').trim();
             var row = {
               kind: '',
               sportId: sport.id,
@@ -492,14 +518,28 @@
               playerDocId: pDoc.id,
               fullName: fullName,
               jerseyNumber: jersey,
+              tank01JerseyNumber: tankJersey,
               position: (data.position || '').trim(),
               detail: null,
             };
-            rows.push(row);
             if (!jersey) {
               row.kind = 'missing';
               issues.push(row);
               return;
+            }
+            if (source === 'manual' && tankJersey && tankJersey !== jersey) {
+              issues.push({
+                kind: 'differs',
+                sportId: sport.id,
+                teamId: teamDoc.id,
+                teamName: teamName,
+                playerDocId: pDoc.id,
+                fullName: fullName,
+                jerseyNumber: jersey,
+                tank01JerseyNumber: tankJersey,
+                position: row.position,
+                detail: 'Saved #' + jersey + ' · Tank01 has #' + tankJersey,
+              });
             }
             var key = jerseyKey(jersey);
             if (!byJersey[key]) byJersey[key] = [];
@@ -539,18 +579,34 @@
         if (s) return s;
         var tn = a.teamName.localeCompare(b.teamName);
         if (tn) return tn;
-        if (a.kind !== b.kind) return a.kind === 'missing' ? -1 : 1;
+        var ka = kindOrder(a.kind);
+        var kb = kindOrder(b.kind);
+        if (ka !== kb) return ka - kb;
         var j = (a.jerseyNumber || '').localeCompare(b.jerseyNumber || '');
         if (j) return j;
         return a.fullName.localeCompare(b.fullName);
       });
       state.issues = issues;
       renderIssues();
-      setStatus(
-        issues.length
-          ? 'Found ' + issues.length + ' issue(s).'
-          : 'No missing or duplicate jerseys.'
-      );
+      var missing = 0;
+      var duplicates = 0;
+      var differs = 0;
+      for (var i = 0; i < issues.length; i++) {
+        if (issues[i].kind === 'missing') missing++;
+        else if (issues[i].kind === 'duplicate') duplicates++;
+        else if (issues[i].kind === 'differs') differs++;
+      }
+      if (!issues.length) {
+        setStatus('No missing, duplicate, or manual-vs-Tank01 jerseys.');
+      } else {
+        var parts = [];
+        if (missing) parts.push(missing + ' missing');
+        if (duplicates) parts.push(duplicates + ' duplicate');
+        if (differs) parts.push(differs + ' vs Tank01');
+        setStatus(
+          'Found ' + issues.length + ' issue(s): ' + parts.join(', ') + '.'
+        );
+      }
     } catch (e) {
       setStatus(String(e.message || e), true);
     } finally {
@@ -563,7 +619,7 @@
     els.issuesList.innerHTML = '';
     if (!state.issues.length) {
       els.issuesList.innerHTML =
-        '<p class="admin-empty glow">Run a scan to list missing and duplicate jersey numbers.</p>';
+        '<p class="admin-empty glow">Run a scan to list missing, duplicate, and manual-vs-Tank01 jersey numbers.</p>';
       return;
     }
     var bySport = {};
@@ -608,9 +664,16 @@
     var kindLabel =
       issue.kind === 'missing'
         ? 'Missing jersey'
-        : issue.jerseyNumber
-          ? 'Duplicate #' + issue.jerseyNumber
-          : 'Duplicate jersey';
+        : issue.kind === 'differs'
+          ? issue.jerseyNumber && issue.tank01JerseyNumber
+            ? 'Saved #' +
+              issue.jerseyNumber +
+              ' · Tank01 #' +
+              issue.tank01JerseyNumber
+            : 'Differs from Tank01'
+          : issue.jerseyNumber
+            ? 'Duplicate #' + issue.jerseyNumber
+            : 'Duplicate jersey';
     sub.appendChild(document.createTextNode(issue.teamName + ' · ' + kindLabel));
     var also = issue.alsoWornBy || [];
     if (also.length) {
@@ -671,15 +734,32 @@
         .doc(issue.teamId)
         .collection('players')
         .doc(issue.playerDocId);
-      await ref.set(
-        {
-          jerseyNumber: next,
-          displayName: issue.fullName + ' #' + next,
-          jerseySource: 'manual',
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
+      var snap = await ref.get();
+      var data = (snap.exists && snap.data()) || {};
+      var oldJersey = (data.jerseyNumber || '').trim();
+      var oldSource = (data.jerseySource || '').trim();
+      var existingTank = (data.tank01JerseyNumber || '').trim();
+      var issueTank = (issue.tank01JerseyNumber || '').trim();
+      var knownTank = existingTank
+        ? existingTank
+        : issueTank
+          ? issueTank
+          : oldSource !== 'manual' && oldJersey
+            ? oldJersey
+            : '';
+      var payload = {
+        jerseyNumber: next,
+        displayName: issue.fullName + ' #' + next,
+        jerseySource: 'manual',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      };
+      if (knownTank && knownTank !== next) {
+        payload.tank01JerseyNumber = knownTank;
+      } else {
+        payload.tank01JerseyNumber =
+          firebase.firestore.FieldValue.delete();
+      }
+      await ref.set(payload, { merge: true });
       setStatus('Saved #' + next + ' for ' + issue.fullName);
       await scanIssues();
     } catch (e) {

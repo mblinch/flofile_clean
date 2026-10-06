@@ -175,6 +175,8 @@ class RosterFirestoreService {
     final removes = <String>[];
     // Doc ids whose jersey was kept from a prior manual verification.
     final preservedManualJersey = <String>{};
+    final tank01Conflicts = <String, String>{};
+    final clearTank01Conflicts = <String>{};
 
     target.forEach((id, p) {
       final cur = existing[id];
@@ -182,11 +184,23 @@ class RosterFirestoreService {
         adds.add(MapEntry(id, p));
         return;
       }
-      final effective = _withPreservedManualJersey(cur, p);
-      if (effective.jerseyNumber != p.jerseyNumber) {
+      final preserved = _withPreservedManualJersey(cur, p);
+      final effective = preserved.player;
+      if (preserved.keptManual) {
         preservedManualJersey.add(id);
       }
-      if (_playerChanged(cur, effective)) {
+      final curConflict =
+          (cur['tank01JerseyNumber'] as String?)?.trim() ?? '';
+      var conflictFieldChanged = false;
+      final tankConflict = preserved.tank01Conflict;
+      if (tankConflict != null && tankConflict.isNotEmpty) {
+        tank01Conflicts[id] = tankConflict;
+        conflictFieldChanged = curConflict != tankConflict;
+      } else if (curConflict.isNotEmpty) {
+        clearTank01Conflicts.add(id);
+        conflictFieldChanged = true;
+      }
+      if (_playerChanged(cur, effective) || conflictFieldChanged) {
         updates.add(MapEntry(id, effective));
       }
     });
@@ -233,6 +247,9 @@ class RosterFirestoreService {
         if (op.isSet) {
           final p = op.player!;
           final keepManual = preservedManualJersey.contains(op.id);
+          final conflict = tank01Conflicts[op.id];
+          final clearConflict =
+              clearTank01Conflicts.contains(op.id) || !keepManual;
           final incomingHasJersey =
               (p.jerseyNumber ?? '').trim().isNotEmpty && !keepManual;
           batch.set(
@@ -246,6 +263,10 @@ class RosterFirestoreService {
               if (p.position != null) 'position': p.position,
               if (keepManual) 'jerseySource': 'manual',
               if (incomingHasJersey) 'jerseySource': 'tank01',
+              if (conflict != null)
+                'tank01JerseyNumber': conflict
+              else if (clearConflict)
+                'tank01JerseyNumber': FieldValue.delete(),
               'updatedAt': FieldValue.serverTimestamp(),
             },
             SetOptions(merge: true),
@@ -311,24 +332,34 @@ class RosterFirestoreService {
     return j.isEmpty ? slug : '${j}_$slug';
   }
 
-  /// Keeps a manually verified jersey when the incoming sync has a blank one.
-  static Player _withPreservedManualJersey(
+  /// Keeps a manually entered jersey on this team. A move to another team
+  /// is a new player doc, so the manual number does not follow them.
+  /// [tank01Conflict] is Tank01's number when it differs; null clears it.
+  static ({Player player, bool keptManual, String? tank01Conflict})
+      _withPreservedManualJersey(
     Map<String, dynamic> cur,
     Player incoming,
   ) {
-    final incomingJersey = (incoming.jerseyNumber ?? '').trim();
-    if (incomingJersey.isNotEmpty) return incoming;
     final source = (cur['jerseySource'] as String?)?.trim() ?? '';
-    if (source != 'manual') return incoming;
     final existingJersey = (cur['jerseyNumber'] as String?)?.trim() ?? '';
-    if (existingJersey.isEmpty) return incoming;
-    return Player(
-      fullName: incoming.fullName,
-      firstName: incoming.firstName,
-      jerseyNumber: existingJersey,
-      displayName: '${incoming.fullName} #$existingJersey',
-      playerId: incoming.playerId,
-      position: incoming.position,
+    final incomingJersey = (incoming.jerseyNumber ?? '').trim();
+    if (source != 'manual' || existingJersey.isEmpty) {
+      return (player: incoming, keptManual: false, tank01Conflict: null);
+    }
+    if (incomingJersey.isEmpty || incomingJersey == existingJersey) {
+      return (player: incoming, keptManual: true, tank01Conflict: null);
+    }
+    return (
+      player: Player(
+        fullName: incoming.fullName,
+        firstName: incoming.firstName,
+        jerseyNumber: existingJersey,
+        displayName: '${incoming.fullName} #$existingJersey',
+        playerId: incoming.playerId,
+        position: incoming.position,
+      ),
+      keptManual: true,
+      tank01Conflict: incomingJersey,
     );
   }
 

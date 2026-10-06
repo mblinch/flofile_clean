@@ -44,9 +44,10 @@ String _ocrTargetDetail(JerseyOcrSuggestion match) {
   return parts.join(' · ');
 }
 
-/// Teal target colours — the photo box and its label (not the firebar orange).
-const _ocrTargetTeal = Color(0xFF2BB5A8);
-const _ocrTargetTealHot = Color(0xFF5FE3D6);
+/// OCR target colours — the steel-blue accent line from the column chrome
+/// (#537690), brighter when hovered. Box, label, and chip hover share it.
+const _ocrTargetTeal = Color(0xFF537690);
+const _ocrTargetTealHot = Color(0xFF7FA6C2);
 
 enum _BrowseScope { all, toCaption, captioned, toFtp, ftp }
 
@@ -451,9 +452,14 @@ class _PhotoCard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          _PhotoOcrScanButton(
-                            controller: controller,
-                            tokens: tokens,
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _PhotoOcrScanButton(
+                                controller: controller,
+                                tokens: tokens,
+                              ),
+                            ],
                           ),
                           if (controller.jerseySuggestions.isNotEmpty ||
                               controller.jerseyOcrBusy) ...[
@@ -798,7 +804,7 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
             imageRect.isEmpty == false &&
             (overImage || _pointerDown);
         final sampleAt = showLoupe
-            ? _clampToRect(cursor!, imageRect)
+            ? _clampToRect(cursor, imageRect)
             : null;
 
         return MouseRegion(
@@ -848,7 +854,7 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                     ),
                   if (showLoupe && sampleAt != null) ...[
                     _buildLoupe(
-                      cursor: cursor!,
+                      cursor: cursor,
                       sampleAt: sampleAt,
                       imageRect: imageRect,
                     ),
@@ -1073,7 +1079,7 @@ class _OcrNumberMarks extends StatelessWidget {
     final label = _ocrMatchLabel(match);
     final detail = _ocrTargetDetail(match);
     const labelStyle = TextStyle(
-      color: Color(0xFF07201E),
+      color: Colors.white,
       fontSize: 10,
       fontWeight: FontWeight.w700,
       height: 1.1,
@@ -1196,7 +1202,11 @@ class _PhotoOcrSuggestionChips extends StatelessWidget {
         ),
       );
     }
-    if (matches.isEmpty) return const SizedBox.shrink();
+    if (matches.isEmpty) {
+      return controller.jerseyOcrPrescanActive
+          ? _PrescanBadge(controller: controller, tokens: tokens)
+          : const SizedBox.shrink();
+    }
 
     return ValueListenableBuilder<JerseyOcrSuggestion?>(
       valueListenable: ocrHover,
@@ -1207,8 +1217,6 @@ class _PhotoOcrSuggestionChips extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (!controller.singleTeamMode)
-                _DarkJerseyChip(controller: controller, tokens: tokens),
               for (final match in matches.take(6))
                 _OcrMatchChip(
                   match: match,
@@ -1222,6 +1230,8 @@ class _PhotoOcrSuggestionChips extends StatelessWidget {
                   onTap: () =>
                       controller.selectPlayerFromTextRecognition(match),
                 ),
+              if (controller.jerseyOcrPrescanActive)
+                _PrescanBadge(controller: controller, tokens: tokens),
             ],
           ),
         );
@@ -1230,82 +1240,49 @@ class _PhotoOcrSuggestionChips extends StatelessWidget {
   }
 }
 
-/// "Dark Jersey: Leafs" — click to cycle which bench wears dark tonight
-/// (Home → Away → not sure). Re-ranks the OCR suggestions immediately.
-class _DarkJerseyChip extends StatelessWidget {
-  const _DarkJerseyChip({required this.controller, required this.tokens});
+/// "Pre-scan 12/80" — background OCR warming the rest of the folder.
+class _PrescanBadge extends StatelessWidget {
+  const _PrescanBadge({required this.controller, required this.tokens});
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
 
   @override
   Widget build(BuildContext context) {
-    final value = controller.homeWearsDark;
-    String teamName(bool home) {
-      final name = (home ? controller.homeTeam : controller.awayTeam).trim();
-      return name.isEmpty ? (home ? 'Home' : 'Away') : name;
-    }
-
-    final String who;
-    final String tip;
-    if (value == null) {
-      who = 'not set';
-      tip = 'Which team is in the Dark Jersey tonight? Click to set.\n'
-          'Helps text recognition tell home from away.';
-    } else {
-      who = teamName(value);
-      tip = 'Dark Jersey: ${teamName(value)}\n'
-          'Light Jersey: ${teamName(!value)}\n'
-          'Click to change.';
-    }
     return Tooltip(
       waitDuration: const Duration(milliseconds: 350),
-      message: tip,
+      message: 'Text recognition is scanning the rest of the folder in the '
+          'background so each frame is ready when you get to it.',
       child: Material(
         color: FfTokens.viewerChrome,
         borderRadius: BorderRadius.circular(7),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(7),
-          onTap: () {
-            // Home → Away → not sure → Home …
-            final next = value == true ? false : (value == false ? null : true);
-            controller.setHomeWearsDark(next);
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: tokens.divider),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 9,
-                  height: 9,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF14181C),
-                    border: Border.all(color: tokens.textTertiary),
-                  ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: tokens.divider),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 10,
+                height: 10,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: tokens.textTertiary,
                 ),
-                const SizedBox(width: 5),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 150),
-                  child: Text(
-                    'Dark Jersey: $who',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.metaStyle.copyWith(
-                      fontSize: 11,
-                      color: value == null
-                          ? tokens.textTertiary
-                          : tokens.textSecondary,
-                    ),
-                  ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Pre-scan ${controller.jerseyOcrPrescanDone}/'
+                '${controller.jerseyOcrPrescanTotal}',
+                style: tokens.metaStyle.copyWith(
+                  fontSize: 11,
+                  color: tokens.textTertiary,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1794,7 +1771,9 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     final first = (firstRow * columns).clamp(0, paths.length);
     if (first == _lastWarmFirst) return;
     _lastWarmFirst = first;
-    final end = (first + columns * 10).clamp(0, paths.length);
+    // Warm a deep window ahead of the scroll so flinging to the bottom
+    // still hits decoded thumbs (folder preload continues in parallel).
+    final end = (first + columns * 48).clamp(0, paths.length);
     if (first >= end) return;
     controller.warmThumbnailPaths(paths.sublist(first, end));
   }

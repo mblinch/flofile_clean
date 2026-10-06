@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +18,7 @@ import '../../widgets/app_styled_dialogs.dart';
 import '../../widgets/caption_layout_builder_dialog.dart';
 import '../../widgets/flo_chrome_header.dart';
 import '../../widgets/oriented_file_preview.dart';
+import '../../utils/oriented_image_bytes.dart';
 import '../../services/camera_serial_service.dart';
 import '../../widgets/preferences_dialog.dart';
 import '../../widgets/unknown_serial_dialog.dart';
@@ -1036,10 +1039,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       return Scaffold(
         backgroundColor: t.bg,
         body: _withChrome(
-          _SessionLoadingPane(
-            tokens: t,
-            label: c.sessionLoadingLabel ?? 'Loading…',
-          ),
+          c.awaitingJerseyColors
+              ? _JerseyColorGate(controller: c, tokens: t)
+              : _SessionLoadingPane(
+                  tokens: t,
+                  label: c.sessionLoadingLabel ?? 'Loading…',
+                ),
           title: c.sessionReady ? 'Loading folder' : 'New Session',
         ),
       );
@@ -1603,7 +1608,13 @@ class _TopChrome extends StatelessWidget {
                 ),
               ),
             ),
-          const Spacer(),
+          const Expanded(child: SizedBox.shrink()),
+          if (c != null)
+            _GameGoogleSearchButton(
+              controller: c,
+              tokens: t,
+            ),
+          const Expanded(child: SizedBox.shrink()),
           if (c != null) ...[
             _ModeBuffBar(
               controller: c,
@@ -1670,6 +1681,146 @@ class _TopChrome extends StatelessWidget {
       builder: (context) => const PreferencesDialog(),
     );
     await controller?.reloadApplicationModes();
+  }
+}
+
+/// Short team label for Google game queries — e.g. "Predators", "Maple Leafs".
+String _teamSearchNickname(String teamName) {
+  final parts = teamName.trim().split(RegExp(r'\s+'));
+  if (parts.isEmpty) return '';
+  if (parts.length == 1) return parts.first;
+  const twoWordNicknames = <String>{
+    'maple leafs',
+    'blue jays',
+    'blue jackets',
+    'red sox',
+    'white sox',
+    'red wings',
+    'golden knights',
+    'trail blazers',
+    'timber wolves',
+    'blue bombers',
+  };
+  final lastTwo =
+      '${parts[parts.length - 2]} ${parts[parts.length - 1]}'.toLowerCase();
+  if (twoWordNicknames.contains(lastTwo)) {
+    return '${parts[parts.length - 2]} ${parts[parts.length - 1]}';
+  }
+  return parts.last;
+}
+
+String _gameGoogleSearchQuery(CaptionV2Controller controller) {
+  final away = _teamSearchNickname(controller.awayTeam);
+  final home = _teamSearchNickname(controller.homeTeam);
+  final date = controller.currentGameInfoForCaption().gameDate ?? DateTime.now();
+  const months = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final dateBit = '${months[date.month - 1]} ${date.day} ${date.year}';
+  if (away.isNotEmpty && home.isNotEmpty) {
+    return '$away @ $home $dateBit';
+  }
+  if (home.isNotEmpty) return '$home $dateBit';
+  if (away.isNotEmpty) return '$away $dateBit';
+  return '';
+}
+
+Future<void> _openGameGoogleSearch(CaptionV2Controller controller) async {
+  final query = _gameGoogleSearchQuery(controller);
+  if (query.isEmpty) return;
+  final url = Uri.https('www.google.com', '/search', {'q': query}).toString();
+  try {
+    if (Platform.isMacOS) {
+      await Process.run('open', [url]);
+    } else if (Platform.isWindows) {
+      await Process.run('cmd', ['/c', 'start', '', url]);
+    } else {
+      await Process.run('xdg-open', [url]);
+    }
+  } catch (_) {
+    // Best-effort only.
+  }
+}
+
+/// Opens a Google search for the current game (score / updates).
+class _GameGoogleSearchButton extends StatelessWidget {
+  const _GameGoogleSearchButton({
+    required this.controller,
+    required this.tokens,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+
+  static const double _width = 108;
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _gameGoogleSearchQuery(controller);
+    final enabled = query.isNotEmpty;
+    final color = enabled ? tokens.textSecondary : tokens.textSecondary.withValues(alpha: 0.45);
+    final fill = tokens.elevated;
+    final border = tokens.divider;
+    return Tooltip(
+      message: enabled
+          ? 'Google game: $query'
+          : 'Pick teams to Google this game',
+      waitDuration: const Duration(milliseconds: 350),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled
+              ? () => unawaited(_openGameGoogleSearch(controller))
+              : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: _width,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: border),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PhosphorIcon(
+                  PhosphorIconsRegular.magnifyingGlass,
+                  size: 15,
+                  color: color,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Google Game Info',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.05,
+                    letterSpacing: 0,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -2255,16 +2406,419 @@ class _SessionLoadingPane extends StatelessWidget {
                   color: tokens.textSecondary,
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Photo details and saved / uploaded status load before the workspace opens.',
-                textAlign: TextAlign.center,
-                style: tokens.metaStyle.copyWith(
-                  color: tokens.textSecondary,
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Loading-screen colour pick: choose a photo, then sample Home and Away.
+class _JerseyColorGate extends StatefulWidget {
+  const _JerseyColorGate({required this.controller, required this.tokens});
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+
+  @override
+  State<_JerseyColorGate> createState() => _JerseyColorGateState();
+}
+
+class _JerseyColorGateState extends State<_JerseyColorGate> {
+  Uint8List? _bytes;
+  Size? _imageSize;
+  int _token = 0;
+  bool _pickingHome = true;
+  String? _path;
+
+  CaptionV2Controller get c => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _JerseyColorGate oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (c.currentPath != _path) _load();
+  }
+
+  Future<void> _load() async {
+    final path = c.currentPath;
+    final token = ++_token;
+    _path = path;
+    if (path == null) return;
+    final bytes = await OrientedImageBytes.load(
+      path,
+      maxWidth: OrientedImageBytes.previewMaxWidth,
+      priority: true,
+    );
+    if (!mounted || token != _token) return;
+    Size? size;
+    if (bytes != null) {
+      try {
+        final codec = await ui.instantiateImageCodec(bytes);
+        final frame = await codec.getNextFrame();
+        size = Size(
+          frame.image.width.toDouble(),
+          frame.image.height.toDouble(),
+        );
+        frame.image.dispose();
+        codec.dispose();
+      } catch (_) {}
+    }
+    if (!mounted || token != _token) return;
+    setState(() {
+      _bytes = bytes;
+      _imageSize = size;
+    });
+  }
+
+  Future<void> _onTap(TapUpDetails details, Size box) async {
+    final bytes = _bytes;
+    final imageSize = _imageSize;
+    if (bytes == null || imageSize == null) return;
+    final rect = _contain(box, imageSize);
+    final local = details.localPosition;
+    if (!rect.contains(local)) return;
+    final nx = ((local.dx - rect.left) / rect.width).clamp(0.0, 1.0);
+    final ny = ((local.dy - rect.top) / rect.height).clamp(0.0, 1.0);
+    final color = await _samplePatch(bytes, nx, ny);
+    if (!mounted || color == null) return;
+    c.setJerseySwatch(isHome: _pickingHome, color: color);
+    // After the first sample, offer the other bench. Stay put if both are set.
+    if (_pickingHome && c.awayJerseySwatch == null) {
+      setState(() => _pickingHome = false);
+    } else if (!_pickingHome && c.homeJerseySwatch == null) {
+      setState(() => _pickingHome = true);
+    } else {
+      setState(() {});
+    }
+  }
+
+  Future<Color?> _samplePatch(Uint8List bytes, double nx, double ny) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      try {
+        final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+        if (data == null) return null;
+        final w = image.width;
+        final h = image.height;
+        final cx = (nx * (w - 1)).round();
+        final cy = (ny * (h - 1)).round();
+        const radius = 10;
+        var sr = 0, sg = 0, sb = 0, n = 0;
+        for (var y = cy - radius; y <= cy + radius; y++) {
+          if (y < 0 || y >= h) continue;
+          for (var x = cx - radius; x <= cx + radius; x++) {
+            if (x < 0 || x >= w) continue;
+            final i = (y * w + x) * 4;
+            sr += data.getUint8(i);
+            sg += data.getUint8(i + 1);
+            sb += data.getUint8(i + 2);
+            n++;
+          }
+        }
+        if (n == 0) return null;
+        return Color.fromARGB(255, sr ~/ n, sg ~/ n, sb ~/ n);
+      } finally {
+        image.dispose();
+        codec.dispose();
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Rect _contain(Size box, Size image) {
+    final scale = math.min(box.width / image.width, box.height / image.height);
+    final w = image.width * scale;
+    final h = image.height * scale;
+    return Rect.fromLTWH((box.width - w) / 2, (box.height - h) / 2, w, h);
+  }
+
+  String _teamLabel(bool home) {
+    final raw = (home ? c.homeTeam : c.awayTeam).trim();
+    if (raw.isNotEmpty) return raw;
+    return home ? 'Home' : 'Away';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tokens;
+    final paths = c.imagePaths;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Pick jersey colours',
+            textAlign: TextAlign.center,
+            style: t.labelStyle.copyWith(fontSize: t.textSizeBody, color: t.text),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Arm Home or Away, then click that jersey with the eyedropper.',
+            textAlign: TextAlign.center,
+            style: t.secondaryLabelStyle.copyWith(color: t.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _TeamPick(
+                tokens: t,
+                label: 'Home eyedropper',
+                team: _teamLabel(true),
+                swatch: c.homeJerseySwatch,
+                selected: _pickingHome,
+                onTap: () => setState(() => _pickingHome = true),
+              ),
+              const SizedBox(width: 8),
+              _TeamPick(
+                tokens: t,
+                label: 'Away eyedropper',
+                team: _teamLabel(false),
+                swatch: c.awayJerseySwatch,
+                selected: !_pickingHome,
+                onTap: () => setState(() => _pickingHome = false),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final box = Size(constraints.maxWidth, constraints.maxHeight);
+                final bytes = _bytes;
+                return MouseRegion(
+                  cursor: SystemMouseCursors.precise,
+                  child: GestureDetector(
+                  onTapUp: bytes == null ? null : (d) => _onTap(d, box),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: t.sunken,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: bytes == null
+                        ? const Center(
+                            child: SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.memory(
+                                bytes,
+                                fit: BoxFit.contain,
+                                gaplessPlayback: true,
+                              ),
+                              Positioned(
+                                left: 0,
+                                right: 0,
+                                bottom: 10,
+                                child: Center(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xCC101418),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.colorize,
+                                            size: 14,
+                                            color: t.accent,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            _pickingHome
+                                                ? 'Eyedropper · Home'
+                                                : 'Eyedropper · Away',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 64,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: paths.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                final selected = index == c.currentIndex;
+                return GestureDetector(
+                  onTap: () => c.showColorPickFrame(index),
+                  child: Container(
+                    width: 86,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: selected ? t.accent : t.divider,
+                        width: selected ? 2 : 1,
+                      ),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(5),
+                      child: OrientedFilePreview(
+                        path: paths[index],
+                        fit: BoxFit.cover,
+                        cacheWidth: OrientedImageBytes.thumbMaxWidth,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _GateButton(
+                tokens: t,
+                label: 'Skip',
+                onPressed: c.finishJerseyColorGate,
+              ),
+              const SizedBox(width: 8),
+              _GateButton(
+                tokens: t,
+                label: 'Continue',
+                onPressed: c.finishJerseyColorGate,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TeamPick extends StatelessWidget {
+  const _TeamPick({
+    required this.tokens,
+    required this.label,
+    required this.team,
+    required this.swatch,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final FfTokens tokens;
+  final String label;
+  final String team;
+  final Color? swatch;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? FfTokens.nocturneAccentSoft : tokens.sunken,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 280),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? tokens.accent : tokens.divider,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.colorize,
+                size: 16,
+                color: selected ? tokens.accent : tokens.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: swatch ?? tokens.divider,
+                  border: Border.all(color: tokens.textTertiary),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '$label · $team',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.metaStyle.copyWith(
+                    color: tokens.text,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GateButton extends StatelessWidget {
+  const _GateButton({
+    required this.tokens,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final FfTokens tokens;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onPressed != null;
+    return TextButton(
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: tokens.metaStyle.copyWith(
+          color: enabled ? tokens.text : tokens.textTertiary,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

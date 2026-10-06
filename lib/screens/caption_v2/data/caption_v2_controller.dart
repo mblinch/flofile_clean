@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' show Color;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
@@ -522,6 +525,9 @@ class CaptionV2Controller extends ChangeNotifier {
   Timer? _folderPollTimer;
   int _folderWatchGeneration = 0;
   int _previewWarmGeneration = 0;
+  /// Independent of [_previewWarmGeneration] so flipping frames doesn't cancel
+  /// the full-folder thumb preload.
+  int _thumbWarmGeneration = 0;
   String? _watchedFolder;
   final Set<String> _pendingIngest = {};
   final Map<String, int> _imageContentStamp = {};
@@ -572,6 +578,53 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Eyedropper swatches. Compared to the torso colour on each OCR hit so
+  /// two dark kits (navy vs black) can still be told apart.
+  ui.Color? homeJerseySwatch;
+  ui.Color? awayJerseySwatch;
+
+  /// Store a colour the user sampled from a jersey, and say which bench it is.
+  void setJerseySwatch({required bool isHome, required ui.Color color}) {
+    if (isHome) {
+      homeJerseySwatch = color;
+    } else {
+      awayJerseySwatch = color;
+    }
+    final home = homeJerseySwatch;
+    final away = awayJerseySwatch;
+    if (home != null && away != null) {
+      final homeLuma = _swatchLuma(home);
+      final awayLuma = _swatchLuma(away);
+      if ((homeLuma - awayLuma).abs() >= 0.08) {
+        setHomeWearsDark(homeLuma < awayLuma);
+        return;
+      }
+    } else {
+      final luma = _swatchLuma(color);
+      if (luma < 0.42 || luma > 0.62) {
+        final dark = luma < 0.42;
+        setHomeWearsDark(isHome ? dark : !dark);
+        return;
+      }
+    }
+    jerseySuggestions = _matchJerseyOcrHits(jerseyOcrHits);
+    notifyListeners();
+  }
+
+  static double _swatchLuma(ui.Color color) {
+    return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
+  }
+
+  /// 0 = same colour, 1 = opposite.
+  static double _jerseyColorDistance(ui.Color sample, ui.Color swatch) {
+    final dr = sample.r - swatch.r;
+    final dg = sample.g - swatch.g;
+    final db = sample.b - swatch.b;
+    return (math.sqrt(dr * dr + dg * dg + db * db) / math.sqrt(3))
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
   /// Raw OCR tokens from the last scan (numbers + names).
   List<JerseyOcrHit> jerseyOcrHits = const [];
   bool jerseyOcrBusy = false;
@@ -583,6 +636,21 @@ class CaptionV2Controller extends ChangeNotifier {
   int _jerseyOcrInflight = 0;
   Timer? _jerseyOcrTimer;
   final Map<String, List<JerseyOcrHit>> _jerseyOcrCache = {};
+  /// Full-frame reads keyed by path, ignoring mtime. Metadata/IPTC writes
+  /// must not force another Vision pass when the user changes frames.
+  final Map<String, List<JerseyOcrHit>> _jerseyOcrByPath = {};
+  /// Full-frame results for every image in the session can live here, so a
+  /// pre-scanned folder never evicts itself (hit lists are tiny).
+  static const int _jerseyOcrCacheMax = 1200;
+
+  /// Background pre-scan: warms the OCR cache for upcoming frames while the
+  /// user works, so each frame's suggestions appear instantly.
+  bool _jerseyOcrPrescanRunning = false;
+  final Set<String> _jerseyOcrPrescanned = {};
+  int jerseyOcrPrescanDone = 0;
+  int jerseyOcrPrescanTotal = 0;
+  bool get jerseyOcrPrescanActive =>
+      _jerseyOcrPrescanRunning && jerseyOcrPrescanDone < jerseyOcrPrescanTotal;
 
   /// Preference gate for jersey OCR (UI + auto/loupe scans).
   /// Default off until the user enables it via the header OCR toggle.
@@ -2356,10 +2424,186 @@ class CaptionV2Controller extends ChangeNotifier {
     await loadFolder(folderPath);
 
     // loadFolder awaits saved/uploaded marks + preview EXIF before returning.
+    // Still on the loading screen: pre-warm thumbs (+ OCR when enabled) so the
+    // session opens snappy instead of catching up in the background.
+    await _refreshJerseyOcrEnabled();
+    await _preloadSessionDuringLoad();
+
     sessionLoading = false;
     sessionLoadingLabel = null;
     sessionReady = true;
     notifyListeners();
+    // Load already warmed thumbs + OCR. Only finish leftovers / neighbors.
+    _schedulePreviewWarmup();
+    if (_jerseyOcrPrescanned.length < imagePaths.length) {
+      _kickJerseyOcrPrescan();
+    }
+  }
+
+  /// Blocking folder warm while [sessionLoading] is true — updates the loading
+  /// label. Thumbs always; jersey OCR only when text recognition is on.
+  Future<void> _preloadSessionDuringLoad() async {
+    if (imagePaths.isEmpty || !sessionLoading) return;
+    final generation = sessionGeneration;
+
+    // 1) Grid thumbs — kills the spinner circles when the strip opens.
+    await _preloadThumbsDuringLoad(generation);
+    if (generation != sessionGeneration || !sessionLoading) return;
+
+    // 2) Current + neighbor main previews.
+    _setSessionLoadingLabel('Preparing preview…');
+    final previewGen = ++_previewWarmGeneration;
+    await _warmPreviews(previewGen);
+    if (generation != sessionGeneration || !sessionLoading) return;
+
+    // 3) Sample home/away jersey colours before OCR so the first matches
+    // already know which bench is which.
+    await _awaitJerseyColorsIfNeeded(generation);
+    if (generation != sessionGeneration || !sessionLoading) return;
+
+    // 4) Text recognition pre-scan (same work as the background pre-scan).
+    if (jerseyOcrEnabled) {
+      await _prescanJerseyOcrDuringLoad(generation);
+    }
+  }
+
+  /// Shown on the loading screen when text recognition is on. Completes when
+  /// the user picks both jerseys or skips.
+  bool awaitingJerseyColors = false;
+  Completer<void>? _jerseyColorGate;
+
+  Future<void> _awaitJerseyColorsIfNeeded(int generation) async {
+    if (!jerseyOcrEnabled || singleTeamMode || imagePaths.isEmpty) return;
+    if (generation != sessionGeneration || !sessionLoading) return;
+    awaitingJerseyColors = true;
+    _setSessionLoadingLabel('Pick jersey colours');
+    final gate = Completer<void>();
+    _jerseyColorGate = gate;
+    notifyListeners();
+    await gate.future;
+    if (generation != sessionGeneration) return;
+    awaitingJerseyColors = false;
+    _jerseyColorGate = null;
+  }
+
+  void finishJerseyColorGate() {
+    final gate = _jerseyColorGate;
+    if (gate != null && !gate.isCompleted) gate.complete();
+  }
+
+  /// Move the loading-screen photo without starting an OCR pass.
+  void showColorPickFrame(int index) {
+    if (imagePaths.isEmpty) return;
+    currentIndex = index.clamp(0, imagePaths.length - 1);
+    notifyListeners();
+  }
+
+  Future<void> _preloadThumbsDuringLoad(int generation) async {
+    final paths = List<String>.from(imagePaths);
+    if (paths.isEmpty) return;
+    final index = currentIndex.clamp(0, paths.length - 1);
+    final ordered = <String>[
+      ...paths.sublist(index),
+      ...paths.sublist(0, index),
+    ];
+    final thumbGen = ++_thumbWarmGeneration;
+    const wave = 24;
+    var done = 0;
+    final total = ordered.length;
+    _setSessionLoadingLabel('Warming thumbnails 0/$total…');
+
+    for (var i = 0; i < ordered.length; i += wave) {
+      if (generation != sessionGeneration ||
+          thumbGen != _thumbWarmGeneration ||
+          !sessionLoading) {
+        return;
+      }
+      final end = (i + wave).clamp(0, ordered.length);
+      final slice = ordered.sublist(i, end);
+      await OrientedImageBytes.prefetchAll(
+        [
+          for (final path in slice)
+            OrientedPrefetchJob(
+              path: path,
+              maxWidth: OrientedImageBytes.thumbMaxWidth,
+            ),
+        ],
+        isCurrent: () =>
+            generation == sessionGeneration &&
+            thumbGen == _thumbWarmGeneration &&
+            sessionLoading,
+      );
+      done = end;
+      _setSessionLoadingLabel('Warming thumbnails $done/$total…');
+    }
+  }
+
+  Future<void> _prescanJerseyOcrDuringLoad(int generation) async {
+    if (!jerseyOcrEnabled || imagePaths.isEmpty) return;
+    if (_jerseyOcrPrescanRunning) return;
+    _jerseyOcrPrescanRunning = true;
+    _resetJerseyOcrPrescan();
+    jerseyOcrPrescanTotal = imagePaths.length;
+    final customWords = _ocrCustomWords();
+    final sportKey = sport.trim().toLowerCase();
+    try {
+      final paths = List<String>.from(imagePaths);
+      final index = currentIndex.clamp(0, paths.length - 1);
+      final ordered = <String>[
+        ...paths.sublist(index),
+        ...paths.sublist(0, index),
+      ];
+      for (var i = 0; i < ordered.length; i++) {
+        if (generation != sessionGeneration ||
+            !jerseyOcrEnabled ||
+            !sessionLoading) {
+          break;
+        }
+        final path = ordered[i];
+        _setSessionLoadingLabel(
+          'Text recognition ${i + 1}/${ordered.length}…',
+        );
+
+        int mtimeMs = 0;
+        try {
+          mtimeMs = (await File(path).lastModified()).millisecondsSinceEpoch;
+        } catch (_) {
+          _jerseyOcrPrescanned.add(path);
+          jerseyOcrPrescanDone = _jerseyOcrPrescanned.length;
+          continue;
+        }
+
+        final key = _jerseyOcrCacheKey(
+          path: path,
+          mtimeMs: mtimeMs,
+          roiKey: 'full',
+          sportKey: sportKey,
+          customWords: customWords,
+        );
+        if (!_jerseyOcrCache.containsKey(key)) {
+          final hits = await JerseyOcrChannel.recognize(
+            path: path,
+            customWords: customWords,
+            sport: sportKey,
+            prescan: true,
+          );
+          if (generation != sessionGeneration || !jerseyOcrEnabled) break;
+          _putJerseyOcrCache(key, hits);
+        }
+        _jerseyOcrPrescanned.add(path);
+        jerseyOcrPrescanDone = _jerseyOcrPrescanned.length;
+        jerseyOcrPrescanTotal = imagePaths.length;
+      }
+
+      // Surface the current frame's OCR result before the UI opens.
+      if (generation == sessionGeneration &&
+          jerseyOcrEnabled &&
+          currentPath != null) {
+        await runOcrTestScan(force: false);
+      }
+    } finally {
+      _jerseyOcrPrescanRunning = false;
+    }
   }
 
   /// Apply roster / team-name edits from [showRosterImportDialog] without
@@ -2566,7 +2810,8 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     notifyListeners();
     final generation = ++_folderWatchGeneration;
-    _previewWarmGeneration++; // cancel any in-flight warm for the prior folder
+    _previewWarmGeneration++; // cancel neighbor preview warm for prior folder
+    _thumbWarmGeneration++; // cancel full-folder thumb warm for prior folder
     _stopFolderWatch();
     try {
       await NativeFilePicker.ensureMediaReadPermission();
@@ -2601,6 +2846,7 @@ class CaptionV2Controller extends ChangeNotifier {
       if (generation != _folderWatchGeneration) return;
       ready.sort();
       imagePaths = ready;
+      _resetJerseyOcrPrescan();
       currentIndex = 0;
       selectedImagePaths.clear();
       savedImages.clear();
@@ -2629,8 +2875,14 @@ class CaptionV2Controller extends ChangeNotifier {
           sessionLoadingLabel = null;
         }
         notifyListeners();
-        _schedulePreviewWarmup();
-        _scheduleJerseyOcr();
+        // Startup keeps [sessionLoading] true and awaits blocking preload in
+        // [applyStartup]. Mid-session folder reloads warm in the background.
+        if (!sessionLoading) {
+          _schedulePreviewWarmup();
+          _scheduleThumbWarmup();
+          _scheduleJerseyOcr();
+          _kickJerseyOcrPrescan();
+        }
       }
     }
   }
@@ -2684,11 +2936,21 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
-  /// Decode nearby thumbs + main previews into [OrientedImageBytes] cache.
+  /// Decode nearby main previews into [OrientedImageBytes] (preview budget).
+  /// Safe to call on every frame change — does **not** cancel thumb preload.
   void _schedulePreviewWarmup() {
     if (imagePaths.isEmpty) return;
     final gen = ++_previewWarmGeneration;
     unawaited(_warmPreviews(gen));
+  }
+
+  /// Decode every grid thumb into the thumb budget. Only cancelled when the
+  /// folder changes — frame navigation leaves it running so the strip stays
+  /// snappy all the way to the bottom.
+  void _scheduleThumbWarmup() {
+    if (imagePaths.isEmpty) return;
+    final gen = ++_thumbWarmGeneration;
+    unawaited(_warmThumbs(gen));
   }
 
   Future<void> _warmPreviews(int gen) async {
@@ -2705,15 +2967,9 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     // Current + neighbors at preview size (main photo pane).
-    for (final i in [index, index + 1, index - 1, index + 2]) {
+    for (final i in [index, index + 1, index - 1, index + 2, index + 3]) {
       if (i < 0 || i >= paths.length) continue;
       addJob(paths[i], OrientedImageBytes.previewMaxWidth);
-    }
-
-    // All grid thumbs, head-first so the top of the strip fills first and
-    // fast scroll further down still hits cache as warmup continues.
-    for (var i = 0; i < paths.length; i++) {
-      addJob(paths[i], OrientedImageBytes.thumbMaxWidth);
     }
 
     await OrientedImageBytes.prefetchAll(
@@ -2722,14 +2978,41 @@ class CaptionV2Controller extends ChangeNotifier {
     );
   }
 
-  /// Warm grid thumbs for [paths] (scroll-ahead). Safe to call often.
-  void warmThumbnailPaths(Iterable<String> paths) {
+  Future<void> _warmThumbs(int gen) async {
+    final paths = List<String>.from(imagePaths);
+    if (paths.isEmpty) return;
+    final index = currentIndex.clamp(0, paths.length - 1);
+    // From the current frame forward (what the user scrolls into next), then
+    // wrap so the top of the strip finishes too.
+    final ordered = <String>[
+      ...paths.sublist(index),
+      ...paths.sublist(0, index),
+    ];
     final jobs = <OrientedPrefetchJob>[
-      for (final path in paths)
+      for (final path in ordered)
         OrientedPrefetchJob(
           path: path,
           maxWidth: OrientedImageBytes.thumbMaxWidth,
         ),
+    ];
+    await OrientedImageBytes.prefetchAll(
+      jobs,
+      isCurrent: () => gen == _thumbWarmGeneration,
+    );
+  }
+
+  /// Warm grid thumbs for [paths] (scroll-ahead). Safe to call often.
+  void warmThumbnailPaths(Iterable<String> paths) {
+    final jobs = <OrientedPrefetchJob>[
+      for (final path in paths)
+        if (!OrientedImageBytes.isCached(
+          path,
+          maxWidth: OrientedImageBytes.thumbMaxWidth,
+        ))
+          OrientedPrefetchJob(
+            path: path,
+            maxWidth: OrientedImageBytes.thumbMaxWidth,
+          ),
     ];
     if (jobs.isEmpty) return;
     unawaited(
@@ -2862,7 +3145,9 @@ class CaptionV2Controller extends ChangeNotifier {
         if (announce || currentChanged || removed > 0) {
           await _refreshFrameIptc();
         }
-        if (currentChanged) {
+        // Re-OCR only on an explicit Refresh — not on every mtime/IPTC churn
+        // while shooting. Brand-new files are scanned in [_insertCompletedImage].
+        if (announce && currentChanged) {
           _invalidateJerseyOcrCacheFor(current);
           _scheduleJerseyOcr();
         }
@@ -3066,8 +3351,14 @@ class CaptionV2Controller extends ChangeNotifier {
       _fileChangedMs[path] = stat.changed.millisecondsSinceEpoch;
     } catch (_) {}
     notifyListeners();
+    // Scan the new frame as soon as it lands — thumb + OCR (if on).
+    warmThumbnailPaths([path]);
     if (path == currentPath) {
+      // User is already on this frame (or just jumped to it): run the real
+      // frame scan now so chips appear immediately.
       _scheduleJerseyOcr();
+    } else if (jerseyOcrEnabled) {
+      unawaited(_ocrScanOnArrival(path));
     }
     unawaited(() async {
       if (await FloCaptionMark.isSaved(path)) {
@@ -3098,6 +3389,7 @@ class CaptionV2Controller extends ChangeNotifier {
         imageIndex: index >= 0 ? index : null,
         fieldsToClear: cleared.isNotEmpty ? cleared : null,
       );
+      await _syncFileSig(imagePath);
     } catch (_) {}
   }
 
@@ -3158,6 +3450,7 @@ class CaptionV2Controller extends ChangeNotifier {
               ? FloCaptionMark.withoutProtectedClears(cleared)
               : (cleared.isNotEmpty ? cleared : null),
         );
+        await _syncFileSig(path);
         i++;
       }
     } catch (e) {
@@ -3181,6 +3474,7 @@ class CaptionV2Controller extends ChangeNotifier {
         imageIndex: index >= 0 ? index : null,
         fieldsToClear: cleared.isNotEmpty ? cleared : null,
       );
+      if (result.success) await _syncFileSig(imagePath);
       return result.success;
     } catch (_) {
       return false;
@@ -3246,6 +3540,14 @@ class CaptionV2Controller extends ChangeNotifier {
     _fileLength[path] = stat.size;
     _fileModifiedMs[path] = stat.modified.millisecondsSinceEpoch;
     _fileChangedMs[path] = stat.changed.millisecondsSinceEpoch;
+  }
+
+  /// Sync length/mtime after *our* writes (IPTC, captions) so the folder
+  /// watcher does not treat the change as a new picture and re-OCR.
+  Future<void> _syncFileSig(String path) async {
+    try {
+      _rememberFileSig(path, await File(path).stat());
+    } catch (_) {}
   }
 
   Future<void> _recordCaptureTime(String path) async {
@@ -5681,7 +5983,39 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
     _schedulePreviewWarmup();
     unawaited(_refreshFrameIptc());
-    _scheduleJerseyOcr();
+    // Already read this frame (preload or an earlier visit) — show it.
+    // Only hit Vision when this photo has never been scanned.
+    if (!_applyCachedFrameOcr()) {
+      _scheduleJerseyOcr();
+    }
+  }
+
+  /// Paint the current frame's cached OCR without a new Vision pass.
+  bool _applyCachedFrameOcr() {
+    if (!jerseyOcrEnabled) return false;
+    final path = currentPath;
+    if (path == null) return false;
+    final hits = _cachedFullFrameOcr(path);
+    if (hits == null) return false;
+    _jerseyOcrTimer?.cancel();
+    _jerseyOcrTimer = null;
+    jerseyOcrHits = hits;
+    jerseySuggestions = _matchJerseyOcrHits(hits);
+    jerseyOcrBusy = false;
+    notifyListeners();
+    return true;
+  }
+
+  List<JerseyOcrHit>? _cachedFullFrameOcr(String path) {
+    final direct = _jerseyOcrByPath[path];
+    if (direct != null) return direct;
+    for (final entry in _jerseyOcrCache.entries) {
+      if (!entry.key.startsWith('$path|')) continue;
+      if (!entry.key.contains('|full|')) continue;
+      _jerseyOcrByPath[path] = entry.value;
+      return entry.value;
+    }
+    return null;
   }
 
   void nextFrame({bool keepSearchOpen = false}) =>
@@ -5703,11 +6037,15 @@ class CaptionV2Controller extends ChangeNotifier {
     jerseySuggestions = const [];
     jerseyOcrHits = const [];
     jerseyOcrBusy = false;
-    if (clearCache) _jerseyOcrCache.clear();
+    if (clearCache) {
+      _jerseyOcrCache.clear();
+      _jerseyOcrByPath.clear();
+    }
   }
 
   void _invalidateJerseyOcrCacheFor(String path) {
     _jerseyOcrCache.removeWhere((key, _) => key.startsWith('$path|'));
+    _jerseyOcrByPath.remove(path);
   }
 
   void _onJerseyOcrPreferenceChanged() {
@@ -5740,6 +6078,7 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     notifyListeners();
     _scheduleJerseyOcr();
+    _kickJerseyOcrPrescan();
   }
 
   /// Header toggle; effective OCR also needs macOS.
@@ -5839,10 +6178,17 @@ class CaptionV2Controller extends ChangeNotifier {
             '${regionOfInterest.width.toStringAsFixed(3)},'
             '${regionOfInterest.height.toStringAsFixed(3)}';
     final sportKey = sport.trim().toLowerCase();
-    final cacheKey =
-        '$path|$mtimeMs|$roiKey|$sportKey|${customWords.length}|${customWords.hashCode}';
+    final cacheKey = _jerseyOcrCacheKey(
+      path: path,
+      mtimeMs: mtimeMs,
+      roiKey: roiKey,
+      sportKey: sportKey,
+      customWords: customWords,
+    );
     late final List<JerseyOcrHit> hits;
-    final cached = force ? null : _jerseyOcrCache[cacheKey];
+    final cached = force
+        ? null
+        : (isLoupe ? _jerseyOcrCache[cacheKey] : _cachedFullFrameOcr(path));
     if (cached != null) {
       hits = cached;
     } else {
@@ -5870,10 +6216,7 @@ class CaptionV2Controller extends ChangeNotifier {
           matches: jerseySuggestions,
         );
       }
-      _jerseyOcrCache[cacheKey] = hits;
-      while (_jerseyOcrCache.length > 64) {
-        _jerseyOcrCache.remove(_jerseyOcrCache.keys.first);
-      }
+      _putJerseyOcrCache(cacheKey, hits);
     }
 
     // Frame and loupe reads live in one list so neither wipes the other.
@@ -5928,6 +6271,185 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Always a fresh Vision pass on that crop (no cache, no person gating).
   Future<OcrScanResult> runOcrLoupeScan(JerseyOcrRegion region) =>
       runOcrTestScan(force: true, regionOfInterest: region);
+
+  static String _jerseyOcrCacheKey({
+    required String path,
+    required int mtimeMs,
+    required String roiKey,
+    required String sportKey,
+    required List<String> customWords,
+  }) =>
+      '$path|$mtimeMs|$roiKey|$sportKey|${customWords.length}|${customWords.hashCode}';
+
+  void _putJerseyOcrCache(String key, List<JerseyOcrHit> hits) {
+    _jerseyOcrCache[key] = hits;
+    // Full-frame reads are reused across mtime changes (saves, IPTC).
+    final full = RegExp(r'\|full\|');
+    if (full.hasMatch(key)) {
+      final path = key.split('|full|').first;
+      final pipe = path.lastIndexOf('|');
+      if (pipe > 0) _jerseyOcrByPath[path.substring(0, pipe)] = hits;
+    }
+    while (_jerseyOcrCache.length > _jerseyOcrCacheMax) {
+      _jerseyOcrCache.remove(_jerseyOcrCache.keys.first);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Background pre-scan
+  // ---------------------------------------------------------------------------
+
+  /// Start (or resume) warming the OCR cache for the session's frames.
+  /// No-op unless text recognition is on and the session is loaded.
+  void _kickJerseyOcrPrescan() {
+    if (!jerseyOcrEnabled || !sessionReady || imagePaths.isEmpty) return;
+    if (_jerseyOcrPrescanRunning) return;
+    if (_nextJerseyOcrPrescanPath() == null) return;
+    unawaited(_runJerseyOcrPrescan());
+  }
+
+  /// OCR a single newly-arrived frame into the cache right away (no
+  /// full-folder badge). Uses the normal Vision lane — not the slow
+  /// background pre-scan queue — so chips are ready when you open it.
+  Future<void> _ocrScanOnArrival(String path) async {
+    if (!jerseyOcrEnabled || !sessionReady) return;
+    if (_jerseyOcrPrescanned.contains(path)) return;
+
+    int mtimeMs = 0;
+    try {
+      mtimeMs = (await File(path).lastModified()).millisecondsSinceEpoch;
+    } catch (_) {
+      _jerseyOcrPrescanned.add(path);
+      return;
+    }
+
+    final customWords = _ocrCustomWords();
+    final sportKey = sport.trim().toLowerCase();
+    final key = _jerseyOcrCacheKey(
+      path: path,
+      mtimeMs: mtimeMs,
+      roiKey: 'full',
+      sportKey: sportKey,
+      customWords: customWords,
+    );
+    if (!_jerseyOcrCache.containsKey(key)) {
+      final hits = await JerseyOcrChannel.recognize(
+        path: path,
+        customWords: customWords,
+        sport: sportKey,
+        // Normal lane — land-and-scan should not sit behind utility pre-scan.
+        prescan: false,
+      );
+      if (!jerseyOcrEnabled) return;
+      _putJerseyOcrCache(key, hits);
+    }
+    _jerseyOcrPrescanned.add(path);
+    jerseyOcrPrescanDone =
+        _jerseyOcrPrescanned.intersection(imagePaths.toSet()).length;
+    jerseyOcrPrescanTotal = imagePaths.length;
+
+    // If the user switched onto this frame while we were scanning, surface it.
+    if (path == currentPath && _jerseyOcrTimer == null) {
+      unawaited(runOcrTestScan(force: false));
+    }
+  }
+
+  void _resetJerseyOcrPrescan() {
+    _jerseyOcrPrescanned.clear();
+    jerseyOcrPrescanDone = 0;
+    jerseyOcrPrescanTotal = 0;
+  }
+
+  /// Next frame to pre-scan: walk forward from the current frame (the ones
+  /// the user will hit next), then wrap to the start.
+  String? _nextJerseyOcrPrescanPath() {
+    final n = imagePaths.length;
+    if (n == 0) return null;
+    final start = currentIndex.clamp(0, n - 1);
+    for (var step = 0; step < n; step++) {
+      final path = imagePaths[(start + step) % n];
+      if (!_jerseyOcrPrescanned.contains(path)) return path;
+    }
+    return null;
+  }
+
+  Future<void> _runJerseyOcrPrescan() async {
+    _jerseyOcrPrescanRunning = true;
+    final generation = sessionGeneration;
+    jerseyOcrPrescanTotal = imagePaths.length;
+    jerseyOcrPrescanDone =
+        _jerseyOcrPrescanned.intersection(imagePaths.toSet()).length;
+    notifyListeners();
+    var lastNotify = DateTime.now();
+    try {
+      while (jerseyOcrEnabled && generation == sessionGeneration) {
+        // The user's own frame / loupe scans come first — idle while one
+        // is in flight so Vision isn't fighting itself for the GPU.
+        if (_jerseyOcrInflight > 0) {
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+          continue;
+        }
+        final path = _nextJerseyOcrPrescanPath();
+        if (path == null) break;
+
+        int mtimeMs = 0;
+        try {
+          mtimeMs = (await File(path).lastModified()).millisecondsSinceEpoch;
+        } catch (_) {
+          _jerseyOcrPrescanned.add(path);
+          jerseyOcrPrescanDone++;
+          continue;
+        }
+        if (generation != sessionGeneration || !jerseyOcrEnabled) break;
+
+        final customWords = _ocrCustomWords();
+        final sportKey = sport.trim().toLowerCase();
+        final key = _jerseyOcrCacheKey(
+          path: path,
+          mtimeMs: mtimeMs,
+          roiKey: 'full',
+          sportKey: sportKey,
+          customWords: customWords,
+        );
+        if (!_jerseyOcrCache.containsKey(key)) {
+          // First notify so the Pre-scan badge appears before Vision starts.
+          notifyListeners();
+          final hits = await JerseyOcrChannel.recognize(
+            path: path,
+            customWords: customWords,
+            sport: sportKey,
+            prescan: true,
+          );
+          if (generation != sessionGeneration || !jerseyOcrEnabled) break;
+          _putJerseyOcrCache(key, hits);
+          // If the user is sitting on this frame with no reads yet (frame
+          // scan still pending / skipped), surface the result now.
+          if (path == currentPath &&
+              jerseyOcrHits.isEmpty &&
+              _jerseyOcrInflight == 0 &&
+              _jerseyOcrTimer == null) {
+            unawaited(runOcrTestScan(force: false));
+          }
+        }
+        _jerseyOcrPrescanned.add(path);
+        jerseyOcrPrescanDone =
+            _jerseyOcrPrescanned.intersection(imagePaths.toSet()).length;
+        jerseyOcrPrescanTotal = imagePaths.length;
+
+        final now = DateTime.now();
+        if (now.difference(lastNotify).inMilliseconds > 400 ||
+            jerseyOcrPrescanDone >= jerseyOcrPrescanTotal) {
+          lastNotify = now;
+          notifyListeners();
+        }
+        // Breathe between frames so UI work (thumbnails, EXIF) stays smooth.
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+      }
+    } finally {
+      _jerseyOcrPrescanRunning = false;
+      notifyListeners();
+    }
+  }
 
   /// True when [hit]'s centre lies within [roi] grown by [pad] about its centre.
   static bool _hitCenterInside(
@@ -6016,8 +6538,20 @@ class CaptionV2Controller extends ChangeNotifier {
     final homeDark = homeWearsDark;
     final sideLean = _recentSideLean();
 
-    /// Jersey fabric tone vs. which bench wears dark: +/− for side agreement.
+    /// Eyedropper colours first, then dark/light. Two navy kits still separate
+    /// when the user has sampled both.
     double toneBoost(JerseyOcrHit hit, {required bool isHome}) {
+      final sample = hit.fabricColor;
+      final homeSwatch = homeJerseySwatch;
+      final awaySwatch = awayJerseySwatch;
+      if (sample != null && homeSwatch != null && awaySwatch != null) {
+        final homeDist = _jerseyColorDistance(sample, homeSwatch);
+        final awayDist = _jerseyColorDistance(sample, awaySwatch);
+        if ((homeDist - awayDist).abs() >= 0.06) {
+          final closerHome = homeDist < awayDist;
+          return closerHome == isHome ? 0.18 : -0.16;
+        }
+      }
       if (homeDark == null || hit.jerseyTone == null) return 0;
       final hitSaysHome = hit.isDarkJersey == homeDark;
       return hitSaysHome == isHome ? 0.14 : -0.14;
@@ -6546,6 +7080,7 @@ class CaptionV2Controller extends ChangeNotifier {
       fieldsToClear: fieldsToClear,
     );
     if (!result.success) return false;
+    await _syncFileSig(path);
     if (path == currentPath) await _refreshFrameIptc();
     notifyListeners();
     return true;
@@ -6562,6 +7097,7 @@ class CaptionV2Controller extends ChangeNotifier {
       fieldsToClear: cleared.isEmpty ? null : cleared,
     );
     if (!result.success) return false;
+    await _syncFileSig(path);
     if (path == currentPath) await _refreshFrameIptc();
     notifyListeners();
     return true;
@@ -7037,6 +7573,9 @@ class CaptionV2Controller extends ChangeNotifier {
         unawaited(FloCaptionMark.markSaved(succeeded));
       }
       await _persistSaved();
+      for (final pth in succeeded) {
+        await _syncFileSig(pth);
+      }
       metadataDirty = false;
       await _storePreviousCaption(
         caption: shouldWriteCaption

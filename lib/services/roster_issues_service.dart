@@ -7,9 +7,12 @@ import 'roster_firestore_service.dart';
 enum RosterIssueKind {
   missingJersey,
   duplicateJersey,
+
+  /// Manual jersey kept on this team while Tank01 still reports another number.
+  differsFromTank01,
 }
 
-/// One player-level roster problem (missing or shared jersey number).
+/// One player-level roster problem (missing, shared, or manual-vs-Tank01).
 class RosterIssue {
   const RosterIssue({
     required this.kind,
@@ -19,6 +22,7 @@ class RosterIssue {
     required this.playerDocId,
     required this.fullName,
     this.jerseyNumber,
+    this.tank01JerseyNumber,
     this.position,
     this.playerId,
     this.detail,
@@ -32,6 +36,9 @@ class RosterIssue {
   final String playerDocId;
   final String fullName;
   final String? jerseyNumber;
+
+  /// Tank01's last reported number when it differs from [jerseyNumber].
+  final String? tank01JerseyNumber;
   final String? position;
   final String? playerId;
   /// Extra context (e.g. other players sharing the number).
@@ -45,6 +52,13 @@ class RosterIssue {
       case RosterIssueKind.duplicateJersey:
         final j = jerseyNumber?.trim() ?? '';
         return j.isEmpty ? 'Duplicate jersey' : 'Duplicate #$j';
+      case RosterIssueKind.differsFromTank01:
+        final ours = jerseyNumber?.trim() ?? '';
+        final tank = tank01JerseyNumber?.trim() ?? '';
+        if (ours.isNotEmpty && tank.isNotEmpty) {
+          return 'Saved #$ours · Tank01 #$tank';
+        }
+        return 'Differs from Tank01';
     }
   }
 
@@ -74,8 +88,8 @@ class RosterIssuesService {
     'wnba',
   ];
 
-  /// Walks `sports_tank01` (or [rootCollection]) for missing and duplicate
-  /// jersey numbers. Pass [sportId] to limit to one sport.
+  /// Walks `sports_tank01` (or [rootCollection]) for missing, duplicate, and
+  /// manual-vs-Tank01 jersey conflicts. Pass [sportId] to limit to one sport.
   Future<List<RosterIssue>> scanIssues({
     String? sportId,
     String rootCollection = RosterFirestoreService.tank01RootCollection,
@@ -104,12 +118,16 @@ class RosterIssuesService {
           final fullName = (data['fullName'] as String?)?.trim() ?? '';
           if (fullName.isEmpty) continue;
           final jersey = (data['jerseyNumber'] as String?)?.trim() ?? '';
+          final tankJersey =
+              (data['tank01JerseyNumber'] as String?)?.trim() ?? '';
+          final source = (data['jerseySource'] as String?)?.trim() ?? '';
           final position = (data['position'] as String?)?.trim();
           final playerId = (data['playerId'] as String?)?.trim();
           final player = _PlayerDoc(
             docId: doc.id,
             fullName: fullName,
             jerseyNumber: jersey.isEmpty ? null : jersey,
+            tank01JerseyNumber: tankJersey.isEmpty ? null : tankJersey,
             position: (position == null || position.isEmpty) ? null : position,
             playerId: (playerId == null || playerId.isEmpty) ? null : playerId,
           );
@@ -128,6 +146,26 @@ class RosterIssuesService {
             ));
             continue;
           }
+
+          if (source == 'manual' &&
+              tankJersey.isNotEmpty &&
+              tankJersey != jersey) {
+            out.add(RosterIssue(
+              kind: RosterIssueKind.differsFromTank01,
+              sportId: sport,
+              teamId: team.id,
+              teamName: team.name,
+              playerDocId: player.docId,
+              fullName: player.fullName,
+              jerseyNumber: jersey,
+              tank01JerseyNumber: tankJersey,
+              position: player.position,
+              playerId: player.playerId,
+              detail: 'Saved #$jersey · Tank01 has #$tankJersey',
+              rootCollection: rootCollection,
+            ));
+          }
+
           byJersey.putIfAbsent(jersey, () => []).add(player);
         }
 
@@ -183,7 +221,12 @@ class RosterIssuesService {
   }
 
   /// Writes a verified jersey onto the player doc and marks
-  /// `jerseySource: manual` so Tank01 sync will not blank it out.
+  /// `jerseySource: manual`. Sync keeps that number on this team. A move
+  /// to another team starts fresh from Tank01.
+  ///
+  /// When the previous number came from Tank01 (or is already a stored Tank01
+  /// conflict), that feed number is kept on `tank01JerseyNumber` so the
+  /// admin issues list can show the mismatch. No email is sent for that.
   Future<void> setVerifiedJersey({
     required RosterIssue issue,
     required String jerseyNumber,
@@ -210,16 +253,31 @@ class RosterIssuesService {
     }
     final data = snap.data() ?? const <String, dynamic>{};
     final fullName = (data['fullName'] as String?)?.trim() ?? issue.fullName;
+    final oldJersey = (data['jerseyNumber'] as String?)?.trim() ?? '';
+    final oldSource = (data['jerseySource'] as String?)?.trim() ?? '';
+    final existingTank =
+        (data['tank01JerseyNumber'] as String?)?.trim() ?? '';
+    final issueTank = issue.tank01JerseyNumber?.trim() ?? '';
 
-    await ref.set(
-      {
-        'jerseyNumber': jersey,
-        'displayName': '$fullName #$jersey',
-        'jerseySource': 'manual',
-        'updatedAt': FieldValue.serverTimestamp(),
-      },
-      SetOptions(merge: true),
-    );
+    final knownTank = existingTank.isNotEmpty
+        ? existingTank
+        : (issueTank.isNotEmpty
+            ? issueTank
+            : (oldSource != 'manual' && oldJersey.isNotEmpty ? oldJersey : ''));
+
+    final patch = <String, dynamic>{
+      'jerseyNumber': jersey,
+      'displayName': '$fullName #$jersey',
+      'jerseySource': 'manual',
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    if (knownTank.isNotEmpty && knownTank != jersey) {
+      patch['tank01JerseyNumber'] = knownTank;
+    } else {
+      patch['tank01JerseyNumber'] = FieldValue.delete();
+    }
+
+    await ref.set(patch, SetOptions(merge: true));
   }
 }
 
@@ -228,6 +286,7 @@ class _PlayerDoc {
     required this.docId,
     required this.fullName,
     this.jerseyNumber,
+    this.tank01JerseyNumber,
     this.position,
     this.playerId,
   });
@@ -235,6 +294,7 @@ class _PlayerDoc {
   final String docId;
   final String fullName;
   final String? jerseyNumber;
+  final String? tank01JerseyNumber;
   final String? position;
   final String? playerId;
 }

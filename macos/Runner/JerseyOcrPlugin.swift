@@ -12,6 +12,8 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
   ///  • frame lane — one scan at a time; a newer frame bumps its generation
   ///    (and the loupe's, since loupe reads of the old frame are stale).
   ///  • loupe lane — a newer loupe position bumps only the loupe generation.
+  ///  • prescan lane — background warm-up of upcoming frames at utility QoS;
+  ///    never cancelled by (or cancelling) the other lanes.
   /// In-flight passes check their ticket between Vision requests.
   private let scanQueue = DispatchQueue(
     label: "caption_writer.jersey_ocr",
@@ -20,6 +22,10 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
   private let loupeQueue = DispatchQueue(
     label: "caption_writer.jersey_ocr.loupe",
     qos: .userInteractive
+  )
+  private let prescanQueue = DispatchQueue(
+    label: "caption_writer.jersey_ocr.prescan",
+    qos: .utility
   )
   private let generationLock = NSLock()
   private var generation = 0
@@ -35,11 +41,13 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
   }
 
   private struct Ticket {
-    let frame: Int
+    /// nil → prescan: always current.
+    let frame: Int?
     let loupe: Int?
   }
 
-  private func bumpGeneration(loupe: Bool) -> Ticket {
+  private func bumpGeneration(loupe: Bool, prescan: Bool) -> Ticket {
+    if prescan { return Ticket(frame: nil, loupe: nil) }
     generationLock.lock()
     defer { generationLock.unlock() }
     if loupe {
@@ -52,9 +60,10 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
   }
 
   private func isCurrent(_ ticket: Ticket) -> Bool {
+    guard let frame = ticket.frame else { return true }
     generationLock.lock()
     defer { generationLock.unlock() }
-    guard generation == ticket.frame else { return false }
+    guard generation == frame else { return false }
     if let loupe = ticket.loupe { return loupeGeneration == loupe }
     return true
   }
@@ -75,9 +84,11 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
     let roi = args["regionOfInterest"] as? [String: Any]
     let sport = ((args["sport"] as? String) ?? "").lowercased()
     let isLoupe = roi != nil
-    let ticket = bumpGeneration(loupe: isLoupe)
+    let isPrescan = !isLoupe && ((args["prescan"] as? Bool) ?? false)
+    let ticket = bumpGeneration(loupe: isLoupe, prescan: isPrescan)
+    let queue = isPrescan ? prescanQueue : (isLoupe ? loupeQueue : scanQueue)
 
-    (isLoupe ? loupeQueue : scanQueue).async { [weak self] in
+    queue.async { [weak self] in
       guard let self else {
         DispatchQueue.main.async { result([]) }
         return
@@ -379,8 +390,8 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
     let torso: CGRect?
     let helmet: CGRect
     let sleeves: [CGRect]
-    /// "dark" | "light" | "unknown"
-    let tone: String
+    /// Fabric sample from the torso. Label is dark / light / unknown.
+    let tone: FabricSample
     let fromPose: Bool
   }
 
@@ -598,10 +609,25 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
     )
   }
 
+  /// Torso fabric: median luminance plus the colour of pixels near that median.
+  private struct FabricSample {
+    let label: String
+    let red: Double
+    let green: Double
+    let blue: Double
+    let sampled: Bool
+
+    static let unknown = FabricSample(
+      label: "unknown", red: 0, green: 0, blue: 0, sampled: false
+    )
+  }
+
   /// Median luminance of a region → "dark" / "light" / "unknown". Numbers
   /// and logos are a small fraction of the torso so the median is the fabric.
-  private static func sampleTone(_ image: CGImage, rect: CGRect) -> String {
-    guard rect.width > 0.01, rect.height > 0.01 else { return "unknown" }
+  /// RGB is the average of pixels close to that median, so a number or crest
+  /// does not tint the swatch.
+  private static func sampleTone(_ image: CGImage, rect: CGRect) -> FabricSample {
+    guard rect.width > 0.01, rect.height > 0.01 else { return .unknown }
     let imgW = CGFloat(image.width)
     let imgH = CGFloat(image.height)
     let crop = CGRect(
@@ -612,7 +638,7 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
     ).integral.intersection(CGRect(x: 0, y: 0, width: imgW, height: imgH))
     guard crop.width >= 4, crop.height >= 4,
           let cropped = image.cropping(to: crop) else {
-      return "unknown"
+      return .unknown
     }
     let side = 16
     guard let ctx = CGContext(
@@ -624,39 +650,65 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
       space: CGColorSpaceCreateDeviceRGB(),
       bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
     ) else {
-      return "unknown"
+      return .unknown
     }
     ctx.interpolationQuality = .medium
     ctx.draw(cropped, in: CGRect(x: 0, y: 0, width: side, height: side))
-    guard let data = ctx.data else { return "unknown" }
+    guard let data = ctx.data else { return .unknown }
     let buf = data.bindMemory(to: UInt8.self, capacity: side * side * 4)
-    var lumas: [Double] = []
-    lumas.reserveCapacity(side * side)
+    struct Px { let r, g, b, l: Double }
+    var pixels: [Px] = []
+    pixels.reserveCapacity(side * side)
     for i in 0..<(side * side) {
       let r = Double(buf[i * 4]) / 255
       let g = Double(buf[i * 4 + 1]) / 255
       let b = Double(buf[i * 4 + 2]) / 255
-      lumas.append(0.2126 * r + 0.7152 * g + 0.0722 * b)
+      pixels.append(Px(r: r, g: g, b: b, l: 0.2126 * r + 0.7152 * g + 0.0722 * b))
     }
-    lumas.sort()
-    let median = lumas[lumas.count / 2]
-    if median < 0.40 { return "dark" }
-    if median > 0.62 { return "light" }
-    return "unknown"
+    let median = pixels.map(\.l).sorted()[pixels.count / 2]
+    var sr = 0.0, sg = 0.0, sb = 0.0, n = 0.0
+    for px in pixels where abs(px.l - median) <= 0.08 {
+      sr += px.r
+      sg += px.g
+      sb += px.b
+      n += 1
+    }
+    if n < 1 {
+      sr = pixels.map(\.r).reduce(0, +)
+      sg = pixels.map(\.g).reduce(0, +)
+      sb = pixels.map(\.b).reduce(0, +)
+      n = Double(pixels.count)
+    }
+    let label: String
+    if median < 0.40 { label = "dark" }
+    else if median > 0.62 { label = "light" }
+    else { label = "unknown" }
+    return FabricSample(
+      label: label,
+      red: sr / n,
+      green: sg / n,
+      blue: sb / n,
+      sampled: true
+    )
   }
 
   /// Attach where-on-the-player + jersey tone to every hit from a pass.
   private static func tag(
     _ hits: [[String: Any]],
     region: String,
-    tone: String,
+    tone: FabricSample,
     onPerson: Bool
   ) -> [[String: Any]] {
     hits.map { hit in
       var copy = hit
       copy["region"] = region
-      copy["jerseyTone"] = tone
+      copy["jerseyTone"] = tone.label
       copy["onPerson"] = onPerson
+      if tone.sampled {
+        copy["jerseyRed"] = tone.red
+        copy["jerseyGreen"] = tone.green
+        copy["jerseyBlue"] = tone.blue
+      }
       return copy
     }
   }
