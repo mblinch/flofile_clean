@@ -4,6 +4,7 @@ import '../services/ftpclient_service.dart';
 import '../services/preferences_service.dart';
 import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Standalone FTP Server Settings panel. Can be shown in a dialog or embedded
 /// (e.g. in Preferences > FTP).
@@ -252,7 +253,7 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
         children: [
           Row(
             children: [
-              Icon(Icons.cloud_upload_outlined,
+              PhosphorIcon(PhosphorIconsRegular.cloudArrowUp,
                   size: 15, color: t.textSecondary),
               const SizedBox(width: 8),
               Text(
@@ -296,7 +297,7 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                 const Spacer(),
               _GhostBtn(
                 tokens: t,
-                icon: Icons.add,
+                icon: PhosphorIconsRegular.plus,
                 label: 'New profile',
                 onTap: _startNewProfile,
               ),
@@ -309,13 +310,13 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
               decoration: BoxDecoration(
                 color: (_statusError
                         ? const Color(0xFFD64545)
-                        : const Color(0xFF6EC8C4))
+                        : const Color(0xFF7FB88A))
                     .withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
                   color: (_statusError
                           ? const Color(0xFFD64545)
-                          : const Color(0xFF6EC8C4))
+                          : const Color(0xFF7FB88A))
                       .withValues(alpha: 0.34),
                 ),
               ),
@@ -333,7 +334,7 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                   ),
                   InkWell(
                     onTap: () => setState(() => _statusMessage = null),
-                    child: Icon(Icons.close, size: 14, color: t.textSecondary),
+                    child: PhosphorIcon(PhosphorIconsRegular.x, size: 14, color: t.textSecondary),
                   ),
                 ],
               ),
@@ -605,7 +606,7 @@ class _GhostBtn extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 13, color: tokens.textSecondary),
+                PhosphorIcon(icon!, size: 13, color: tokens.textSecondary),
                 const SizedBox(width: 4),
               ],
               Text(
@@ -644,18 +645,26 @@ class _FillBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     final fill = !enabled
-        ? tokens.sunken
+        ? (emphasized ? FfTokens.gold.withValues(alpha: 0.4) : tokens.sunken)
         : danger
-            ? tokens.accent.withValues(alpha: 0.16)
+            ? FfTokens.dangerBg
             : emphasized
-                ? tokens.accent.withValues(alpha: 0.22)
+                ? FfTokens.gold
                 : tokens.selectedFill;
     final border = !enabled
         ? tokens.divider
-        : (danger || emphasized ? tokens.accent : tokens.divider);
+        : danger
+            ? FfTokens.dangerBorder
+            : emphasized
+                ? FfTokens.gold
+                : tokens.divider;
     final textColor = !enabled
         ? tokens.text.withValues(alpha: 0.38)
-        : (danger || emphasized ? tokens.accent : tokens.text);
+        : danger
+            ? FfTokens.danger
+            : emphasized
+                ? FfTokens.inkOnGold
+                : tokens.text;
     return Material(
       color: fill,
       borderRadius: BorderRadius.circular(6),

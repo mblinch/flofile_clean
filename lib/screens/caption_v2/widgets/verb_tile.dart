@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../caption_style/caption_text_normalize.dart';
 import '../../../theme/ff_tokens.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Tap target that runs [onCmdTap] for Cmd-click and [onTap] otherwise.
 ///
@@ -76,7 +77,7 @@ class _CmdClickState extends State<CmdClick> {
 /// Verb list tile: monospace code + label.
 ///
 /// Selected verbs use only a leading accent bar beside the number.
-class VerbTile extends StatelessWidget {
+class VerbTile extends StatefulWidget {
   const VerbTile({
     super.key,
     required this.code,
@@ -107,117 +108,132 @@ class VerbTile extends StatelessWidget {
   final GestureTapDownCallback? onSecondaryTapDown;
 
   @override
+  State<VerbTile> createState() => _VerbTileState();
+}
+
+class _VerbTileState extends State<VerbTile> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final isMobile = MediaQuery.sizeOf(context).width < 1100;
-    final tileHeight = height ?? (isMobile ? 44.0 : 28.0);
+    final tileHeight = widget.height ?? (isMobile ? 44.0 : 28.0);
     final veryCompact = tileHeight < 24;
-    final labelFontSize =
-        (t.textSizeMeta + ((tileHeight - 24) / 4)).clamp(11.0, 16.0).toDouble();
-    final labelColor = dimmed ? t.text.withValues(alpha: 0.38) : t.text;
+    final labelColor = widget.dimmed
+        ? t.text.withValues(alpha: 0.38)
+        : t.text;
+
+    Color? fill;
+    if (widget.firebarSelected) {
+      fill = FfTokens.firebar.withValues(alpha: 0.16);
+    } else if (widget.selected) {
+      fill = t.selected;
+    } else if (_hovered) {
+      fill = t.hover;
+    }
 
     return Semantics(
       button: true,
-      selected: selected,
+      selected: widget.selected,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
         child: CmdClick(
-          onTap: onTap,
-          onCmdTap: onPinTap,
-          onSecondaryTapDown: onSecondaryTapDown,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            curve: Curves.easeOut,
-            height: tileHeight,
-            padding: EdgeInsets.symmetric(
-              horizontal: veryCompact ? 4 : 6,
-              vertical: veryCompact ? 1 : 2,
-            ),
-            decoration: BoxDecoration(
-              color: firebarSelected
-                  ? FfTokens.firebar.withValues(alpha: 0.16)
-                  : null,
-              borderRadius: BorderRadius.circular(6),
-              border: firebarSelected
-                  ? Border.all(
-                      color: FfTokens.firebar.withValues(alpha: 0.42),
-                    )
-                  : focused
-                      ? Border.all(
-                          color: t.accent,
-                          width: FfTokens.focusOutlineWidth,
-                        )
-                      : null,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 3,
-                  height: veryCompact ? 14 : 18,
-                  decoration: BoxDecoration(
-                    color: selected ? t.accent : Colors.transparent,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                SizedBox(width: veryCompact ? 4 : 6),
-                if (code.isNotEmpty) ...[
-                  SizedBox(
-                    width: veryCompact ? 18 : 22,
-                    child: Text(
-                      code,
-                      style: t.jerseyStyle.copyWith(
-                        fontSize:
-                            veryCompact ? t.textSizeMicro : t.textSizeJersey,
-                        color: t.textSecondary,
+          onTap: widget.onTap,
+          onCmdTap: widget.onPinTap,
+          onSecondaryTapDown: widget.onSecondaryTapDown,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+              height: tileHeight,
+              padding: EdgeInsets.symmetric(
+                horizontal: veryCompact ? 4 : 6,
+                vertical: veryCompact ? 1 : 2,
+              ),
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+                border: widget.firebarSelected
+                    ? Border.all(
+                        color: FfTokens.firebar.withValues(alpha: 0.42),
+                      )
+                    : widget.selected
+                        ? const Border(
+                            left: BorderSide(
+                              color: FfTokens.nocturneAc,
+                              width: 2,
+                            ),
+                          )
+                        : widget.focused
+                            ? Border.all(
+                                color: t.accent,
+                                width: FfTokens.focusOutlineWidth,
+                              )
+                            : null,
+              ),
+              child: Row(
+                children: [
+                  if (widget.code.isNotEmpty) ...[
+                    SizedBox(
+                      width: veryCompact ? 18 : 22,
+                      child: Text(
+                        widget.code,
+                        style: t.jerseyStyle.copyWith(
+                          fontSize:
+                              veryCompact ? t.textSizeMicro : t.textSizeJersey,
+                          color: t.textSecondary,
+                        ),
                       ),
                     ),
-                  ),
-                  SizedBox(width: veryCompact ? 4 : 6),
-                ],
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
+                    SizedBox(width: veryCompact ? 4 : 6),
+                  ],
+                  Expanded(
                     child: Text.rich(
                       _highlightedVerb(
-                        label,
-                        highlightQuery,
-                        normal: t.metaStyle.copyWith(
-                          fontSize: labelFontSize,
+                        widget.label,
+                        widget.highlightQuery,
+                        normal: FfTokens.rosterName(
                           color: labelColor,
-                          fontWeight: selected
-                              ? FfTokens.weightMedium
-                              : FfTokens.weightRegular,
+                          selected: widget.selected,
                         ),
                       ),
                       maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-                if (pinned) ...[
-                  const SizedBox(width: 3),
-                  if (onPinTap != null)
-                    IconButton(
-                      onPressed: onPinTap,
-                      tooltip: 'Unpin for next frames',
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints.tightFor(
-                        width: veryCompact ? 24 : 28,
-                        height: veryCompact ? 20 : 24,
+                  if (widget.pinned) ...[
+                    const SizedBox(width: 3),
+                    if (widget.onPinTap != null)
+                      IconButton(
+                        onPressed: widget.onPinTap,
+                        tooltip: 'Unpin for next frames',
+                        padding: EdgeInsets.zero,
+                        constraints: BoxConstraints.tightFor(
+                          width: veryCompact ? 24 : 28,
+                          height: veryCompact ? 20 : 24,
+                        ),
+                        visualDensity: VisualDensity.compact,
+                        iconSize: veryCompact ? 12 : 14,
+                        color: widget.dimmed
+                            ? t.text.withValues(alpha: 0.38)
+                            : FfTokens.pinned,
+                        icon: const PhosphorIcon(PhosphorIconsFill.pushPin),
+                      )
+                    else
+                      PhosphorIcon(PhosphorIconsFill.pushPin,
+                        size: 13,
+                        color: widget.dimmed
+                            ? t.text.withValues(alpha: 0.38)
+                            : FfTokens.pinned,
                       ),
-                      visualDensity: VisualDensity.compact,
-                      iconSize: veryCompact ? 12 : 14,
-                      color: dimmed ? t.text.withValues(alpha: 0.38) : t.accent,
-                      icon: const Icon(Icons.push_pin_rounded),
-                    )
-                  else
-                    Icon(
-                      Icons.push_pin_rounded,
-                      size: 13,
-                      color: dimmed ? t.text.withValues(alpha: 0.38) : t.accent,
-                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         ),

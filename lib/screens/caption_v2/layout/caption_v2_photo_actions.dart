@@ -11,6 +11,7 @@ import '../../../theme/ff_tokens.dart';
 import '../../../widgets/oriented_file_preview.dart';
 import '../data/caption_transfer_payload.dart';
 import '../data/caption_v2_controller.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 enum _PhotoAction {
   copyCaption,
@@ -72,7 +73,7 @@ Future<void> showCaptionV2Zoom(
               top: 12,
               child: IconButton.filledTonal(
                 onPressed: () => Navigator.of(dialogContext).pop(),
-                icon: const Icon(Icons.close_rounded),
+                icon: const PhosphorIcon(PhosphorIconsRegular.x),
                 tooltip: 'Close',
                 style: IconButton.styleFrom(
                   backgroundColor: t.surface.withValues(alpha: 0.9),
@@ -109,13 +110,13 @@ Future<void> showCaptionV2PhotoMenu({
     IconData icon, {
     bool destructive = false,
   }) {
-    final color = destructive ? Colors.red.shade400 : t.text;
+    final color = destructive ? FfTokens.danger : t.text;
     return PopupMenuItem<_PhotoAction>(
       value: value,
       height: 38,
       child: Row(
         children: [
-          Icon(icon, size: 16, color: color),
+          PhosphorIcon(icon, size: 16, color: color),
           const SizedBox(width: 10),
           Text(label, style: t.labelStyle.copyWith(color: color)),
         ],
@@ -140,24 +141,24 @@ Future<void> showCaptionV2PhotoMenu({
       side: BorderSide(color: t.divider),
     ),
     items: [
-      item(_PhotoAction.copyCaption, 'Copy Caption', Icons.copy_outlined),
+      item(_PhotoAction.copyCaption, 'Copy Caption', PhosphorIconsRegular.copy),
       item(
         _PhotoAction.pasteCaption,
         targets.length > 1
             ? 'Paste Caption to ${targets.length} Photos'
             : 'Paste Caption',
-        Icons.paste_outlined,
+        PhosphorIconsRegular.clipboardText,
       ),
       item(
         _PhotoAction.applyTemplate,
         'Apply IPTC Template',
-        Icons.description_outlined,
+        PhosphorIconsRegular.fileText,
       ),
-      item(_PhotoAction.editIptc, 'Edit IPTC', Icons.edit_outlined),
+      item(_PhotoAction.editIptc, 'Edit IPTC', PhosphorIconsRegular.pencilSimple),
       item(
         _PhotoAction.editPhotoshop,
         'Edit in Photoshop',
-        Icons.brush_outlined,
+        PhosphorIconsRegular.paintBrush,
       ),
       const PopupMenuDivider(height: 1),
       if (controller.ftpModeEnabled) ...[
@@ -165,23 +166,23 @@ Future<void> showCaptionV2PhotoMenu({
           item(
             _PhotoAction.clearFtp,
             'Remove FTP Status',
-            Icons.cloud_done_outlined,
+            PhosphorIconsRegular.cloudCheck,
           )
         else
-          item(_PhotoAction.ftp, 'FTP Image', Icons.cloud_upload_outlined),
+          item(_PhotoAction.ftp, 'FTP Image', PhosphorIconsRegular.cloudArrowUp),
         const PopupMenuDivider(height: 1),
       ],
-      item(_PhotoAction.reveal, 'Open in Finder', Icons.open_in_new_rounded),
+      item(_PhotoAction.reveal, 'Open in Finder', PhosphorIconsRegular.arrowSquareOut),
       item(
         _PhotoAction.rename,
         'Rename Image',
-        Icons.drive_file_rename_outline,
+        PhosphorIconsRegular.pencilSimple,
       ),
       const PopupMenuDivider(height: 1),
       item(
         _PhotoAction.delete,
         'Delete Image',
-        Icons.delete_outline,
+        PhosphorIconsRegular.trash,
         destructive: true,
       ),
     ],
@@ -557,11 +558,15 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
                             dimension: 14,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : const Icon(Icons.save_outlined, size: 17),
+                        : const PhosphorIcon(PhosphorIconsRegular.floppyDisk, size: 17),
                     label: const Text('Save IPTC'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: t.accent,
-                      foregroundColor: t.inkOnAccent,
+                      backgroundColor: FfTokens.gold,
+                      foregroundColor: FfTokens.inkOnGold,
+                      disabledBackgroundColor:
+                          FfTokens.gold.withValues(alpha: 0.4),
+                      disabledForegroundColor:
+                          FfTokens.inkOnGold.withValues(alpha: 0.4),
                     ),
                   ),
                 ],
@@ -685,7 +690,7 @@ class _DialogHeader extends StatelessWidget {
           ),
           IconButton(
             onPressed: onClose,
-            icon: const Icon(Icons.close_rounded),
+            icon: const PhosphorIcon(PhosphorIconsRegular.x),
             color: tokens.textSecondary,
             tooltip: 'Close',
           ),
@@ -771,8 +776,8 @@ Future<String?> _showTextDialog(
         FilledButton(
           onPressed: () => Navigator.of(dialogContext).pop(controller.text),
           style: FilledButton.styleFrom(
-            backgroundColor: t.accent,
-            foregroundColor: t.inkOnAccent,
+            backgroundColor: FfTokens.gold,
+            foregroundColor: FfTokens.inkOnGold,
           ),
           child: Text(confirmLabel),
         ),
@@ -806,8 +811,8 @@ Future<bool> _showConfirmDialog(
             FilledButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.red.shade700,
-                foregroundColor: Colors.white,
+                backgroundColor: FfTokens.danger,
+                foregroundColor: FfTokens.inkOnGold,
               ),
               child: Text(confirmLabel),
             ),

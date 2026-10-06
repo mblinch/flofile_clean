@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,9 +11,11 @@ import '../caption_style/verb_caption_wording.dart';
 import '../caption_style/verb_defaults_bundle.dart';
 import '../caption_style/verb_sub_options.dart';
 import '../screens/caption_v2/data/caption_v2_caption_domain.dart';
+import '../theme/ff_icons.dart';
 import '../theme/ff_tokens.dart';
 import '../utils/default_verb_keywords.dart';
-import 'app_compact_checkbox.dart';
+import '../utils/verb_name_casing.dart';
+import 'admin_verb_editor_v3_chrome.dart';
 import 'app_styled_dialogs.dart';
 import 'verb_edit_sub_options_section.dart';
 
@@ -62,18 +65,33 @@ class AdminVerbAuthoringEditor extends StatefulWidget {
 
 class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   final FocusNode _nameFocus = FocusNode();
+  final FocusNode _searchFocus = FocusNode();
+  final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _categoryRenameController =
+      TextEditingController();
   final GlobalKey<_VerbEditorPaneState> _editorPaneKey =
       GlobalKey<_VerbEditorPaneState>();
+  final GlobalKey _moveButtonKey = GlobalKey();
   String? _selectedCategory;
   String? _selectedKey;
   String? _selectedGroupId;
   bool _renaming = false;
+  bool _renamingCategory = false;
   int _sampleIndex = 0;
+  int _pendingChanges = 0;
   Timer? _saveDebounce;
+  Timer? _undoTimer;
+  Map<String, dynamic>? _publishedBaseline;
+  _EditorSnapshot? _undoSnapshot;
+  String? _undoMessage;
 
   @override
   void initState() {
     super.initState();
+    _publishedBaseline = _deepCopyMap(widget.bundle);
+    _searchFocus.addListener(() {
+      if (mounted) setState(() {});
+    });
     final initial = widget.initialVerbKey?.trim();
     if (initial != null && initial.isNotEmpty) {
       _selectedKey = initial;
@@ -95,6 +113,11 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   @override
   void didUpdateWidget(covariant AdminVerbAuthoringEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.sport != widget.sport) {
+      _publishedBaseline = _deepCopyMap(widget.bundle);
+      _pendingChanges = 0;
+      _clearUndo();
+    }
     if (oldWidget.sport != widget.sport ||
         !identical(oldWidget.bundle, widget.bundle)) {
       _ensureSelection();
@@ -104,8 +127,88 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   @override
   void dispose() {
     _saveDebounce?.cancel();
+    _undoTimer?.cancel();
     _nameFocus.dispose();
+    _searchFocus.dispose();
+    _searchController.dispose();
+    _categoryRenameController.dispose();
     super.dispose();
+  }
+
+  Map<String, dynamic> _deepCopyMap(Map<String, dynamic> source) {
+    return Map<String, dynamic>.from(
+      (jsonDecode(jsonEncode(source)) as Map).cast<String, dynamic>(),
+    );
+  }
+
+  void _markDraftChange() {
+    _pendingChanges += 1;
+  }
+
+  void _clearUndo() {
+    _undoTimer?.cancel();
+    _undoSnapshot = null;
+    _undoMessage = null;
+  }
+
+  void _pushUndo(String message) {
+    _undoSnapshot = _EditorSnapshot(
+      bundle: _deepCopyMap(widget.bundle),
+      selectedCategory: _selectedCategory,
+      selectedKey: _selectedKey,
+      pendingChanges: _pendingChanges,
+    );
+    _undoTimer?.cancel();
+    _undoTimer = Timer(const Duration(seconds: 7), () {
+      if (!mounted) return;
+      setState(_clearUndo);
+    });
+    if (mounted) {
+      setState(() => _undoMessage = message);
+    } else {
+      _undoMessage = message;
+    }
+  }
+
+  void _undo() {
+    final snap = _undoSnapshot;
+    if (snap == null) return;
+    _clearUndo();
+    setState(() {
+      _selectedCategory = snap.selectedCategory;
+      _selectedKey = snap.selectedKey;
+      _pendingChanges = snap.pendingChanges;
+    });
+    widget.onBundleChanged(_deepCopyMap(snap.bundle));
+    setState(_ensureSelection);
+  }
+
+  void _discardDrafts() {
+    final baseline = _publishedBaseline;
+    if (baseline == null) return;
+    _flushSelectedVerb();
+    _clearUndo();
+    setState(() => _pendingChanges = 0);
+    widget.onBundleChanged(_deepCopyMap(baseline));
+    setState(_ensureSelection);
+  }
+
+  Future<void> _publishDrafts() async {
+    _flushSelectedVerb();
+    if (!widget.personalMode) {
+      final write = widget.onWriteSportDefaults;
+      if (write != null) {
+        await write(successLabel: 'Published');
+      } else if (widget.onPublishCurrentVerb != null) {
+        await _runCurrentVerbAction(widget.onPublishCurrentVerb);
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _publishedBaseline = _deepCopyMap(widget.bundle);
+      _pendingChanges = 0;
+      _clearUndo();
+    });
   }
 
   FfTokens get _t => Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -288,7 +391,8 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     };
   }
 
-  void _emit(Map<String, dynamic> bundle) {
+  void _emit(Map<String, dynamic> bundle, {bool countAsDraft = true}) {
+    if (countAsDraft) _markDraftChange();
     widget.onBundleChanged(bundle);
   }
 
@@ -418,7 +522,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   }
 
   void _rename(_VerbDraft verb, String label) {
-    final trimmed = label.trim();
+    final trimmed = titleCaseVerbName(label);
     if (trimmed.isEmpty) return;
     // Prefer in-flight editor draft so rename doesn't drop wording edits.
     final base = (_pendingDraft != null && _pendingDraft!.key == verb.key)
@@ -467,6 +571,275 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     _emit(bundle);
   }
 
+  void _setVerbCategory(_VerbDraft verb, String category) {
+    final next = category.trim();
+    if (next.isEmpty || next == verb.category) return;
+    if (!_categories.contains(next)) return;
+
+    // Prefer in-flight editor draft so category change doesn't drop wording edits.
+    final base = (_pendingDraft != null && _pendingDraft!.key == verb.key)
+        ? _pendingDraft!
+        : verb;
+    final updated = base.copyWith(category: next);
+
+    final bundle = _copyBundle();
+    final record = updated.toRecord();
+    if (updated.isCustom) {
+      final list = ((bundle['customVerbs'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(Map<String, dynamic>.from)
+          .toList();
+      final index = list.indexWhere(
+        (item) => (item['key'] ?? item['label']).toString() == updated.key,
+      );
+      if (index < 0) {
+        list.add(record);
+      } else {
+        list[index] = record;
+      }
+      bundle['customVerbs'] = list;
+    } else {
+      final overrides = Map<String, dynamic>.from(
+        (bundle['verbOverrides'] as Map?) ?? const {},
+      );
+      overrides[updated.key] = record;
+      bundle['verbOverrides'] = overrides;
+    }
+
+    final order = Map<String, dynamic>.from(
+      (bundle['verbOrder'] as Map?) ?? const {},
+    );
+    for (final entry in order.entries.toList()) {
+      if (entry.value is! List) continue;
+      final list = List<String>.from(entry.value as List)..remove(updated.key);
+      order[entry.key] = list;
+    }
+    final dest = List<String>.from((order[next] as List?) ?? const <String>[]);
+    if (!dest.contains(updated.key)) dest.add(updated.key);
+    order[next] = dest;
+    bundle['verbOrder'] = order;
+
+    if (_pendingDraft?.key == updated.key) _pendingDraft = null;
+    setState(() => _selectedCategory = next);
+    _emit(bundle);
+  }
+
+  Future<void> _addCategory() async {
+    final existing = _categories;
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => _AddCategoryDialog(
+        tokens: _t,
+        existing: existing,
+        moveSelectedVerb: false,
+      ),
+    );
+    if (!mounted || name == null) return;
+    final next = name.trim();
+    if (next.isEmpty || next == 'Favorites') return;
+
+    for (final category in existing) {
+      if (category.toLowerCase() == next.toLowerCase()) {
+        setState(() {
+          _selectedCategory = category;
+          _selectedKey = null;
+          _ensureSelection();
+        });
+        return;
+      }
+    }
+
+    _pushUndo('Added “$next”');
+    final bundle = _copyBundle();
+    final categories = List<String>.from(
+      (bundle['categoryOrder'] as List?) ?? existing,
+    )..add(next);
+    bundle['categoryOrder'] = categories;
+    final order = Map<String, dynamic>.from(
+      (bundle['verbOrder'] as Map?) ?? const {},
+    );
+    order.putIfAbsent(next, () => <String>[]);
+    bundle['verbOrder'] = order;
+    setState(() {
+      _selectedCategory = next;
+      _selectedKey = null;
+    });
+    _emit(bundle);
+  }
+
+  Future<void> _deleteCategory([String? categoryName]) async {
+    final current = (categoryName ??
+            _selectedVerb?.category ??
+            _selectedCategory ??
+            '')
+        .trim();
+    if (current.isEmpty || current == 'Favorites') return;
+
+    final destinations =
+        _categories.where((category) => category != current).toList();
+    if (destinations.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keep at least one category.')),
+      );
+      return;
+    }
+
+    final verbsInCategory =
+        _allVerbs.where((verb) => verb.category == current).toList();
+
+    // Empty category: delete immediately with undo.
+    if (verbsInCategory.isEmpty) {
+      _pushUndo('Deleted “$current”');
+      final bundle = _copyBundle();
+      final categories = List<String>.from(
+        (bundle['categoryOrder'] as List?) ?? _categories,
+      )..remove(current);
+      bundle['categoryOrder'] = categories;
+      final order = Map<String, dynamic>.from(
+        (bundle['verbOrder'] as Map?) ?? const {},
+      )..remove(current);
+      bundle['verbOrder'] = order;
+      setState(() => _selectedCategory = destinations.first);
+      _emit(bundle);
+      setState(_ensureSelection);
+      return;
+    }
+
+    final choice = await showVerbEditorDeleteCategoryDialog(
+      context: context,
+      tokens: _t,
+      category: current,
+      verbLabels: [for (final v in verbsInCategory) v.label],
+      destinations: destinations,
+    );
+    if (!mounted || choice == null) return;
+
+    _pushUndo('Deleted “$current”');
+    final bundle = _copyBundle();
+    final categories = List<String>.from(
+      (bundle['categoryOrder'] as List?) ?? _categories,
+    )..remove(current);
+    bundle['categoryOrder'] = categories;
+
+    final order = <String, List<String>>{};
+    final rawOrder = bundle['verbOrder'];
+    if (rawOrder is Map) {
+      rawOrder.forEach((key, value) {
+        order[key.toString()] = value is List
+            ? value.map((item) => item.toString()).toList()
+            : <String>[];
+      });
+    }
+    order.remove(current);
+
+    if (choice.deleteAll) {
+      for (final verb in verbsInCategory) {
+        _removeVerbFromBundle(bundle, verb);
+      }
+      bundle['verbOrder'] = order;
+      setState(() => _selectedCategory = destinations.first);
+    } else {
+      final dest = choice.destination!;
+      if (!categories.contains(dest)) categories.add(dest);
+      bundle['categoryOrder'] = categories;
+      final destList = order.putIfAbsent(dest, () => <String>[]);
+      for (final verb in verbsInCategory) {
+        final base = (_pendingDraft != null && _pendingDraft!.key == verb.key)
+            ? _pendingDraft!
+            : verb;
+        final updated = base.copyWith(category: dest);
+        _writeVerbRecord(bundle, updated);
+        if (_pendingDraft?.key == verb.key) _pendingDraft = null;
+        destList.remove(verb.key);
+        destList.add(verb.key);
+      }
+      bundle['verbOrder'] = order;
+      setState(() => _selectedCategory = dest);
+    }
+
+    _emit(bundle);
+    setState(_ensureSelection);
+  }
+
+  void _writeVerbRecord(Map<String, dynamic> bundle, _VerbDraft updated) {
+    final record = updated.toRecord();
+    if (updated.isCustom) {
+      final list = ((bundle['customVerbs'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(Map<String, dynamic>.from)
+          .toList();
+      final index = list.indexWhere(
+        (item) => (item['key'] ?? item['label']).toString() == updated.key,
+      );
+      if (index < 0) {
+        list.add(record);
+      } else {
+        list[index] = record;
+      }
+      bundle['customVerbs'] = list;
+    } else {
+      final overrides = Map<String, dynamic>.from(
+        (bundle['verbOverrides'] as Map?) ?? const {},
+      );
+      overrides[updated.key] = record;
+      bundle['verbOverrides'] = overrides;
+    }
+  }
+
+  void _removeVerbFromBundle(Map<String, dynamic> bundle, _VerbDraft verb) {
+    if (_pendingDraft?.key == verb.key) _pendingDraft = null;
+    if (verb.isCustom) {
+      final customs = ((bundle['customVerbs'] as List?) ?? const [])
+          .whereType<Map>()
+          .map(Map<String, dynamic>.from)
+          .where(
+            (item) => (item['key'] ?? item['label']).toString() != verb.key,
+          )
+          .toList();
+      bundle['customVerbs'] = customs;
+      final overrides = Map<String, dynamic>.from(
+        (bundle['verbOverrides'] as Map?) ?? const {},
+      )..remove(verb.key);
+      bundle['verbOverrides'] = overrides;
+    } else {
+      final deleted = ((bundle['deletedVerbs'] as List?) ?? const [])
+          .map((value) => value.toString())
+          .toSet()
+        ..add(verb.key);
+      bundle['deletedVerbs'] = deleted.toList();
+      if (!widget.personalMode) {
+        final overrides = Map<String, dynamic>.from(
+          (bundle['verbOverrides'] as Map?) ?? const {},
+        )..remove(verb.key);
+        bundle['verbOverrides'] = overrides;
+      }
+    }
+    final order = Map<String, dynamic>.from(
+      (bundle['verbOrder'] as Map?) ?? const {},
+    );
+    for (final entry in order.entries.toList()) {
+      if (entry.value is! List) continue;
+      final list = List<String>.from(entry.value as List)..remove(verb.key);
+      order[entry.key] = list;
+    }
+    bundle['verbOrder'] = order;
+    final favorites =
+        ((bundle['favoriteVerbs'] as List?) ?? const [])
+            .map((value) => value.toString())
+            .toSet()
+          ..remove(verb.key);
+    bundle['favoriteVerbs'] = favorites.toList();
+  }
+
+  void _toggleFavorite(_VerbDraft verb) {
+    final bundle = _copyBundle();
+    final favorites = _favorites;
+    if (!favorites.add(verb.key)) favorites.remove(verb.key);
+    bundle['favoriteVerbs'] = favorites.toList();
+    _emit(bundle);
+  }
+
   void _newVerb() {
     final category = _selectedCategory ??
         (_categories.isEmpty ? 'Other' : _categories.first);
@@ -507,11 +880,6 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _nameFocus.requestFocus();
-      if (!widget.personalMode) {
-        unawaited(
-          widget.onWriteSportDefaults?.call(successLabel: 'Added “$key”'),
-        );
-      }
     });
   }
 
@@ -595,169 +963,53 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
         _selectedCategory = source.category;
         _renaming = false;
       });
-      if (!widget.personalMode) {
-        unawaited(
-          widget.onWriteSportDefaults?.call(successLabel: 'Added “$key”'),
-        );
-      }
     });
   }
 
   Future<void> _deleteVerb([_VerbDraft? target]) async {
     final verb = target ?? _flushSelectedVerb();
     if (verb == null) return;
-    final t = _t;
-    // Personal mode: defaults are hidden (per-user), customs are deleted.
-    // Admin mode keeps delete language for both, and clears factory overrides.
     final hideDefault = widget.personalMode && !verb.isCustom;
-    // Hide is immediate; only real deletes ask for confirmation.
-    if (!hideDefault) {
-      final title = 'Delete “${verb.label}”?';
-      final body = verb.isCustom
-          ? 'Removes this custom verb from your catalog.'
-          : 'Hides this default verb from the catalog. '
-              'Saved captions keep their rendered text.';
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (context) => AppDialogFfStyle(
-          enabled: true,
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              extensions: <ThemeExtension<dynamic>>[t],
-            ),
-            child: Dialog(
-              backgroundColor: Colors.transparent,
-              insetPadding: const EdgeInsets.all(24),
-              child: Container(
-                width: 400,
-                decoration: BoxDecoration(
-                  color: t.surface,
-                  borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-                  border: Border.all(color: t.divider),
-                  boxShadow: [
-                    BoxShadow(
-                      color: t.bg.withValues(alpha: 0.55),
-                      blurRadius: 20,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: TextStyle(
-                                fontFamily: FfTokens.labelFamily,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: -0.2,
-                                color: t.text,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              body,
-                              style: t.metaStyle.copyWith(
-                                color: t.text.withValues(alpha: 0.55),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Divider(height: 1, color: t.divider),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                        child: Row(
-                          children: [
-                            const Spacer(),
-                            TextButton(
-                              onPressed: () => Navigator.pop(context, false),
-                              child: Text(
-                                'Cancel',
-                                style: t.metaStyle.copyWith(
-                                  color: t.text.withValues(alpha: 0.62),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            ElevatedGreyButton(
-                              label: 'Delete verb',
-                              fontSize: 11,
-                              isDanger: true,
-                              onPressed: () => Navigator.pop(context, true),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-      if (ok != true || !mounted) return;
-    }
-    if (_pendingDraft?.key == verb.key) _pendingDraft = null;
+    final ok = hideDefault
+        ? await showAppConfirmDialog(
+              context: context,
+              title: 'Hide “${verb.label}”?',
+              message:
+                  'Hides this default verb from your catalog. You can unhide it later.',
+              confirmLabel: 'Hide verb',
+            ) ==
+            true
+        : await showVerbEditorDeleteVerbDialog(
+            context: context,
+            tokens: _t,
+            verb: verb.label,
+            category: verb.category,
+            sport: widget.sport,
+          );
+    if (!ok || !mounted) return;
+
+    final category = verb.category;
+    final siblings =
+        _allVerbs.where((v) => v.category == category).toList(growable: false);
+    final index = siblings.indexWhere((v) => v.key == verb.key);
+    final nextKey = () {
+      if (siblings.length <= 1) return null;
+      if (index < 0) return siblings.first.key;
+      if (index + 1 < siblings.length) return siblings[index + 1].key;
+      return siblings[index - 1].key;
+    }();
+
+    _pushUndo('Deleted “${verb.label}”');
     final bundle = _copyBundle();
-    if (verb.isCustom) {
-      bundle['customVerbs'] = _customs
-          .where(
-            (item) => (item['key'] ?? item['label']).toString() != verb.key,
-          )
-          .toList();
-      final overrides = Map<String, dynamic>.from(
-        (bundle['verbOverrides'] as Map?) ?? const {},
-      )..remove(verb.key);
-      bundle['verbOverrides'] = overrides;
+    _removeVerbFromBundle(bundle, verb);
+    if (hideDefault) {
+      _selectedKey = verb.key;
     } else {
-      final deleted = ((bundle['deletedVerbs'] as List?) ?? const [])
-          .map((value) => value.toString())
-          .toSet()
-        ..add(verb.key);
-      bundle['deletedVerbs'] = deleted.toList();
-      // Personal hide keeps per-user wording overrides; admin delete clears them.
-      if (!widget.personalMode) {
-        final overrides = Map<String, dynamic>.from(
-          (bundle['verbOverrides'] as Map?) ?? const {},
-        )..remove(verb.key);
-        bundle['verbOverrides'] = overrides;
-      }
+      _selectedKey = nextKey;
+      _selectedCategory = category;
     }
-    final order = Map<String, dynamic>.from(
-      (bundle['verbOrder'] as Map?) ?? const {},
-    );
-    for (final entry in order.entries.toList()) {
-      if (entry.value is! List) continue;
-      final list = List<String>.from(entry.value as List)..remove(verb.key);
-      order[entry.key] = list;
-    }
-    bundle['verbOrder'] = order;
-    final favorites = _favorites..remove(verb.key);
-    bundle['favoriteVerbs'] = favorites.toList();
-    // Keep selection on a personally hidden default so Unhide is one click away.
-    if (hideDefault) _selectedKey = verb.key;
     _emit(bundle);
     setState(_ensureSelection);
-    if (!widget.personalMode) {
-      unawaited(
-        widget.onWriteSportDefaults?.call(
-          successLabel: hideDefault
-              ? 'Hidden “${verb.label}”'
-              : 'Removed “${verb.label}”',
-        ),
-      );
-    }
   }
 
   void _unhideVerb(_VerbDraft verb) {
@@ -813,93 +1065,527 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     );
   }
 
+  List<_VerbDraft> get _verbsInSelectedCategory {
+    final cat = _selectedCategory;
+    if (cat == null) return const [];
+    return _allVerbs.where((v) => v.category == cat).toList();
+  }
+
+  List<VerbSearchHit> get _searchHits {
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isEmpty) return const <VerbSearchHit>[];
+    final hits = <VerbSearchHit>[];
+    for (final verb in _allVerbs) {
+      final hay = '${verb.category} ${verb.label} ${verb.key}'.toLowerCase();
+      if (hay.contains(q)) {
+        hits.add(VerbSearchHit(
+          key: verb.key,
+          category: verb.category,
+          label: verb.label,
+        ));
+      }
+      if (hits.length >= 40) break;
+    }
+    return hits;
+  }
+
+  void _selectCategoryOnly(String category) {
+    if (category == '__new__') {
+      unawaited(_addCategory());
+      return;
+    }
+    _flushSelectedVerb();
+    setState(() {
+      _selectedCategory = category;
+      _renamingCategory = false;
+      final visible =
+          _allVerbs.where((v) => v.category == category).toList();
+      _selectedKey = visible.isEmpty ? null : visible.first.key;
+    });
+  }
+
+  void _selectVerbOnly(String? key) {
+    if (key == '__new__') {
+      _newVerb();
+      return;
+    }
+    if (key == null) return;
+    _selectVerbFromBrowser(key);
+  }
+
+  Future<void> _startRenameCategory() async {
+    final current = _selectedCategory;
+    if (current == null || current == 'Favorites') return;
+    setState(() {
+      _renamingCategory = true;
+      _categoryRenameController.text = current;
+    });
+  }
+
+  void _cancelRenameCategory() {
+    setState(() => _renamingCategory = false);
+  }
+
+  void _commitRenameCategory(String raw) {
+    final current = _selectedCategory;
+    if (current == null) {
+      _cancelRenameCategory();
+      return;
+    }
+    final next = raw.trim();
+    if (next.isEmpty || next == current || next == 'Favorites') {
+      _cancelRenameCategory();
+      return;
+    }
+    if (_categories.any((c) => c.toLowerCase() == next.toLowerCase())) {
+      _cancelRenameCategory();
+      return;
+    }
+    _pushUndo('Renamed “$current” to $next');
+    final bundle = _copyBundle();
+    final categories = List<String>.from(
+      (bundle['categoryOrder'] as List?) ?? _categories,
+    );
+    final index = categories.indexOf(current);
+    if (index >= 0) {
+      categories[index] = next;
+    } else {
+      categories.add(next);
+    }
+    bundle['categoryOrder'] = categories;
+    final order = Map<String, dynamic>.from(
+      (bundle['verbOrder'] as Map?) ?? const {},
+    );
+    final moved = List<String>.from((order.remove(current) as List?) ?? const []);
+    order[next] = [...moved, ...List<String>.from((order[next] as List?) ?? const [])];
+    bundle['verbOrder'] = order;
+    for (final verb in _allVerbs.where((v) => v.category == current)) {
+      _writeVerbRecord(bundle, verb.copyWith(category: next));
+    }
+    setState(() {
+      _selectedCategory = next;
+      _renamingCategory = false;
+    });
+    _emit(bundle);
+  }
+
+  Future<void> _moveCategoryMenu() async {
+    final verb = _flushSelectedVerb();
+    if (verb == null) return;
+    final others =
+        _categories.where((c) => c != verb.category).toList(growable: false);
+    if (others.isEmpty) return;
+    final picked = await showMoveCategoryMenu(
+      context: context,
+      anchorKey: _moveButtonKey,
+      tokens: _t,
+      verbLabel: verb.label,
+      categories: others,
+    );
+    if (!mounted || picked == null) return;
+    _pushUndo('Moved “${verb.label}” to $picked');
+    _setVerbCategory(verb, picked);
+    if (!mounted) return;
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = _t;
     final all = _allVerbs;
     final verb = _selectedVerb;
+    final category = _selectedCategory ??
+        ( _categories.isEmpty ? null : _categories.first);
+    final inCategory = _verbsInSelectedCategory;
+    final width = MediaQuery.sizeOf(context).width;
+    final stackBoxes = width < 760;
+    final iconOnlySecondary = width < 1100;
+    final iconOnlyMost = width < 900;
+    final canvas = widget.personalMode ? t.surface : t.bg;
+
+    final categoryBox = VerbEditorPickerBox(
+      tokens: t,
+      label: 'CATEGORY',
+      actions: [
+        VerbEditorActionButton(
+          tokens: t,
+          icon: PhosphorIconsRegular.pencilSimple,
+          label: 'Rename',
+          iconOnly: iconOnlySecondary || iconOnlyMost,
+          enabled: category != null && category != 'Favorites',
+          onPressed: _startRenameCategory,
+        ),
+        VerbEditorActionButton(
+          tokens: t,
+          icon: PhosphorIconsRegular.trash,
+          label: 'Delete category',
+          danger: true,
+          enabled: category != null &&
+              category != 'Favorites' &&
+              _categories.length > 1,
+          onPressed: () => _deleteCategory(category),
+        ),
+      ],
+      child: _renamingCategory
+          ? CategoryRenameField(
+              tokens: t,
+              controller: _categoryRenameController,
+              onSubmit: _commitRenameCategory,
+              onCancel: _cancelRenameCategory,
+            )
+          : _boxedSelect<String>(
+              tokens: t,
+              value: category,
+              enabled: !widget.busy && _categories.isNotEmpty,
+              items: [
+                for (final c in _categories)
+                  DropdownMenuItem(
+                    value: c,
+                    child: Text(
+                      '$c (${all.where((v) => v.category == c).length})',
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                const DropdownMenuItem(
+                  value: '__new__',
+                  child: Text('＋ New category…', softWrap: false),
+                ),
+              ],
+              onChanged: (v) {
+                if (v != null) _selectCategoryOnly(v);
+              },
+            ),
+    );
+
+    final verbBox = VerbEditorPickerBox(
+      tokens: t,
+      label: 'VERB',
+      actions: [
+        KeyedSubtree(
+          key: _moveButtonKey,
+          child: VerbEditorActionButton(
+            tokens: t,
+            icon: PhosphorIconsRegular.arrowBendUpRight,
+            label: 'Move category',
+            iconOnly: iconOnlyMost,
+            enabled: verb != null && _categories.length > 1,
+            onPressed: _moveCategoryMenu,
+          ),
+        ),
+        VerbEditorActionButton(
+          tokens: t,
+          icon: PhosphorIconsRegular.copy,
+          label: 'Duplicate',
+          iconOnly: iconOnlySecondary || iconOnlyMost,
+          enabled: verb != null,
+          onPressed: verb == null ? null : _duplicateVerb,
+        ),
+        VerbEditorActionButton(
+          tokens: t,
+          icon: PhosphorIconsRegular.trash,
+          label: 'Delete verb',
+          danger: true,
+          enabled: verb != null,
+          onPressed: verb == null ? null : () => _deleteVerb(verb),
+        ),
+      ],
+      child: inCategory.isEmpty
+          ? Row(
+              children: [
+                Expanded(
+                  child: _boxedSelect<String>(
+                    tokens: t,
+                    value: null,
+                    enabled: false,
+                    hint: 'No verbs yet',
+                    items: const [],
+                    onChanged: null,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                VerbEditorActionButton(
+                  tokens: t,
+                  icon: PhosphorIconsRegular.plus,
+                  label: 'New verb',
+                  onPressed: _newVerb,
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: _boxedSelect<String>(
+                    tokens: t,
+                    value: verb?.key,
+                    enabled: !widget.busy,
+                    items: [
+                      for (final v in inCategory)
+                        DropdownMenuItem(
+                          value: v.key,
+                          child: Text(
+                            v.label,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      const DropdownMenuItem(
+                        value: '__new__',
+                        child: Text('＋ New verb…', softWrap: false),
+                      ),
+                    ],
+                    onChanged: _selectVerbOnly,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _iconSquare(
+                  tokens: t,
+                  tooltip: verb != null && _favorites.contains(verb.key)
+                      ? 'Remove favorite'
+                      : 'Favorite',
+                  icon: verb != null && _favorites.contains(verb.key)
+                      ? PhosphorIconsFill.star
+                      : PhosphorIconsRegular.star,
+                  color: verb != null && _favorites.contains(verb.key)
+                      ? FfTokens.favorites
+                      : t.textSecondary,
+                  onPressed: verb == null ? null : () => _toggleFavorite(verb),
+                ),
+                _iconSquare(
+                  tokens: t,
+                  tooltip: 'Previous verb',
+                  icon: PhosphorIconsRegular.caretLeft,
+                  onPressed: all.isEmpty ? null : () => _stepVerb(-1),
+                ),
+                _iconSquare(
+                  tokens: t,
+                  tooltip: 'Next verb',
+                  icon: PhosphorIconsRegular.caretRight,
+                  onPressed: all.isEmpty ? null : () => _stepVerb(1),
+                ),
+              ],
+            ),
+    );
 
     final body = Column(
       children: [
-        _Header(
+        VerbEditorTopBar(
           tokens: t,
           sport: widget.sport,
           sports: widget.sports,
           busy: widget.busy,
-          categoryLabel: verb?.category ?? _selectedCategory,
-          verbLabel: verb?.label,
-          canStep: all.isNotEmpty,
+          searchController: _searchController,
+          searchFocus: _searchFocus,
+          searchResults: _searchHits,
           onSportChanged: widget.onSportChanged,
-          onOpenPicker: _openVerbPicker,
-          onPrevious: () => _stepVerb(-1),
-          onNext: () => _stepVerb(1),
-          onNewVerb: _newVerb,
-          onDuplicateVerb: verb == null ? null : _duplicateVerb,
-          onDeleteVerb: verb == null
-              ? null
-              : verb.isHidden
-                  ? () => _unhideVerb(verb)
-                  : () => _deleteVerb(verb),
-          deleteActionIsHide:
-              widget.personalMode && verb != null && !verb.isCustom,
-          deleteActionIsUnhide: verb?.isHidden == true,
+          onSearchChanged: (_) => setState(() {}),
+          onPickSearchResult: (key) {
+            _selectVerbFromBrowser(key);
+            _searchController.clear();
+            _searchFocus.unfocus();
+            setState(() {});
+          },
+          onClearSearch: () {
+            _searchController.clear();
+            setState(() {});
+          },
         ),
-        Expanded(
-          child: verb == null
-              ? Center(
-                  child: Text(
-                    'Choose a verb',
-                    style: t.metaStyle,
-                  ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: stackBoxes
+              ? Column(
+                  children: [
+                    categoryBox,
+                    const SizedBox(height: 8),
+                    verbBox,
+                  ],
                 )
-              : _VerbEditorPane(
-                  key: _editorPaneKey,
-                  tokens: t,
-                  sport: widget.sport,
-                  verb: verb,
-                  selectedGroupId: _selectedGroupId,
-                  renaming: _renaming,
-                  nameFocus: _nameFocus,
-                  sampleIndex: _sampleIndex,
-                  onRenameMode: () => setState(() => _renaming = true),
-                  onRename: (value) {
-                    _rename(verb, value);
-                    setState(() => _renaming = false);
-                  },
-                  onGroupSelected: (id) =>
-                      setState(() => _selectedGroupId = id),
-                  onAuthoringChanged: (value) =>
-                      _updateAuthoring(verb, value),
-                  onDraftChanged: _saveVerb,
-                  onShuffle: () => setState(() => _sampleIndex++),
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: categoryBox),
+                    const SizedBox(width: 8),
+                    Expanded(child: verbBox),
+                  ],
                 ),
         ),
-        if (widget.onPublishCurrentVerb != null)
-          _VerbActionBar(
-            tokens: t,
-            busy: widget.busy,
-            hasSelection: verb != null,
-            onPublish: () => _runCurrentVerbAction(widget.onPublishCurrentVerb),
+        Expanded(
+          child: ClipRect(
+            child: verb == null
+                ? Center(
+                    child: Text(
+                      category == null
+                          ? 'Choose a category'
+                          : 'No verbs in $category yet',
+                      style: t.metaStyle.copyWith(color: t.textSecondary),
+                    ),
+                  )
+                : _VerbEditorPane(
+                    key: _editorPaneKey,
+                    tokens: t,
+                    canvasColor: canvas,
+                    sport: widget.sport,
+                    categories: _categories,
+                    verb: verb,
+                    isFavorite: _favorites.contains(verb.key),
+                    selectedGroupId: _selectedGroupId,
+                    renaming: _renaming,
+                    nameFocus: _nameFocus,
+                    sampleIndex: _sampleIndex,
+                    onRenameMode: () => setState(() => _renaming = true),
+                    onRename: (value) {
+                      _rename(verb, value);
+                      setState(() => _renaming = false);
+                    },
+                    onToggleFavorite: () => _toggleFavorite(verb),
+                    onGroupSelected: (id) =>
+                        setState(() => _selectedGroupId = id),
+                    onAuthoringChanged: (value) =>
+                        _updateAuthoring(verb, value),
+                    onDraftChanged: _saveVerb,
+                    onShuffle: () => setState(() => _sampleIndex++),
+                  ),
           ),
+        ),
+        if (_undoMessage != null)
+          Material(
+            color: t.selected,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _undoMessage!,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: t.metaStyle.copyWith(color: t.text),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _undo,
+                    child: Text(
+                      'Undo',
+                      style: t.metaStyle.copyWith(
+                        color: FfTokens.gold,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        VerbEditorFooter(
+          tokens: t,
+          busy: widget.busy,
+          pendingChanges: _pendingChanges,
+          personalMode: widget.personalMode,
+          onDiscard: _discardDrafts,
+          onPublish: _publishDrafts,
+        ),
       ],
     );
 
-    if (widget.embedded) {
-      return ColoredBox(color: t.bg, child: body);
-    }
+    final clipped = ClipRect(
+      child: ColoredBox(color: canvas, child: body),
+    );
+
+    if (widget.embedded) return clipped;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: t.bg,
+        color: canvas,
         border: Border.all(color: t.divider),
         borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-        child: body,
+        child: clipped,
       ),
     );
   }
+
+  Widget _boxedSelect<T>({
+    required FfTokens tokens,
+    required T? value,
+    required List<DropdownMenuItem<T>> items,
+    required ValueChanged<T?>? onChanged,
+    bool enabled = true,
+    String? hint,
+  }) {
+    return SizedBox(
+      height: 34,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: tokens.sunken,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: tokens.divider),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<T>(
+            value: value,
+            isExpanded: true,
+            hint: hint == null
+                ? null
+                : Text(
+                    hint,
+                    softWrap: false,
+                    style: tokens.metaStyle.copyWith(color: tokens.textSecondary),
+                  ),
+            dropdownColor: tokens.surface,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            style: tokens.metaStyle.copyWith(color: tokens.text),
+            borderRadius: BorderRadius.circular(8),
+            items: items,
+            onChanged: enabled ? onChanged : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _iconSquare({
+    required FfTokens tokens,
+    required String tooltip,
+    required IconData icon,
+    required VoidCallback? onPressed,
+    Color? color,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: SizedBox(
+        width: 30,
+        height: 34,
+        child: IconButton(
+          onPressed: onPressed,
+          padding: EdgeInsets.zero,
+          icon: PhosphorIcon(
+            icon,
+            size: FfIcons.size,
+            color: color ??
+                (onPressed == null
+                    ? tokens.text.withValues(alpha: 0.28)
+                    : null),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditorSnapshot {
+  const _EditorSnapshot({
+    required this.bundle,
+    required this.selectedCategory,
+    required this.selectedKey,
+    required this.pendingChanges,
+  });
+
+  final Map<String, dynamic> bundle;
+  final String? selectedCategory;
+  final String? selectedKey;
+  final int pendingChanges;
 }
 
 class _Header extends StatelessWidget {
@@ -949,8 +1635,8 @@ class _Header extends StatelessWidget {
     final hasCrumb = crumbCategory.isNotEmpty || crumbVerb.isNotEmpty;
 
     return Container(
-      height: 48,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: tokens.surface,
         border: Border(bottom: BorderSide(color: tokens.divider)),
@@ -989,7 +1675,7 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Material(
-              color: tokens.bg,
+              color: tokens.sunken,
               borderRadius: BorderRadius.circular(8),
               child: InkWell(
                 onTap: busy ? null : onOpenPicker,
@@ -1083,26 +1769,26 @@ class _Header extends StatelessWidget {
           const SizedBox(width: 8),
           _HeaderIconButton(
             tokens: tokens,
-            icon: Icons.chevron_left,
+            icon: PhosphorIconsRegular.caretLeft,
             tooltip: 'Previous verb',
             onPressed: busy || !canStep ? null : onPrevious,
           ),
           _HeaderIconButton(
             tokens: tokens,
-            icon: Icons.chevron_right,
+            icon: PhosphorIconsRegular.caretRight,
             tooltip: 'Next verb',
             onPressed: busy || !canStep ? null : onNext,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           SizedBox(
-            height: 32,
+            height: 26,
             child: OutlinedButton.icon(
               onPressed: busy || onDuplicateVerb == null
                   ? null
                   : onDuplicateVerb,
               icon: PhosphorIcon(
                 PhosphorIconsRegular.copy,
-                size: 13,
+                size: 11,
                 color: onDuplicateVerb == null
                     ? tokens.text.withValues(alpha: 0.28)
                     : tokens.text.withValues(alpha: 0.72),
@@ -1111,16 +1797,22 @@ class _Header extends StatelessWidget {
               style: OutlinedButton.styleFrom(
                 foregroundColor: tokens.text.withValues(alpha: 0.80),
                 side: BorderSide(color: tokens.divider),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(6),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           SizedBox(
-            height: 32,
+            height: 26,
             child: OutlinedButton.icon(
               onPressed:
                   busy || onDeleteVerb == null ? null : onDeleteVerb,
@@ -1130,12 +1822,12 @@ class _Header extends StatelessWidget {
                     : deleteActionIsHide
                         ? PhosphorIconsRegular.eyeSlash
                         : PhosphorIconsRegular.trash,
-                size: 13,
+                size: 11,
                 color: onDeleteVerb == null
                     ? tokens.text.withValues(alpha: 0.28)
                     : deleteActionIsUnhide
                         ? tokens.text.withValues(alpha: 0.72)
-                        : const Color(0xFFFF6B6B),
+                        : const Color(0xFFF07167),
               ),
               label: Text(
                 deleteActionIsUnhide
@@ -1149,7 +1841,7 @@ class _Header extends StatelessWidget {
                     ? tokens.text.withValues(alpha: 0.28)
                     : deleteActionIsUnhide
                         ? tokens.text.withValues(alpha: 0.80)
-                        : const Color(0xFFFF6B6B),
+                        : const Color(0xFFF07167),
                 side: BorderSide(
                   color: onDeleteVerb == null
                       ? tokens.divider
@@ -1157,30 +1849,42 @@ class _Header extends StatelessWidget {
                           ? tokens.divider
                           : const Color(0x55FF6B6B),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(6),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           SizedBox(
-            height: 32,
+            height: 26,
             child: OutlinedButton.icon(
               onPressed: busy ? null : onNewVerb,
               icon: PhosphorIcon(
                 PhosphorIconsRegular.plus,
-                size: 13,
+                size: 11,
                 color: tokens.accent,
               ),
               label: const Text('New verb'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: tokens.accent,
                 side: BorderSide(color: tokens.accent),
-                padding: const EdgeInsets.symmetric(horizontal: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(7),
+                  borderRadius: BorderRadius.circular(6),
                 ),
               ),
             ),
@@ -1251,8 +1955,14 @@ class _DuplicateVerbDialogState extends State<_DuplicateVerbDialog> {
   }
 
   void _submit() {
-    final name = _name.text.trim();
+    final name = titleCaseVerbName(_name.text);
     if (name.isEmpty) return;
+    if (_name.text != name) {
+      _name.value = TextEditingValue(
+        text: name,
+        selection: TextSelection.collapsed(offset: name.length),
+      );
+    }
     Navigator.pop(
       context,
       _DuplicateVerbResult(
@@ -1431,6 +2141,564 @@ class _DuplicateVerbDialogState extends State<_DuplicateVerbDialog> {
   }
 }
 
+class _AddCategoryDialog extends StatefulWidget {
+  const _AddCategoryDialog({
+    required this.tokens,
+    required this.existing,
+    this.moveSelectedVerb = false,
+  });
+
+  final FfTokens tokens;
+  final List<String> existing;
+
+  /// When true, creating the category also moves the selected verb into it.
+  final bool moveSelectedVerb;
+
+  @override
+  State<_AddCategoryDialog> createState() => _AddCategoryDialogState();
+}
+
+class _AddCategoryDialogState extends State<_AddCategoryDialog> {
+  late final TextEditingController _name;
+
+  @override
+  void initState() {
+    super.initState();
+    _name = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  String get _normalized {
+    final parts = _name.text.trim().split(RegExp(r'\s+'));
+    return parts
+        .where((part) => part.isNotEmpty)
+        .map(
+          (part) => part.length == 1
+              ? part.toUpperCase()
+              : '${part[0].toUpperCase()}${part.substring(1)}',
+        )
+        .join(' ');
+  }
+
+  String? get _error {
+    final name = _normalized;
+    if (name.isEmpty) return null;
+    if (name == 'Favorites') return 'Favorites is reserved.';
+    final taken = widget.existing.any(
+      (category) => category.toLowerCase() == name.toLowerCase(),
+    );
+    if (taken) return 'That category already exists.';
+    return null;
+  }
+
+  void _submit() {
+    final name = _normalized;
+    if (name.isEmpty || _error != null) return;
+    Navigator.pop(context, name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tokens;
+    final error = _error;
+    final canCreate = _normalized.isNotEmpty && error == null;
+    return AppDialogFfStyle(
+      enabled: true,
+      child: Theme(
+        data: Theme.of(context).copyWith(extensions: <ThemeExtension<dynamic>>[t]),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(24),
+          child: Container(
+            width: 360,
+            decoration: BoxDecoration(
+              color: t.surface,
+              borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+              border: Border.all(color: t.divider),
+              boxShadow: [
+                BoxShadow(
+                  color: t.bg.withValues(alpha: 0.55),
+                  blurRadius: 20,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.moveSelectedVerb
+                                ? 'MOVE VERB TO NEW CATEGORY'
+                                : 'Add category',
+                            style: TextStyle(
+                              fontFamily: FfTokens.labelFamily,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.2,
+                              color: t.text,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cancel',
+                          onPressed: () => Navigator.pop(context),
+                          icon: PhosphorIcon(
+                            PhosphorIconsRegular.x,
+                            size: 16,
+                            color: t.text.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: t.divider),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (widget.moveSelectedVerb) ...[
+                          Text(
+                            'Creates a category and moves the selected verb into it.',
+                            style: t.metaStyle.copyWith(
+                              color: t.text.withValues(alpha: 0.70),
+                              height: 1.35,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                        AppDialogLabeledField(
+                          label: 'Category name',
+                          bottomGap: 6,
+                          child: AppDialogControlShell(
+                            child: TextField(
+                              controller: _name,
+                              autofocus: true,
+                              style: t.metaStyle.copyWith(
+                                fontSize: 11,
+                                color: t.text,
+                                height: 1.25,
+                              ),
+                              cursorColor: t.accent,
+                              onChanged: (_) => setState(() {}),
+                              onSubmitted: (_) => _submit(),
+                              decoration: appDialogBareFieldDecoration(),
+                            ),
+                          ),
+                        ),
+                        if (error != null)
+                          Text(
+                            error,
+                            style: t.metaStyle.copyWith(
+                              fontSize: 11,
+                              color: FfTokens.danger,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            'Cancel',
+                            style: t.metaStyle.copyWith(
+                              color: t.text.withValues(alpha: 0.62),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedGreyButton(
+                          label: widget.moveSelectedVerb
+                              ? 'Move verb'
+                              : 'Add category',
+                          fontSize: 11,
+                          isPrimary: true,
+                          onPressed: canCreate ? _submit : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DeleteCategoryVerbRow {
+  const _DeleteCategoryVerbRow({
+    required this.key,
+    required this.label,
+  });
+
+  final String key;
+  final String label;
+}
+
+class _DeleteCategoryResult {
+  const _DeleteCategoryResult({
+    required this.destination,
+    required this.deleteKeys,
+  });
+
+  final String destination;
+  final Set<String> deleteKeys;
+}
+
+class _DeleteCategoryDialog extends StatefulWidget {
+  const _DeleteCategoryDialog({
+    required this.tokens,
+    required this.category,
+    required this.verbs,
+    required this.destinations,
+  });
+
+  final FfTokens tokens;
+  final String category;
+  final List<_DeleteCategoryVerbRow> verbs;
+  final List<String> destinations;
+
+  @override
+  State<_DeleteCategoryDialog> createState() => _DeleteCategoryDialogState();
+}
+
+class _DeleteCategoryDialogState extends State<_DeleteCategoryDialog> {
+  late String _destination;
+  late final Set<String> _deleteKeys;
+
+  @override
+  void initState() {
+    super.initState();
+    _destination = widget.destinations.first;
+    _deleteKeys = <String>{};
+  }
+
+  void _submit() {
+    Navigator.pop(
+      context,
+      _DeleteCategoryResult(
+        destination: _destination,
+        deleteKeys: Set<String>.from(_deleteKeys),
+      ),
+    );
+  }
+
+  Widget _actionChip({
+    required FfTokens tokens,
+    required String label,
+    required bool selected,
+    required bool danger,
+    required VoidCallback onTap,
+  }) {
+    final border = selected
+        ? (danger ? const Color(0xFFF07167) : tokens.accent)
+        : tokens.divider;
+    final fill = selected
+        ? (danger
+            ? const Color(0xFFF07167).withValues(alpha: 0.16)
+            : tokens.selectedFill)
+        : tokens.badgeFill;
+    final color = selected
+        ? (danger ? const Color(0xFFF07167) : tokens.text)
+        : tokens.text.withValues(alpha: 0.55);
+    return Material(
+      color: fill,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        side: BorderSide(color: border, width: selected ? 1.2 : 1),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Text(
+            label,
+            style: tokens.metaStyle.copyWith(
+              fontSize: 10.5,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              color: color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tokens;
+    final hasVerbs = widget.verbs.isNotEmpty;
+    final deleteCount = _deleteKeys.length;
+    final moveCount = widget.verbs.length - deleteCount;
+    return AppDialogFfStyle(
+      enabled: true,
+      child: Theme(
+        data: Theme.of(context).copyWith(extensions: <ThemeExtension<dynamic>>[t]),
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(24),
+          child: Container(
+            width: 440,
+            constraints: const BoxConstraints(maxHeight: 520),
+            decoration: BoxDecoration(
+              color: t.surface,
+              borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+              border: Border.all(color: t.divider),
+              boxShadow: [
+                BoxShadow(
+                  color: t.bg.withValues(alpha: 0.55),
+                  blurRadius: 20,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Delete “${widget.category}”',
+                            style: TextStyle(
+                              fontFamily: FfTokens.labelFamily,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.2,
+                              color: t.text,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Cancel',
+                          onPressed: () => Navigator.pop(context),
+                          icon: PhosphorIcon(
+                            PhosphorIconsRegular.x,
+                            size: 16,
+                            color: t.text.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: t.divider),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text(
+                            hasVerbs
+                                ? 'Choose whether each verb is moved or deleted '
+                                    'before removing this category.'
+                                : 'This category is empty and can be removed.',
+                            style: t.metaStyle.copyWith(
+                              color: t.text.withValues(alpha: 0.70),
+                              height: 1.35,
+                            ),
+                          ),
+                          if (hasVerbs) ...[
+                            const SizedBox(height: 12),
+                            AppDialogLabeledDropdown<String>(
+                              label: 'Move selected verbs to',
+                              bottomGap: 10,
+                              value: _destination,
+                              items: [
+                                for (final category in widget.destinations)
+                                  DropdownMenuItem(
+                                    value: category,
+                                    child: Text(category),
+                                  ),
+                              ],
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() => _destination = value);
+                              },
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  'Verbs in ${widget.category}',
+                                  style: appDialogFieldLabelStyleOf(context),
+                                ),
+                                const Spacer(),
+                                TextButton(
+                                  onPressed: () => setState(_deleteKeys.clear),
+                                  child: Text(
+                                    'Move all',
+                                    style: t.metaStyle.copyWith(
+                                      fontSize: 11,
+                                      color: t.text.withValues(alpha: 0.62),
+                                    ),
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => setState(() {
+                                    _deleteKeys
+                                      ..clear()
+                                      ..addAll(
+                                        widget.verbs.map((verb) => verb.key),
+                                      );
+                                  }),
+                                  child: Text(
+                                    'Delete all',
+                                    style: t.metaStyle.copyWith(
+                                      fontSize: 11,
+                                      color: const Color(0xFFF07167)
+                                          .withValues(alpha: 0.90),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: t.sunken,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: t.divider),
+                              ),
+                              child: Column(
+                                children: [
+                                  for (var i = 0;
+                                      i < widget.verbs.length;
+                                      i++) ...[
+                                    if (i > 0)
+                                      Divider(height: 1, color: t.divider),
+                                    Padding(
+                                      padding: const EdgeInsets.fromLTRB(
+                                        10,
+                                        8,
+                                        8,
+                                        8,
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              widget.verbs[i].label,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: t.metaStyle.copyWith(
+                                                color: t.text,
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _actionChip(
+                                            tokens: t,
+                                            label: 'Move',
+                                            selected: !_deleteKeys
+                                                .contains(widget.verbs[i].key),
+                                            danger: false,
+                                            onTap: () => setState(
+                                              () => _deleteKeys.remove(
+                                                widget.verbs[i].key,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          _actionChip(
+                                            tokens: t,
+                                            label: 'Delete',
+                                            selected: _deleteKeys
+                                                .contains(widget.verbs[i].key),
+                                            danger: true,
+                                            onTap: () => setState(
+                                              () => _deleteKeys.add(
+                                                widget.verbs[i].key,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            if (hasVerbs) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                [
+                                  if (moveCount > 0)
+                                    'Move $moveCount → $_destination',
+                                  if (deleteCount > 0) 'Delete $deleteCount',
+                                ].join(' · '),
+                                style: t.metaStyle.copyWith(
+                                  fontSize: 11,
+                                  color: t.text.withValues(alpha: 0.55),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                    child: Row(
+                      children: [
+                        const Spacer(),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            'Cancel',
+                            style: t.metaStyle.copyWith(
+                              color: t.text.withValues(alpha: 0.62),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedGreyButton(
+                          label: 'Delete category',
+                          fontSize: 11,
+                          isPrimary: true,
+                          onPressed: _submit,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HeaderIconButton extends StatelessWidget {
   const _HeaderIconButton({
     required this.tokens,
@@ -1454,7 +2722,7 @@ class _HeaderIconButton extends StatelessWidget {
         onPressed: onPressed,
         padding: EdgeInsets.zero,
         visualDensity: VisualDensity.compact,
-        icon: Icon(
+        icon: PhosphorIcon(
           icon,
           size: 18,
           color: onPressed == null
@@ -1504,7 +2772,7 @@ class _VerbActionBar extends StatelessWidget {
           ElevatedGreyButton(
             label: busy ? 'Publishing…' : 'Publish default',
             fontSize: 11,
-            icon: Icons.cloud_upload_outlined,
+            icon: PhosphorIconsRegular.cloudArrowUp,
             isAdmin: true,
             onPressed: enabled ? onPublish : null,
           ),
@@ -1619,13 +2887,9 @@ class _VerbJumpDialogState extends State<_VerbJumpDialog> {
                         focusNode: _focus,
                         autofocus: true,
                         style: t.metaStyle.copyWith(color: t.text),
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           isDense: true,
                           border: InputBorder.none,
-                          hintText: 'Find a verb…',
-                          hintStyle: t.metaStyle.copyWith(
-                            color: t.textSecondary,
-                          ),
                         ),
                         onChanged: (_) => setState(() => _highlight = 0),
                         onSubmitted: (_) => _confirm(),
@@ -1696,7 +2960,7 @@ class _VerbJumpDialogState extends State<_VerbJumpDialog> {
                                           PhosphorIcon(
                                             PhosphorIconsRegular.eyeSlash,
                                             size: 12,
-                                            color: const Color(0xFFFF6B6B),
+                                            color: const Color(0xFFF07167),
                                           ),
                                         ],
                                       ],
@@ -1728,14 +2992,18 @@ class _VerbEditorPane extends StatefulWidget {
   const _VerbEditorPane({
     super.key,
     required this.tokens,
+    required this.canvasColor,
     required this.sport,
+    required this.categories,
     required this.verb,
+    required this.isFavorite,
     required this.selectedGroupId,
     required this.renaming,
     required this.nameFocus,
     required this.sampleIndex,
     required this.onRenameMode,
     required this.onRename,
+    required this.onToggleFavorite,
     required this.onGroupSelected,
     required this.onAuthoringChanged,
     required this.onDraftChanged,
@@ -1743,14 +3011,18 @@ class _VerbEditorPane extends StatefulWidget {
   });
 
   final FfTokens tokens;
+  final Color canvasColor;
   final String sport;
+  final List<String> categories;
   final _VerbDraft verb;
+  final bool isFavorite;
   final String? selectedGroupId;
   final bool renaming;
   final FocusNode nameFocus;
   final int sampleIndex;
   final VoidCallback onRenameMode;
   final ValueChanged<String> onRename;
+  final VoidCallback onToggleFavorite;
   final ValueChanged<String?> onGroupSelected;
   final ValueChanged<VerbAuthoringData> onAuthoringChanged;
   final ValueChanged<_VerbDraft> onDraftChanged;
@@ -1874,6 +3146,18 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
     widget.onDraftChanged(_currentDraft());
   }
 
+  void _commitVerbName([String? _]) {
+    final titled = titleCaseVerbName(_name.text);
+    if (_name.text != titled) {
+      _name.value = TextEditingValue(
+        text: titled,
+        selection: TextSelection.collapsed(offset: titled.length),
+      );
+      setState(() {});
+    }
+    widget.onRename(titled);
+  }
+
   void _clearWordingField(TextEditingController controller) {
     if (controller.text.isEmpty) return;
     setState(() {
@@ -1963,71 +3247,32 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
     final livePlural = _plural.text.trim();
     final liveIng = _ing.text.trim();
     return Container(
-      color: t.bg,
-      child: Column(
-        children: [
-          Container(
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: t.divider)),
-            ),
-            child: Row(
-              children: [
-                if (widget.renaming)
-                  SizedBox(
-                    width: 260,
-                    child: TextField(
-                      controller: _name,
-                      focusNode: widget.nameFocus,
-                      autofocus: true,
-                      onChanged: (_) => setState(() {}),
-                      onSubmitted: widget.onRename,
-                      onEditingComplete: () => widget.onRename(_name.text),
-                      style: TextStyle(
-                        fontFamily: FfTokens.labelFamily,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.3,
-                        color: t.text,
+      color: widget.canvasColor,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+                  AppDialogLabeledField(
+                    label: 'Verb name',
+                    bottomGap: 10,
+                    child: AppDialogControlShell(
+                      child: TextField(
+                        controller: _name,
+                        focusNode: widget.nameFocus,
+                        style: appDialogFieldTextStyleOf(context),
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: _commitVerbName,
+                        onEditingComplete: _commitVerbName,
+                        decoration: appDialogBareFieldDecoration(),
                       ),
                     ),
-                  )
-                else ...[
-                  Text(
-                    widget.verb.label,
-                    style: TextStyle(
-                      fontFamily: FfTokens.labelFamily,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.3,
-                      color: t.text,
-                    ),
                   ),
-                  IconButton(
-                    tooltip: 'Rename verb',
-                    onPressed: widget.onRenameMode,
-                    icon: PhosphorIcon(
-                      PhosphorIconsRegular.notePencil,
-                      size: 15,
-                      color: t.text.withValues(alpha: 0.50),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
                   _SectionHeading(
                     tokens: t,
                     label: 'WORDING',
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -2046,8 +3291,14 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                                   setState(() => _useSingularPhrase = value);
                                   _emitDraft();
                                 },
-                                activeThumbColor: Colors.white,
                                 activeTrackColor: t.accent,
+                                inactiveTrackColor: t.hover,
+                                thumbColor: WidgetStateProperty.resolveWith((states) {
+                                  if (states.contains(WidgetState.selected)) {
+                                    return t.bg;
+                                  }
+                                  return t.textTertiary;
+                                }),
                                 materialTapTargetSize:
                                     MaterialTapTargetSize.shrinkWrap,
                               ),
@@ -2059,13 +3310,10 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                             onPressed: () => _clearWordingField(_singular),
                           ),
                           child: AppDialogControlShell(
-                            height: 52,
                             enabled: _useSingularPhrase,
                             child: TextField(
                               controller: _singular,
                               enabled: _useSingularPhrase,
-                              minLines: 2,
-                              maxLines: 2,
                               style: appDialogFieldTextStyleOf(
                                 context,
                                 enabled: _useSingularPhrase,
@@ -2076,7 +3324,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: AppDialogLabeledField(
                           label: 'Two or more players',
@@ -2092,8 +3340,14 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                                   setState(() => _usePluralPhrase = value);
                                   _emitDraft();
                                 },
-                                activeThumbColor: Colors.white,
                                 activeTrackColor: t.accent,
+                                inactiveTrackColor: t.hover,
+                                thumbColor: WidgetStateProperty.resolveWith((states) {
+                                  if (states.contains(WidgetState.selected)) {
+                                    return t.bg;
+                                  }
+                                  return t.textTertiary;
+                                }),
                                 materialTapTargetSize:
                                     MaterialTapTargetSize.shrinkWrap,
                               ),
@@ -2105,13 +3359,10 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                             onPressed: () => _clearWordingField(_plural),
                           ),
                           child: AppDialogControlShell(
-                            height: 52,
                             enabled: _usePluralPhrase,
                             child: TextField(
                               controller: _plural,
                               enabled: _usePluralPhrase,
-                              minLines: 2,
-                              maxLines: 2,
                               style: appDialogFieldTextStyleOf(
                                 context,
                                 enabled: _usePluralPhrase,
@@ -2125,7 +3376,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: AppDialogLabeledField(
                           label: 'Wording for reactions',
@@ -2136,11 +3387,8 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                             onPressed: () => _clearWordingField(_ing),
                           ),
                           child: AppDialogControlShell(
-                            height: 52,
                             child: TextField(
                               controller: _ing,
-                              minLines: 2,
-                              maxLines: 2,
                               style: appDialogFieldTextStyleOf(context),
                               onChanged: (_) {
                                 setState(() {});
@@ -2153,74 +3401,75 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Opponent joiner',
-                        style: appDialogFieldLabelStyleOf(context),
-                      ),
-                      const SizedBox(width: 10),
-                      SizedBox(
-                        width: 220,
-                        child: AppDialogControlShell(
-                          child: TextField(
-                            controller: _opponentJoiner,
-                            style: appDialogFieldTextStyleOf(context),
-                            onChanged: (_) {
-                              setState(() {});
-                              _emitDraft();
-                            },
-                            decoration: appDialogBareFieldDecoration(),
+                      Expanded(
+                        child: AppDialogLabeledField(
+                          label: 'Opponent joiner',
+                          bottomGap: 0,
+                          child: AppDialogControlShell(
+                            child: TextField(
+                              controller: _opponentJoiner,
+                              style: appDialogFieldTextStyleOf(context),
+                              onChanged: (_) {
+                                setState(() {});
+                                _emitDraft();
+                              },
+                              decoration: appDialogBareFieldDecoration(),
+                            ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      AppCompactCheckbox(
-                        value: _withTeammates,
-                        accentColor: t.accent,
-                        onChanged: (value) {
-                          setState(() => _withTeammates = value);
-                          _emitDraft();
-                        },
-                      ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
-                          'With teammates — first pick does the action; '
-                          'other same-team picks are named after “with”',
-                          style: appDialogFieldLabelStyleOf(context),
+                        child: AppDialogLabeledField(
+                          label: 'With teammates',
+                          bottomGap: 0,
+                          labelLeading: SizedBox(
+                            width: 28,
+                            height: 16,
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: Switch.adaptive(
+                                value: _withTeammates,
+                                onChanged: (value) {
+                                  setState(() => _withTeammates = value);
+                                  _emitDraft();
+                                },
+                                activeTrackColor: t.accent,
+                                inactiveTrackColor: t.hover,
+                                thumbColor: WidgetStateProperty.resolveWith((states) {
+                                  if (states.contains(WidgetState.selected)) {
+                                    return t.bg;
+                                  }
+                                  return t.textTertiary;
+                                }),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ),
+                          child: AppDialogControlShell(
+                            enabled: _withTeammates,
+                            child: Text(
+                              'Celebrates with teammates Heater Ace #24 and Dunkin Deuces #8 (pick from teams selected)',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: appDialogFieldTextStyleOf(
+                                context,
+                                enabled: _withTeammates,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Divider(height: 1, color: t.divider),
-                  const SizedBox(height: 12),
-                  _SectionHeading(
-                    tokens: t,
-                    label: 'PREVIEW',
-                    trailingWidget: TextButton.icon(
-                      onPressed: widget.onShuffle,
-                      icon: PhosphorIcon(
-                        PhosphorIconsRegular.shuffle,
-                        size: 12,
-                        color: t.text.withValues(alpha: 0.60),
-                      ),
-                      label: Text(
-                        'Shuffle sample',
-                        style: t.metaStyle.copyWith(
-                          fontSize: 11,
-                          color: t.text.withValues(alpha: 0.60),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 10),
                   _ResolvedPreview(
                     tokens: t,
                     sport: widget.sport,
@@ -2245,9 +3494,9 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                     withTeammates: _withTeammates,
                     subOptions: _subOptions,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   Divider(height: 1, color: t.divider),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   VerbEditSubOptionsSection(
                     verbLabel: widget.verb.key,
                     sport: widget.sport,
@@ -2255,14 +3504,15 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                     onChanged: _setSubOptions,
                     showBorder: false,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   Divider(height: 1, color: t.divider),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   AppDialogLabeledField(
                     label: 'Keywords',
                     bottomGap: 0,
                     labelTrailing: Text(
-                      'Only applied when keyword mode is activated',
+                      'Only applied when keyword mode is on',
+                      softWrap: false,
                       style: t.metaStyle.copyWith(
                         fontSize: 10.5,
                         color: t.textSecondary,
@@ -2273,17 +3523,12 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                         controller: _keywords,
                         style: appDialogFieldTextStyleOf(context),
                         onChanged: (_) => _emitDraft(),
-                        decoration: appDialogBareFieldDecoration(
-                          hintText: 'comma, separated, keywords',
-                        ),
+                        decoration: appDialogBareFieldDecoration(),
                       ),
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2392,11 +3637,14 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
     'the Chicago Comets',
     'the Montreal Royals',
   ];
-  static const _timing = [
-    'during the third inning',
-    'during the fifth inning',
-    'during the seventh inning',
-  ];
+  List<String> get _timing {
+    final unit = sportPeriodNoun(widget.sport);
+    return [
+      'during the second $unit',
+      'during the third $unit',
+      'during the first $unit',
+    ];
+  }
 
   String get _hitNoun {
     switch (widget.verbKey) {
@@ -2604,10 +3852,60 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
         : '$connector $team $timing';
     final action = _actionFor(selectedId);
 
+    Widget chip(String id, String label) {
+      final selected = id == 'plural'
+          ? selectedId == 'plural'
+          : selectedId != 'plural';
+      return Material(
+        color: selected ? t.selectedFill : t.badgeFill,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+          side: BorderSide(
+            color: selected ? t.accent : t.divider,
+          ),
+        ),
+        child: InkWell(
+          onTap: () => setState(() => _variantId = id),
+          borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            child: Text(
+              label,
+              softWrap: false,
+              style: t.metaStyle.copyWith(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: t.text,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        SizedBox(
+          height: 28,
+          child: Row(
+            children: [
+              Text(
+                'PREVIEW',
+                style: FfTokens.railLabel.copyWith(
+                  color: t.text.withValues(alpha: 0.70),
+                ),
+              ),
+              const Spacer(),
+              chip('base', 'Single player'),
+              const SizedBox(width: 6),
+              chip('plural', 'Two or more players'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
         Container(
+          width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: t.sunken,
@@ -2617,7 +3915,8 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
           child: Text.rich(
             TextSpan(
               style: t.bodyStyle.copyWith(
-                fontSize: 13.5,
+                fontSize: 13,
+                height: 1.4,
                 color: t.text.withValues(alpha: 0.82),
               ),
               children: [
@@ -2626,7 +3925,7 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
                   text: action,
                   style: TextStyle(
                     color: t.text,
-                    backgroundColor: t.accent.withValues(alpha: 0.20),
+                    backgroundColor: t.selected.withValues(alpha: 0.9),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -2635,32 +3934,19 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
             ),
           ),
         ),
-        if (variants.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          Text(
-            'Modifier Options Preview:',
-            style: FfTokens.railLabel.copyWith(
-              color: t.text.withValues(alpha: 0.70),
-            ),
-          ),
+        if (variants.where((v) => v.id != 'base' && v.id != 'plural').isNotEmpty) ...[
           const SizedBox(height: 8),
           Wrap(
             spacing: 6,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 4,
             children: [
-              for (final v in variants)
+              for (final v in variants.where((v) => v.id != 'base' && v.id != 'plural'))
                 Material(
-                  color: v.id == selectedId
-                      ? t.selectedFill
-                      : t.badgeFill,
+                  color: v.id == selectedId ? t.selectedFill : t.badgeFill,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(FfTokens.radiusChip),
                     side: BorderSide(
-                      color: v.id == selectedId
-                          ? t.selectedBorder
-                          : t.divider,
-                      width: v.id == selectedId ? 1.2 : 1,
+                      color: v.id == selectedId ? t.accent : t.divider,
                     ),
                   ),
                   child: InkWell(
@@ -2668,11 +3954,12 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
                     borderRadius: BorderRadius.circular(FfTokens.radiusChip),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
+                        horizontal: 8,
+                        vertical: 4,
                       ),
                       child: Text(
                         v.label,
+                        softWrap: false,
                         style: t.metaStyle.copyWith(
                           fontSize: 11,
                           fontWeight: v.id == selectedId

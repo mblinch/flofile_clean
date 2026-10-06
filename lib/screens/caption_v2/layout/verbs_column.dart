@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../theme/ff_glow.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../services/mac_spell_check_service.dart';
 import '../data/caption_v2_controller.dart';
@@ -10,6 +11,7 @@ import '../widgets/verb_tile.dart';
 import 'caption_v2_verb_editor.dart';
 import 'roster_column.dart';
 import 'verb_accordion.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Verbs column with cascaded category headers and inline RBI controls.
 class VerbsColumn extends StatefulWidget {
@@ -39,8 +41,6 @@ class _VerbsColumnState extends State<VerbsColumn> {
     12,
     (i) => FocusNode(debugLabel: 'Verb category $i'),
   );
-  bool _wheelMode = false;
-
   CaptionV2Controller get controller => widget.controller;
 
   List<String> get _categories {
@@ -95,12 +95,10 @@ class _VerbsColumnState extends State<VerbsColumn> {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     if (_customVerbFocusNode.hasFocus) return KeyEventResult.ignored;
 
-    if (!_wheelMode) {
-      final accordion = _accordionKey.currentState;
-      if (accordion != null) {
-        final handled = accordion.onKeyEvent(event);
-        if (handled == KeyEventResult.handled) return handled;
-      }
+    final accordion = _accordionKey.currentState;
+    if (accordion != null) {
+      final handled = accordion.onKeyEvent(event);
+      if (handled == KeyEventResult.handled) return handled;
     }
 
     final digit = _digitForKey(event.logicalKey);
@@ -167,7 +165,8 @@ class _VerbsColumnState extends State<VerbsColumn> {
         },
         child: CaptionV2ColumnCard(
           focused: widget.focused,
-          header: Text('VERBS', style: t.labelStyle),
+          accentOutline: true,
+          header: Text('VERBS', style: FfTokens.panelLabel(color: t.text)),
           showHeader: false,
           child: controller.searchOpen
               ? _FirebarVerbReference(
@@ -180,56 +179,29 @@ class _VerbsColumnState extends State<VerbsColumn> {
                   children: [
                     SizedBox(
                       height: 26,
-                      child: Row(
-                        children: [
-                          Text(
-                            'VERBS',
-                            style: FfTokens.captionTitle.copyWith(
-                              color: t.text,
-                              fontSize: 15,
-                              letterSpacing: -0.45,
-                              height: 1,
-                            ),
-                            textHeightBehavior: const TextHeightBehavior(
-                              applyHeightToFirstAscent: false,
-                              applyHeightToLastDescent: false,
-                            ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'VERBS',
+                          style: FfTokens.panelLabel(color: t.text),
+                          textHeightBehavior: const TextHeightBehavior(
+                            applyHeightToFirstAscent: false,
+                            applyHeightToLastDescent: false,
                           ),
-                          const Spacer(),
-                          _VerbViewToggle(
-                            wheelMode: _wheelMode,
-                            tokens: t,
-                            onInfinite: widget.onInfiniteRequested,
-                            onChanged: (value) {
-                              if (value && widget.onDrumRequested != null) {
-                                widget.onDrumRequested!();
-                                return;
-                              }
-                              setState(() {
-                                if (value && _wheelMode) {
-                                  _wheelMode = false;
-                                } else {
-                                  _wheelMode = value;
-                                }
-                              });
-                            },
-                          ),
-                        ],
+                        ),
                       ),
                     ),
                     Divider(height: 1, color: t.divider),
                     Expanded(
-                      child: _wheelMode
-                          ? _VerbWheel(controller: controller, tokens: t)
-                          : ListenableBuilder(
-                              listenable: controller,
-                              builder: (context, _) => DefaultVerbAccordion(
-                                key: _accordionKey,
-                                controller: controller,
-                                onEditVerb: _showVerbEditor,
-                                onVerbArmed: _columnFocusNode.requestFocus,
-                              ),
-                            ),
+                      child: ListenableBuilder(
+                        listenable: controller,
+                        builder: (context, _) => DefaultVerbAccordion(
+                          key: _accordionKey,
+                          controller: controller,
+                          onEditVerb: _showVerbEditor,
+                          onVerbArmed: _columnFocusNode.requestFocus,
+                        ),
+                      ),
                     ),
                     Divider(height: 1, color: t.divider),
                     Padding(
@@ -337,320 +309,6 @@ class _VerbRailItemState extends State<_VerbRailItem> {
       ),
     );
   }
-}
-
-class _VerbViewToggle extends StatelessWidget {
-  const _VerbViewToggle({
-    required this.wheelMode,
-    required this.tokens,
-    required this.onChanged,
-    this.onInfinite,
-  });
-
-  final bool wheelMode;
-  final FfTokens tokens;
-  final ValueChanged<bool> onChanged;
-  final VoidCallback? onInfinite;
-
-  @override
-  Widget build(BuildContext context) {
-    Widget button({
-      required bool wheel,
-      required IconData icon,
-      required String tooltip,
-    }) {
-      final selected = wheelMode == wheel;
-      return Tooltip(
-        message: tooltip,
-        child: InkWell(
-          key: ValueKey(wheel ? 'verb-wheel-toggle' : 'verb-classic-toggle'),
-          onTap: () => onChanged(wheel),
-          borderRadius: BorderRadius.circular(4),
-          child: SizedBox(
-            width: 24,
-            height: 22,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: selected ? tokens.accent : tokens.textSecondary,
-                ),
-                const SizedBox(height: 1),
-                Container(
-                  width: 12,
-                  height: 1.5,
-                  color: selected ? tokens.accent : Colors.transparent,
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          'View Options',
-          style: tokens.metaStyle.copyWith(
-            fontSize: 11,
-            height: 1,
-            color: tokens.textSecondary,
-          ),
-        ),
-        const SizedBox(width: 2),
-        button(
-          wheel: true,
-          icon: Icons.swap_vert,
-          tooltip: 'Default',
-        ),
-        if (onInfinite != null)
-          Tooltip(
-            message: 'Drum wheel',
-            child: InkWell(
-              key: const ValueKey('verb-infinite-toggle'),
-              onTap: onInfinite,
-              borderRadius: BorderRadius.circular(4),
-              child: SizedBox(
-                width: 24,
-                height: 22,
-                child: Icon(
-                  Icons.all_inclusive,
-                  size: 16,
-                  color: tokens.textSecondary,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _VerbWheel extends StatefulWidget {
-  const _VerbWheel({
-    required this.controller,
-    required this.tokens,
-  });
-
-  final CaptionV2Controller controller;
-  final FfTokens tokens;
-
-  @override
-  State<_VerbWheel> createState() => _VerbWheelState();
-}
-
-class _VerbWheelState extends State<_VerbWheel> {
-  static const _itemExtent = 42.0;
-
-  late final FixedExtentScrollController _scrollController;
-  late String _category;
-  late int _centerIndex;
-
-  List<String> get _categories => widget.controller.verbCategories
-      .where(
-        (category) =>
-            category == 'Favorites' ||
-            (widget.controller.verbDefinitionsByCategory[category] ??
-                    const <EffectiveVerb>[])
-                .isNotEmpty,
-      )
-      .toList();
-
-  List<EffectiveVerb> get _verbs {
-    return widget.controller.verbDefinitionsByCategory[_category] ??
-        const <EffectiveVerb>[];
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    final categories = _categories;
-    _category = categories.contains(widget.controller.verbCategory)
-        ? widget.controller.verbCategory!
-        : categories.first;
-    final verbs = _verbs;
-    final selected =
-        verbs.indexWhere((verb) => verb.key == widget.controller.selectedVerb);
-    _centerIndex = selected < 0 ? 0 : selected;
-    _scrollController = FixedExtentScrollController(initialItem: _centerIndex);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final categories = _categories;
-    final verbs = _verbs;
-    if (verbs.isEmpty) {
-      return Center(
-        child: Text('No verbs', style: widget.tokens.metaStyle),
-      );
-    }
-    return Column(
-      children: [
-        Container(
-          height: 30,
-          margin: const EdgeInsets.fromLTRB(2, 3, 2, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: widget.tokens.badgeFill,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: widget.tokens.divider),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              key: const ValueKey('verb-wheel-category'),
-              value: _category,
-              isExpanded: true,
-              isDense: true,
-              icon: Icon(
-                Icons.expand_more,
-                size: 16,
-                color: widget.tokens.textSecondary,
-              ),
-              dropdownColor: widget.tokens.surface,
-              style: widget.tokens.labelStyle.copyWith(
-                color: widget.tokens.text,
-                fontSize: 14,
-              ),
-              items: [
-                for (final category in categories)
-                  DropdownMenuItem(
-                    value: category,
-                    child: Text(
-                      category == 'Non Game-Action'
-                          ? 'Non game-action'
-                          : category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: (category) {
-                if (category == null || category == _category) return;
-                setState(() {
-                  _category = category;
-                  _centerIndex = 0;
-                });
-                widget.controller.setVerbCategory(category);
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted && _scrollController.hasClients) {
-                    _scrollController.jumpToItem(0);
-                  }
-                });
-              },
-            ),
-          ),
-        ),
-        Expanded(
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned.fill(
-                child: ScrollConfiguration(
-                  behavior: const _VerbWheelScrollBehavior(),
-                  child: ListWheelScrollView.useDelegate(
-                    key: const ValueKey('verb-wheel'),
-                    controller: _scrollController,
-                    itemExtent: _itemExtent,
-                    diameterRatio: 1.8,
-                    perspective: 0.002,
-                    physics: const FixedExtentScrollPhysics(),
-                    overAndUnderCenterOpacity: 0.48,
-                    useMagnifier: true,
-                    magnification: 1.08,
-                    onSelectedItemChanged: (index) {
-                      setState(() => _centerIndex = index);
-                    },
-                    childDelegate: ListWheelChildBuilderDelegate(
-                      childCount: verbs.length,
-                      builder: (context, index) {
-                        final verb = verbs[index];
-                        final centered = index == _centerIndex;
-                        return MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: CmdClick(
-                            onTap: () async {
-                              if (!centered) {
-                                await _scrollController.animateToItem(
-                                  index,
-                                  duration: const Duration(milliseconds: 220),
-                                  curve: Curves.easeOutCubic,
-                                );
-                              }
-                              if (!mounted) return;
-                              widget.controller.selectVerb(verb.key);
-                            },
-                            onCmdTap: () async {
-                              if (!centered) {
-                                await _scrollController.animateToItem(
-                                  index,
-                                  duration: const Duration(milliseconds: 220),
-                                  curve: Curves.easeOutCubic,
-                                );
-                              }
-                              if (!mounted) return;
-                              widget.controller.toggleVerbPin(verb.key);
-                            },
-                            child: Center(
-                              child: Text(
-                                verb.label,
-                                maxLines: 1,
-                                style: widget.tokens.metaStyle.copyWith(
-                                  color: centered
-                                      ? widget.tokens.text
-                                      : widget.tokens.textSecondary,
-                                  fontSize: centered ? 14 : 13,
-                                  fontWeight: centered
-                                      ? FfTokens.weightMedium
-                                      : FfTokens.weightRegular,
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-              IgnorePointer(
-                child: Container(
-                  height: _itemExtent,
-                  decoration: BoxDecoration(
-                    color: widget.tokens.selectedFill.withValues(alpha: 0.45),
-                    border: Border.symmetric(
-                      horizontal:
-                          BorderSide(color: widget.tokens.selectedBorder),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _VerbWheelScrollBehavior extends MaterialScrollBehavior {
-  const _VerbWheelScrollBehavior();
-
-  @override
-  Set<PointerDeviceKind> get dragDevices => {
-        ...super.dragDevices,
-        PointerDeviceKind.mouse,
-        PointerDeviceKind.trackpad,
-      };
 }
 
 class _FirebarVerbReference extends StatefulWidget {
@@ -858,7 +516,7 @@ class _CascadeCategoryState extends State<_CascadeCategory> {
                       ),
                     ),
                     Icon(
-                      widget.selected ? Icons.expand_more : Icons.chevron_right,
+                      widget.selected ? PhosphorIconsRegular.caretDown : PhosphorIconsRegular.caretRight,
                       size: 14,
                       color: widget.selected
                           ? t.text
@@ -919,7 +577,13 @@ class _VerbList extends StatelessWidget {
     if (verbs.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Center(child: Text('No verbs', style: tokens.metaStyle)),
+        child: Center(
+          child: FfGlow(
+            glowW: 240,
+            glowH: 150,
+            child: Text('No verbs', style: tokens.metaStyle),
+          ),
+        ),
       );
     }
 
@@ -1138,10 +802,10 @@ class _CustomVerbField extends StatelessWidget {
     return Container(
       height: 28,
       decoration: BoxDecoration(
-        color: tokens.badgeFill,
+        color: tokens.sunken,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: pinned ? tokens.accent : tokens.divider,
+          color: pinned ? FfTokens.pinned : tokens.divider,
         ),
       ),
       child: Row(
@@ -1171,14 +835,14 @@ class _CustomVerbField extends StatelessWidget {
             ),
           ),
           _CustomVerbAction(
-            icon: Icons.history,
+            icon: PhosphorIconsRegular.clockCounterClockwise,
             tooltip: 'Use last custom verb',
             tokens: tokens,
             enabled: canUseLast,
             onTap: onUseLast,
           ),
           _CustomVerbAction(
-            icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+            icon: pinned ? PhosphorIconsFill.pushPin : PhosphorIconsRegular.pushPin,
             tooltip: pinned ? 'Unpin custom verb' : 'Pin custom verb',
             tokens: tokens,
             enabled: textController.text.trim().isNotEmpty,
@@ -1217,11 +881,11 @@ class _CustomVerbAction extends StatelessWidget {
         child: SizedBox(
           width: 25,
           height: 28,
-          child: Icon(
+          child: PhosphorIcon(
             icon,
             size: 14,
             color: enabled
-                ? (selected ? tokens.accent : tokens.textSecondary)
+                ? (selected ? FfTokens.pinned : tokens.textSecondary)
                 : tokens.divider,
           ),
         ),

@@ -5,6 +5,7 @@ import 'dart:io';
 import '../services/camera_serial_service.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class CameraSerialDialog extends StatefulWidget {
   final CameraSerialService cameraService;
@@ -374,7 +375,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
-                            _serialNumberMode ? Icons.numbers : Icons.person,
+                            _serialNumberMode ? PhosphorIconsRegular.hash : PhosphorIconsRegular.user,
                             size: 16,
                             color: _serialNumberMode
                                 ? Colors.blue.shade700
@@ -408,7 +409,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                     const SizedBox(width: 8),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
+                      icon: const PhosphorIcon(PhosphorIconsRegular.x),
                     ),
                   ],
                 ),
@@ -505,7 +506,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                       hintText: _serialNumberMode
                           ? 'Search by serial numbers...'
                           : 'Search cameras or photographers...',
-                      prefixIcon: const Icon(Icons.search),
+                      prefixIcon: const PhosphorIcon(PhosphorIconsRegular.magnifyingGlass),
                       border: const OutlineInputBorder(),
                       isDense: true,
                     ),
@@ -514,19 +515,19 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                 const SizedBox(width: 12),
                 TextButton.icon(
                   onPressed: _importFromFile,
-                  icon: const Icon(Icons.upload_file, size: 18),
+                  icon: const PhosphorIcon(PhosphorIconsRegular.uploadSimple, size: 18),
                   label: const Text('Import'),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: _pasteFromClipboard,
-                  icon: const Icon(Icons.content_paste, size: 18),
+                  icon: const PhosphorIcon(PhosphorIconsRegular.clipboardText, size: 18),
                   label: const Text('Paste'),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
                   onPressed: _detectFromCurrentImage,
-                  icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                  icon: const PhosphorIcon(PhosphorIconsRegular.camera, size: 18),
                   label: const Text('Detect'),
                   style: TextButton.styleFrom(foregroundColor: Colors.green),
                 ),
@@ -534,7 +535,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                 if (_filteredMappings.isNotEmpty)
                   TextButton.icon(
                     onPressed: _clearAll,
-                    icon: const Icon(Icons.clear_all, size: 18),
+                    icon: const PhosphorIcon(PhosphorIconsRegular.trash, size: 18),
                     label: const Text('Clear All'),
                     style: TextButton.styleFrom(foregroundColor: Colors.red),
                   ),
@@ -554,8 +555,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              Icons.camera_alt_outlined,
+                            PhosphorIcon(PhosphorIconsRegular.camera,
                               size: 48,
                               color: Colors.grey.shade400,
                             ),
@@ -600,8 +600,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                                 horizontal: 12,
                                 vertical: 4,
                               ),
-                              leading: Icon(
-                                Icons.camera_alt,
+                              leading: PhosphorIcon(PhosphorIconsRegular.camera,
                                 color: Colors.grey.shade600,
                                 size: 20,
                               ),
@@ -632,7 +631,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                               ),
                               trailing: IconButton(
                                 onPressed: () => _removeCamera(serialNumber),
-                                icon: const Icon(Icons.delete_outline),
+                                icon: const PhosphorIcon(PhosphorIconsRegular.trash),
                                 color: Colors.red,
                                 iconSize: 18,
                               ),

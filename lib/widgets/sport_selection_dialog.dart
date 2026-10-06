@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class SportSelectionDialog extends StatelessWidget {
   final Function(String sport) onSportSelected;
@@ -22,31 +23,31 @@ class SportSelectionDialog extends StatelessWidget {
         children: [
           _buildSportCard(
             'Baseball',
-            Icons.sports_baseball,
+            PhosphorIconsRegular.baseball,
             const Color(0xFF0052CC),
             compact: true,
           ),
           _buildSportCard(
             'Hockey',
-            Icons.sports_hockey,
+            PhosphorIconsRegular.hockey,
             const Color(0xFFD32F2F),
             compact: true,
           ),
           _buildSportCard(
             'Basketball',
-            Icons.sports_basketball,
+            PhosphorIconsRegular.basketball,
             const Color(0xFFFF6F00),
             compact: true,
           ),
           _buildSportCard(
             'WNBA',
-            Icons.sports_basketball,
+            PhosphorIconsRegular.basketball,
             const Color(0xFF7B1FA2),
             compact: true,
           ),
           _buildSportCard(
             'Soccer',
-            Icons.sports_soccer,
+            PhosphorIconsRegular.soccerBall,
             const Color(0xFF1B5E20),
             compact: true,
           ),
@@ -84,7 +85,7 @@ class SportSelectionDialog extends StatelessWidget {
             fontFamily: 'Inter',
             fontSize: inline ? 12 : 13,
             fontVariations: const [FontVariation('wght', 600)],
-            color: inline ? const Color(0xFF2A4858) : Colors.black87,
+            color: inline ? const Color(0xFF3A6076) : Colors.black87,
             letterSpacing: -0.2,
           ),
         ),
@@ -96,27 +97,27 @@ class SportSelectionDialog extends StatelessWidget {
           children: [
             _buildSportCard(
               'Baseball',
-              Icons.sports_baseball,
+              PhosphorIconsRegular.baseball,
               const Color(0xFF0052CC),
             ),
             _buildSportCard(
               'Hockey',
-              Icons.sports_hockey,
+              PhosphorIconsRegular.hockey,
               const Color(0xFFD32F2F),
             ),
             _buildSportCard(
               'Basketball',
-              Icons.sports_basketball,
+              PhosphorIconsRegular.basketball,
               const Color(0xFFFF6F00),
             ),
             _buildSportCard(
               'WNBA',
-              Icons.sports_basketball,
+              PhosphorIconsRegular.basketball,
               const Color(0xFF7B1FA2),
             ),
             _buildSportCard(
               'Soccer',
-              Icons.sports_soccer,
+              PhosphorIconsRegular.soccerBall,
               const Color(0xFF1B5E20),
             ),
           ],
@@ -167,7 +168,7 @@ class SportSelectionDialog extends StatelessWidget {
                   color: color.withOpacity(0.12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: PhosphorIcon(
                   icon,
                   size: compact ? 13 : 28,
                   color: color,

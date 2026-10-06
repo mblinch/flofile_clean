@@ -1,59 +1,64 @@
 /* FloFile Captions — marketing site
-   Colors + treatment aligned with caption V2 FfTokens (flat panels, no teal). */
+   Locked to caption V2 FfTokens.dark (Nocturne teal). Same palette as the app. */
 
 :root {
-  --bg: #161826;
-  --bg-elevated: #232532;
-  --surface: #232532;
-  --bg-sunken: #1c1e2c;
-  --hover: rgba(233, 233, 237, 0.06);
-  --border: rgba(233, 233, 237, 0.16);
+  color-scheme: dark;
 
-  --text: #e9e9ed;
-  --text-secondary: rgba(233, 233, 237, 0.55);
-  --text-muted: rgba(233, 233, 237, 0.42);
+  /* Nocturne — soft cool slate (light blue cast), teal accent */
+  --bg: #101315;
+  --el: #181d22;
+  --sf: #1e242a;
+  --hv: #2a3035;
+  --elevated: #181d22;
+  --bg-elevated: #181d22;
+  --surface: #1e242a;
+  --sunken: #0c0e11;
+  --bg-sunken: #0c0e11;
+  --hover: #2a3035;
+  --selected: #20313c;
+  --ln: rgba(232, 238, 244, 0.12);
+  --ln2: rgba(232, 238, 244, 0.18);
+  --accent-edge: #3a6076;
+  --overlay: rgba(16, 19, 21, 0.75);
+  --border: rgba(232, 238, 244, 0.12);
 
-  --accent: #8792ab;
-  --accent-hover: #9aa3b8;
-  --accent-soft: rgba(135, 146, 171, 0.16);
-  --selected: rgba(135, 146, 171, 0.16);
-  --selected-border: rgba(135, 146, 171, 0.5);
-  --focus: #8792ab;
-  /* Text on filled accent (matches app: ink drawn as bg on accent chips) */
-  --ink-on-accent: #161826;
+  --text: #e8eef4;
+  --text-2: rgba(232, 238, 244, 0.62);
+  --text-3: rgba(232, 238, 244, 0.42);
+  --text-secondary: rgba(232, 238, 244, 0.62);
+  --text-muted: rgba(232, 238, 244, 0.42);
 
-  /* Firebar orange — sparingly (app firebar / emphasis only) */
-  --firebar: #e8763a;
+  --accent: #4a7a96;
+  --accent-hover: #5a8eab;
+  --accent-soft: #20313c;
+  --accent-2: #e8763a;
+  --focus: #7eb0cc;
+  --selected-border: #4a7a96;
+  --ink-on-accent: #101315;
+
+  --gold: #e8c547;
+  --ink-on-gold: #1a1606;
+  --fav: #e8c547;
   --badge: #e8c547;
+  --firebar: #ff5a1f; /* Firebar ONLY */
+  --ok: #7fb88a;
+  --red: #f07167;
+  --redbg: rgba(240, 113, 103, 0.10);
+
+  --wash-top: rgba(74, 122, 150, 0.12);
+  --wash-corner: rgba(232, 118, 58, 0.05);
+
+  --glow-x: -15%;
+  --glow-y: -60%;
+  --glow-w: 700px;
+  --glow-h: 520px;
+  --glow-color: rgba(74, 122, 150, 0.18);
 
   --radius: 10px;
   --radius-lg: 12px;
   --max: 1080px;
   --font: "Inter", system-ui, -apple-system, sans-serif;
   --shadow: none;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #f3f5fe;
-    --bg-elevated: #ffffff;
-    --surface: #ffffff;
-    --bg-sunken: #e8eaf4;
-    --hover: rgba(41, 43, 49, 0.06);
-    --border: rgba(41, 43, 49, 0.12);
-    --text: #292b31;
-    --text-secondary: rgba(41, 43, 49, 0.55);
-    --text-muted: rgba(41, 43, 49, 0.42);
-    --accent: #5c6577;
-    --accent-hover: #4a5263;
-    --accent-soft: rgba(92, 101, 119, 0.16);
-    --selected: rgba(92, 101, 119, 0.16);
-    --selected-border: rgba(92, 101, 119, 0.5);
-    --focus: #5c6577;
-    --ink-on-accent: #f3f5fe;
-    --firebar: #e8763a;
-    --badge: #e8c547;
-  }
 }
 
 *,
@@ -64,6 +69,7 @@
 
 html {
   scroll-behavior: smooth;
+  color-scheme: dark;
 }
 
 body {
@@ -112,16 +118,14 @@ a:hover {
   top: 1rem;
 }
 
-/* Flat app canvas — no marketing atmosphere washes */
+/* App canvas — soft teal/orange atmosphere washes */
 .page-bg {
   min-height: 100vh;
-  background: var(--bg);
-}
-
-@media (prefers-color-scheme: light) {
-  .page-bg {
-    background: var(--bg);
-  }
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -12%, var(--wash-top), transparent 70%),
+    radial-gradient(ellipse 45% 40% at 100% 100%, var(--wash-corner), transparent 70%),
+    var(--bg);
+  background-attachment: fixed;
 }
 
 .wrap {
@@ -194,15 +198,33 @@ a:hover {
   align-items: center;
   padding: 0.45rem 0.9rem;
   border-radius: 999px;
-  background: var(--accent);
-  color: var(--ink-on-accent) !important;
+  background: var(--gold);
+  color: var(--ink-on-gold) !important;
   font-weight: 600;
   font-size: 0.85rem;
 }
 
 .nav-cta:hover {
-  background: var(--accent-hover);
-  color: var(--ink-on-accent) !important;
+  background: color-mix(in srgb, var(--gold) 88%, white);
+  color: var(--ink-on-gold) !important;
+}
+
+.nav-cta-outline {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text) !important;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.nav-cta-outline:hover {
+  border-color: var(--selected-border);
+  background: var(--selected);
+  color: var(--text) !important;
 }
 
 .nav-toggle {
@@ -249,6 +271,27 @@ a:hover {
   }
 }
 
+/* Soft spotlight behind key headings — background only, never blocks clicks */
+.glow {
+  position: relative;
+  isolation: isolate;
+}
+.glow::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  left: var(--glow-x, -15%);
+  top: var(--glow-y, -60%);
+  width: var(--glow-w, 700px);
+  height: var(--glow-h, 520px);
+  background: radial-gradient(
+    closest-side,
+    var(--glow-color, rgba(74, 122, 150, 0.18)),
+    transparent
+  );
+}
+
 /* Type */
 .eyebrow {
   margin: 0 0 0.75rem;
@@ -256,7 +299,7 @@ a:hover {
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-2);
 }
 
 h1,
@@ -350,13 +393,20 @@ h3 {
 }
 
 .btn-primary {
-  background: var(--accent);
-  color: var(--ink-on-accent);
+  background: var(--gold);
+  color: var(--ink-on-gold);
 }
 
 .btn-primary:hover {
-  background: var(--accent-hover);
-  color: var(--ink-on-accent);
+  background: color-mix(in srgb, var(--gold) 88%, white);
+  color: var(--ink-on-gold);
+}
+
+.btn-primary:disabled,
+.btn-primary[disabled] {
+  background: var(--gold);
+  color: var(--ink-on-gold);
+  opacity: 0.4;
 }
 
 .btn-secondary {

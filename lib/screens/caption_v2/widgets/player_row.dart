@@ -3,13 +3,13 @@ import 'package:flutter/material.dart';
 import '../../../caption_style/caption_text_normalize.dart';
 import '../../../theme/ff_tokens.dart';
 import 'verb_tile.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
-/// Roster row: monospace jersey badge + name.
+/// Roster row: jersey badge + name.
 ///
-/// Selected: accent tint fill, 1px accent@50% border, badge inverted to accent
-/// fill with [FfTokens.inkOnAccent] text, trailing check.
-/// Pin icon appears only when [pinned]; Cmd-click / [onPinTap] toggles pin.
-class PlayerRow extends StatelessWidget {
+/// Selected: --sf fill + 2px --ac left bar, --text @ 600, 5px radius.
+/// Hover: --hv. Long names ellipsize.
+class PlayerRow extends StatefulWidget {
   const PlayerRow({
     super.key,
     required this.jersey,
@@ -24,6 +24,8 @@ class PlayerRow extends StatelessWidget {
     this.highlightQuery = '',
     this.onTap,
     this.onPinTap,
+    this.onGoogleTap,
+    this.onReportTap,
     this.onSecondaryTapDown,
   });
 
@@ -39,135 +41,169 @@ class PlayerRow extends StatelessWidget {
   final String highlightQuery;
   final VoidCallback? onTap;
   final VoidCallback? onPinTap;
+  final VoidCallback? onGoogleTap;
+  final VoidCallback? onReportTap;
   final GestureTapDownCallback? onSecondaryTapDown;
+
+  @override
+  State<PlayerRow> createState() => _PlayerRowState();
+}
+
+class _PlayerRowState extends State<PlayerRow> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final enabled = onTap != null || onPinTap != null;
+    final enabled = widget.onTap != null || widget.onPinTap != null;
     final isMobile = MediaQuery.sizeOf(context).width < 1100;
-    final rowHeight = height ?? (isMobile ? 44.0 : 28.0);
+    final rowHeight = widget.height ?? (isMobile ? 44.0 : 28.0);
     final veryCompact = rowHeight < 24;
-    final nameFontSize = (rowHeight * 0.56).clamp(12.0, 28.0).toDouble();
-    final jerseyFontSize = (rowHeight * 0.40).clamp(10.0, 18.0).toDouble();
+    final iconSize = veryCompact ? 15.0 : 17.0;
+    final showActions = _hovered &&
+        (widget.onPinTap != null ||
+            widget.onGoogleTap != null ||
+            widget.onReportTap != null);
+    final showPin =
+        widget.pinned || (_hovered && widget.onPinTap != null);
+
+    Color? fill;
+    if (widget.firebarSelected) {
+      fill = FfTokens.firebar.withValues(alpha: 0.16);
+    } else if (widget.selected) {
+      fill = t.selected;
+    } else if (_hovered) {
+      fill = t.hover;
+    }
 
     return Semantics(
       button: enabled,
       enabled: enabled,
-      selected: selected,
+      selected: widget.selected,
       child: MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        opaque: false,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
         child: CmdClick(
-          onTap: onTap,
-          onCmdTap: onPinTap,
-          onSecondaryTapDown: onSecondaryTapDown,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            curve: Curves.easeOut,
-            height: rowHeight,
-            padding: EdgeInsets.symmetric(
-              horizontal: veryCompact ? 4 : 6,
-              vertical: veryCompact ? 1 : 2,
-            ),
-            decoration: BoxDecoration(
-              color: firebarSelected
-                  ? FfTokens.firebar.withValues(alpha: 0.16)
-                  : selected
-                      ? t.selectedFill
-                      : null,
-              borderRadius: BorderRadius.circular(6),
-              border: firebarSelected
-                  ? Border.all(
-                      color: FfTokens.firebar.withValues(alpha: 0.42),
-                    )
-                  : selected || focused
-                      ? Border.all(
-                          color: selected ? t.selectedBorder : t.accent,
-                          width: focused && !selected
-                              ? FfTokens.focusOutlineWidth
-                              : 1,
-                        )
-                      : null,
-            ),
-            child: Row(
-              children: [
-                _JerseyBadge(
-                  jersey: jersey,
-                  selected: selected,
-                  highlightQuery: highlightQuery,
-                  tokens: t,
-                  fontSize: jerseyFontSize,
-                ),
-                SizedBox(width: veryCompact ? 5 : 8),
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
+          onTap: widget.onTap,
+          onCmdTap: widget.onPinTap,
+          onSecondaryTapDown: widget.onSecondaryTapDown,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              curve: Curves.easeOut,
+              height: rowHeight,
+              padding: EdgeInsets.symmetric(
+                horizontal: veryCompact ? 4 : 6,
+                vertical: veryCompact ? 1 : 2,
+              ),
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+                border: widget.firebarSelected
+                    ? Border.all(
+                        color: FfTokens.firebar.withValues(alpha: 0.42),
+                      )
+                    : widget.selected
+                        ? const Border(
+                            left: BorderSide(
+                              color: FfTokens.nocturneAc,
+                              width: 2,
+                            ),
+                          )
+                        : widget.focused
+                            ? Border.all(
+                                color: t.accent,
+                                width: FfTokens.focusOutlineWidth,
+                              )
+                            : null,
+              ),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 20,
+                    child: Text(
+                      widget.jersey,
+                      textAlign: TextAlign.right,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: FfTokens.rosterJersey(color: t.textTertiary),
+                    ),
+                  ),
+                  SizedBox(width: veryCompact ? 5 : 8),
+                  Expanded(
                     child: Text.rich(
                       _highlightedText(
-                        name,
-                        highlightQuery,
-                        normal: t.metaStyle.copyWith(
-                          fontSize: nameFontSize,
+                        widget.name,
+                        widget.highlightQuery,
+                        normal: FfTokens.rosterName(
                           color: t.text,
-                          fontWeight: selected
-                              ? FfTokens.weightMedium
-                              : FfTokens.weightRegular,
+                          selected: widget.selected,
                         ),
                       ),
                       maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-                if (usageCount != null) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    '${usageCount}x',
-                    style: t.microStyle,
-                  ),
-                ],
-                if (selected && selectionRole != null) ...[
-                  const SizedBox(width: 5),
-                  Text(
-                    selectionRole!,
-                    style: t.microStyle.copyWith(
-                      color: t.accent,
-                      fontWeight: FfTokens.weightMedium,
+                  if (widget.usageCount != null) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '${widget.usageCount}x',
+                      style: t.microStyle,
                     ),
-                  ),
-                ],
-                if (pinned) ...[
-                  const SizedBox(width: 3),
-                  if (onPinTap != null)
-                    IconButton(
-                      onPressed: onPinTap,
-                      tooltip: 'Unpin for next frames',
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints.tightFor(
-                        width: veryCompact ? 24 : 28,
-                        height: veryCompact ? 20 : 24,
+                  ],
+                  if (widget.selected && widget.selectionRole != null) ...[
+                    const SizedBox(width: 5),
+                    Text(
+                      widget.selectionRole!,
+                      style: t.microStyle.copyWith(
+                        color: t.textSecondary,
+                        fontWeight: FfTokens.weightMedium,
                       ),
-                      visualDensity: VisualDensity.compact,
-                      iconSize: veryCompact ? 12 : 14,
-                      color: t.accent,
-                      icon: const Icon(Icons.push_pin_rounded),
-                    )
-                  else
-                    Icon(
-                      Icons.push_pin_rounded,
-                      size: veryCompact ? 12 : 13,
-                      color: t.accent,
                     ),
+                  ],
+                  if (showPin && !showActions) ...[
+                    const SizedBox(width: 3),
+                    PhosphorIcon(PhosphorIconsFill.pushPin,
+                      size: veryCompact ? 15 : 17,
+                      color: FfTokens.pinned,
+                    ),
+                  ],
+                  if (showActions) ...[
+                    const SizedBox(width: 2),
+                    if (widget.onPinTap != null)
+                      _PlayerHoverAction(
+                        tooltip: widget.pinned
+                            ? 'Unpin for next frames'
+                            : 'Pin for next frames',
+                        icon: PhosphorIconsFill.pushPin,
+                        color: FfTokens.pinned,
+                        size: iconSize,
+                        onTap: widget.onPinTap!,
+                      ),
+                    if (widget.onGoogleTap != null)
+                      _PlayerHoverAction(
+                        tooltip: 'Google this player',
+                        icon: PhosphorIconsRegular.magnifyingGlass,
+                        color: t.textSecondary,
+                        size: iconSize,
+                        onTap: widget.onGoogleTap!,
+                      ),
+                    if (widget.onReportTap != null)
+                      _PlayerHoverAction(
+                        tooltip: 'Report wrong number or spelling',
+                        icon: PhosphorIconsRegular.flag,
+                        color: t.textSecondary,
+                        size: iconSize,
+                        onTap: widget.onReportTap!,
+                      ),
+                  ],
                 ],
-                if (selected) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.check,
-                    size: 14,
-                    color: t.accent,
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
         ),
@@ -176,42 +212,36 @@ class PlayerRow extends StatelessWidget {
   }
 }
 
-class _JerseyBadge extends StatelessWidget {
-  const _JerseyBadge({
-    required this.jersey,
-    required this.selected,
-    required this.highlightQuery,
-    required this.tokens,
-    required this.fontSize,
+class _PlayerHoverAction extends StatelessWidget {
+  const _PlayerHoverAction({
+    required this.tooltip,
+    required this.icon,
+    required this.color,
+    required this.size,
+    required this.onTap,
   });
 
-  final String jersey;
-  final bool selected;
-  final String highlightQuery;
-  final FfTokens tokens;
-  final double fontSize;
+  final String tooltip;
+  final IconData icon;
+  final Color color;
+  final double size;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(minWidth: fontSize + 14),
-      padding:
-          EdgeInsets.symmetric(horizontal: fontSize > 14 ? 6 : 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: selected ? tokens.accent : tokens.badgeFill,
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: Text.rich(
-        _highlightedText(
-          jersey,
-          RegExp(r'^\d+$').hasMatch(highlightQuery) ? highlightQuery : '',
-          normal: tokens.jerseyStyle.copyWith(
-            fontSize: fontSize,
-            color: selected ? tokens.inkOnAccent : tokens.text,
-            height: 1.1,
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: PhosphorIcon(icon, size: size, color: color),
           ),
         ),
-        textAlign: TextAlign.center,
       ),
     );
   }

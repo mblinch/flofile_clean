@@ -37,6 +37,7 @@ import 'ftp_settings_panel.dart';
 import '../flo_layout_constants.dart';
 import '../theme/ff_tokens.dart';
 import '../services/admin_service.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 // TextEditingController that can render inline highlights accurately inside the
 // TextField by overriding buildTextSpan. This keeps caret/selection perfectly
@@ -1100,14 +1101,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       children: [
                         // Home/Away symbol
                         if (isHome)
-                          Icon(
-                            Icons.home,
+                          PhosphorIcon(PhosphorIconsRegular.house,
                             size: 12,
                             color: Colors.grey.shade700,
                           ),
                         if (!isHome)
-                          Icon(
-                            Icons.flight,
+                          PhosphorIcon(PhosphorIconsRegular.airplane,
                             size: 12,
                             color: Colors.grey.shade700,
                           ),
@@ -1141,9 +1140,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Home/Away symbol for selected item
                 if (selectedTeam != null) ...[
                   if (isHome)
-                    Icon(Icons.home, size: 11, color: Colors.grey.shade700),
+                    PhosphorIcon(PhosphorIconsRegular.house, size: 11, color: Colors.grey.shade700),
                   if (!isHome)
-                    Icon(Icons.flight, size: 11, color: Colors.grey.shade700),
+                    PhosphorIcon(PhosphorIconsRegular.airplane, size: 11, color: Colors.grey.shade700),
                   const SizedBox(width: 3),
                   Expanded(
                     child: Text(
@@ -1160,7 +1159,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                   ),
                 ],
-                const Icon(Icons.arrow_drop_down, size: 14),
+                const PhosphorIcon(PhosphorIconsRegular.caretDown, size: 14),
               ],
             ),
           ),
@@ -1344,8 +1343,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    Icons.home,
+                                  PhosphorIcon(PhosphorIconsRegular.house,
                                     size: 10,
                                     color: tempSelectedTeam == selectedHomeTeam
                                         ? Colors.black87
@@ -1423,8 +1421,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    Icons.flight,
+                                  PhosphorIcon(PhosphorIconsRegular.airplane,
                                     size: 10,
                                     color: tempSelectedTeam == selectedAwayTeam
                                         ? Colors.black87
@@ -1682,8 +1679,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.refresh,
+                        PhosphorIcon(PhosphorIconsRegular.arrowClockwise,
                           size: 12,
                           color: Colors.grey.shade700,
                         ),
@@ -1811,7 +1807,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
+                      icon: const PhosphorIcon(PhosphorIconsRegular.x),
                     ),
                   ],
                 ),
@@ -1925,8 +1921,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   children: [
                     Row(
                       children: [
-                        const Icon(
-                          Icons.auto_fix_high,
+                        const PhosphorIcon(PhosphorIconsRegular.sparkle,
                           color: Colors.orange,
                           size: 24,
                         ),
@@ -1942,7 +1937,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close),
+                      icon: const PhosphorIcon(PhosphorIconsRegular.x),
                     ),
                   ],
                 ),
@@ -2050,8 +2045,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.lightbulb,
+                      PhosphorIcon(PhosphorIconsRegular.lightbulb,
                         color: Colors.blue.shade700,
                         size: 20,
                       ),
@@ -3188,7 +3182,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           gradient: const LinearGradient(
             begin: Alignment.centerLeft,
             end: Alignment.centerRight,
-            colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
+            colors: [Color(0xFF4A7A96), Color(0xFF3A6076)],
           ),
           boxShadow: [
             BoxShadow(
@@ -4364,8 +4358,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                       mainAxisSize:
                                                           MainAxisSize.min,
                                                       children: [
-                                                        Icon(
-                                                          Icons.help_outline,
+                                                        PhosphorIcon(PhosphorIconsRegular.question,
                                                           size: 12,
                                                           color: Colors
                                                               .grey.shade600,
@@ -4669,7 +4662,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                 isDense: true,
                                                                 hintText: _waitingForHomeVisitorChoice
                                                                     ? 'Press H for Home or V for Away'
-                                                                    : '🔥 Firebar',
+                                                                    : 'Firebar',
                                                                 suffixText:
                                                                     _waitingForHomeVisitorChoice
                                                                         ? null
@@ -5692,7 +5685,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           isDense: true,
                           hintText: _waitingForHomeVisitorChoice
                               ? 'Press H for Home or V for Away'
-                              : '🔥 Firebar',
+                              : 'Firebar',
                           suffixText: _waitingForHomeVisitorChoice
                               ? null
                               : _shouldShowRbiInlineHint()
@@ -5938,7 +5931,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               Row(
                 children: [
                   Icon(
-                    isHome ? Icons.home : Icons.flight,
+                    isHome ? PhosphorIconsRegular.house : PhosphorIconsRegular.airplane,
                     size: 12,
                     color: isHome ? Colors.white : Colors.black87,
                   ),
@@ -6015,8 +6008,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.add,
+                            PhosphorIcon(PhosphorIconsRegular.plus,
                               size: 14,
                               color: isHome
                                   ? Colors.blue.shade600
@@ -6117,7 +6109,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         children: [
           const Row(
             children: [
-              Icon(Icons.edit_note, size: 16, color: Colors.black87),
+              PhosphorIcon(PhosphorIconsRegular.notePencil, size: 16, color: Colors.black87),
               SizedBox(width: 8),
               Text(
                 'Generated Caption:',
@@ -6182,8 +6174,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.history,
+                        PhosphorIcon(PhosphorIconsRegular.clockCounterClockwise,
                           size: 14,
                           color: Colors.grey.shade700,
                         ),
@@ -6222,8 +6213,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.refresh,
+                        PhosphorIcon(PhosphorIconsRegular.arrowClockwise,
                           size: 12,
                           color: Colors.grey.shade700,
                         ),
@@ -6264,13 +6254,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4A90E2),
+                        color: const Color(0xFF4A7A96),
                         borderRadius: BorderRadius.circular(3),
-                        border: Border.all(color: const Color(0xFF4A90E2)),
+                        border: Border.all(color: const Color(0xFF4A7A96)),
                       ),
                       child: Center(
-                        child: Icon(
-                          Icons.settings,
+                        child: PhosphorIcon(PhosphorIconsRegular.gear,
                           size: 32,
                           color: Colors.white,
                         ),
@@ -6298,14 +6287,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           : const LinearGradient(
                               begin: Alignment.topCenter,
                               end: Alignment.bottomCenter,
-                              colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+                              colors: [Color(0xFF6B7788), Color(0xFF3A6076)],
                             ),
                       color: _disableFtp ? Colors.grey.shade300 : null,
                       borderRadius: BorderRadius.circular(3),
                       border: Border.all(
                         color: _disableFtp
                             ? Colors.grey.shade300
-                            : const Color(0xFF3A5F78),
+                            : const Color(0xFF6B7788),
                       ),
                     ),
                     child: Row(
@@ -6514,8 +6503,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     mainAxisSize:
                                                         MainAxisSize.min,
                                                     children: [
-                                                      Icon(
-                                                        Icons.grid_view,
+                                                      PhosphorIcon(PhosphorIconsRegular.squaresFour,
                                                         size: 9,
                                                         color: (_homeOnLeft
                                                                 ? _homePlayerView ==
@@ -6590,8 +6578,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     mainAxisSize:
                                                         MainAxisSize.min,
                                                     children: [
-                                                      Icon(
-                                                        Icons.list,
+                                                      PhosphorIcon(PhosphorIconsRegular.list,
                                                         size: 9,
                                                         color: (_homeOnLeft
                                                                 ? _homePlayerView ==
@@ -6671,8 +6658,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     mainAxisSize:
                                                         MainAxisSize.min,
                                                     children: [
-                                                      Icon(
-                                                        Icons.apps,
+                                                      PhosphorIcon(PhosphorIconsRegular.squaresFour,
                                                         size: 9,
                                                         color: (_homeOnLeft
                                                                 ? _homePlayerView ==
@@ -6734,8 +6720,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             top: 2,
                                             bottom: 2,
                                           ),
-                                          prefixIcon: const Icon(
-                                            Icons.search,
+                                          prefixIcon: const PhosphorIcon(PhosphorIconsRegular.magnifyingGlass,
                                             size: 14,
                                             color: Colors.grey,
                                           ),
@@ -7024,8 +7009,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             color: Colors.red,
                             borderRadius: BorderRadius.circular(2),
                           ),
-                          child: const Icon(
-                            Icons.star,
+                          child: const PhosphorIcon(PhosphorIconsFill.star,
                             size: 8,
                             color: Colors.white,
                           ),
@@ -7129,7 +7113,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
             child: Row(
               children: [
-                Icon(Icons.home, size: 12, color: Colors.grey.shade700),
+                PhosphorIcon(PhosphorIconsRegular.house, size: 12, color: Colors.grey.shade700),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -7163,7 +7147,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
             child: Row(
               children: [
-                Icon(Icons.flight, size: 12, color: Colors.grey.shade700),
+                PhosphorIcon(PhosphorIconsRegular.airplane, size: 12, color: Colors.grey.shade700),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -7203,7 +7187,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
           child: Row(
             children: [
-              Icon(Icons.home, size: 12, color: Colors.grey.shade700),
+              PhosphorIcon(PhosphorIconsRegular.house, size: 12, color: Colors.grey.shade700),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -7232,7 +7216,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
           child: Row(
             children: [
-              Icon(Icons.flight, size: 12, color: Colors.grey.shade700),
+              PhosphorIcon(PhosphorIconsRegular.airplane, size: 12, color: Colors.grey.shade700),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -7340,8 +7324,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               const SizedBox(width: 1),
               Icon(
                 _homePlayerSortAscending
-                    ? Icons.keyboard_arrow_up
-                    : Icons.keyboard_arrow_down,
+                    ? PhosphorIconsRegular.caretUp
+                    : PhosphorIconsRegular.caretDown,
                 size: 12,
                 color: Colors.blue.shade700,
               ),
@@ -7406,8 +7390,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 borderRadius: BorderRadius.circular(3),
               ),
               child: Center(
-                child: Icon(
-                  Icons.add,
+                child: PhosphorIcon(PhosphorIconsRegular.plus,
                   size: 14,
                   color: Colors.blue.shade700,
                 ),
@@ -7662,7 +7645,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           value: 'edit',
           child: Row(
             children: [
-              Icon(Icons.edit, size: 16),
+              PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 16),
               SizedBox(width: 8),
               Text('Edit player'),
             ],
@@ -7672,7 +7655,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           value: 'add',
           child: Row(
             children: [
-              const Icon(Icons.person_add, size: 16),
+              const PhosphorIcon(PhosphorIconsRegular.userPlus, size: 16),
               const SizedBox(width: 8),
               Text('Add custom player to ${isHome ? 'Home' : 'Away'}'),
             ],
@@ -8171,8 +8154,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             color: Colors.red,
                             borderRadius: BorderRadius.circular(2),
                           ),
-                          child: const Icon(
-                            Icons.star,
+                          child: const PhosphorIcon(PhosphorIconsFill.star,
                             size: 8,
                             color: Colors.white,
                           ),
@@ -8303,8 +8285,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.home,
+                    PhosphorIcon(PhosphorIconsRegular.house,
                       size: headerIconSizeGrid,
                       color: Colors.grey.shade700,
                     ),
@@ -8398,8 +8379,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   color: Colors.red,
                                   borderRadius: BorderRadius.circular(2),
                                 ),
-                                child: const Icon(
-                                  Icons.star,
+                                child: const PhosphorIcon(PhosphorIconsFill.star,
                                   size: 8,
                                   color: Colors.white,
                                 ),
@@ -8451,8 +8431,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      Icons.flight,
+                    PhosphorIcon(PhosphorIconsRegular.airplane,
                       size: headerIconSizeGrid,
                       color: Colors.grey.shade700,
                     ),
@@ -8548,8 +8527,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     color: Colors.red,
                                     borderRadius: BorderRadius.circular(2),
                                   ),
-                                  child: const Icon(
-                                    Icons.star,
+                                  child: const PhosphorIcon(PhosphorIconsFill.star,
                                     size: 8,
                                     color: Colors.white,
                                   ),
@@ -9038,8 +9016,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                       ),
                                                                                       child: Row(
                                                                                         children: [
-                                                                                          Icon(
-                                                                                            Icons.info_outline,
+                                                                                          PhosphorIcon(PhosphorIconsRegular.info,
                                                                                             size: 16,
                                                                                             color: Colors.orange.shade600,
                                                                                           ),
@@ -9086,7 +9063,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                               ),
                                                                                               const SizedBox(width: 2),
                                                                                               Icon(
-                                                                                                _isHomePlayer(player) ? Icons.home : Icons.flight,
+                                                                                                _isHomePlayer(player) ? PhosphorIconsRegular.house : PhosphorIconsRegular.airplane,
                                                                                                 size: 11,
                                                                                                 color: _isHomePlayer(player) ? Colors.blue.shade600 : Colors.red.shade600,
                                                                                               ),
@@ -9126,8 +9103,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                         ),
                                                                                         child: Row(
                                                                                           children: [
-                                                                                            Icon(
-                                                                                              Icons.check,
+                                                                                            PhosphorIcon(PhosphorIconsRegular.check,
                                                                                               size: 16,
                                                                                               color: Colors.blue.shade700,
                                                                                             ),
@@ -9423,7 +9399,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       child: Row(
         children: [
           if (showReorderHint) ...[
-            Icon(Icons.drag_indicator, size: 14, color: Colors.grey.shade700),
+            PhosphorIcon(PhosphorIconsRegular.dotsSixVertical, size: 14, color: Colors.grey.shade700),
             const SizedBox(width: 4),
           ],
           Expanded(
@@ -11337,8 +11313,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 children: [
                   Icon(
                     _favoriteVerbs.contains(verb)
-                        ? Icons.star
-                        : Icons.star_border,
+                        ? PhosphorIconsFill.star
+                        : PhosphorIconsRegular.star,
                     size: 18,
                     color: _favoriteVerbs.contains(verb)
                         ? Colors.amber
@@ -11355,7 +11331,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               value: 'edit',
               child: Row(
                 children: [
-                  Icon(Icons.edit, size: 18, color: Colors.grey),
+                  PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 18, color: Colors.grey),
                   SizedBox(width: 8),
                   Text('Edit Wording'),
                 ],
@@ -11365,7 +11341,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               value: 'delete_verb',
               child: Row(
                 children: [
-                  Icon(Icons.delete_outline, size: 18, color: Colors.grey),
+                  PhosphorIcon(PhosphorIconsRegular.trash, size: 18, color: Colors.grey),
                   SizedBox(width: 8),
                   Text('Delete verb'),
                 ],
@@ -11967,8 +11943,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     width: 20,
                                     height: 20,
                                     alignment: Alignment.center,
-                                    child: Icon(
-                                      Icons.close,
+                                    child: PhosphorIcon(PhosphorIconsRegular.x,
                                       size: 14,
                                       color: Colors.grey.shade700,
                                     ),
@@ -12312,7 +12287,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               child: ElevatedGreyButton(
                                                 label: 'Copy',
                                                 fontSize: 10,
-                                                icon: Icons.copy,
+                                                icon: PhosphorIconsRegular.copy,
                                                 onPressed: () {
                                                   if (widget.onCopyMetadata !=
                                                       null) {
@@ -12327,7 +12302,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                               child: ElevatedGreyButton(
                                                 label: _iptcSaveLabel(),
                                                 fontSize: 10,
-                                                icon: Icons.arrow_forward,
+                                                icon: PhosphorIconsRegular.arrowRight,
                                                 onPressed: () async {
                                                   if (widget.onSaveIptc !=
                                                       null) {
@@ -12816,8 +12791,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                   width: 20,
                                   height: 20,
                                   alignment: Alignment.center,
-                                  child: Icon(
-                                    Icons.close,
+                                  child: PhosphorIcon(PhosphorIconsRegular.x,
                                     size: 14,
                                     color: Colors.grey.shade700,
                                   ),
@@ -12836,7 +12810,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               ElevatedGreyButton(
                                 label: _iptcSaveLabel(),
                                 fontSize: 10,
-                                icon: Icons.arrow_forward,
+                                icon: PhosphorIconsRegular.arrowRight,
                                 fullWidth: true,
                                 onPressed: () async {
                                   setState(() {
@@ -13052,8 +13026,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     width: 20,
                                     height: 20,
                                     alignment: Alignment.center,
-                                    child: Icon(
-                                      Icons.close,
+                                    child: PhosphorIcon(PhosphorIconsRegular.x,
                                       size: 14,
                                       color: Colors.grey.shade700,
                                     ),
@@ -13209,8 +13182,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     color:
                                                         Colors.grey.shade300),
                                               ),
-                                              child: Icon(
-                                                Icons.remove,
+                                              child: PhosphorIcon(PhosphorIconsRegular.minus,
                                                 size: 12,
                                                 color: currentPage > 0
                                                     ? Colors.grey.shade700
@@ -13248,8 +13220,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                     color:
                                                         Colors.grey.shade300),
                                               ),
-                                              child: Icon(
-                                                Icons.add,
+                                              child: PhosphorIcon(PhosphorIconsRegular.plus,
                                                 size: 12,
                                                 color: currentPage < 2
                                                     ? Colors.grey.shade700
@@ -13335,7 +13306,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             child: ElevatedGreyButton(
                                               label: 'Copy',
                                               fontSize: 10,
-                                              icon: Icons.copy,
+                                              icon: PhosphorIconsRegular.copy,
                                               onPressed: () {
                                                 if (widget.onCopyMetadata !=
                                                     null) {
@@ -13350,7 +13321,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                             child: ElevatedGreyButton(
                                               label: _iptcSaveLabel(),
                                               fontSize: 10,
-                                              icon: Icons.arrow_forward,
+                                              icon: PhosphorIconsRegular.arrowRight,
                                               onPressed: () async {
                                                 if (widget.onSaveIptc != null) {
                                                   await widget.onSaveIptc!();
@@ -13476,7 +13447,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         children: [
           const Row(
             children: [
-              Icon(Icons.edit_note, size: 12, color: Colors.black87),
+              PhosphorIcon(PhosphorIconsRegular.notePencil, size: 12, color: Colors.black87),
               SizedBox(width: 4),
               Text(
                 'Caption:',
@@ -13797,7 +13768,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               style: const TextStyle(fontSize: 10),
                             ),
                           ),
-                          const Icon(Icons.arrow_drop_down, size: 16),
+                          const PhosphorIcon(PhosphorIconsRegular.caretDown, size: 16),
                         ],
                       ),
                     ),
@@ -13908,8 +13879,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                       width: 20,
                                       height: 20,
                                       alignment: Alignment.center,
-                                      child: Icon(
-                                        Icons.close,
+                                      child: PhosphorIcon(PhosphorIconsRegular.x,
                                         size: 14,
                                         color: Colors.grey.shade700,
                                       ),
@@ -14134,8 +14104,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                 child: ElevatedButton.icon(
                                                   onPressed:
                                                       widget.onCopyMetadata,
-                                                  icon: Icon(
-                                                    Icons.copy,
+                                                  icon: PhosphorIcon(PhosphorIconsRegular.copy,
                                                     size: 16,
                                                     color: Colors.grey.shade700,
                                                   ),
@@ -14443,7 +14412,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         ),
         child: Icon(
-          _showOvertimePeriods ? Icons.expand_less : Icons.expand_more,
+          _showOvertimePeriods ? PhosphorIconsRegular.caretUp : PhosphorIconsRegular.caretDown,
           size: 16,
           color: _showOvertimePeriods ? Colors.white : Colors.grey.shade700,
         ),
@@ -15623,7 +15592,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
               return ListTile(
                 leading: Icon(
-                  isHome ? Icons.home : Icons.flight,
+                  isHome ? PhosphorIconsRegular.house : PhosphorIconsRegular.airplane,
                   color: isHome ? Colors.blue.shade600 : Colors.red.shade600,
                 ),
                 title: Text('${player.fullName} #${player.jerseyNumber}'),
@@ -15698,7 +15667,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     Navigator.of(context).pop();
                     _processHomeVisitorChoiceAndRestore('h', originalText);
                   },
-                  icon: const Icon(Icons.home, size: 20),
+                  icon: const PhosphorIcon(PhosphorIconsRegular.house, size: 20),
                   label: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -15731,7 +15700,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     Navigator.of(context).pop();
                     _processHomeVisitorChoiceAndRestore('v', originalText);
                   },
-                  icon: const Icon(Icons.flight, size: 20),
+                  icon: const PhosphorIcon(PhosphorIconsRegular.airplane, size: 20),
                   label: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -18490,8 +18459,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 color: isHome ? Colors.blue.shade200 : Colors.orange.shade200,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(
-                Icons.close,
+              child: PhosphorIcon(PhosphorIconsRegular.x,
                 size: 10,
                 color: isHome ? Colors.blue.shade700 : Colors.orange.shade700,
               ),
@@ -18682,7 +18650,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle, size: 12, color: Colors.blue),
+                const PhosphorIcon(PhosphorIconsRegular.checkCircle, size: 12, color: Colors.blue),
                 const SizedBox(width: 4),
                 Text(
                   'Selected: $_selectedVerb',
@@ -18700,7 +18668,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       _clearVerbSubSelections();
                     });
                   },
-                  child: const Icon(Icons.close, size: 12, color: Colors.blue),
+                  child: const PhosphorIcon(PhosphorIconsRegular.x, size: 12, color: Colors.blue),
                 ),
               ],
             ),
@@ -18855,7 +18823,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: _showFtpSettings,
-                icon: const Icon(Icons.settings, size: 18),
+                icon: const PhosphorIcon(PhosphorIconsRegular.gear, size: 18),
                 label: const Text(
                   'FTP Settings',
                   style: TextStyle(fontSize: 10),
@@ -19665,7 +19633,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 isCurrent ? Colors.blue.withOpacity(0.1) : null,
                             child: ListTile(
                               leading: Icon(
-                                isCurrent ? Icons.check_circle : Icons.storage,
+                                isCurrent ? PhosphorIconsRegular.checkCircle : PhosphorIconsRegular.hardDrives,
                                 color: isCurrent ? Colors.blue : Colors.grey,
                               ),
                               title: Text(
@@ -19684,13 +19652,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 children: [
                                   if (!isCurrent)
                                     IconButton(
-                                      icon: const Icon(Icons.play_arrow),
+                                      icon: const PhosphorIcon(PhosphorIconsRegular.play),
                                       onPressed: () =>
                                           _loadFtpProfile(profileName),
                                       tooltip: 'Load Profile',
                                     ),
                                   IconButton(
-                                    icon: const Icon(Icons.delete),
+                                    icon: const PhosphorIcon(PhosphorIconsRegular.trash),
                                     onPressed: () =>
                                         _deleteFtpProfile(profileName),
                                     tooltip: 'Delete Profile',
@@ -19848,7 +19816,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 // Header
                 Row(
                   children: [
-                    Icon(Icons.edit, size: 16, color: Colors.grey.shade600),
+                    PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 16, color: Colors.grey.shade600),
                     const SizedBox(width: 6),
                     Text(
                       'Edit Profile: $profileName',
@@ -20244,7 +20212,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 Row(
                   children: [
                     Icon(
-                      showProfileManager ? Icons.folder : Icons.settings,
+                      showProfileManager ? PhosphorIconsRegular.folder : PhosphorIconsRegular.gear,
                       size: 16,
                       color: Colors.grey.shade600,
                     ),
@@ -20278,8 +20246,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
-                                  Icons.add,
+                                PhosphorIcon(PhosphorIconsRegular.plus,
                                   size: 12,
                                   color: Colors.grey.shade600,
                                 ),
@@ -20318,8 +20285,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               children: [
                                 Icon(
                                   showProfileManager
-                                      ? Icons.settings
-                                      : Icons.folder,
+                                      ? PhosphorIconsRegular.gear
+                                      : PhosphorIconsRegular.folder,
                                   size: 12,
                                   color: Colors.grey.shade600,
                                 ),
@@ -20355,8 +20322,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.check_circle,
+                        PhosphorIcon(PhosphorIconsRegular.checkCircle,
                           size: 16,
                           color: Colors.green.shade600,
                         ),
@@ -20377,8 +20343,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               successMessage = null;
                             });
                           },
-                          child: Icon(
-                            Icons.close,
+                          child: PhosphorIcon(PhosphorIconsRegular.x,
                             size: 14,
                             color: Colors.green.shade600,
                           ),
@@ -20452,8 +20417,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                         Navigator.pop(context);
                                         _showEditProfileDialog(profileName);
                                       },
-                                      child: Icon(
-                                        Icons.settings,
+                                      child: PhosphorIcon(PhosphorIconsRegular.gear,
                                         size: 14,
                                         color: Colors.grey.shade600,
                                       ),
@@ -20479,8 +20443,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           }
                         });
                       },
-                      icon: Icon(
-                        Icons.arrow_drop_down,
+                      icon: PhosphorIcon(PhosphorIconsRegular.caretDown,
                         size: 16,
                         color: Colors.grey.shade600,
                       ),
@@ -20675,8 +20638,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 child: ListTile(
                                   leading: Icon(
                                     isCurrent
-                                        ? Icons.check_circle
-                                        : Icons.storage,
+                                        ? PhosphorIconsRegular.checkCircle
+                                        : PhosphorIconsRegular.hardDrives,
                                     color:
                                         isCurrent ? Colors.blue : Colors.grey,
                                     size: 16,
@@ -20699,8 +20662,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     children: [
                                       if (!isCurrent)
                                         IconButton(
-                                          icon: const Icon(
-                                            Icons.play_arrow,
+                                          icon: const PhosphorIcon(PhosphorIconsRegular.play,
                                             size: 16,
                                           ),
                                           onPressed: () {
@@ -20721,8 +20683,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                           tooltip: 'Load Profile',
                                         ),
                                       IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
+                                        icon: const PhosphorIcon(PhosphorIconsRegular.trash,
                                           size: 16,
                                         ),
                                         onPressed: () {
@@ -23262,8 +23223,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(2),
                         ),
-                        child: const Icon(
-                          Icons.star,
+                        child: const PhosphorIcon(PhosphorIconsFill.star,
                           size: 10,
                           color: Colors.white,
                         ),
@@ -23272,7 +23232,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ],
                     // Team icon
                     Icon(
-                      isHomePlayer ? Icons.home : Icons.flight,
+                      isHomePlayer ? PhosphorIconsRegular.house : PhosphorIconsRegular.airplane,
                       size: 10,
                       color: isHomePlayer ? Colors.white : Colors.black87,
                     ),
@@ -23319,8 +23279,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               : Colors.grey.shade300,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Icon(
-                          Icons.close,
+                        child: PhosphorIcon(PhosphorIconsRegular.x,
                           size: 8,
                           color: isHomePlayer ? Colors.white : Colors.black87,
                         ),
@@ -23374,8 +23333,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           color: Colors.red,
                           borderRadius: BorderRadius.circular(2),
                         ),
-                        child: const Icon(
-                          Icons.star,
+                        child: const PhosphorIcon(PhosphorIconsFill.star,
                           size: 10,
                           color: Colors.white,
                         ),
@@ -23384,7 +23342,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                     ],
                     // Team icon
                     Icon(
-                      isHomePlayer ? Icons.home : Icons.flight,
+                      isHomePlayer ? PhosphorIconsRegular.house : PhosphorIconsRegular.airplane,
                       size: 10,
                       color: isHomePlayer ? Colors.white : Colors.black87,
                     ),
@@ -23431,8 +23389,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                               : Colors.grey.shade300,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: Icon(
-                          Icons.close,
+                        child: PhosphorIcon(PhosphorIconsRegular.x,
                           size: 8,
                           color: isHomePlayer ? Colors.white : Colors.black87,
                         ),
@@ -24029,8 +23986,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 ),
                 Icon(
                   isExpanded
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
+                      ? PhosphorIconsRegular.caretUp
+                      : PhosphorIconsRegular.caretDown,
                   size: 16,
                   color: Colors.grey.shade600,
                 ),
@@ -24810,7 +24767,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   Widget _getSortIconWidget(String sortOption) {
     switch (sortOption) {
       case 'number':
-        return Icon(Icons.numbers, size: 12, color: Colors.grey.shade600);
+        return PhosphorIcon(PhosphorIconsRegular.hash, size: 12, color: Colors.grey.shade600);
       case 'lastName':
         return Text(
           'ZA',
@@ -24830,7 +24787,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ),
         );
       default:
-        return Icon(Icons.sort, size: 12, color: Colors.grey.shade600);
+        return PhosphorIcon(PhosphorIconsRegular.arrowsDownUp, size: 12, color: Colors.grey.shade600);
     }
   }
 
@@ -25624,7 +25581,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   children: [
                     // Firebar label
                     Text(
-                      '🔥FIREBAR:',
+                      'FIREBAR:',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -25790,8 +25747,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.arrow_back,
+                              PhosphorIcon(PhosphorIconsRegular.arrowLeft,
                                 size: 12,
                                 color: Colors.grey.shade700,
                               ),
@@ -25838,8 +25794,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.copy,
+                              PhosphorIcon(PhosphorIconsRegular.copy,
                                 size: 12,
                                 color: Colors.grey.shade700,
                               ),
@@ -25879,8 +25834,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.content_paste,
+                              PhosphorIcon(PhosphorIconsRegular.clipboardText,
                                 size: 12,
                                 color: Colors.grey.shade700,
                               ),
@@ -25921,8 +25875,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                Icons.history,
+                              PhosphorIcon(PhosphorIconsRegular.clockCounterClockwise,
                                 size: 12,
                                 color: Colors.grey.shade700,
                               ),
@@ -26000,8 +25953,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                 ),
                               ),
                               const SizedBox(width: 2),
-                              Icon(
-                                Icons.arrow_forward,
+                              PhosphorIcon(PhosphorIconsRegular.arrowRight,
                                 size: 12,
                                 color: Colors.grey.shade700,
                               ),
@@ -26032,8 +25984,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     begin: Alignment.topCenter,
                                     end: Alignment.bottomCenter,
                                     colors: [
-                                      Color(0xFF3A5F78),
-                                      Color(0xFF2A4858)
+                                      Color(0xFF6B7788),
+                                      Color(0xFF3A6076)
                                     ],
                                   ),
                             color: _disableFtp ? Colors.grey.shade300 : null,
@@ -26041,7 +25993,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             border: Border.all(
                               color: _disableFtp
                                   ? Colors.grey.shade300
-                                  : const Color(0xFF3A5F78),
+                                  : const Color(0xFF6B7788),
                             ),
                           ),
                           child: Row(
@@ -26099,15 +26051,14 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                             vertical: 5,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF4A90E2),
+                            color: const Color(0xFF4A7A96),
                             borderRadius: BorderRadius.circular(3),
-                            border: Border.all(color: const Color(0xFF4A90E2)),
+                            border: Border.all(color: const Color(0xFF4A7A96)),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.settings,
+                              PhosphorIcon(PhosphorIconsRegular.gear,
                                 size: 12,
                                 color: Colors.white,
                               ),
@@ -26147,8 +26098,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
-                                Icons.refresh,
+                              PhosphorIcon(PhosphorIconsRegular.arrowClockwise,
                                 size: 12,
                                 color: Colors.grey.shade700,
                               ),
@@ -26301,12 +26251,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           ? const LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [Color(0xFF3A5F78), Color(0xFF2A4858)],
+              colors: [Color(0xFF6B7788), Color(0xFF3A6076)],
             )
           : null;
       bg = enabled ? null : Colors.grey.shade300;
       textColor = enabled ? Colors.white : Colors.grey.shade600;
-      borderColor = enabled ? const Color(0xFF3A5F78) : Colors.grey.shade300;
+      borderColor = enabled ? const Color(0xFF6B7788) : Colors.grey.shade300;
     } else if (primary) {
       bg = enabled ? const Color(0xFF1A1A1A) : Colors.grey.shade300;
       textColor = enabled ? Colors.white : Colors.grey.shade600;
@@ -26403,7 +26353,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.refresh, size: 12, color: Colors.grey.shade700),
+                  PhosphorIcon(PhosphorIconsRegular.arrowClockwise, size: 12, color: Colors.grey.shade700),
                   const SizedBox(width: 2),
                   Text(
                     'Reset Caption',
@@ -26484,8 +26434,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 const SizedBox(
                   width: 15,
                 ), // 15px padding from the left edge
-                Icon(
-                  Icons.arrow_back,
+                PhosphorIcon(PhosphorIconsRegular.arrowLeft,
                   size: 14,
                   color: Colors.grey.shade700,
                 ),
@@ -27839,8 +27788,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.home,
+                      PhosphorIcon(PhosphorIconsRegular.house,
                         size: listHeaderIconSize,
                         color: Colors.grey.shade700,
                       ),
@@ -27905,12 +27853,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? const Color(0xFF2A4858)
+                                ? const Color(0xFF3A6076)
                                 : Colors.white,
                             border: Border(
                               bottom: BorderSide(
                                 color: isSelected
-                                    ? const Color(0xFF2A4858)
+                                    ? const Color(0xFF3A6076)
                                     : Colors.grey.shade200,
                                 width: 0.5,
                               ),
@@ -27927,14 +27875,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     color: Colors.orange,
                                     borderRadius: BorderRadius.circular(2),
                                   ),
-                                  child: const Icon(
-                                    Icons.star,
+                                  child: const PhosphorIcon(PhosphorIconsFill.star,
                                     size: 8,
                                     color: Colors.white,
                                   ),
                                 ),
                               Text(
-                                '🔥H${player.jerseyNumber ?? "?"}',
+                                'H${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
                                   fontFamily: 'Inter',
                                   fontSize: jerseyBadgeFont,
@@ -27992,8 +27939,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
-                        Icons.flight,
+                      PhosphorIcon(PhosphorIconsRegular.airplane,
                         size: listHeaderIconSize,
                         color: Colors.grey.shade700,
                       ),
@@ -28058,12 +28004,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           ),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? const Color(0xFF2A4858)
+                                ? const Color(0xFF3A6076)
                                 : Colors.white,
                             border: Border(
                               bottom: BorderSide(
                                 color: isSelected
-                                    ? const Color(0xFF2A4858)
+                                    ? const Color(0xFF3A6076)
                                     : Colors.grey.shade200,
                                 width: 0.5,
                               ),
@@ -28080,14 +28026,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                     color: Colors.orange,
                                     borderRadius: BorderRadius.circular(2),
                                   ),
-                                  child: const Icon(
-                                    Icons.star,
+                                  child: const PhosphorIcon(PhosphorIconsFill.star,
                                     size: 8,
                                     color: Colors.white,
                                   ),
                                 ),
                               Text(
-                                '🔥V${player.jerseyNumber ?? "?"}',
+                                'V${player.jerseyNumber ?? "?"}',
                                 style: TextStyle(
                                   fontFamily: 'Inter',
                                   fontSize: jerseyBadgeFont,
@@ -28253,7 +28198,7 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.edit_outlined,
+                  const PhosphorIcon(PhosphorIconsRegular.pencilSimple,
                       size: 11, color: Colors.black54),
                   const SizedBox(width: 4),
                   Text(
@@ -28267,7 +28212,7 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
                   const Spacer(),
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
-                    child: Icon(Icons.close,
+                    child: PhosphorIcon(PhosphorIconsRegular.x,
                         size: 13, color: Colors.grey.shade500),
                   ),
                 ],
@@ -28599,7 +28544,7 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.data_object, size: 9, color: Color(0xFF1565C0)),
+              const PhosphorIcon(PhosphorIconsRegular.bracketsCurly, size: 9, color: Color(0xFF1565C0)),
               const SizedBox(width: 3),
               Text(
                 varSource,
@@ -28652,7 +28597,7 @@ class _BylineEditorDialogState extends State<_BylineEditorDialog> {
                   child: usingMetadata
                       ? const Center(
                           child:
-                              Icon(Icons.check, size: 9, color: Colors.white),
+                              PhosphorIcon(PhosphorIconsRegular.check, size: 9, color: Colors.white),
                         )
                       : null,
                 ),

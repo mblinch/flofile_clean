@@ -6,6 +6,7 @@ import '../data/caption_v2_controller.dart';
 import '../widgets/frame_status_dot.dart';
 import 'caption_v2_photo_actions.dart';
 import 'photo_column.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Full-screen frame review pushed from the mobile header thumbnail.
 class FrameReviewRoute extends StatelessWidget {
@@ -41,7 +42,7 @@ class FrameReviewRoute extends StatelessWidget {
             actions: [
               IconButton(
                 onPressed: controller.pickImageFolder,
-                icon: const Icon(Icons.folder_open),
+                icon: const PhosphorIcon(PhosphorIconsRegular.folderOpen),
                 tooltip: 'Open folder',
               ),
             ],
@@ -87,7 +88,7 @@ class FrameReviewRoute extends StatelessWidget {
                             top: 16,
                             child: IconButton.filledTonal(
                               onPressed: () => showCaptionV2Zoom(context, path),
-                              icon: const Icon(Icons.zoom_in_rounded),
+                              icon: const PhosphorIcon(PhosphorIconsRegular.magnifyingGlassPlus),
                               tooltip: 'Zoom image',
                               style: IconButton.styleFrom(
                                 backgroundColor:

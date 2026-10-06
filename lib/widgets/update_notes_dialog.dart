@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../app_update_notes.dart';
 import 'app_styled_dialogs.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// One-shot “What’s new” after [package_info_plus] build increases.
 class UpdateNotesDialog extends StatelessWidget {
@@ -17,7 +18,7 @@ class UpdateNotesDialog extends StatelessWidget {
     return AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.auto_awesome, color: theme.colorScheme.primary, size: 22),
+          PhosphorIcon(PhosphorIconsRegular.sparkle, color: theme.colorScheme.primary, size: 22),
           const SizedBox(width: 8),
           Expanded(
             child: Text(

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../utils/oriented_image_bytes.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Preview with EXIF orientation and ICC color management before display.
 ///
@@ -92,7 +93,7 @@ class _ColorManagedFilePreviewState extends State<ColorManagedFilePreview> {
         alignment: Alignment.center,
         width: widget.width,
         height: widget.height,
-        child: const Icon(Icons.broken_image, color: Colors.grey, size: 48),
+        child: const PhosphorIcon(PhosphorIconsRegular.imageBroken, color: Colors.grey, size: 48),
       );
     }
     return Image.memory(

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dropdown_flutter/custom_dropdown.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ import '../services/tank01_roster_sync_service.dart';
 import '../services/verb_user_catalog_service.dart';
 import '../caption_style/verb_sub_options.dart';
 import '../caption_style/verb_defaults_bundle.dart';
+import '../theme/ff_glow.dart';
 import '../theme/ff_tokens.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
@@ -29,6 +31,7 @@ import 'admin_verb_authoring_editor.dart';
 import 'verb_edit_plural_field.dart';
 import 'verb_edit_sub_options_section.dart';
 import 'caption_layout_builder_dialog.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 enum _AdminSection { verbs, captionStructures, rosterCompare, rosterIssues }
 
@@ -248,50 +251,147 @@ class _AdminScreenState extends State<AdminScreen> {
       context: context,
       builder: (ctx) {
         final t = Theme.of(ctx).extension<FfTokens>() ?? FfTokens.dark;
-        return AlertDialog(
-          backgroundColor: t.surface,
-          title: Text('Set jersey number', style: TextStyle(color: t.text)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '${issue.teamName} · ${issue.fullName}',
-                style: t.metaStyle.copyWith(color: t.textSecondary),
-              ),
-              if (issue.detail != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  issue.detail!,
-                  style: t.metaStyle.copyWith(color: t.textSecondary),
+        return AppDialogFfStyle(
+          enabled: true,
+          child: Theme(
+            data: Theme.of(ctx).copyWith(
+              extensions: <ThemeExtension<dynamic>>[t],
+            ),
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.all(24),
+              child: Container(
+                width: 380,
+                decoration: BoxDecoration(
+                  color: t.surface,
+                  borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+                  border: Border.all(color: t.divider),
+                  boxShadow: [
+                    BoxShadow(
+                      color: t.bg.withValues(alpha: 0.55),
+                      blurRadius: 20,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
-              ],
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                decoration: InputDecoration(
-                  labelText: 'Jersey number',
-                  hintText: issue.kind == RosterIssueKind.duplicateJersey
-                      ? 'Enter a unique number'
-                      : 'e.g. 27',
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 8, 12),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Set jersey number',
+                                style: TextStyle(
+                                  fontFamily: FfTokens.labelFamily,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: -0.2,
+                                  color: t.text,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Cancel',
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              icon: PhosphorIcon(PhosphorIconsRegular.x,
+                                size: 16,
+                                color: t.text.withValues(alpha: 0.55),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Divider(height: 1, color: t.divider),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '${issue.teamName} · ${issue.fullName}',
+                              style: t.metaStyle.copyWith(
+                                color: t.text.withValues(alpha: 0.70),
+                              ),
+                            ),
+                            if (issue.detail != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                issue.detail!,
+                                style: t.metaStyle.copyWith(
+                                  color: t.text.withValues(alpha: 0.55),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            AppDialogLabeledField(
+                              label: 'Jersey number',
+                              bottomGap: 0,
+                              child: AppDialogControlShell(
+                                child: TextField(
+                                  controller: controller,
+                                  autofocus: true,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                  style: t.metaStyle.copyWith(
+                                    fontSize: 11,
+                                    color: t.text,
+                                    height: 1.25,
+                                  ),
+                                  cursorColor: t.accent,
+                                  decoration: appDialogBareFieldDecoration(),
+                                  onSubmitted: (v) {
+                                    final next = v.trim();
+                                    if (next.isEmpty) return;
+                                    Navigator.of(ctx).pop(next);
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+                        child: Row(
+                          children: [
+                            const Spacer(),
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: Text(
+                                'Cancel',
+                                style: t.metaStyle.copyWith(
+                                  color: t.text.withValues(alpha: 0.62),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedGreyButton(
+                              label: 'Save',
+                              fontSize: 11,
+                              isPrimary: true,
+                              onPressed: () {
+                                final next = controller.text.trim();
+                                if (next.isEmpty) return;
+                                Navigator.of(ctx).pop(next);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
               ),
-            ],
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-              child: const Text('Save'),
-            ),
-          ],
         );
       },
     );
@@ -323,6 +423,47 @@ class _AdminScreenState extends State<AdminScreen> {
       setState(() => _issuesError = e.toString());
     } finally {
       if (mounted) setState(() => _issuesSaving = false);
+    }
+  }
+
+  Future<void> _openPlayerGoogleSearch(RosterIssue issue) async {
+    final sport = issue.sportId.toLowerCase().trim();
+    String league;
+    switch (sport) {
+      case 'hockey':
+        league = 'NHL';
+        break;
+      case 'baseball':
+        league = 'MLB';
+        break;
+      case 'basketball':
+        league = 'NBA';
+        break;
+      case 'wnba':
+        league = 'WNBA';
+        break;
+      case 'soccer':
+        league = 'soccer';
+        break;
+      default:
+        league = SportVerbCategories.displayLabel(issue.sportId);
+    }
+    final name = issue.fullName.trim();
+    final query = name.isEmpty ? '$league player' : '$league player $name';
+    final url = Uri.https('www.google.com', '/search', {'q': query}).toString();
+    try {
+      if (Platform.isMacOS) {
+        await Process.run('open', [url]);
+      } else if (Platform.isWindows) {
+        await Process.run('cmd', ['/c', 'start', '', url]);
+      } else {
+        await Process.run('xdg-open', [url]);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open Google search: $e')),
+      );
     }
   }
 
@@ -590,6 +731,31 @@ class _AdminScreenState extends State<AdminScreen> {
     await _flushCaptionBuilder?.call();
   }
 
+  /// Two-step confirm so admin publishes to app originals are hard to misfire.
+  Future<bool> _confirmAdminPublish({
+    required String title,
+    required String message,
+    String confirmLabel = 'Publish',
+  }) async {
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+    );
+    if (ok != true || !mounted) return false;
+
+    final okAdmin = await showAppConfirmDialog(
+      context: context,
+      title: 'Publishing as admin',
+      message:
+          'You are signed in as an admin. This writes Firebase app originals '
+          'that affect all users — not your personal Preferences.',
+      confirmLabel: 'Publish as admin',
+    );
+    return okAdmin == true && mounted;
+  }
+
   Future<void> _writeActiveVerbBundleAsDefaults({String? successLabel}) async {
     if (!mounted) return;
     setState(() => _busy = true);
@@ -653,15 +819,13 @@ class _AdminScreenState extends State<AdminScreen> {
       }
     }
 
-    final ok = await showAppConfirmDialog(
-      context: context,
+    final ok = await _confirmAdminPublish(
       title: 'Publish “$label” as default?',
       message:
           'Updates Firebase app originals for this sport’s verb catalog '
           '(including this verb).',
-      confirmLabel: 'Publish',
     );
-    if (ok != true || !mounted) return;
+    if (!ok) return;
 
     // Merge the flushed verb into the in-editor catalog, then publish that.
     final bundle = Map<String, dynamic>.from(_activeVerbBundle);
@@ -735,16 +899,14 @@ class _AdminScreenState extends State<AdminScreen> {
       );
       return;
     }
-    final ok = await showAppConfirmDialog(
-      context: context,
+    final ok = await _confirmAdminPublish(
       title:
           allSports ? 'Publish all verb defaults?' : 'Publish verb defaults?',
       message: allSports
           ? 'Updates Firebase app originals for every sport.'
           : 'Updates Firebase app originals for $_verbSport.',
-      confirmLabel: 'Publish',
     );
-    if (ok != true || !mounted) return;
+    if (!ok) return;
     setState(() => _busy = true);
     try {
       if (allSports) {
@@ -778,17 +940,15 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Future<void> _publishCaptions({bool allWires = false}) async {
-    final ok = await showAppConfirmDialog(
-      context: context,
+    final ok = await _confirmAdminPublish(
       title: allWires
           ? 'Publish all caption structures?'
           : 'Publish caption structure?',
       message: allWires
           ? 'Updates every wire caption layout in Firebase app originals.'
           : 'Updates ${WireIptcSpecs.factoryWireLabel(_captionWire)} in Firebase.',
-      confirmLabel: 'Publish',
     );
-    if (ok != true || !mounted) return;
+    if (!ok) return;
     setState(() => _busy = true);
     try {
       await _flushCaptionBuilderDrafts();
@@ -862,16 +1022,14 @@ class _AdminScreenState extends State<AdminScreen> {
       );
       return;
     }
-    final ok = await showAppConfirmDialog(
-      context: context,
+    final ok = await _confirmAdminPublish(
       title: 'Publish caption style library?',
       message:
           'Pushes ${library.length} saved style(s) to Firebase as the default '
           'starter library for new users. Existing users who have never saved '
           'a custom style will also receive these on next launch.',
-      confirmLabel: 'Publish',
     );
-    if (ok != true || !mounted) return;
+    if (!ok) return;
     setState(() => _busy = true);
     try {
       await AppDefaultsFirestoreService.publishCaptionStyleLibrary(
@@ -1375,7 +1533,7 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           _iconAction(
             icon:
-                _verbHasRecordedDefault(v.key) ? Icons.star : Icons.star_border,
+                _verbHasRecordedDefault(v.key) ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
             tooltip: _verbHasRecordedDefault(v.key)
                 ? 'Already a recorded default — click to update from current wording'
                 : 'Set as default for app originals',
@@ -1384,12 +1542,12 @@ class _AdminScreenState extends State<AdminScreen> {
             onPressed: _busy ? null : () => _recordVerbAsDefault(v),
           ),
           _iconAction(
-            icon: Icons.edit_outlined,
+            icon: PhosphorIconsRegular.pencilSimple,
             tooltip: 'Edit verb',
             onPressed: _busy ? null : () => _editVerb(v),
           ),
           _iconAction(
-            icon: Icons.delete_outline,
+            icon: PhosphorIconsRegular.trash,
             tooltip: 'Remove verb',
             onPressed: _busy ? null : () => _deleteVerb(v),
           ),
@@ -1460,7 +1618,7 @@ class _AdminScreenState extends State<AdminScreen> {
           borderRadius: BorderRadius.circular(4),
           child: Padding(
             padding: const EdgeInsets.all(4),
-            child: Icon(
+            child: PhosphorIcon(
               icon,
               size: 16,
               color: iconColor ?? Colors.grey.shade600,
@@ -1548,21 +1706,21 @@ class _AdminScreenState extends State<AdminScreen> {
             label: _busy
                 ? 'Publishing…'
                 : 'Publish ${WireIptcSpecs.factoryWireLabel(_captionWire)}',
-            icon: Icons.cloud_upload_outlined,
+            icon: PhosphorIconsRegular.cloudArrowUp,
             onPressed: _busy ? null : () => _publishCaptions(),
           ),
           const SizedBox(width: 8),
           _OutlinedAccentButton(
             tokens: t,
             label: 'Publish all wires',
-            icon: Icons.cloud_upload_outlined,
+            icon: PhosphorIconsRegular.cloudArrowUp,
             onPressed: _busy ? null : () => _publishCaptions(allWires: true),
           ),
           const SizedBox(width: 8),
           _OutlinedAccentButton(
             tokens: t,
             label: 'Publish style library',
-            icon: Icons.style_outlined,
+            icon: PhosphorIconsRegular.palette,
             onPressed: _busy ? null : _publishCaptionStyleLibrary,
           ),
         ],
@@ -1577,7 +1735,7 @@ class _AdminScreenState extends State<AdminScreen> {
         _OutlinedAccentButton(
           tokens: t,
           label: _loading ? 'Loading…' : 'Reload',
-          icon: Icons.cloud_download_outlined,
+          icon: PhosphorIconsRegular.cloudArrowDown,
           onPressed: _loading || _busy ? null : _bootstrap,
         ),
         const SizedBox(width: 8),
@@ -1588,8 +1746,7 @@ class _AdminScreenState extends State<AdminScreen> {
             borderRadius: BorderRadius.circular(4),
             child: Padding(
               padding: const EdgeInsets.all(4),
-              child: Icon(
-                Icons.close,
+              child: PhosphorIcon(PhosphorIconsRegular.x,
                 size: 20,
                 color: t.textSecondary,
               ),
@@ -1645,29 +1802,30 @@ class _AdminScreenState extends State<AdminScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: t.accent.withValues(alpha: 0.15),
+                          color: FfTokens.gold,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: t.accent.withValues(alpha: 0.44),
-                          ),
                         ),
-                        child: Text(
+                        child: const Text(
                           'Admin',
                           style: TextStyle(
                             fontFamily: FfTokens.labelFamily,
                             fontSize: 9,
                             fontWeight: FontWeight.w600,
-                            color: t.accent,
+                            color: FfTokens.inkOnGold,
                             height: 1,
                           ),
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        'App originals',
-                        style: t.labelStyle.copyWith(
-                          fontSize: 13,
-                          color: t.text,
+                      FfGlow(
+                        glowW: 320,
+                        glowH: 180,
+                        child: Text(
+                          'App originals',
+                          style: t.labelStyle.copyWith(
+                            fontSize: 13,
+                            color: t.text,
+                          ),
                         ),
                       ),
                       const Spacer(),
@@ -1850,13 +2008,11 @@ class _AdminScreenState extends State<AdminScreen> {
         listItemDecoration: ListItemDecoration(
           selectedColor: t.selectedFill,
         ),
-        closedSuffixIcon: Icon(
-          Icons.arrow_drop_down,
+        closedSuffixIcon: PhosphorIcon(PhosphorIconsRegular.caretDown,
           size: 16,
           color: t.textSecondary,
         ),
-        expandedSuffixIcon: Icon(
-          Icons.arrow_drop_up,
+        expandedSuffixIcon: PhosphorIcon(PhosphorIconsRegular.caretUp,
           size: 16,
           color: t.textSecondary,
         ),
@@ -1903,7 +2059,7 @@ class _AdminScreenState extends State<AdminScreen> {
             ElevatedGreyButton(
               label: _issuesScanning ? 'Scanning…' : 'Scan jersey issues',
               fontSize: 11,
-              icon: Icons.search,
+              icon: PhosphorIconsRegular.magnifyingGlass,
               onPressed: _issuesScanning || _issuesSaving
                   ? null
                   : _scanRosterIssues,
@@ -1974,11 +2130,20 @@ class _AdminScreenState extends State<AdminScreen> {
                         ].join(' · '),
                         style: t.metaStyle.copyWith(color: t.textSecondary),
                       ),
-                      trailing: TextButton(
-                        onPressed: _issuesSaving
-                            ? null
-                            : () => _fixJerseyIssue(rows[i]),
-                        child: const Text('Set #'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton(
+                            onPressed: () => _openPlayerGoogleSearch(rows[i]),
+                            child: const Text('Google'),
+                          ),
+                          TextButton(
+                            onPressed: _issuesSaving
+                                ? null
+                                : () => _fixJerseyIssue(rows[i]),
+                            child: const Text('Set #'),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -2020,7 +2185,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   ? 'Syncing…'
                   : 'Sync Tank01 → sports_tank01 ($_compareSport)',
               fontSize: 11,
-              icon: Icons.cloud_upload_outlined,
+              icon: PhosphorIconsRegular.cloudArrowUp,
               onPressed: _tank01SyncRunning ||
                       _compareRunning ||
                       !tank01SupportsSport(_compareSport)
@@ -2032,7 +2197,7 @@ class _AdminScreenState extends State<AdminScreen> {
                   ? 'Syncing…'
                   : 'Sync all Tank01 sports',
               fontSize: 11,
-              icon: Icons.cloud_sync_outlined,
+              icon: PhosphorIconsRegular.arrowsClockwise,
               onPressed: _tank01SyncRunning || _compareRunning
                   ? null
                   : () => _syncTank01ToFirestore(allSports: true),
@@ -2066,7 +2231,7 @@ class _AdminScreenState extends State<AdminScreen> {
               ElevatedGreyButton(
                 label: _compareRunning ? 'Comparing…' : 'Compare rosters',
                 fontSize: 11,
-                icon: Icons.compare_arrows,
+                icon: PhosphorIconsRegular.arrowsLeftRight,
                 onPressed: _compareRunning ||
                         _tank01SyncRunning ||
                         _compareTeamNames.isEmpty
@@ -2077,7 +2242,7 @@ class _AdminScreenState extends State<AdminScreen> {
               ElevatedGreyButton(
                 label: 'Reload teams',
                 fontSize: 11,
-                icon: Icons.refresh,
+                icon: PhosphorIconsRegular.arrowClockwise,
                 onPressed: _compareRunning || _tank01SyncRunning
                     ? null
                     : _loadTeamsForCompare,
@@ -2666,7 +2831,7 @@ class _OutlinedAccentButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 14, color: color),
+              PhosphorIcon(icon!, size: 14, color: color),
               const SizedBox(width: 6),
             ],
             Text(label),

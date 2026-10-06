@@ -84,6 +84,11 @@ class PreferencesService {
   static const String _keyUseOfficialLeagueApis = 'use_official_league_apis';
   /// When false, caption V2 hides FTP buttons/shortcuts for the session.
   static const String _keyFtpModeEnabled = 'ftp_mode_enabled';
+  /// JSON list of recent `{away,home}` matchups per sport (startup screen).
+  static const String _keyRecentMatchupsPrefix = 'startup_recent_matchups_';
+  /// Last home/away team picks on the V2 startup screen (per sport).
+  static const String _keyStartupLastHomePrefix = 'startup_last_home_';
+  static const String _keyStartupLastAwayPrefix = 'startup_last_away_';
   /// `none` | `on_import` | `on_save` — when startup IPTC template is applied.
   static const String _keyIptcApplyMode = 'iptc_apply_mode';
   static const String _keyApplyIptcOnImport = 'apply_iptc_on_import';
@@ -2412,6 +2417,85 @@ class PreferencesService {
     return MapEntry(
       prefs.getString('$_keyCaptionPreviewHomePrefix$s'),
       prefs.getString('$_keyCaptionPreviewAwayPrefix$s'),
+    );
+  }
+
+  Future<void> saveStartupLastTeams({
+    required String sport,
+    required String homeTeam,
+    required String awayTeam,
+  }) async {
+    final prefs = await _getPrefs();
+    final s = sport.toLowerCase().trim();
+    await prefs.setString('$_keyStartupLastHomePrefix$s', homeTeam);
+    await prefs.setString('$_keyStartupLastAwayPrefix$s', awayTeam);
+    await saveLastCaptionPreviewTeams(
+      sport: s,
+      homeTeam: homeTeam,
+      awayTeam: awayTeam,
+    );
+  }
+
+  Future<MapEntry<String?, String?>> getStartupLastTeams({
+    required String sport,
+  }) async {
+    final prefs = await _getPrefs();
+    final s = sport.toLowerCase().trim();
+    final home = prefs.getString('$_keyStartupLastHomePrefix$s');
+    final away = prefs.getString('$_keyStartupLastAwayPrefix$s');
+    if ((home != null && home.isNotEmpty) ||
+        (away != null && away.isNotEmpty)) {
+      return MapEntry(home, away);
+    }
+    return getLastCaptionPreviewTeams(sport: s);
+  }
+
+  Future<List<MapEntry<String, String>>> getRecentMatchups({
+    required String sport,
+  }) async {
+    final prefs = await _getPrefs();
+    final raw =
+        prefs.getString('$_keyRecentMatchupsPrefix${sport.toLowerCase().trim()}');
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! List) return const [];
+      final out = <MapEntry<String, String>>[];
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final away = item['away']?.toString().trim() ?? '';
+        final home = item['home']?.toString().trim() ?? '';
+        if (away.isEmpty || home.isEmpty) continue;
+        out.add(MapEntry(away, home));
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Prepends [away] @ [home] for [sport], keeping at most four unique matchups.
+  Future<void> pushRecentMatchup({
+    required String sport,
+    required String away,
+    required String home,
+  }) async {
+    final a = away.trim();
+    final h = home.trim();
+    if (a.isEmpty || h.isEmpty || a == h) return;
+    final s = sport.toLowerCase().trim();
+    final existing = await getRecentMatchups(sport: s);
+    final next = <MapEntry<String, String>>[
+      MapEntry(a, h),
+      ...existing.where((e) => !(e.key == a && e.value == h)),
+    ];
+    if (next.length > 4) next.removeRange(4, next.length);
+    final prefs = await _getPrefs();
+    await prefs.setString(
+      '$_keyRecentMatchupsPrefix$s',
+      json.encode([
+        for (final e in next) {'away': e.key, 'home': e.value},
+      ]),
     );
   }
 

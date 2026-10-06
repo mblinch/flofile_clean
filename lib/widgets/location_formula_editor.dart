@@ -4,6 +4,7 @@ import '../caption_style/caption_formula_renderer.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
 import '../caption_style/region_abbrev.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Matches the caption layout dialog's accent blue.
 const Color _editorBlue = Color(0xFF0052CC);
@@ -422,8 +423,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     // becomes the immediate drag source on mouse / touch.
     Widget staticHandle() => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-          child: Icon(
-            Icons.drag_indicator,
+          child: PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
             size: 14,
             color: Colors.grey.shade500,
           ),
@@ -721,8 +721,7 @@ class _CountryVariantGearButtonState extends State<_CountryVariantGearButton> {
               borderRadius: BorderRadius.circular(3),
               onTap: _toggle,
               child: Center(
-                child: Icon(
-                  Icons.settings,
+                child: PhosphorIcon(PhosphorIconsRegular.gear,
                   size: 11,
                   color: Colors.grey.shade700,
                 ),
@@ -927,8 +926,7 @@ class _RegionVariantGearButtonState extends State<_RegionVariantGearButton> {
               borderRadius: BorderRadius.circular(3),
               onTap: _toggle,
               child: Center(
-                child: Icon(
-                  Icons.settings,
+                child: PhosphorIcon(PhosphorIconsRegular.gear,
                   size: 11,
                   color: Colors.grey.shade700,
                 ),

@@ -36,7 +36,7 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
   @override
   void initState() {
     super.initState();
-    _load();
+    _load(notify: false);
   }
 
   @override
@@ -45,7 +45,7 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
     if (oldWidget.path != widget.path ||
         oldWidget.version != widget.version ||
         _cacheWidthChanged(oldWidget.cacheWidth, widget.cacheWidth)) {
-      _load();
+      _load(notify: true);
     }
   }
 
@@ -57,13 +57,32 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
     return (next - previous).abs() / previous > 0.2;
   }
 
-  void _load() {
+  void _load({required bool notify}) {
     final t = ++_token;
+    // Paint immediately when already warmed — avoids spinner flash on scroll.
+    final cached = OrientedImageBytes.peekCached(
+      widget.path,
+      maxWidth: widget.cacheWidth,
+    );
+    if (notify) {
+      setState(() => _bytes = cached);
+    } else {
+      _bytes = cached;
+    }
     OrientedImageBytes.load(
       widget.path,
       maxWidth: widget.cacheWidth,
+      priority: true,
     ).then((bytes) {
       if (!mounted || t != _token) return;
+      if (identical(_bytes, bytes)) {
+        if (bytes != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) widget.onLoaded?.call();
+          });
+        }
+        return;
+      }
       setState(() => _bytes = bytes);
       if (bytes != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -1,0 +1,263 @@
+/* Admin console — extends marketing site tokens */
+
+.admin-shell {
+  min-height: 100vh;
+}
+
+.admin-main {
+  padding: 28px 0 64px;
+}
+
+.admin-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px 22px 18px;
+  max-width: 980px;
+}
+
+.admin-card h1 {
+  margin: 0 0 8px;
+  font-size: 1.45rem;
+  letter-spacing: -0.02em;
+}
+
+.admin-card p {
+  margin: 0 0 16px;
+  color: var(--text-secondary);
+}
+
+.admin-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.admin-tab {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-tab.is-active {
+  background: var(--selected);
+  border-color: var(--selected-border);
+  color: var(--text);
+}
+
+.admin-user-chip {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+
+.admin-status {
+  min-height: 1.2em;
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  color: var(--accent);
+}
+
+.admin-status.is-error {
+  color: #ff8a8a;
+}
+
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.admin-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 160px;
+}
+
+.admin-field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.admin-select,
+.admin-input {
+  appearance: none;
+  background: var(--bg-sunken);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.92rem;
+}
+
+.admin-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.admin-input-narrow {
+  width: 72px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-sunken);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-table th {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-muted {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.admin-empty {
+  position: relative;
+  isolation: isolate;
+  color: var(--text-secondary);
+  padding: 16px 4px;
+}
+.admin-empty.glow::before {
+  --glow-w: 320px;
+  --glow-h: 200px;
+  --glow-color: rgba(74, 122, 150, 0.14);
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.btn-sm {
+  padding: 5px 9px;
+  font-size: 0.82rem;
+  border-radius: 7px;
+}
+
+.btn-danger-ghost {
+  background: transparent;
+  border: 1px solid rgba(240, 113, 103, 0.35);
+  color: var(--red, #f07167);
+}
+
+.btn-danger-ghost:hover {
+  background: var(--redbg, rgba(240, 113, 103, 0.10));
+  color: var(--red, #f07167);
+}
+
+.admin-issue-block {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-sunken);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.admin-issue-block h3 {
+  margin: 0 0 10px;
+  font-size: 0.98rem;
+}
+
+.admin-issue-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.admin-issue-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.admin-issue-title {
+  font-weight: 600;
+}
+
+.admin-issue-sub {
+  margin-top: 2px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.admin-player-link {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-edge);
+  text-underline-offset: 2px;
+}
+
+.admin-player-link:hover {
+  color: var(--accent-hover);
+  text-decoration-color: var(--accent-hover);
+}
+
+.admin-player-link-inline {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 720px) {
+  .admin-issue-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-actions {
+    justify-content: flex-start;
+  }
+}

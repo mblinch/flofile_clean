@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../flo_layout_constants.dart';
 import '../theme/app_tokens.dart';
 import '../theme/ff_tokens.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// When enabled, shared dialog controls use Caption V2 [FfTokens] instead of
 /// the classic white/teal chrome.
@@ -383,7 +384,7 @@ class AppDialogLabeledField extends StatelessWidget {
                             TextSpan(
                               text: ' *',
                               style: labelStyle.copyWith(
-                                color: t?.accent ?? const Color(0xFFE25555),
+                                color: t != null ? FfTokens.danger : const Color(0xFFF07167),
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
@@ -493,14 +494,24 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
     required this.value,
     required this.items,
     required this.onChanged,
+    this.labelTrailing,
     this.bottomGap = 12,
+    this.onDeleteItem,
+    this.canDeleteItem,
   });
 
   final String label;
   final T? value;
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T?>? onChanged;
+  final Widget? labelTrailing;
   final double bottomGap;
+
+  /// Optional per-row delete action (e.g. trash beside each category).
+  final ValueChanged<T>? onDeleteItem;
+
+  /// When set with [onDeleteItem], return false to hide trash for that value.
+  final bool Function(T value)? canDeleteItem;
 
   static const double _menuItemHeight = 30.0;
 
@@ -510,6 +521,12 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
     }
     if (items.isNotEmpty) return items.first.child;
     return const SizedBox.shrink();
+  }
+
+  bool _deletable(T? itemValue) {
+    if (onDeleteItem == null || itemValue == null) return false;
+    if (canDeleteItem == null) return true;
+    return canDeleteItem!(itemValue);
   }
 
   Future<void> _openMenu(BuildContext context) async {
@@ -559,11 +576,42 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
                   ),
                 ),
                 if (item.value == value)
-                  Icon(
-                    Icons.check,
+                  PhosphorIcon(PhosphorIconsRegular.check,
                     size: 16,
                     color: t?.text ?? const Color(0xFF333333),
                   ),
+                if (_deletable(item.value)) ...[
+                  const SizedBox(width: 4),
+                  Builder(
+                    builder: (itemContext) {
+                      return Tooltip(
+                        message: 'Delete category',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              final toDelete = item.value;
+                              Navigator.of(itemContext).pop();
+                              if (toDelete == null) return;
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                onDeleteItem!(toDelete);
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(2),
+                              child: PhosphorIcon(PhosphorIconsRegular.trash,
+                                size: 15,
+                                color: const Color(0xFFF07167)
+                                    .withValues(alpha: 0.90),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
           ),
@@ -579,6 +627,7 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
     return AppDialogLabeledField(
       label: label,
       bottomGap: bottomGap,
+      labelTrailing: labelTrailing,
       child: Builder(
         builder: (buttonContext) {
           return AppDialogControlShell(
@@ -592,8 +641,7 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
                     child: _selectedChild(),
                   ),
                 ),
-                Icon(
-                  Icons.arrow_drop_down,
+                PhosphorIcon(PhosphorIconsRegular.caretDown,
                   size: 18,
                   color: enabled
                       ? (t?.textSecondary ?? const Color(0xFF666666))
@@ -743,8 +791,7 @@ Future<bool?> showAppConfirmDialog({
                                 borderRadius: BorderRadius.circular(6),
                                 child: Padding(
                                   padding: const EdgeInsets.all(4),
-                                  child: Icon(
-                                    Icons.close,
+                                  child: PhosphorIcon(PhosphorIconsRegular.x,
                                     size: 16,
                                     color: tokens.textSecondary,
                                   ),
@@ -1063,8 +1110,8 @@ class AppSecondaryButton extends StatelessWidget {
         mainAxisSize: fullWidth ? MainAxisSize.max : MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(
-              icon,
+            PhosphorIcon(
+              icon!,
               size: 11,
               color: enabled ? Colors.grey.shade700 : Colors.grey.shade600,
             ),
@@ -1134,26 +1181,40 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
     final ff = appDialogTokens(context);
 
     if (ff != null && !admin && !teal) {
+      // Primary = gold; danger ghost = --red text/border, --redbg on hover;
+      // danger confirm (isPrimary+isDanger) = solid --red + dark ink.
+      final isDangerConfirm = widget.isDanger && widget.isPrimary;
       final fill = !enabled
-          ? ff.badgeFill
-          : danger
-              ? const Color(0x33C0392B)
-              : widget.isPrimary
-                  ? ( _pressed
-                      ? ff.accent.withValues(alpha: 0.85)
-                      : (_hovered
-                          ? ff.accent.withValues(alpha: 0.92)
-                          : ff.accent))
-                  : (_pressed
-                      ? ff.badgeFill
-                      : (_hovered ? ff.surface : ff.sunken));
+          ? (widget.isPrimary
+              ? (isDangerConfirm
+                      ? FfTokens.danger
+                      : FfTokens.gold)
+                  .withValues(alpha: 0.4)
+              : ff.badgeFill)
+          : isDangerConfirm
+              ? FfTokens.danger
+              : danger
+                  ? FfTokens.dangerBg
+                  : widget.isPrimary
+                      ? (_pressed
+                          ? FfTokens.gold.withValues(alpha: 0.88)
+                          : (_hovered
+                              ? Color.lerp(FfTokens.gold, Colors.white, 0.12)!
+                              : FfTokens.gold))
+                      : (_pressed
+                          ? ff.badgeFill
+                          : (_hovered ? ff.surface : ff.sunken));
       final fg = !enabled
-          ? ff.textSecondary
-          : danger
-              ? const Color(0xFFC0392B)
-              : widget.isPrimary
-                  ? ff.inkOnAccent
-                  : ff.text;
+          ? (widget.isPrimary
+              ? FfTokens.inkOnGold.withValues(alpha: 0.4)
+              : ff.textSecondary)
+          : isDangerConfirm
+              ? FfTokens.inkOnGold
+              : danger
+                  ? FfTokens.danger
+                  : widget.isPrimary
+                      ? FfTokens.inkOnGold
+                      : ff.text;
       return MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
@@ -1176,11 +1237,13 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
               border: Border.all(
                 color: !enabled
                     ? ff.divider
-                    : danger
-                        ? const Color(0x33C0392B)
-                        : widget.isPrimary
-                            ? Colors.transparent
-                            : ff.divider,
+                    : isDangerConfirm
+                        ? FfTokens.danger
+                        : danger
+                            ? FfTokens.dangerBorder
+                            : widget.isPrimary
+                                ? Colors.transparent
+                                : ff.divider,
               ),
             ),
             child: Row(
@@ -1189,7 +1252,7 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 if (widget.icon != null) ...[
-                  Icon(widget.icon, size: widget.fontSize, color: fg),
+                  PhosphorIcon(widget.icon!, size: widget.fontSize, color: fg),
                   const SizedBox(width: 5),
                 ],
                 Flexible(
@@ -1236,7 +1299,7 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                       ? Colors.grey.shade300
                       : const Color(0x1A000000))
                   : danger
-                      ? const Color(0x33C0392B)
+                      ? FfTokens.dangerBorder
                       : admin
                           ? kFloAdminGoldDark
                           : teal
@@ -1266,8 +1329,8 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                                   ]
                                 : danger
                                     ? [
-                                        const Color(0xFFFFF5F5),
-                                        const Color(0xFFFFE8E8)
+                                        FfTokens.dangerBg,
+                                        FfTokens.dangerBg,
                                       ]
                                     : _hovered
                                         ? [
@@ -1317,19 +1380,19 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
-                Icon(
-                  widget.icon,
+                PhosphorIcon(
+                  widget.icon!,
                   size: widget.fontSize,
                   color: !enabled
                       ? ((teal || admin)
                           ? Colors.grey.shade600
                           : const Color(0xFFAAAAAA))
                       : danger
-                          ? const Color(0xFFC0392B)
+                          ? FfTokens.danger
                           : admin
                               ? kFloAdminGoldText
                               : teal
-                                  ? Colors.white
+                                  ? FfTokens.nocturneBg
                                   : const Color(0xFF555555),
                 ),
                 const SizedBox(width: 5),
@@ -1350,11 +1413,11 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                             ? Colors.grey.shade600
                             : const Color(0xFFAAAAAA))
                         : danger
-                            ? const Color(0xFFC0392B)
+                            ? FfTokens.danger
                             : admin
                                 ? kFloAdminGoldText
                                 : teal
-                                    ? Colors.white
+                                    ? FfTokens.nocturneBg
                                     : const Color(0xFF555555),
                   ),
                 ),
@@ -1378,7 +1441,7 @@ class AppPopupMenu {
     bool destructive = false,
     double height = kAppContextMenuItemHeight,
   }) {
-    final Color c = destructive ? const Color(0xFFC62828) : Colors.black87;
+    final Color c = destructive ? FfTokens.danger : Colors.black87;
     return PopupMenuItem<T>(
       value: value,
       height: height,
@@ -1387,7 +1450,7 @@ class AppPopupMenu {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 13, color: c),
+            PhosphorIcon(icon!, size: 13, color: c),
             const SizedBox(width: 6),
           ],
           Text(

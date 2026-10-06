@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'metadata_preset_dialog.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class MetadataWidget extends StatefulWidget {
   final Map<String, dynamic>? metadata;
@@ -498,7 +499,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Icon(Icons.arrow_drop_down, size: 16),
+                  const PhosphorIcon(PhosphorIconsRegular.caretDown, size: 16),
                 ],
               ),
             ),
@@ -555,7 +556,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Icon(Icons.calendar_today, size: 16),
+                  const PhosphorIcon(PhosphorIconsRegular.calendarBlank, size: 16),
                 ],
               ),
             ),
@@ -612,7 +613,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const Icon(Icons.access_time, size: 16),
+                  const PhosphorIcon(PhosphorIconsRegular.clock, size: 16),
                 ],
               ),
             ),
@@ -645,7 +646,7 @@ class _MetadataWidgetState extends State<MetadataWidget> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, size: 16, color: Colors.black87),
+                const PhosphorIcon(PhosphorIconsRegular.info, size: 16, color: Colors.black87),
                 const SizedBox(width: 8),
                 const Text(
                   'Metadata',

@@ -1,20 +1,30 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../caption_style/caption_formula_renderer.dart';
+import '../../../caption_style/caption_style_catalog.dart';
+import '../../../caption_style/caption_template.dart';
+import '../../../caption_style/game_info.dart';
 import '../../../config/tank01_config.dart';
 import '../../../services/admin_service.dart';
 import '../../../services/api_manager.dart';
+import '../../../services/current_user_service.dart';
 import '../../../services/iptc_template_apply_service.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
 import '../../../widgets/app_styled_dialogs.dart';
-import '../../../widgets/startup_caption_layout_preview.dart';
+import '../../../widgets/caption_layout_builder_dialog.dart';
 import 'caption_v2_iptc_dialog.dart';
 import 'roster_import_dialog.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Result handed from the V2 startup screen into the caption session.
 class CaptionV2StartupResult {
@@ -54,10 +64,14 @@ class CaptionV2StartupScreen extends StatefulWidget {
 
 class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   final _api = ApiManager();
+  final _rootFocus = FocusNode();
+  final _awayFocus = FocusNode();
+  final _homeFocus = FocusNode();
   PreferencesService? _prefs;
 
   String? _sport;
   String? _folderPath;
+  int _imageCount = 0;
   String? _homeTeam;
   String? _awayTeam;
   List<Player>? _homeRoster;
@@ -67,6 +81,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool _loadingTeams = false;
   bool _offline = false;
   bool _pickingFolder = false;
+  bool _folderDragOver = false;
   bool _going = false;
   bool _usingCustomRosters = false;
   String? _error;
@@ -80,6 +95,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   String _iptcStatus = "Don't write IPTC";
   bool _ftpModeEnabled = true;
 
+  CaptionStyleCatalog? _styleCatalog;
+  CaptionTemplate? _captionTemplate;
+  String? _selectedStyleToken;
+  bool _loadingStyles = true;
+
   static const _sports = <String>[
     'baseball',
     'hockey',
@@ -87,6 +107,14 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     'wnba',
     'soccer',
   ];
+
+  static const _imageExtensions = {
+    '.jpg',
+    '.jpeg',
+    '.tif',
+    '.tiff',
+    '.png',
+  };
 
   bool get _sportChosen => _sport != null && _sport!.isNotEmpty;
   bool get _folderChosen => _folderPath != null && _folderPath!.isNotEmpty;
@@ -98,17 +126,23 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool get _inferredSingleTeam =>
       (_homeFilled && !_awayFilled) || (!_homeFilled && _awayFilled);
 
-  bool get _teamsChosen {
-    if (_inferredSingleTeam) return true;
-    if (!_homeFilled || !_awayFilled) return false;
-    return _homeTeam != _awayTeam;
-  }
+  bool get _bothTeamsChosen =>
+      _homeFilled && _awayFilled && _homeTeam != _awayTeam;
 
-  bool get _canGo => _sportChosen && _folderChosen && _teamsChosen && !_going;
+  /// Go Time requires folder + sport + both teams (per redesign).
+  bool get _canGo =>
+      _sportChosen && _folderChosen && _bothTeamsChosen && !_going;
 
   bool get _writeIptc => _iptcMode != IptcApplyMode.none;
 
   bool get _tank01Supported => _sport != null && tank01SupportsSport(_sport!);
+
+  Set<String> get _favoriteTeamNames {
+    final out = <String>{};
+    if (_favoriteHome != null) out.add(_favoriteHome!);
+    if (_favoriteAway != null) out.add(_favoriteAway!);
+    return out;
+  }
 
   String get _apiLabel {
     if (!_sportChosen) return '';
@@ -116,9 +150,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final tank01Fb = _tank01Supported && !official;
     switch (_sport) {
       case 'baseball':
-        return tank01Fb
-            ? 'Tank01 Firebase (MLB)'
-            : 'MLB Stats API';
+        return tank01Fb ? 'Tank01 Firebase (MLB)' : 'MLB Stats API';
       case 'hockey':
         return tank01Fb ? 'Tank01 Firebase (NHL)' : 'NHL API';
       case 'basketball':
@@ -132,10 +164,42 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
+  String get _outputLabel {
+    if (_writeIptc && _ftpModeEnabled) return 'IPTC + FTP';
+    if (_writeIptc) return 'IPTC';
+    if (_ftpModeEnabled) return 'FTP';
+    return 'Captions only';
+  }
+
+  String get _goHint {
+    if (_canGo) {
+      final n = _imageCount;
+      return n == 1 ? '1 image ready' : '$n images ready';
+    }
+    final missing = <String>[];
+    if (!_folderChosen) missing.add('a folder');
+    if (!_sportChosen) missing.add('a sport');
+    if (!_bothTeamsChosen) missing.add('both teams');
+    if (missing.isEmpty) return 'Complete setup to start.';
+    if (missing.length == 1) return 'Add ${missing.first} to start.';
+    if (missing.length == 2) {
+      return 'Add ${missing[0]} and ${missing[1]} to start.';
+    }
+    return 'Add ${missing[0]}, ${missing[1]} and ${missing[2]} to start.';
+  }
+
   @override
   void initState() {
     super.initState();
     _bootstrap();
+  }
+
+  @override
+  void dispose() {
+    _rootFocus.dispose();
+    _awayFocus.dispose();
+    _homeFocus.dispose();
+    super.dispose();
   }
 
   Future<void> _bootstrap() async {
@@ -149,8 +213,14 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       }
       _iptcStatus = await _iptcStatusFromPrefs();
       _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
+      await _loadCaptionStyles();
       if (!mounted) return;
       setState(() {});
+
+      final savedSport = (await _prefs!.getCurrentSport()).trim();
+      if (savedSport.isNotEmpty && _sports.contains(savedSport)) {
+        await _selectSport(savedSport, persist: false, restoreTeams: true);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'Startup failed: $e');
@@ -171,7 +241,43 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
-  Future<void> _selectSport(String sport, {bool persist = true}) async {
+  Future<void> _loadCaptionStyles() async {
+    setState(() => _loadingStyles = true);
+    try {
+      final prefs = _prefs ?? await PreferencesService.getInstance();
+      final catalog =
+          await CaptionStyleCatalog.load(prefs, sport: _sport);
+      final template = await prefs.getCaptionTemplate();
+      // Overlay sport-correct game ID for built-in wires so the side preview
+      // never shows a stale league (e.g. NHL during baseball).
+      final sportAware = _sportChosen
+          ? await prefs.applyGameIdentifierForSport(
+              template,
+              template.wireStyle,
+              _sport!,
+            )
+          : template;
+      if (!mounted) return;
+      setState(() {
+        _styleCatalog = catalog;
+        _captionTemplate = sportAware;
+        _selectedStyleToken = catalog.activeToken;
+        _loadingStyles = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadingStyles = false;
+        _error = 'Could not load caption styles: $e';
+      });
+    }
+  }
+
+  Future<void> _selectSport(
+    String sport, {
+    bool persist = true,
+    bool restoreTeams = false,
+  }) async {
     if (!mounted) return;
     setState(() {
       _sport = sport;
@@ -187,8 +293,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     try {
       _api.setSport(sport);
       if (persist) {
-        // Persist only when the user taps a sport (not on cold auto-highlight).
-        // Defer cloud-heavy save work so a chip tap can't hang / race the UI.
         unawaited(() async {
           try {
             await _prefs?.saveCurrentSport(sport);
@@ -198,7 +302,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         }());
       }
       await _loadFavorites(sport);
-      await _loadTeams();
+      await _loadTeams(restoreLastTeams: restoreTeams);
+      await _loadCaptionStyles();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -220,7 +325,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
-  Future<void> _loadTeams() async {
+  Future<void> _loadTeams({bool restoreLastTeams = false}) async {
     if (!_sportChosen) return;
     setState(() {
       _loadingTeams = true;
@@ -230,31 +335,101 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       final teams = await _api.fetchTeams();
       if (!mounted) return;
       final names = teams.map((t) => t.name).toSet().toList()..sort();
-      setState(() {
-        _offline = false;
-        _teams = names;
-        _loadingTeams = false;
-        if (_favoriteHome != null && names.contains(_favoriteHome)) {
-          _homeTeam = _favoriteHome;
-        }
-        if (_favoriteAway != null && names.contains(_favoriteAway)) {
-          _awayTeam = _favoriteAway;
-        }
-      });
+      await _applyTeamList(
+        names,
+        offline: false,
+        restoreLastTeams: restoreLastTeams,
+      );
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _offline = true;
-        _teams = _fallbackTeams(_sport!);
-        _loadingTeams = false;
-        _error = 'Teams loaded offline — check network to refresh.';
-        if (_favoriteHome != null && _teams.contains(_favoriteHome)) {
-          _homeTeam = _favoriteHome;
-        }
-        if (_favoriteAway != null && _teams.contains(_favoriteAway)) {
-          _awayTeam = _favoriteAway;
-        }
-      });
+      await _applyTeamList(
+        _fallbackTeams(_sport!),
+        offline: true,
+        restoreLastTeams: restoreLastTeams,
+        error: 'Teams loaded offline — check network to refresh.',
+      );
+    }
+  }
+
+  Future<void> _applyTeamList(
+    List<String> names, {
+    required bool offline,
+    bool restoreLastTeams = false,
+    String? error,
+  }) async {
+    String? home;
+    String? away;
+
+    if (_favoriteHome != null && names.contains(_favoriteHome)) {
+      home = _favoriteHome;
+    }
+    if (_favoriteAway != null &&
+        names.contains(_favoriteAway) &&
+        _favoriteAway != home) {
+      away = _favoriteAway;
+    }
+
+    if (restoreLastTeams || (home == null && away == null)) {
+      final last = await _prefs?.getStartupLastTeams(sport: _sport!) ??
+          const MapEntry(null, null);
+      if (home == null &&
+          last.key != null &&
+          names.contains(last.key) &&
+          last.key != away) {
+        home = last.key;
+      }
+      if (away == null &&
+          last.value != null &&
+          names.contains(last.value) &&
+          last.value != home) {
+        away = last.value;
+      }
+    }
+
+    if (home != null && home == away) {
+      away = null;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _offline = offline;
+      _teams = names;
+      _loadingTeams = false;
+      _homeTeam = home;
+      _awayTeam = away;
+      _error = error;
+    });
+  }
+
+  Future<void> _setFolder(String path) async {
+    final count = await _countImages(path);
+    if (!mounted) return;
+    setState(() {
+      _folderPath = path;
+      _imageCount = count;
+      _pickingFolder = false;
+      _folderDragOver = false;
+    });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('last_images_folder', path);
+    } catch (_) {}
+  }
+
+  Future<int> _countImages(String dirPath) async {
+    try {
+      var n = 0;
+      await for (final entity in Directory(dirPath).list(followLinks: false)) {
+        if (entity is! File) continue;
+        final name = p.basename(entity.path);
+        if (name.startsWith('.') || name.startsWith('._')) continue;
+        final lower = name.toLowerCase();
+        if (lower.startsWith('tmp.') || lower.endsWith('.tmp')) continue;
+        if (_imageExtensions.contains(p.extension(lower))) n++;
+      }
+      return n;
+    } catch (_) {
+      return 0;
     }
   }
 
@@ -273,15 +448,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         if (mounted) setState(() => _pickingFolder = false);
         return;
       }
-      try {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('last_images_folder', result);
-      } catch (_) {}
-      if (!mounted) return;
-      setState(() {
-        _folderPath = result;
-        _pickingFolder = false;
-      });
+      await _setFolder(result);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -289,6 +456,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _error = 'Could not open folder: $e';
       });
     }
+  }
+
+  void _onFolderDropped(DropDoneDetails detail) {
+    if (detail.files.isEmpty) return;
+    final first = detail.files.first.path;
+    if (first.isEmpty) return;
+    final entity = FileSystemEntity.typeSync(first);
+    final folder = entity == FileSystemEntityType.directory
+        ? first
+        : p.dirname(first);
+    unawaited(_setFolder(folder));
   }
 
   Future<void> _toggleFavorite({required bool isHome}) async {
@@ -358,6 +536,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   Future<void> _pasteRoster() async {
+    if (!_sportChosen) return;
     setState(() => _usingCustomRosters = true);
     final result = await showRosterImportDialog(
       context,
@@ -377,6 +556,66 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       if (result.awayPlayers != null) {
         _awayTeam = result.awayTeamName;
       }
+    });
+  }
+
+  Future<void> _selectStyle(String token) async {
+    final catalog = _styleCatalog;
+    if (catalog == null || token == _selectedStyleToken) return;
+    final prefs = _prefs ?? await PreferencesService.getInstance();
+    final template = catalog
+        .resolve(token, refForCustom: _captionTemplate)
+        .normalizePerOccurrenceLists();
+    final sportAware = _sportChosen
+        ? await prefs.applyGameIdentifierForSport(
+            template,
+            template.wireStyle,
+            _sport!,
+          )
+        : template;
+    await prefs.saveCaptionTemplate(sportAware);
+    if (!mounted) return;
+    setState(() {
+      _selectedStyleToken = token;
+      _captionTemplate = sportAware;
+    });
+  }
+
+  Future<void> _editStyles() async {
+    final applied = await CaptionLayoutBuilderDialog.show(context);
+    if (!mounted) return;
+    if (applied != null) {
+      final prefs = _prefs ?? await PreferencesService.getInstance();
+      final catalog =
+          await CaptionStyleCatalog.load(prefs, sport: _sport);
+      final sportAware = _sportChosen
+          ? await prefs.applyGameIdentifierForSport(
+              applied,
+              applied.wireStyle,
+              _sport!,
+            )
+          : applied;
+      if (!mounted) return;
+      setState(() {
+        _styleCatalog = catalog;
+        _captionTemplate = sportAware;
+        _selectedStyleToken = catalog.activeToken;
+      });
+      return;
+    }
+    await _loadCaptionStyles();
+  }
+
+  void _swapTeams() {
+    setState(() {
+      final tmp = _homeTeam;
+      _homeTeam = _awayTeam;
+      _awayTeam = tmp;
+      final tmpRoster = _homeRoster;
+      _homeRoster = _awayRoster;
+      _awayRoster = tmpRoster;
+      // Favorites stay side-specific; only swap selections.
+      _usingCustomRosters = false;
     });
   }
 
@@ -426,6 +665,14 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       awayRoster = _awayRoster;
     }
 
+    if (_sport != null && away.isNotEmpty) {
+      await _prefs?.saveStartupLastTeams(
+        sport: _sport!,
+        homeTeam: home,
+        awayTeam: away,
+      );
+    }
+
     widget.onComplete(
       CaptionV2StartupResult(
         sport: _sport!,
@@ -439,301 +686,710 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey != LogicalKeyboardKey.enter &&
+        event.logicalKey != LogicalKeyboardKey.numpadEnter) {
+      return KeyEventResult.ignored;
+    }
+    if (_awayFocus.hasFocus || _homeFocus.hasFocus) {
+      return KeyEventResult.ignored;
+    }
+    if (!_canGo) return KeyEventResult.ignored;
+    unawaited(_goTime());
+    return KeyEventResult.handled;
+  }
+
+  List<String> _sortedTeams({String? exclude}) {
+    final favs = _favoriteTeamNames;
+    final excluded = exclude?.trim();
+    final list = _teams
+        .where((t) => excluded == null || excluded.isEmpty || t != excluded)
+        .toList();
+    list.sort((a, b) {
+      final af = favs.contains(a);
+      final bf = favs.contains(b);
+      if (af != bf) return af ? -1 : 1;
+      return a.toLowerCase().compareTo(b.toLowerCase());
+    });
+    return list;
+  }
+
+  void _setAwayTeam(String? team) {
+    setState(() {
+      _usingCustomRosters = false;
+      _awayTeam = team;
+      if (team != null && team == _homeTeam) {
+        _homeTeam = null;
+      }
+      _homeRoster = null;
+      _awayRoster = null;
+    });
+  }
+
+  void _setHomeTeam(String? team) {
+    setState(() {
+      _usingCustomRosters = false;
+      _homeTeam = team;
+      if (team != null && team == _awayTeam) {
+        _awayTeam = null;
+      }
+      _homeRoster = null;
+      _awayRoster = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
 
-    return ColoredBox(
-      color: t.bg,
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    return Focus(
+      focusNode: _rootFocus,
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.lerp(t.accent, t.bg, 0.62)!,
+              Color.lerp(t.accent, t.bg, 0.82)!,
+              t.bg,
+              Color.lerp(t.bg, t.sunken, 0.55)!,
+            ],
+            stops: const [0.0, 0.28, 0.62, 1.0],
+          ),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 900;
+            final width = constraints.maxWidth.clamp(0.0, 1200.0);
+            final height = constraints.maxHeight.clamp(0.0, 780.0);
+            return Align(
+              alignment: Alignment.center,
+              child: SizedBox(
+                width: width,
+                height: height,
+                child: wide
+                    ? _buildWideLayout(t)
+                    : _buildNarrowLayout(t),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideLayout(FfTokens t) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 60, child: _buildSteps(t)),
+                const SizedBox(width: 16),
+                Expanded(flex: 40, child: _buildSidePanel(t)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNarrowLayout(FfTokens t) {
+    // Still no page scroll — stack and let columns share height.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 3,
+            child: _buildSteps(t),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            flex: 2,
+            child: _buildSidePanel(t),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSteps(FfTokens t) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Flexible(
+          flex: 2,
+          child: _StepCard(
+            number: 1,
+            title: 'Images folder',
+            complete: _folderChosen,
+            child: _buildFolderStep(t),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Flexible(
+          flex: 2,
+          child: _StepCard(
+            number: 2,
+            title: 'Sport',
+            complete: _sportChosen,
+            child: _buildSportStep(t),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Flexible(
+          flex: 3,
+          child: _StepCard(
+            number: 3,
+            title: 'Teams',
+            complete: _bothTeamsChosen,
+            trailing: _GhostButton(
+              label: 'Refresh rosters',
+              icon: PhosphorIconsRegular.arrowClockwise,
+              onPressed: _sportChosen && !_loadingTeams ? _loadTeams : null,
+            ),
+            child: _buildTeamsStep(t),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Flexible(
+          flex: 3,
+          child: _StepCard(
+            number: 4,
+            title: 'Caption style',
+            complete: _selectedStyleToken != null,
+            trailing: _GhostButton(
+              label: 'Edit styles',
+              onPressed: _editStyles,
+            ),
+            child: _buildStyleStep(t),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Flexible(
+          flex: 3,
+          child: _StepCard(
+            number: 5,
+            title: 'Session options',
+            complete: true,
+            child: _buildSessionStep(t),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            _error!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11.5,
+              color: t.accent,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFolderStep(FfTokens t) {
+    final chosen = _folderChosen;
+    final borderColor = _folderDragOver
+        ? t.accent
+        : chosen
+            ? t.divider
+            : const Color(0x38E4EAF2); // rgba(228,234,242,.22)
+    final bg = _folderDragOver ? t.selected : t.bg;
+
+    final useDashed = !chosen && !_folderDragOver;
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: DropTarget(
+      onDragEntered: (_) => setState(() => _folderDragOver = true),
+      onDragExited: (_) => setState(() => _folderDragOver = false),
+      onDragDone: _onFolderDropped,
+      child: CustomPaint(
+        painter: useDashed
+            ? _DashedRRectPainter(
+                color: borderColor,
+                radius: 8,
+              )
+            : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+            border: useDashed
+                ? null
+                : Border.all(color: borderColor, width: 1),
+          ),
+          child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: t.elevated,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: t.divider),
+              ),
+              child: PhosphorIcon(PhosphorIconsRegular.folder,
+                size: 16,
+                color: chosen ? FfTokens.statusSaved : t.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: chosen
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          p.basename(_folderPath!),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: t.text,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          _imageCount == 1
+                              ? '1 image'
+                              : '$_imageCount images',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 11,
+                            color: t.textTertiary,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Drop a folder here',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                            color: t.text,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          'or choose one from your computer',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 11,
+                            color: t.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
+            const SizedBox(width: 10),
+            _OutlinedAction(
+              label: _pickingFolder
+                  ? 'Opening…'
+                  : (chosen ? 'Change' : 'Choose folder'),
+              onPressed: _pickingFolder ? null : _pickFolder,
+            ),
+          ],
+        ),
+        ),
+      ),
+      ),
+    );
+  }
+
+  Widget _buildSportStep(FfTokens t) {
+    return Align(
+      alignment: Alignment.topLeft,
+      child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final s in _sports)
+              _SportChip(
+                label: _sportLabel(s),
+                selected: _sport == s,
+                onTap: () => _selectSport(s),
+              ),
+          ],
+        ),
+        if (_sport == 'soccer') ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: Checkbox(
+                  value: true,
+                  onChanged: null,
+                  activeColor: t.accent,
+                  checkColor: t.inkOnAccent,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Always use ESPN MLS rosters for soccer',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11.5,
+                    color: t.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ] else if (_isAdmin) ...[
+          const SizedBox(height: 6),
+          _OptionRow(
+            title: 'Official league APIs',
+            description: _tank01Supported
+                ? 'On: sports/… APIs · Off: Tank01 Firebase (default)'
+                : _apiLabel,
+            value: _useOfficialLeagueApis && _tank01Supported,
+            enabled: _sportChosen && _tank01Supported,
+            onChanged: _setUseOfficialLeagueApis,
+          ),
+        ],
+      ],
+      ),
+    );
+  }
+
+  Widget _buildTeamsStep(FfTokens t) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Expanded(
+              child: _TeamDropdown(
+                label: 'Away',
+                value: _awayTeam,
+                teams: _sortedTeams(exclude: _homeTeam),
+                excludeTeam: _homeTeam,
+                enabled: _sportChosen && !_loadingTeams,
+                favorited:
+                    _awayTeam != null && _favoriteAway == _awayTeam,
+                favoriteNames: _favoriteTeamNames,
+                focusNode: _awayFocus,
+                hintText:
+                    _sportChosen ? 'Select away…' : 'Pick a sport first',
+                onChanged: _setAwayTeam,
+                onToggleFavorite: () => _toggleFavorite(isHome: false),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 8, right: 8, bottom: 2),
+              child: _SwapButton(
+                enabled: _sportChosen,
+                onPressed: _swapTeams,
+              ),
+            ),
+            Expanded(
+              child: _TeamDropdown(
+                label: 'Home',
+                value: _homeTeam,
+                teams: _sortedTeams(exclude: _awayTeam),
+                excludeTeam: _awayTeam,
+                enabled: _sportChosen && !_loadingTeams,
+                favorited:
+                    _homeTeam != null && _favoriteHome == _homeTeam,
+                favoriteNames: _favoriteTeamNames,
+                focusNode: _homeFocus,
+                hintText:
+                    _sportChosen ? 'Select home…' : 'Pick a sport first',
+                onChanged: _setHomeTeam,
+                onToggleFavorite: () => _toggleFavorite(isHome: true),
+              ),
+            ),
+          ],
+        ),
+        if (_loadingTeams && availableTeamsEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Loading team list…',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11,
+              color: t.textTertiary,
+            ),
+          ),
+        ],
+        if (_offline && _sportChosen) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Offline list',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11,
+              color: t.textTertiary,
+            ),
+          ),
+        ],
+        const SizedBox(height: 4),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: _GhostButton(
+            label: 'Paste rosters from a webpage or other source',
+            icon: PhosphorIconsRegular.fileText,
+            onPressed: _sportChosen ? _pasteRoster : null,
+          ),
+        ),
+        if (_usingCustomRosters &&
+            (_homeRoster != null || _awayRoster != null)) ...[
+          const SizedBox(height: 2),
+          Text(
+            '${(_awayRoster?.length ?? 0) + (_homeRoster?.length ?? 0)} players pasted',
+            style: const TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11,
+              color: FfTokens.statusSaved,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  bool get availableTeamsEmpty => _teams.isEmpty;
+
+  Widget _buildStyleStep(FfTokens t) {
+    if (_loadingStyles) {
+      return const Center(
+        child: SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+    final catalog = _styleCatalog;
+    if (catalog == null) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Align(
+          alignment: Alignment.topLeft,
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final opt in catalog.options)
+                SizedBox(
+                  width: _styleCardWidth(constraints.maxWidth),
+                  child: _StyleCard(
+                    name: opt.label,
+                    description: _styleDescription(opt.token, opt.label),
+                    selected: _selectedStyleToken == opt.token,
+                    onTap: () => _selectStyle(opt.token),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  double _styleCardWidth(double maxWidth) {
+    // Approximate CSS: repeat(auto-fill, minmax(150px, 1fr))
+    const gap = 8.0;
+    const min = 150.0;
+    final cols = ((maxWidth + gap) / (min + gap)).floor().clamp(1, 4);
+    return (maxWidth - gap * (cols - 1)) / cols;
+  }
+
+  String _styleDescription(String token, String label) {
+    final lower = label.toLowerCase();
+    if (token == CaptionStyleCatalog.tokGetty ||
+        token == CaptionStyleCatalog.tokGettyIntl) {
+      return 'Dateline, full sentence, credit';
+    }
+    if (token == CaptionStyleCatalog.tokAp ||
+        token == CaptionStyleCatalog.tokCp) {
+      return 'City (STATE) — shorter form';
+    }
+    if (lower.contains('short')) {
+      return 'Name and action only';
+    }
+    if (token == CaptionStyleCatalog.tokImagn) {
+      return 'Agency wire style';
+    }
+    if (token.startsWith('saved:')) {
+      return 'Custom saved layout';
+    }
+    return 'Custom caption layout';
+  }
+
+  Widget _buildSessionStep(FfTokens t) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _OptionRow(
+          title: 'Write IPTC',
+          description: "Embed the caption in each image's metadata",
+          value: _writeIptc,
+          onChanged: _setWriteIptc,
+          trailing: _GhostButton(
+            label: 'Edit IPTC',
+            onPressed: _writeIptc ? _openIptc : null,
+          ),
+        ),
+        const SizedBox(height: 6),
+        _OptionRow(
+          title: 'FTP Mode',
+          description: 'Adds an FTP button to send images as you go',
+          value: _ftpModeEnabled,
+          onChanged: _setFtpMode,
+        ),
+      ],
+      ),
+    );
+  }
+
+  Widget _buildSidePanel(FfTokens t) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: _SideCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'New Flo File Session',
-                  style: t.labelStyle.copyWith(fontSize: 15),
-                ),
-                const SizedBox(height: 8),
-                _Section(
-                  title: 'Images folder',
-                  unlocked: true,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _folderPath == null
-                              ? 'No folder selected'
-                              : _folderPath!,
-                          style: _folderPath == null
-                              ? t.secondaryLabelStyle
-                              : t.monoMetaStyle.copyWith(color: t.text),
-                          softWrap: true,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      _OutlinedBtn(
-                        label: _pickingFolder ? 'Opening…' : 'Choose folder',
-                        compact: true,
-                        onPressed: _pickingFolder ? null : _pickFolder,
-                      ),
-                    ],
+                  'CAPTION PREVIEW',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.1,
+                    color: t.textTertiary,
                   ),
                 ),
                 const SizedBox(height: 6),
-                _Section(
-                  title: 'Sport',
-                  unlocked: _folderChosen,
-                  trailing: Text(
-                    _sportChosen ? _apiLabel : ' ',
-                    style: t.metaStyle,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Shrink-wrapped pills on one row (Wrap only if the window is tiny).
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final s in _sports)
-                            _Chip(
-                              label: _sportLabel(s),
-                              selected: _sport == s,
-                              onTap: () => _selectSport(s),
-                            ),
-                        ],
-                      ),
-                      if (_isAdmin) ...[
-                        const SizedBox(height: 6),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: Checkbox(
-                                value: _useOfficialLeagueApis,
-                                activeColor: t.accent,
-                                checkColor: t.inkOnAccent,
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                visualDensity: VisualDensity.compact,
-                                side: BorderSide(
-                                  color: _tank01Supported
-                                      ? t.textSecondary
-                                      : t.divider,
-                                ),
-                                onChanged: !_sportChosen || !_tank01Supported
-                                    ? null
-                                    : (v) =>
-                                        _setUseOfficialLeagueApis(v ?? false),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                _tank01Supported
-                                    ? 'Use official league APIs (sports/…) — default is Tank01 Firebase'
-                                    : 'Soccer always uses ESPN MLS',
-                                maxLines: 2,
-                                style: t.metaStyle.copyWith(
-                                  color: _tank01Supported
-                                      ? t.text
-                                      : t.textSecondary,
-                                  height: 1.25,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                _Section(
-                  title: 'Teams',
-                  unlocked: _sportChosen,
-                  dimmed: _usingCustomRosters,
-                  trailing: SizedBox(
-                    height: 14,
-                    child: _loadingTeams
-                        ? SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: t.accent,
-                            ),
-                          )
-                        : (_offline
-                            ? Text('Offline list', style: t.metaStyle)
-                            : TextButton(
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: const Size(0, 14),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                                onPressed: _sportChosen ? _loadTeams : null,
-                                child: Text(
-                                  'Refresh',
-                                  style: t.metaStyle.copyWith(color: t.accent),
-                                ),
-                              )),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: _TeamPicker(
-                              label: 'Away',
-                              value: _awayTeam,
-                              teams: _teams,
-                              enabled: _sportChosen && !_loadingTeams,
-                              favorited: _awayTeam != null &&
-                                  _favoriteAway == _awayTeam,
-                              onChanged: (v) => setState(() {
-                                _usingCustomRosters = false;
-                                _awayTeam = v;
-                                _homeRoster = null;
-                                _awayRoster = null;
-                              }),
-                              onToggleFavorite: () =>
-                                  _toggleFavorite(isHome: false),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _TeamPicker(
-                              label: 'Home',
-                              value: _homeTeam,
-                              teams: _teams,
-                              enabled: _sportChosen && !_loadingTeams,
-                              favorited: _homeTeam != null &&
-                                  _favoriteHome == _homeTeam,
-                              onChanged: (v) => setState(() {
-                                _usingCustomRosters = false;
-                                _homeTeam = v;
-                                _awayRoster = null;
-                                _homeRoster = null;
-                              }),
-                              onToggleFavorite: () =>
-                                  _toggleFavorite(isHome: true),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _RosterPasteButton(
-                        playerCount: _awayRoster == null && _homeRoster == null
-                            ? null
-                            : (_awayRoster?.length ?? 0) +
-                                (_homeRoster?.length ?? 0),
-                        onPressed: _pasteRoster,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 6),
-                _Section(
-                  title: 'Caption style',
-                  unlocked: _sportChosen,
-                  child: StartupCaptionLayoutPreview(
-                    sport: _sport,
-                    compact: true,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                _Section(
-                  title: 'Session',
-                  unlocked: _teamsChosen,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 88,
-                            child: Text('Write IPTC', style: t.bodyStyle),
-                          ),
-                          _OnOffPills(
-                            value: _writeIptc,
-                            enabled: _teamsChosen,
-                            onChanged: _setWriteIptc,
-                          ),
-                          const SizedBox(width: 8),
-                          _PillSizedBtn(
-                            label: 'Edit IPTC',
-                            onPressed: !_teamsChosen || !_writeIptc
-                                ? null
-                                : _openIptc,
-                          ),
-                        ],
-                      ),
-                      if (_writeIptc) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          _iptcStatus,
-                          style: t.metaStyle,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 88,
-                            child: Text('FTP mode', style: t.bodyStyle),
-                          ),
-                          _OnOffPills(
-                            value: _ftpModeEnabled,
-                            enabled: _teamsChosen,
-                            onChanged: _setFtpMode,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Enables FTP button',
-                            style: t.metaStyle,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_error!, style: t.metaStyle.copyWith(color: t.accent)),
-                ],
-                const SizedBox(height: 12),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _OutlinedBtn(
-                    label: _going ? 'Loading…' : 'Go Time',
-                    emphasized: true,
-                    compact: true,
-                    onPressed: _canGo ? _goTime : null,
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: _CaptionPreviewLive(
+                      sport: _sport,
+                      awayTeam: _awayTeam,
+                      homeTeam: _homeTeam,
+                      template: _captionTemplate,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
         ),
-      ),
+        const SizedBox(height: 8),
+        _SideCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'READY CHECK',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 1.1,
+                  color: t.textTertiary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              _ReadyRow(
+                label: 'Folder',
+                value: _folderChosen
+                    ? p.basename(_folderPath!)
+                    : 'Not chosen',
+                done: _folderChosen,
+              ),
+              _ReadyRow(
+                label: 'Sport',
+                value: _sportChosen ? _sportLabel(_sport!) : 'Not chosen',
+                done: _sportChosen,
+              ),
+              _ReadyRow(
+                label: 'Away',
+                value: _awayTeam ?? 'Not chosen',
+                done: _awayTeam != null && _awayTeam!.trim().isNotEmpty,
+              ),
+              _ReadyRow(
+                label: 'Home',
+                value: _homeTeam ?? 'Not chosen',
+                done: _homeTeam != null && _homeTeam!.trim().isNotEmpty,
+              ),
+              _ReadyRow(
+                label: 'Style',
+                value: _styleCatalog != null && _selectedStyleToken != null
+                    ? _styleCatalog!.labelFor(_selectedStyleToken!)
+                    : 'Not chosen',
+                done: _selectedStyleToken != null,
+              ),
+              _ReadyRow(
+                label: 'Output',
+                value: _outputLabel,
+                done: true,
+              ),
+              const SizedBox(height: 8),
+              _GoTimeButton(
+                enabled: _canGo,
+                loading: _going,
+                onPressed: _goTime,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _goHint,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  color: t.textTertiary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -904,185 +1560,443 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 }
 
-class _OnOffPills extends StatelessWidget {
-  const _OnOffPills({
-    required this.value,
-    required this.onChanged,
-    this.enabled = true,
+// ---------------------------------------------------------------------------
+// Live caption preview (sport-correct league / period; placeholder styling)
+// ---------------------------------------------------------------------------
+
+class _CaptionPreviewLive extends StatelessWidget {
+  const _CaptionPreviewLive({
+    required this.sport,
+    required this.awayTeam,
+    required this.homeTeam,
+    required this.template,
   });
 
-  /// Matches [_PillSizedBtn] / segment row height.
-  static const double height = 26;
+  final String? sport;
+  final String? awayTeam;
+  final String? homeTeam;
+  final CaptionTemplate? template;
 
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final bool enabled;
+  static const _awayPlaceholder = 'Away team';
+  static const _homePlaceholder = 'Home team';
+  static const _periodPlaceholder = 'period';
+  static const _leaguePlaceholder = 'league';
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>()!;
-    Widget seg({required String label, required bool selected, required bool on}) {
-      return Material(
-        color: selected ? const Color(0xFF3A4050) : Colors.transparent,
-        child: InkWell(
-          onTap: !enabled || selected ? null : () => onChanged(on),
-          child: SizedBox(
-            height: height - 2, // inside 1px border
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Center(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    height: 1.0,
-                    fontWeight: FontWeight.w500,
-                    color: !enabled
-                        ? t.text.withValues(alpha: 0.28)
-                        : selected
-                            ? t.text
-                            : t.text.withValues(alpha: 0.42),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final tpl = template ?? CaptionTemplate.getty();
+    final sportKey = (sport ?? '').toLowerCase().trim();
+    final hasSport = sportKey.isNotEmpty;
+
+    final away = (awayTeam != null && awayTeam!.isNotEmpty)
+        ? awayTeam!
+        : _awayPlaceholder;
+    final home = (homeTeam != null && homeTeam!.isNotEmpty)
+        ? homeTeam!
+        : _homePlaceholder;
+    final awayFilled = away != _awayPlaceholder;
+    final homeFilled = home != _homePlaceholder;
+
+    final leagueId = hasSport
+        ? defaultGameIdentifierText(sportKey)
+        : 'in their $_leaguePlaceholder';
+    final timing = hasSport
+        ? CaptionFormulaRenderer.previewTimePhraseForSport(sportKey)
+        : 'in the $_periodPlaceholder';
+
+    final action = _actionFor(sportKey, timing);
+    final body =
+        '$away #00 Heater Ace $action against the $home $timing ahead of their ${leagueId.replaceFirst('in their ', '')}';
+
+    final game = GameInfo(
+      gameDate: DateTime.now(),
+      city: 'Los Angeles',
+      region: 'California',
+      regionCode: 'CA',
+      country: 'United States',
+      countryCode: 'USA',
+      venue: 'Los Angeles Sports Stadium',
+      photographerName: CurrentUserService.displayNameOrPlaceholder(),
+      agencyName: '',
+    );
+
+    final agency = _agencyFor(tpl.wireStyle);
+    // Force sport-correct game identifier even if the stored template is stale.
+    final previewTemplate = hasSport
+        ? CaptionTemplate.applyGameIdentifierText(tpl, leagueId)
+        : tpl.copyWith(gameIdentifierText: leagueId);
+
+    // Prefer a full formula render when we have a template; fall back to body.
+    String caption;
+    try {
+      caption = CaptionFormulaRenderer.render(
+        template: previewTemplate,
+        game: game,
+        sampleAgency: agency,
+        captionOverride:
+            '$away #00 Heater Ace $action against the $home $timing',
+        sport: hasSport ? sportKey : null,
       );
+    } catch (_) {
+      caption =
+          'Los Angeles, California, USA. $body at Los Angeles Sports Stadium '
+          '${_weekday(game.gameDate!)}. '
+          '${game.photographerName}/${CaptionFormulaRenderer.defaultAgencyLabel(agency)}';
     }
 
-    return Opacity(
-      opacity: enabled ? 1 : 0.55,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: t.bg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: t.divider),
+    // If sport is unset, ensure period/league placeholders appear.
+    if (!hasSport) {
+      caption = caption
+          .replaceAll(
+            RegExp(
+              r'\b(in the third period|during the third inning|in the fourth quarter|in the second half)\b',
+              caseSensitive: false,
+            ),
+            'in the $_periodPlaceholder',
+          )
+          .replaceAll(
+            RegExp(
+              r'\b(NHL|MLB|NBA|WNBA|MLS)\b',
+            ),
+            _leaguePlaceholder,
+          );
+    }
+
+    final filled = <String>[
+      if (awayFilled) away,
+      if (homeFilled) home,
+    ];
+    final missing = <String>[
+      if (!awayFilled) _awayPlaceholder,
+      if (!homeFilled) _homePlaceholder,
+      if (!hasSport) _periodPlaceholder,
+      if (!hasSport) _leaguePlaceholder,
+    ];
+
+    return Text.rich(
+      TextSpan(
+        children: _spanCaption(
+          caption,
+          filled: filled,
+          missing: missing,
+          text: t.text,
+          filledColor: t.text,
+          missingColor: t.textTertiary,
+          filledUnderline: t.accentEdge,
+          missingUnderline: const Color(0x6BE4EAF2), // --text-3-ish for dashed
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            seg(label: 'On', selected: value, on: true),
-            Container(width: 1, height: height - 2, color: t.divider),
-            seg(label: 'Off', selected: !value, on: false),
-          ],
-        ),
+      ),
+      style: const TextStyle(
+        fontFamily: FfTokens.fontFamily,
+        fontSize: 13.5,
+        height: 1.55,
       ),
     );
   }
+
+  static String _actionFor(String sport, String timing) {
+    switch (sport) {
+      case 'hockey':
+        return 'scores a goal';
+      case 'basketball':
+      case 'wnba':
+        return 'dunks';
+      case 'soccer':
+        return 'scores a goal';
+      case 'baseball':
+        return 'hits a home run';
+      default:
+        return 'scores a goal';
+    }
+  }
+
+  static CreditSampleAgency _agencyFor(WireStyle wire) {
+    switch (wire) {
+      case WireStyle.imagn:
+        return CreditSampleAgency.imagn;
+      case WireStyle.ap:
+      case WireStyle.cp:
+        return CreditSampleAgency.ap;
+      case WireStyle.getty:
+      case WireStyle.gettyInternational:
+      case WireStyle.custom:
+        return CreditSampleAgency.gettyImages;
+    }
+  }
+
+  static String _weekday(DateTime d) {
+    const names = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return names[d.weekday - 1];
+  }
+
+  static List<InlineSpan> _spanCaption(
+    String caption, {
+    required List<String> filled,
+    required List<String> missing,
+    required Color text,
+    required Color filledColor,
+    required Color missingColor,
+    required Color filledUnderline,
+    required Color missingUnderline,
+  }) {
+    final markers = <_Mark>[];
+    for (final f in filled) {
+      if (f.isEmpty) continue;
+      var start = 0;
+      while (true) {
+        final i = caption.indexOf(f, start);
+        if (i < 0) break;
+        markers.add(_Mark(i, i + f.length, filled: true));
+        start = i + f.length;
+      }
+    }
+    for (final m in missing) {
+      if (m.isEmpty) continue;
+      var start = 0;
+      while (true) {
+        final i = caption.indexOf(m, start);
+        if (i < 0) break;
+        markers.add(_Mark(i, i + m.length, filled: false));
+        start = i + m.length;
+      }
+    }
+    markers.sort((a, b) => a.start.compareTo(b.start));
+
+    // Drop overlaps (keep earlier / longer).
+    final kept = <_Mark>[];
+    var cursor = 0;
+    for (final m in markers) {
+      if (m.start < cursor) continue;
+      kept.add(m);
+      cursor = m.end;
+    }
+
+    final spans = <InlineSpan>[];
+    var i = 0;
+    for (final m in kept) {
+      if (m.start > i) {
+        spans.add(TextSpan(
+          text: caption.substring(i, m.start),
+          style: TextStyle(color: text),
+        ));
+      }
+      spans.add(TextSpan(
+        text: caption.substring(m.start, m.end),
+        style: TextStyle(
+          color: m.filled ? filledColor : missingColor,
+          fontWeight: m.filled ? FontWeight.w600 : FontWeight.w400,
+          decoration: TextDecoration.underline,
+          decorationStyle: TextDecorationStyle.dashed,
+          decorationColor: m.filled ? filledUnderline : missingUnderline,
+          decorationThickness: 1.25,
+        ),
+      ));
+      i = m.end;
+    }
+    if (i < caption.length) {
+      spans.add(TextSpan(
+        text: caption.substring(i),
+        style: TextStyle(color: text),
+      ));
+    }
+    return spans;
+  }
 }
 
-/// Compact outlined control matching [_OnOffPills] height; greys out when disabled.
-class _PillSizedBtn extends StatelessWidget {
-  const _PillSizedBtn({
-    required this.label,
-    this.onPressed,
+class _DashedRRectPainter extends CustomPainter {
+  const _DashedRRectPainter({
+    required this.color,
+    required this.radius,
   });
 
-  final String label;
-  final VoidCallback? onPressed;
+  final Color color;
+  final double radius;
 
   @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final enabled = onPressed != null;
-    return Opacity(
-      opacity: enabled ? 1 : 0.38,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            height: _OnOffPills.height,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: t.bg,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: enabled ? t.divider : t.divider.withValues(alpha: 0.55),
-              ),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                height: 1.0,
-                fontWeight: FontWeight.w500,
-                color: enabled
-                    ? t.text
-                    : t.text.withValues(alpha: 0.42),
-              ),
-            ),
-          ),
-        ),
-      ),
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
     );
+    final path = Path()..addRRect(rrect);
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      const dash = 5.0;
+      const gap = 4.0;
+      while (distance < metric.length) {
+        final next = distance + dash;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + gap;
+      }
+    }
   }
+
+  @override
+  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.radius != radius;
 }
 
-class _Section extends StatelessWidget {
-  const _Section({
+class _Mark {
+  const _Mark(this.start, this.end, {required this.filled});
+  final int start;
+  final int end;
+  final bool filled;
+}
+
+// ---------------------------------------------------------------------------
+// Shared chrome widgets
+// ---------------------------------------------------------------------------
+
+class _StepCard extends StatelessWidget {
+  const _StepCard({
+    required this.number,
     required this.title,
-    required this.unlocked,
+    required this.complete,
     required this.child,
     this.trailing,
-    this.dimmed = false,
-    this.selected = false,
   });
 
+  final int number;
   final String title;
-  final bool unlocked;
+  final bool complete;
   final Widget child;
   final Widget? trailing;
-  final bool dimmed;
-  final bool selected;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Opacity(
-      opacity: unlocked && !dimmed ? 1 : 0.4,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: selected ? t.selectedFill : t.surface,
-          borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-          border: Border.all(
-            color: selected ? t.selectedBorder : t.divider,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Text(
-                  title.toUpperCase(),
-                  style: FfTokens.railLabel.copyWith(
-                    color: t.text.withValues(alpha: 0.70),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: t.elevated,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: t.accent.withValues(alpha: 0.85)),
+        boxShadow: FfTokens.accentButtonGlow(t.accent),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              _StepBadge(number: number, complete: complete),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: t.text,
+                    shadows: [
+                      Shadow(
+                        color: (complete ? t.accent : t.text)
+                            .withValues(alpha: 0.35),
+                        blurRadius: 6,
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                if (trailing != null) trailing!,
-              ],
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 6),
+          Expanded(
+            child: ClipRect(
+              child: SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: child,
+                ),
+              ),
             ),
-            const SizedBox(height: 4),
-            IgnorePointer(ignoring: !unlocked, child: child),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-/// Compact selectable pill matching [_OnOffPills] / [_PillSizedBtn].
-class _Chip extends StatelessWidget {
-  const _Chip({
+class _StepBadge extends StatelessWidget {
+  const _StepBadge({required this.number, required this.complete});
+
+  final int number;
+  final bool complete;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return Container(
+      width: 22,
+      height: 22,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: complete ? t.selected : Colors.transparent,
+        border: Border.all(
+          color: complete ? t.accent : t.accentEdge,
+        ),
+        boxShadow: complete ? FfTokens.accentButtonGlow(t.accent) : null,
+      ),
+      alignment: Alignment.center,
+      child: complete
+          ? PhosphorIcon(
+              PhosphorIconsRegular.check,
+              size: 12,
+              color: t.accent,
+            )
+          : Text(
+              '$number',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: t.textSecondary,
+              ),
+            ),
+    );
+  }
+}
+
+class _SideCard extends StatelessWidget {
+  const _SideCard({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: t.elevated,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: t.accent.withValues(alpha: 0.85)),
+        boxShadow: FfTokens.accentButtonGlow(t.accent),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _SportChip extends StatelessWidget {
+  const _SportChip({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -1102,25 +2016,32 @@ class _Chip extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
-          height: _OnOffPills.height,
+          height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF3A4050) : t.bg,
+            color: selected ? t.selected : t.bg,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: t.divider),
+            border: Border.all(color: selected ? t.accent : t.divider),
+            boxShadow:
+                selected ? FfTokens.accentButtonGlow(t.accent) : null,
           ),
           child: Center(
             widthFactor: 1,
-            heightFactor: 1,
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 11,
-                height: 1.0,
-                fontWeight: FontWeight.w500,
-                color: selected
-                    ? t.text
-                    : t.text.withValues(alpha: 0.42),
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                color: selected ? t.text : t.textSecondary,
+                shadows: selected
+                    ? [
+                        Shadow(
+                          color: t.accent.withValues(alpha: 0.45),
+                          blurRadius: 6,
+                        ),
+                      ]
+                    : null,
               ),
             ),
           ),
@@ -1130,107 +2051,187 @@ class _Chip extends StatelessWidget {
   }
 }
 
-class _OutlinedBtn extends StatelessWidget {
-  const _OutlinedBtn({
-    required this.label,
-    this.onPressed,
-    this.emphasized = false,
-    this.compact = false,
+class _StyleCard extends StatelessWidget {
+  const _StyleCard({
+    required this.name,
+    required this.description,
+    required this.selected,
+    required this.onTap,
   });
 
-  final String label;
-  final VoidCallback? onPressed;
-  final bool emphasized;
-  final bool compact;
+  final String name;
+  final String description;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final enabled = onPressed != null;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: selected ? t.selected : t.bg,
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: selected ? t.accent : t.divider),
+            boxShadow:
+                selected ? FfTokens.accentButtonGlow(t.accent) : null,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: t.text,
+                  shadows: selected
+                      ? [
+                          Shadow(
+                            color: t.accent.withValues(alpha: 0.45),
+                            blurRadius: 6,
+                          ),
+                        ]
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  color: t.textTertiary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OptionRow extends StatelessWidget {
+  const _OptionRow({
+    required this.title,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+    this.trailing,
+  });
+
+  final String title;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool enabled;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final titleColor = enabled ? t.text : t.textSecondary;
+    final descColor = enabled ? t.textTertiary : t.textTertiary;
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.15,
+                  color: titleColor,
+                ),
+              ),
+              Text(
+                description,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  height: 1.2,
+                  color: descColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[
+          trailing!,
+          const SizedBox(width: 8),
+        ],
+        _Switch38(
+          value: value,
+          enabled: enabled,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class _Switch38 extends StatelessWidget {
+  const _Switch38({
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return Opacity(
       opacity: enabled ? 1 : 0.45,
-      child: Material(
-        type: emphasized ? MaterialType.canvas : MaterialType.transparency,
-        color: emphasized ? t.badgeFill : null,
-        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-          child: Container(
-            constraints: BoxConstraints(minHeight: compact ? 28 : 40),
-            padding: EdgeInsets.symmetric(
-              horizontal: compact ? 10 : 16,
-              vertical: compact ? 5 : 10,
-            ),
+      child: MouseRegion(
+        cursor:
+            enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        child: GestureDetector(
+          onTap: enabled ? () => onChanged(!value) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 38,
+            height: 22,
+            padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-              border: Border.all(color: t.accent, width: 1.5),
+              // Off = --hv track; on = --ac track.
+              color: value ? t.accent : t.hover,
+              borderRadius: BorderRadius.circular(11),
             ),
-            child: Text(
-              label,
-              style: compact
-                  ? t.labelStyle.copyWith(fontSize: 11)
-                  : t.labelStyle,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RosterPasteButton extends StatelessWidget {
-  const _RosterPasteButton({
-    required this.playerCount,
-    required this.onPressed,
-  });
-
-  final int? playerCount;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final imported = playerCount != null;
-    return Opacity(
-      opacity: onPressed == null ? 0.45 : 1,
-      child: Material(
-        color: imported ? t.selectedFill : t.badgeFill,
-        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 32),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-              border: Border.all(
-                color: imported ? t.selectedBorder : t.divider,
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                // On = --bg knob; off = muted knob.
+                color: value ? t.bg : t.textTertiary,
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  imported ? Icons.check : Icons.content_paste_outlined,
-                  size: 16,
-                  color: imported ? t.text : t.textSecondary,
-                ),
-                const SizedBox(width: 7),
-                Flexible(
-                  child: Text(
-                    imported
-                        ? '$playerCount players pasted'
-                        : 'Paste rosters copied from webpage or other source',
-                    style: t.metaStyle.copyWith(
-                      color: imported ? t.text : t.textSecondary,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -1238,96 +2239,410 @@ class _RosterPasteButton extends StatelessWidget {
   }
 }
 
-class _TeamPicker extends StatelessWidget {
-  const _TeamPicker({
+class _TeamDropdown extends StatelessWidget {
+  const _TeamDropdown({
     required this.label,
     required this.value,
     required this.teams,
+    this.excludeTeam,
     required this.enabled,
     required this.favorited,
+    required this.favoriteNames,
+    required this.hintText,
     required this.onChanged,
     required this.onToggleFavorite,
+    required this.focusNode,
   });
 
   final String label;
   final String? value;
   final List<String> teams;
+  final String? excludeTeam;
   final bool enabled;
   final bool favorited;
+  final Set<String> favoriteNames;
+  final String hintText;
   final ValueChanged<String?> onChanged;
   final VoidCallback onToggleFavorite;
+  final FocusNode focusNode;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final effectiveValue =
+    final effective =
         (value != null && teams.contains(value)) ? value : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: t.metaStyle),
-        const SizedBox(height: 2),
-        Row(
-          children: [
-            Expanded(
-              child: DropdownButtonFormField<String?>(
-                key: ValueKey('$label:$effectiveValue'),
-                initialValue: effectiveValue,
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 12.5,
+            color: t.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: 34,
+          child: Stack(
+            children: [
+              DropdownButtonFormField<String?>(
+                key: ValueKey(
+                  '$label:$effective:${excludeTeam ?? ''}:$enabled:${teams.length}',
+                ),
+                focusNode: focusNode,
+                initialValue: effective,
                 isExpanded: true,
-                dropdownColor: t.surface,
-                style: t.bodyStyle,
+                dropdownColor: t.elevated,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  color: t.text,
+                ),
                 iconEnabledColor: t.textSecondary,
+                iconDisabledColor: t.textTertiary,
                 decoration: InputDecoration(
                   isDense: true,
-                  hintText: teams.isEmpty ? 'Loading…' : 'Select $label…',
-                  hintStyle: t.secondaryLabelStyle,
+                  hintText: hintText,
+                  hintStyle: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    color: t.textTertiary,
+                  ),
                   filled: true,
-                  fillColor: t.sunken,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  fillColor: t.bg,
+                  contentPadding: const EdgeInsets.fromLTRB(12, 10, 40, 10),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: t.divider),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: t.accent),
+                  ),
+                  disabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: t.divider),
+                  ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: t.divider),
                   ),
                 ),
                 items: [
-                  DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text(
-                      'None',
-                      style: t.secondaryLabelStyle,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
                   for (final name in teams)
                     DropdownMenuItem<String?>(
                       value: name,
                       child: Text(
-                        name,
-                        style: t.bodyStyle,
+                        favoriteNames.contains(name) ? '★ $name' : name,
                         overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 13,
+                          color: t.text,
+                        ),
                       ),
                     ),
                 ],
-                onChanged: enabled && teams.isNotEmpty ? onChanged : null,
+                onChanged: enabled && teams.isNotEmpty
+                    ? (v) {
+                        if (v != null &&
+                            excludeTeam != null &&
+                            v == excludeTeam) {
+                          return;
+                        }
+                        onChanged(v);
+                      }
+                    : null,
               ),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              onPressed:
-                  effectiveValue == null || !enabled ? null : onToggleFavorite,
-              icon: Icon(
-                favorited ? Icons.star : Icons.star_border,
-                size: 18,
-                color: favorited ? t.accent : t.textSecondary,
+              Positioned(
+                right: 28,
+                top: 0,
+                bottom: 0,
+                child: IconButton(
+                  onPressed: effective == null || !enabled
+                      ? null
+                      : onToggleFavorite,
+                  icon: Text(
+                    favorited ? '★' : '☆',
+                    style: TextStyle(
+                      fontSize: 15,
+                      height: 1,
+                      color: favorited
+                          ? FfTokens.favorites
+                          : t.textTertiary,
+                    ),
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 28,
+                    minHeight: 28,
+                  ),
+                  tooltip: 'Favorite $label team',
+                ),
               ),
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Favorite $label team',
-            ),
-          ],
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _SwapButton extends StatelessWidget {
+  const _SwapButton({required this.enabled, required this.onPressed});
+
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return SizedBox(
+      width: 34,
+      height: 34,
+      child: Material(
+        color: t.bg,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: t.divider),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '⇄',
+              style: TextStyle(
+                fontSize: 16,
+                color: enabled ? t.text : t.textTertiary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GhostButton extends StatelessWidget {
+  const _GhostButton({
+    required this.label,
+    this.icon,
+    this.onPressed,
+  });
+
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final enabled = onPressed != null;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                PhosphorIcon(
+                  icon!,
+                  size: 14,
+                  color: enabled ? t.textSecondary : t.textTertiary,
+                ),
+                const SizedBox(width: 5),
+              ],
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: enabled ? t.textSecondary : t.textTertiary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OutlinedAction extends StatelessWidget {
+  const _OutlinedAction({required this.label, this.onPressed});
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final enabled = onPressed != null;
+    return Material(
+      color: t.bg,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+            height: 30,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: enabled ? t.accentEdge : t.divider),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+                color: enabled ? t.text : t.textTertiary,
+              ),
+            ),
+          ),
+      ),
+    );
+  }
+}
+
+class _ReadyRow extends StatelessWidget {
+  const _ReadyRow({
+    required this.label,
+    required this.value,
+    required this.done,
+  });
+
+  final String label;
+  final String value;
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: done ? t.accent : t.divider,
+              ),
+              color: done ? t.selected : Colors.transparent,
+            ),
+            alignment: Alignment.center,
+            child: done
+                ? PhosphorIcon(
+                    PhosphorIconsRegular.check,
+                    size: 10,
+                    color: t.accent,
+                  )
+                : null,
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 52,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12.5,
+                color: t.textSecondary,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12.5,
+                fontWeight: done ? FontWeight.w500 : FontWeight.w400,
+                color: done ? t.text : t.textTertiary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GoTimeButton extends StatelessWidget {
+  const _GoTimeButton({
+    required this.enabled,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final bool enabled;
+  final bool loading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: enabled ? FfTokens.accentButtonGlow(t.accent) : null,
+      ),
+      child: Material(
+        color: enabled ? t.selected : t.elevated,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: enabled && !loading ? onPressed : null,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: enabled ? t.accent : t.divider,
+              ),
+            ),
+            child: Text(
+              loading ? 'Loading…' : 'Go time ↵',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: enabled ? t.text : t.textTertiary,
+                shadows: enabled
+                    ? [
+                        Shadow(
+                          color: t.accent.withValues(alpha: 0.5),
+                          blurRadius: 7,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

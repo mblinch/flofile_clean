@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/ff_tokens.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Compact celebrate/react control: party toggle + mode dropdown.
 ///
@@ -79,11 +80,11 @@ class CelebrationDropdown extends StatelessWidget {
                 width: compact ? 52 : 58,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: _on ? t.selectedFill : t.sunken,
+                  color: _on ? t.selectedFill : t.elevated,
                   borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-                  border: Border.all(
-                    color: _on ? t.selectedBorder : t.divider,
-                  ),
+                  border: _on
+                      ? Border(left: BorderSide(color: t.accent, width: 2))
+                      : Border.all(color: t.divider),
                 ),
                 child: ColorFiltered(
                   colorFilter: _on
@@ -98,13 +99,9 @@ class CelebrationDropdown extends StatelessWidget {
                           0, 0, 0, 1, 0,
                         ]),
                   child: Center(
-                    child: Text(
-                      '🎉',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: compact ? 14 : 16,
-                        height: 1,
-                      ),
+                    child: PhosphorIcon(
+                      PhosphorIconsRegular.confetti,
+                      size: compact ? 14 : 16,
                     ),
                   ),
                 ),
@@ -143,7 +140,7 @@ class CelebrationDropdown extends StatelessWidget {
                 height: height,
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
-                  color: t.sunken,
+                  color: t.elevated,
                   borderRadius: BorderRadius.circular(FfTokens.radiusChip),
                   border: Border.all(color: t.divider),
                 ),
@@ -163,8 +160,7 @@ class CelebrationDropdown extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Icon(
-                      Icons.expand_more,
+                    PhosphorIcon(PhosphorIconsRegular.caretDown,
                       size: 16,
                       color: t.textSecondary,
                     ),

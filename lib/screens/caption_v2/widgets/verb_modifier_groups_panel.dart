@@ -134,11 +134,11 @@ class _Option extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: selected ? tokens.selectedFill : tokens.sunken,
+          color: selected ? tokens.selectedFill : tokens.elevated,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: selected ? tokens.selectedBorder : tokens.divider,
-          ),
+          border: selected
+              ? Border(left: BorderSide(color: tokens.accent, width: 2))
+              : Border.all(color: tokens.divider),
         ),
         child: Text(
           option.label,
@@ -149,7 +149,7 @@ class _Option extends StatelessWidget {
                 : FfTokens.fontFamily,
             fontSize: kind == VerbModifierKind.tokens ? 11.5 : 12,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-            color: selected ? tokens.accent : tokens.text,
+            color: tokens.text,
           ),
         ),
       ),

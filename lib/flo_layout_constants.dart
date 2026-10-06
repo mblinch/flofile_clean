@@ -94,54 +94,56 @@ class FloScrollBehavior extends MaterialScrollBehavior {
   }
 }
 
-/// FloFile teal accent (MLB clock, selections, primary actions).
-const Color kFloTealLight = Color(0xFF4A7A96);
-const Color kFloTealDark = Color(0xFF2A4858);
-const Color kFloTealMid = Color(0xFF3A5F78);
+/// Nocturne accent / surfaces (teal palette).
+/// Names retain historical `Teal` identifiers for call-site compatibility.
+const Color kFloTealLight = Color(0xFF4A7A96); // --color-accent
+const Color kFloTealDark = Color(0xFF3A6076); // --color-accent-edge
+const Color kFloTealMid = Color(0xFF6A6E73); // --color-text-muted approx
 
-/// Light fill behind selected chips / player cells.
-const Color kFloTealSelectedFill = Color(0xFFE4EEF2);
+/// Selected chip / player cell fill (--color-accent-soft).
+const Color kFloTealSelectedFill = Color(0xFF20313C);
 
-/// Submenu strip beside verb options (RBI, reactions, base, etc.).
-const Color kFloTealSubmenuFill = Color(0xFFD6E8F0);
+/// Submenu strip beside verb options (RBI, reactions, base, etc.) (--color-surface).
+const Color kFloTealSubmenuFill = Color(0xFF1E242A);
 
+/// Flat Nocturne fills — gradients kept as API but resolve to solid accent / soft.
 const LinearGradient kFloTealGradientHorizontal = LinearGradient(
   begin: Alignment.centerLeft,
   end: Alignment.centerRight,
-  colors: [kFloTealLight, kFloTealDark],
+  colors: [kFloTealLight, kFloTealLight],
 );
 
-/// Lighter teal row fill for selected verbs (parent category uses [kFloTealGradientHorizontal]).
+/// Selected verb row fill (--color-accent-soft).
 const LinearGradient kFloTealGradientHorizontalLight = LinearGradient(
   begin: Alignment.centerLeft,
   end: Alignment.centerRight,
-  colors: [Color(0xFFC8DDE8), Color(0xFFE2EDF3)],
+  colors: [kFloTealSelectedFill, kFloTealSelectedFill],
 );
 
-/// Mid-light teal for Edit Verb section headers (darker than [kFloTealGradientHorizontalLight]).
+/// Edit Verb section headers (--color-hover).
 const LinearGradient kFloTealGradientHorizontalHeader = LinearGradient(
   begin: Alignment.centerLeft,
   end: Alignment.centerRight,
-  colors: [Color(0xFF6F9CB4), Color(0xFF8FB4C8)],
+  colors: [Color(0xFF2A3035), Color(0xFF2A3035)],
 );
 
-/// Light teal fill for idle category rows in Keyboard Fire.
+/// Idle category rows in Keyboard Fire (--color-elevated).
 const LinearGradient kFloCategoryRowGradient = LinearGradient(
   begin: Alignment.centerLeft,
   end: Alignment.centerRight,
-  colors: [Color(0xFFDCEBF2), Color(0xFFF0F7FA)],
+  colors: [Color(0xFF181D22), Color(0xFF181D22)],
 );
 
 const LinearGradient kFloTealGradientVertical = LinearGradient(
   begin: Alignment.topCenter,
   end: Alignment.bottomCenter,
-  colors: [kFloTealLight, kFloTealDark],
+  colors: [kFloTealLight, kFloTealLight],
 );
 
 /// Admin-only control chrome (gold).
-const Color kFloAdminGoldLight = Color(0xFFF5E08A);
-const Color kFloAdminGoldDark = Color(0xFFB8922A);
-const Color kFloAdminGoldText = Color(0xFF3D3208);
+const Color kFloAdminGoldLight = Color(0xFFE8C547); // --gold
+const Color kFloAdminGoldDark = Color(0xFFE8C547);
+const Color kFloAdminGoldText = Color(0xFF1A1606); // ink on gold
 
 const LinearGradient kFloAdminGoldGradientHorizontal = LinearGradient(
   begin: Alignment.centerLeft,
@@ -155,29 +157,32 @@ const LinearGradient kFloAdminGoldGradientVertical = LinearGradient(
   colors: [kFloAdminGoldLight, kFloAdminGoldDark],
 );
 
-/// Solid or gradient decoration for a selected toggle chip / inning cell.
+/// Selected toggle chip / inning cell: --sf fill + 2px --ac left bar.
 BoxDecoration floTealSelectedDecoration({
   BorderRadius? borderRadius,
   bool gradient = true,
 }) {
   return BoxDecoration(
-    gradient: gradient ? kFloTealGradientHorizontal : null,
-    color: gradient ? null : kFloTealMid,
+    color: kFloTealSelectedFill,
     borderRadius: borderRadius ?? BorderRadius.circular(kFloInningButtonRadius),
-    border: Border.all(color: kFloTealDark, width: 0.7),
+    border: const Border(
+      left: BorderSide(color: kFloTealLight, width: 2),
+    ),
   );
 }
 
-/// Light selected row/chip (player grid, verb list).
+/// Selected row/chip: --sf fill + 2px --ac left bar (no coloured wash).
 BoxDecoration floTealSelectedChipDecoration({BorderRadius? borderRadius}) {
   return BoxDecoration(
     color: kFloTealSelectedFill,
     borderRadius: borderRadius ?? BorderRadius.circular(3),
-    border: Border.all(color: kFloTealLight, width: 1.5),
+    border: const Border(
+      left: BorderSide(color: kFloTealLight, width: 2),
+    ),
   );
 }
 
-/// Horizontal progress fill: white track with teal gradient growing left → right.
+/// Horizontal progress fill: track with --ac growing left → right.
 class FloTealGradientProgressBar extends StatelessWidget {
   const FloTealGradientProgressBar({
     super.key,

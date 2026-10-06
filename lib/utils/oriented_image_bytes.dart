@@ -7,6 +7,17 @@ import 'package:image/image.dart' as img;
 
 import '../services/color_managed_preview_channel.dart';
 
+/// One decode target for [OrientedImageBytes.prefetchAll].
+class OrientedPrefetchJob {
+  const OrientedPrefetchJob({
+    required this.path,
+    required this.maxWidth,
+  });
+
+  final String path;
+  final int maxWidth;
+}
+
 /// Decodes a photo and applies EXIF orientation so pixels match how the shot
 /// should be displayed (Lightroom, Finder, etc.).
 class OrientedImageBytes {
@@ -16,10 +27,21 @@ class OrientedImageBytes {
   static int _cacheBytes = 0;
 
   static const _cacheVersion = 'macos-ci-srgb-v2';
-  static const _maxCacheBytes = 32 * 1024 * 1024;
-  static const _maxDecodes = 2;
+  /// Session RAM budget for decoded previews/thumbs (LRU).
+  static const _maxCacheBytes = 256 * 1024 * 1024;
+  /// Parallel native/JPEG decodes. Higher fills the cache faster on folder open.
+  static const _maxDecodes = 5;
   static int _decodesInFlight = 0;
   static final List<Completer<void>> _decodeWaiters = [];
+
+  /// Main Caption V2 preview decode width.
+  static const int previewMaxWidth = 2200;
+
+  /// Loupe hold / 100% view — `0` means no downscale (full pixels).
+  static const int loupeMaxWidth = 0;
+
+  /// Default grid thumb width (3-column layout).
+  static const int thumbMaxWidth = 320;
 
   static String _cacheKey(String path, int? maxWidth) =>
       '$_cacheVersion|$path|${maxWidth ?? 0}';
@@ -42,10 +64,25 @@ class OrientedImageBytes {
     }
   }
 
+  /// Sync cache peek (no decode). Uses file mtime so keys match [load].
+  static Uint8List? peekCached(String path, {int? maxWidth}) {
+    try {
+      final mod = File(path).lastModifiedSync();
+      final key = '${_cacheKey(path, maxWidth)}|${mod.millisecondsSinceEpoch}';
+      return _readCache(key);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// PNG/JPEG bytes suitable for [Image.memory]; cached per [path] + [maxWidth] + mtime.
+  ///
+  /// [priority] jumps the decode queue. Defaults to true for large/preview
+  /// sizes and for explicit UI loads; background prefetch passes false.
   static Future<Uint8List?> load(
     String path, {
     int? maxWidth,
+    bool? priority,
   }) async {
     final file = File(path);
     if (!await file.exists()) return null;
@@ -54,14 +91,37 @@ class OrientedImageBytes {
     final hit = _readCache(key);
     if (hit != null) return hit;
 
-    final priority = maxWidth != null && maxWidth >= 800;
-    await _acquireDecode(priority: priority);
+    final isPriority = priority ??
+        (maxWidth == null || maxWidth <= 0 || maxWidth >= 800);
+    await _acquireDecode(priority: isPriority);
     try {
       final again = _readCache(key);
       if (again != null) return again;
       return await _decodeUncached(file, path, maxWidth, key);
     } finally {
       _releaseDecode();
+    }
+  }
+
+  /// Decode [jobs] into the cache without returning bytes.
+  ///
+  /// Stops early when [isCurrent] returns false (folder/index generation).
+  /// Prefetch jobs yield to UI [load]s (priority: false).
+  static Future<void> prefetchAll(
+    List<OrientedPrefetchJob> jobs, {
+    required bool Function() isCurrent,
+  }) async {
+    if (jobs.isEmpty) return;
+    // Kick off in waves so we don't create thousands of waiters at once.
+    const wave = 16;
+    for (var i = 0; i < jobs.length; i += wave) {
+      if (!isCurrent()) return;
+      final end = (i + wave).clamp(0, jobs.length);
+      final slice = jobs.sublist(i, end);
+      await Future.wait([
+        for (final job in slice)
+          load(job.path, maxWidth: job.maxWidth, priority: false),
+      ]);
     }
   }
 
@@ -93,7 +153,11 @@ class OrientedImageBytes {
     int? maxWidth,
     String key,
   ) async {
-    final maxPx = maxWidth != null && maxWidth > 0 ? maxWidth : 4096;
+    // `0` / negative = full resolution (no downscale). Null defaults to 4096.
+    final fullRes = maxWidth != null && maxWidth <= 0;
+    final maxPx = fullRes
+        ? 16384
+        : (maxWidth != null && maxWidth > 0 ? maxWidth : 4096);
 
     if (ColorManagedPreviewChannel.supported) {
       try {
@@ -121,7 +185,10 @@ class OrientedImageBytes {
       var oriented =
           hasExifOrientation ? img.bakeOrientation(decoded) : decoded;
 
-      if (maxWidth != null && maxWidth > 0 && oriented.width > maxWidth) {
+      if (!fullRes &&
+          maxWidth != null &&
+          maxWidth > 0 &&
+          oriented.width > maxWidth) {
         oriented = img.copyResize(
           oriented,
           width: maxWidth,

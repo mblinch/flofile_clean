@@ -9,6 +9,7 @@ import '../services/preferences_service.dart';
 import '../flo_layout_constants.dart';
 import 'app_styled_dialogs.dart';
 import 'oriented_file_preview.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// User choice after a burst (rapid sequence) is detected on save.
 enum BurstCaptionSaveChoice {
@@ -259,7 +260,7 @@ class _BurstCaptionConfirmDialogBodyState
                       const SizedBox(width: 12),
                       GestureDetector(
                         onTap: () => Navigator.pop(ctx),
-                        child: const Icon(Icons.close, color: Colors.white, size: 16),
+                        child: const PhosphorIcon(PhosphorIconsRegular.x, color: Colors.white, size: 16),
                       ),
                     ],
                   ),
@@ -512,8 +513,7 @@ class _BurstCaptionConfirmDialogBodyState
                                         padding: const EdgeInsets.all(2),
                                         color: Colors.white
                                             .withValues(alpha: 0.9),
-                                        child: Icon(
-                                          Icons.search,
+                                        child: PhosphorIcon(PhosphorIconsRegular.magnifyingGlass,
                                           size: 14,
                                           color: Colors.grey.shade700,
                                         ),
@@ -529,8 +529,8 @@ class _BurstCaptionConfirmDialogBodyState
                                           .withValues(alpha: 0.9),
                                       child: Icon(
                                         excluded
-                                            ? Icons.close
-                                            : Icons.check,
+                                            ? PhosphorIconsRegular.x
+                                            : PhosphorIconsRegular.check,
                                         size: 14,
                                         color: excluded
                                             ? Colors.grey.shade700

@@ -12,9 +12,9 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-UI polish with a tighter theme and JetBrains Mono for mono fields. Caption layout supports Custom text snippets with a trailing suffix. Startup team pickers reopen the full list on a second click instead of leaving a caret.
+On-device jersey OCR (macOS): photos auto-scan for jersey numbers and player names, matched against your loaded home/away rosters. Hold the loupe on a number or name for a focused scan. Tap a match chip to select that player.
 
-Baseball: MLB inning-from-timestamp starts matching when Timestamp is On (no toggle click needed). RBI captions no longer double “hits a” when the verb phrase already includes it (e.g. “hits a RBI single”).
+Caption V2 polish continues across photo preview, roster, and Firebar workflows.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
 ''';

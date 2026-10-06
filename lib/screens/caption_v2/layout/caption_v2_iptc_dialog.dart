@@ -11,6 +11,7 @@ import '../../../services/app_defaults_firestore_service.dart';
 import '../../../services/iptc_template_apply_service.dart';
 import '../../../services/iptc_template_import_service.dart';
 import '../../../services/preferences_service.dart';
+import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
 import '../../../widgets/startup_iptc_template_panel.dart';
 
@@ -442,7 +443,12 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                   FilledButton(
                     onPressed: _loading ? null : _done,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF4A7A96),
+                      backgroundColor: FfTokens.gold,
+                      foregroundColor: FfTokens.inkOnGold,
+                      disabledBackgroundColor:
+                          FfTokens.gold.withValues(alpha: 0.4),
+                      disabledForegroundColor:
+                          FfTokens.inkOnGold.withValues(alpha: 0.4),
                     ),
                     child: const Text('Done'),
                   ),

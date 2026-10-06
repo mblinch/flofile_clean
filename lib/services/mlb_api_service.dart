@@ -25,6 +25,31 @@ class Player {
     this.position,
   });
 
+  Player copyWith({
+    String? fullName,
+    String? firstName,
+    String? jerseyNumber,
+    String? displayName,
+    String? playerId,
+    String? position,
+    bool clearJerseyNumber = false,
+  }) {
+    final nextJersey =
+        clearJerseyNumber ? null : (jerseyNumber ?? this.jerseyNumber);
+    final nextName = fullName ?? this.fullName;
+    return Player(
+      fullName: nextName,
+      firstName: firstName ?? this.firstName,
+      jerseyNumber: nextJersey,
+      displayName: displayName ??
+          ((nextJersey != null && nextJersey.trim().isNotEmpty)
+              ? '$nextName #${nextJersey.trim()}'
+              : nextName),
+      playerId: playerId ?? this.playerId,
+      position: position ?? this.position,
+    );
+  }
+
   factory Player.fromJson(Map<String, dynamic> json, String? jerseyNumber) {
     final fullName = json['fullName'] as String;
     final firstName = fullName.split(' ').first;

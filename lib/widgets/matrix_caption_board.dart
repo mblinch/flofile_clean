@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/mlb_api_service.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class MatrixCaptionBoard extends StatefulWidget {
   final String? homeTeamName;
@@ -779,8 +780,7 @@ class _MatrixCaptionBoardState extends State<MatrixCaptionBoard> {
                                   ),
                                   child: isSelected
                                       ? const Center(
-                                          child: Icon(
-                                            Icons.check_circle,
+                                          child: PhosphorIcon(PhosphorIconsRegular.checkCircle,
                                             color: Colors.green,
                                             size: 18,
                                           ),
@@ -857,8 +857,7 @@ class _MatrixCaptionBoardState extends State<MatrixCaptionBoard> {
                       const SizedBox(width: 8),
                       GestureDetector(
                         onTap: _clearOpponent,
-                        child: Icon(
-                          Icons.close,
+                        child: PhosphorIcon(PhosphorIconsRegular.x,
                           size: 16,
                           color: Colors.orange.shade900,
                         ),
@@ -902,7 +901,7 @@ class _MatrixCaptionBoardState extends State<MatrixCaptionBoard> {
                         );
                       }
                     : null,
-                icon: const Icon(Icons.copy, size: 18),
+                icon: const PhosphorIcon(PhosphorIconsRegular.copy, size: 18),
                 label: const Text('Copy'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.blue.shade600,
@@ -925,7 +924,7 @@ class _MatrixCaptionBoardState extends State<MatrixCaptionBoard> {
                         );
                       }
                     : null,
-                icon: const Icon(Icons.save, size: 18),
+                icon: const PhosphorIcon(PhosphorIconsRegular.floppyDisk, size: 18),
                 label: const Text('Save'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green.shade600,

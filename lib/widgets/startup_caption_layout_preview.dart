@@ -11,6 +11,7 @@ import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
 import 'caption_layout_builder_dialog.dart';
 import 'caption_style_dropdown_row.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Caption layout sample line on the startup screen, with style picker and edit.
 class StartupCaptionLayoutPreview extends StatefulWidget {
@@ -429,7 +430,7 @@ class _StartupCaptionLayoutPreviewState
           const SizedBox(height: 10),
           AppSecondaryButton(
             label: 'Edit caption layout',
-            icon: Icons.view_agenda_outlined,
+            icon: PhosphorIconsRegular.rows,
             onTap: _openEditor,
           ),
         ],

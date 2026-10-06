@@ -9,6 +9,7 @@ import '../theme/ff_tokens.dart';
 import '../services/auth_service.dart';
 import 'admin_screen.dart';
 import 'app_styled_dialogs.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Top chrome bar matching [AppHeaderWidget] (teal gradient,
 /// [kFloAppHeaderHeight]).
@@ -39,11 +40,7 @@ class FloChromeHeader extends StatelessWidget {
     final Decoration decoration;
     if (useV2Chrome) {
       decoration = BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [ff.surface, ff.bg],
-        ),
+        color: Colors.transparent,
         border: Border(bottom: BorderSide(color: ff.divider)),
       );
     } else {
@@ -157,7 +154,7 @@ class FloChromeHeader extends StatelessWidget {
           fontWeight: FontWeight.w600,
           color: emphasized
               ? AppTokens.adminText
-              : (onDark ? const Color(0xFFE9E9ED) : AppTokens.onAccent),
+              : (onDark ? const Color(0xFFE4EAF2) : AppTokens.onAccent),
           height: 1.0,
         ),
       ),
@@ -213,7 +210,7 @@ class FloHeaderRestartButton extends StatelessWidget {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.restart_alt, size: 14),
+              PhosphorIcon(PhosphorIconsRegular.arrowClockwise, size: 14),
               SizedBox(width: 5),
               Text(
                 'Restart app',
@@ -297,7 +294,7 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
         AppPopupMenu.tile(
           value: 'sign_out',
           label: 'Sign out',
-          icon: Icons.logout,
+          icon: PhosphorIconsRegular.signOut,
         ),
       ],
     );
@@ -350,8 +347,7 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
                         color: fg.withValues(alpha: 0.35),
                       ),
                     ),
-                    child: Icon(
-                      Icons.person,
+                    child: PhosphorIcon(PhosphorIconsRegular.user,
                       color: fg,
                       size: 11,
                     ),
@@ -373,8 +369,7 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
                     ),
                   ],
                   const SizedBox(width: 2),
-                  Icon(
-                    Icons.arrow_drop_down,
+                  PhosphorIcon(PhosphorIconsRegular.caretDown,
                     key: _arrowKey,
                     color: fg,
                     size: 16,

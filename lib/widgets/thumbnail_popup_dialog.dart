@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app_styled_dialogs.dart';
 import 'package:path/path.dart' as p;
 import 'oriented_file_preview.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class ThumbnailPopupDialog extends StatefulWidget {
   final List<String> imagePaths;
@@ -99,7 +100,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
             borderRadius: BorderRadius.circular(4),
             border: Border.all(color: const Color(0xFFE6E6E6), width: 0.7),
           ),
-          child: Icon(icon, size: 12, color: Colors.grey.shade600),
+          child: PhosphorIcon(icon, size: 12, color: Colors.grey.shade600),
         ),
       ),
     );
@@ -174,7 +175,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                         color: Colors.black.withOpacity(0.6),
                         borderRadius: BorderRadius.circular(14),
                       ),
-                      child: const Icon(Icons.close,
+                      child: const PhosphorIcon(PhosphorIconsRegular.x,
                           size: 16, color: Colors.white),
                     ),
                   ),
@@ -204,45 +205,45 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
         AppPopupMenu.tile(
           value: 'select',
           label: 'Select Image',
-          icon: Icons.check,
+          icon: PhosphorIconsRegular.check,
         ),
         if (widget.onEditMetadata != null)
           AppPopupMenu.tile(
             value: 'edit',
             label: 'Edit IPTC',
-            icon: Icons.edit_outlined,
+            icon: PhosphorIconsRegular.pencilSimple,
           ),
         AppPopupMenu.tile(
           value: 'copy_metadata',
           label: 'Copy Metadata',
-          icon: Icons.copy_outlined,
+          icon: PhosphorIconsRegular.copy,
         ),
         AppPopupMenu.tile(
           value: 'paste_metadata',
           label: 'Paste Metadata',
-          icon: Icons.paste_outlined,
+          icon: PhosphorIconsRegular.clipboardText,
         ),
         AppPopupMenu.tile(
           value: 'apply_iptc_template',
           label: 'Apply IPTC Template',
-          icon: Icons.description_outlined,
+          icon: PhosphorIconsRegular.fileText,
         ),
         const PopupMenuDivider(height: 1),
         AppPopupMenu.tile(
           value: 'open',
           label: 'Open in Finder',
-          icon: Icons.open_in_new,
+          icon: PhosphorIconsRegular.arrowSquareOut,
         ),
         AppPopupMenu.tile(
           value: 'rename',
           label: 'Rename Image',
-          icon: Icons.drive_file_rename_outline,
+          icon: PhosphorIconsRegular.pencilSimple,
         ),
         const PopupMenuDivider(height: 1),
         AppPopupMenu.tile(
           value: 'delete',
           label: 'Delete Image',
-          icon: Icons.delete_outline,
+          icon: PhosphorIconsRegular.trash,
           destructive: true,
         ),
       ],
@@ -329,7 +330,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                   ),
                   const Spacer(),
                   // Thumbnail size controls
-                  _popupToolbarBtn(Icons.remove, () {
+                  _popupToolbarBtn(PhosphorIconsRegular.minus, () {
                     const steps = [
                       100.0,
                       150.0,
@@ -356,7 +357,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                       ),
                     ),
                   ),
-                  _popupToolbarBtn(Icons.add, () {
+                  _popupToolbarBtn(PhosphorIconsRegular.plus, () {
                     const steps = [
                       100.0,
                       150.0,
@@ -374,7 +375,7 @@ class _ThumbnailPopupDialogState extends State<ThumbnailPopupDialog> {
                     onTap: () => Navigator.of(context).pop(),
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
-                      child: Icon(Icons.close,
+                      child: PhosphorIcon(PhosphorIconsRegular.x,
                           size: 14, color: Colors.grey.shade600),
                     ),
                   ),

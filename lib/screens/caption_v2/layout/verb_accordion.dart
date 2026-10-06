@@ -10,6 +10,7 @@ import '../widgets/rbi_row.dart';
 import '../widgets/celebration_dropdown.dart';
 import '../widgets/verb_tile.dart';
 import 'caption_v2_verb_editor.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Default no-scroll verb accordion. Favorites is a pinned virtual category.
 class DefaultVerbAccordion extends StatefulWidget {
@@ -268,7 +269,6 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                       _AccordionSection(
                         category: category,
                         displayName: _displayName(category),
-                        count: _verbsFor(category).length,
                         open: false,
                         headerH: headerH,
                         verbRowH: verbRowH,
@@ -286,7 +286,6 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                         child: _AccordionSection(
                           category: category,
                           displayName: _displayName(category),
-                          count: _verbsFor(category).length,
                           open: true,
                           scrollBody: true,
                           headerH: headerH,
@@ -383,8 +382,7 @@ class _VerbSortMenu extends StatelessWidget {
               color: tokens.text.withValues(alpha: 0.62),
             ),
           ),
-          Icon(
-            Icons.arrow_drop_down_rounded,
+          PhosphorIcon(PhosphorIconsRegular.caretDown,
             size: 16,
             color: tokens.text.withValues(alpha: 0.55),
           ),
@@ -398,7 +396,6 @@ class _AccordionSection extends StatelessWidget {
   const _AccordionSection({
     required this.category,
     required this.displayName,
-    required this.count,
     required this.open,
     required this.headerH,
     required this.verbRowH,
@@ -415,7 +412,6 @@ class _AccordionSection extends StatelessWidget {
 
   final String category;
   final String displayName;
-  final int count;
   final bool open;
   final bool scrollBody;
   final double headerH;
@@ -433,7 +429,6 @@ class _AccordionSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final header = _CategoryHeader(
       label: displayName,
-      count: count,
       open: open,
       height: headerH,
       tokens: tokens,
@@ -501,7 +496,6 @@ class _PinnedVerbSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const pinnedTeal = Color(0xFF6EC8C4);
     final hasVerb = verb != null;
     final armed = hasVerb && controller.selectedVerb == verb!.key;
     final showRbi = armed && controller.verbNeedsRbi(verb!.key);
@@ -513,19 +507,18 @@ class _PinnedVerbSlot extends StatelessWidget {
       height: height,
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: pinnedTeal.withValues(alpha: hasVerb ? 0.12 : 0.06),
         border: Border(
           bottom: BorderSide(
-            color: pinnedTeal.withValues(alpha: hasVerb ? 0.32 : 0.18),
+            color: hasVerb ? FfTokens.pinnedDivider : tokens.divider,
           ),
         ),
       ),
       child: Row(
         children: [
           Icon(
-            hasVerb ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+            hasVerb ? PhosphorIconsFill.pushPin : PhosphorIconsRegular.pushPin,
             size: 10,
-            color: pinnedTeal.withValues(alpha: hasVerb ? 0.95 : 0.50),
+            color: FfTokens.pinned,
           ),
           const SizedBox(width: 4),
           Text(
@@ -538,7 +531,7 @@ class _PinnedVerbSlot extends StatelessWidget {
               fontSize: 13,
               height: 1.0,
               letterSpacing: 0.1,
-              color: pinnedTeal.withValues(alpha: hasVerb ? 1 : 0.55),
+              color: FfTokens.pinned,
             ),
           ),
           const SizedBox(width: 10),
@@ -582,7 +575,7 @@ class _PinnedVerbSlot extends StatelessWidget {
                         fontWeight: FontWeight.w400,
                         fontSize: 11,
                         height: 1.0,
-                        color: tokens.text.withValues(alpha: 0.38),
+                        color: FfTokens.pinnedHint,
                       ),
                     ),
                   ),
@@ -591,7 +584,7 @@ class _PinnedVerbSlot extends StatelessWidget {
             TextButton(
               onPressed: () => controller.toggleVerbPin(verb!.key),
               style: TextButton.styleFrom(
-                foregroundColor: pinnedTeal,
+                foregroundColor: FfTokens.pinned,
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -604,7 +597,7 @@ class _PinnedVerbSlot extends StatelessWidget {
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   height: 1.0,
-                  color: pinnedTeal.withValues(alpha: 0.95),
+                  color: FfTokens.pinned,
                 ),
               ),
             ),
@@ -612,25 +605,22 @@ class _PinnedVerbSlot extends StatelessWidget {
       ),
     );
 
-    return ColoredBox(
-      color: const Color(0xFF6EC8C4).withValues(alpha: 0.06),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          bar,
-          if (armed && (showRbi || showBase || showCelebration))
-            VerbExtrasPanel(
-              controller: controller,
-              verbKey: verb!.key,
-              showRbi: showRbi,
-              showBase: showBase,
-              showCelebration: showCelebration,
-              showSaveActions: false,
-              tokens: tokens,
-            ),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        bar,
+        if (armed && (showRbi || showBase || showCelebration))
+          VerbExtrasPanel(
+            controller: controller,
+            verbKey: verb!.key,
+            showRbi: showRbi,
+            showBase: showBase,
+            showCelebration: showCelebration,
+            showSaveActions: false,
+            tokens: tokens,
+          ),
+      ],
     );
   }
 }
@@ -638,7 +628,6 @@ class _PinnedVerbSlot extends StatelessWidget {
 class _CategoryHeader extends StatefulWidget {
   const _CategoryHeader({
     required this.label,
-    required this.count,
     required this.open,
     required this.height,
     required this.tokens,
@@ -647,7 +636,6 @@ class _CategoryHeader extends StatefulWidget {
   });
 
   final String label;
-  final int count;
   final bool open;
   final double height;
   final FfTokens tokens;
@@ -663,11 +651,12 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
 
   @override
   Widget build(BuildContext context) {
-    const favoritesGold = Color(0xFFFFD166);
     final t = widget.tokens;
     final open = widget.open;
     final gold = widget.gold;
-    final headerColor = gold ? favoritesGold : t.accent;
+    final labelColor = gold
+        ? FfTokens.favorites
+        : (open ? t.text : t.textSecondary);
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -679,58 +668,30 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
           height: widget.height,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           decoration: BoxDecoration(
-            color: open
-                ? headerColor.withValues(alpha: 0.13)
-                : (_hovered
-                    ? t.text.withValues(alpha: 0.06)
-                    : (gold
-                        ? favoritesGold.withValues(alpha: 0.07)
-                        : Colors.transparent)),
+            color: gold
+                ? FfTokens.favoritesFill
+                : (_hovered ? t.hover : Colors.transparent),
             border: Border(
               bottom: BorderSide(
-                color: open
-                    ? headerColor.withValues(alpha: 0.34)
-                    : (gold
-                        ? favoritesGold.withValues(alpha: 0.22)
-                        : t.divider),
+                color: gold ? FfTokens.favoritesBorder : t.divider,
               ),
             ),
           ),
           child: Row(
             children: [
               Icon(
-                open ? Icons.keyboard_arrow_down : Icons.chevron_right,
+                open ? PhosphorIconsRegular.caretDown : PhosphorIconsRegular.caretRight,
                 size: 11,
-                color: open || gold
-                    ? headerColor.withValues(alpha: open ? 1 : 0.72)
-                    : t.text.withValues(alpha: 0.38),
+                color: labelColor,
               ),
               const SizedBox(width: 5),
               Expanded(
                 child: Text(
-                  widget.label,
+                  widget.label.toUpperCase(),
                   maxLines: 1,
+                  softWrap: false,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily:
-                        open ? FfTokens.labelFamily : FfTokens.fontFamily,
-                    fontWeight: open ? FontWeight.w600 : FontWeight.w400,
-                    fontSize: DefaultVerbAccordion.categoryFontSize,
-                    letterSpacing: open ? -0.2 : 0,
-                    color: open || gold
-                        ? headerColor.withValues(alpha: open ? 1 : 0.78)
-                        : t.text.withValues(alpha: 0.76),
-                  ),
-                ),
-              ),
-              Text(
-                '${widget.count}',
-                style: TextStyle(
-                  fontFamily: FfTokens.monoFamily,
-                  fontSize: 10,
-                  color: open || gold
-                      ? headerColor.withValues(alpha: open ? 1 : 0.62)
-                      : t.text.withValues(alpha: 0.44),
+                  style: FfTokens.categoryLabel(color: labelColor),
                 ),
               ),
             ],
@@ -891,8 +852,6 @@ class _AccordionVerbRow extends StatefulWidget {
 }
 
 class _AccordionVerbRowState extends State<_AccordionVerbRow> {
-  bool _hovered = false;
-
   CaptionV2Controller get controller => widget.controller;
   EffectiveVerb get verb => widget.verb;
   FfTokens get tokens => widget.tokens;
@@ -947,19 +906,14 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
     final showRbi = armed && controller.verbNeedsRbi(verb.key);
     final showBase = armed && controller.verbNeedsBase(verb.key);
     final showCelebration = armed && controller.verbNeedsCelebration(verb.key);
-    final bright = armed || _hovered;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         MouseRegion(
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
           cursor: SystemMouseCursors.click,
           child: Material(
-            color: armed
-                ? tokens.accent.withValues(alpha: 0.15)
-                : Colors.transparent,
+            color: Colors.transparent,
             child: CmdClick(
               useInkWell: true,
               onTap: () {
@@ -975,11 +929,12 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                 height: widget.rowHeight,
                 padding: const EdgeInsets.only(left: 12, right: 4),
                 decoration: BoxDecoration(
+                  color: armed ? tokens.selected : null,
+                  borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+                  // Match player-row selected outline.
                   border: armed
-                      ? Border.symmetric(
-                          horizontal: BorderSide(
-                            color: tokens.accent.withValues(alpha: 0.55),
-                          ),
+                      ? Border(
+                          left: BorderSide(color: tokens.accent, width: 2),
                         )
                       : null,
                 ),
@@ -988,8 +943,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                     if (widget.showDragHandle)
                       Padding(
                         padding: const EdgeInsets.only(right: 4),
-                        child: Icon(
-                          Icons.drag_handle_rounded,
+                        child: PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
                           size: 14,
                           color: tokens.text.withValues(alpha: 0.40),
                         ),
@@ -1000,10 +954,9 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                         child: controller.isVerbPinned(verb.key)
                             ? Padding(
                                 padding: const EdgeInsets.only(right: 4),
-                                child: Icon(
-                                  Icons.push_pin_rounded,
+                                child: PhosphorIcon(PhosphorIconsFill.pushPin,
                                   size: 10,
-                                  color: tokens.text.withValues(alpha: 0.22),
+                                  color: FfTokens.pinned,
                                 ),
                               )
                             : null,
@@ -1013,13 +966,9 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                         verb.label,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: FfTokens.labelFamily,
-                          fontSize: DefaultVerbAccordion.verbFontSize,
-                          fontWeight: FontWeight.w500,
-                          color: bright
-                              ? tokens.text
-                              : tokens.text.withValues(alpha: 0.84),
+                        style: FfTokens.rosterName(
+                          color: tokens.text,
+                          selected: armed,
                         ),
                       ),
                     ),

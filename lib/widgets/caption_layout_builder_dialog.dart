@@ -17,6 +17,7 @@ import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
 import 'date_formula_editor.dart';
 import 'location_formula_editor.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 FfTokens _ffOf(BuildContext context) =>
     Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -3371,8 +3372,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                     }),
                     background:
                         isEditingThis ? _ffOf(context).selectedFill : _ffOf(context).sunken,
-                    child: Icon(
-                      Icons.edit_outlined,
+                    child: PhosphorIcon(PhosphorIconsRegular.pencilSimple,
                       size: 11,
                       color: _ffOf(context).textSecondary,
                     ),
@@ -3383,8 +3383,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   tooltip: 'Remove',
                   onTap: () => _removeBylineFieldAtView(viewIndex),
                   background: _ffOf(context).sunken,
-                  child: Icon(
-                    Icons.close,
+                  child: PhosphorIcon(PhosphorIconsRegular.x,
                     size: 11,
                     color: _ffOf(context).textSecondary,
                   ),
@@ -3409,8 +3408,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   tooltip: 'Remove',
                   onTap: () => _removeBylineFieldAtView(viewIndex),
                   background: _ffOf(context).sunken,
-                  child: Icon(
-                    Icons.close,
+                  child: PhosphorIcon(PhosphorIconsRegular.x,
                     size: 11,
                     color: _ffOf(context).textSecondary,
                   ),
@@ -3424,8 +3422,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
     Widget staticHandle() => Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
-          child: Icon(
-            Icons.drag_indicator,
+          child: PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
             size: 14,
             color: _ffOf(context).text.withValues(alpha: 0.45),
           ),
@@ -3901,8 +3898,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           onTap: () => _removeSegmentSnippet(_activeFormulaIndex!),
           child: Padding(
             padding: const EdgeInsets.all(4),
-            child: Icon(
-              Icons.delete_outline,
+            child: PhosphorIcon(PhosphorIconsRegular.trash,
               size: 16,
               color: _ffOf(context).textSecondary,
             ),
@@ -4144,7 +4140,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.shuffle, size: 12, color: _ffOf(context).textSecondary),
+              PhosphorIcon(PhosphorIconsRegular.shuffle, size: 12, color: _ffOf(context).textSecondary),
               const SizedBox(width: 4),
               Text(
                 'Shuffle sample',
@@ -4212,7 +4208,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.add_circle_outline, size: 13, color: _ffOf(context).accent),
+            PhosphorIcon(PhosphorIconsRegular.plusCircle, size: 13, color: _ffOf(context).accent),
             const SizedBox(width: 4),
             Text(
               '+ Add field',
@@ -4222,7 +4218,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 color: _ffOf(context).accent,
               ),
             ),
-            Icon(Icons.arrow_drop_down, size: 18, color: _ffOf(context).accent),
+            PhosphorIcon(PhosphorIconsRegular.caretDown, size: 18, color: _ffOf(context).accent),
           ],
         ),
       ),
@@ -4284,7 +4280,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   /// Preview chips + player sample share [_snippetFill] with light body text.
   _SegmentTint get _segmentTint => const _SegmentTint(
         bg: _snippetFill,
-        fg: Color(0xFFE9E9ED),
+        fg: Color(0xFFE4EAF2),
       );
 
   List<Widget> _buildPreviewWidgets({
@@ -4498,19 +4494,19 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         elevation: 4,
         borderRadius: BorderRadius.circular(4),
         child:
-            Icon(Icons.drag_indicator, size: 10, color: _ffOf(context).textSecondary),
+            PhosphorIcon(PhosphorIconsRegular.dotsSixVertical, size: 10, color: _ffOf(context).textSecondary),
       ),
       childWhenDragging: Opacity(
         opacity: 0.25,
         child:
-            Icon(Icons.drag_indicator, size: 10, color: _ffOf(context).text.withValues(alpha: 0.40)),
+            PhosphorIcon(PhosphorIconsRegular.dotsSixVertical, size: 10, color: _ffOf(context).text.withValues(alpha: 0.40)),
       ),
       child: MouseRegion(
         cursor: SystemMouseCursors.grab,
         child: Tooltip(
           message: 'Drag to reorder snippets',
           child:
-              Icon(Icons.drag_indicator, size: 10, color: _ffOf(context).text.withValues(alpha: 0.45)),
+              PhosphorIcon(PhosphorIconsRegular.dotsSixVertical, size: 10, color: _ffOf(context).text.withValues(alpha: 0.45)),
         ),
       ),
     );
@@ -4643,7 +4639,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   color: _ffOf(context).textSecondary,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.close, size: 7, color: Colors.white),
+                child: const PhosphorIcon(PhosphorIconsRegular.x, size: 7, color: Colors.white),
               ),
             ),
           ),
@@ -4725,13 +4721,13 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   if (lockedTok)
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
-                      child: Icon(Icons.lock_outline,
+                      child: PhosphorIcon(PhosphorIconsRegular.lock,
                           size: 13, color: t.textSecondary),
                     )
                   else if (token.startsWith('saved:'))
                     Padding(
                       padding: const EdgeInsets.only(right: 6),
-                      child: Icon(Icons.bookmark_outline,
+                      child: PhosphorIcon(PhosphorIconsRegular.bookmarkSimple,
                           size: 14, color: t.textSecondary),
                     ),
                   Expanded(
@@ -4748,7 +4744,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                     ),
                   ),
                   Icon(
-                    fav ? Icons.star : Icons.star_border,
+                    fav ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
                     size: 15,
                     color: fav
                         ? const Color(0xFFE6B84A)
@@ -4783,8 +4779,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                   child: Row(
                     children: [
                       if (locked) ...[
-                        Icon(
-                          Icons.lock_outline,
+                        PhosphorIcon(PhosphorIconsRegular.lock,
                           size: 12,
                           color: t.text.withValues(alpha: 0.45),
                         ),
@@ -4814,8 +4809,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
             Container(width: 1, color: t.divider),
             SizedBox(
               width: 26,
-              child: Icon(
-                Icons.keyboard_arrow_down_rounded,
+              child: PhosphorIcon(PhosphorIconsRegular.caretDown,
                 size: 14,
                 color: t.text.withValues(alpha: 0.42),
               ),
@@ -4872,8 +4866,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                     'in a column beside the caption.\n'
                     'Keywords sits below Personality in that column.',
                 waitDuration: const Duration(milliseconds: 400),
-                child: Icon(
-                  Icons.help_outline,
+                child: PhosphorIcon(PhosphorIconsRegular.question,
                   size: 14,
                   color: _ffOf(context).textSecondary,
                 ),
@@ -5174,8 +5167,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                               borderRadius: BorderRadius.circular(6),
                               child: Padding(
                                 padding: const EdgeInsets.all(4),
-                                child: Icon(
-                                  Icons.close,
+                                child: PhosphorIcon(PhosphorIconsRegular.x,
                                   size: 18,
                                   color: _t.textSecondary,
                                 ),
@@ -6035,7 +6027,7 @@ class _BylineAddChipButton extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                present ? Icons.check : Icons.add,
+                present ? PhosphorIconsRegular.check : PhosphorIconsRegular.plus,
                 size: 11,
                 color: present
                     ? const Color(0xFF2563EB)
@@ -6138,7 +6130,7 @@ class _BylineAddCustomButton extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.add, size: 11, color: _ffOf(context).textSecondary),
+                PhosphorIcon(PhosphorIconsRegular.plus, size: 11, color: _ffOf(context).textSecondary),
                 const SizedBox(width: 3),
                 Text(
                   'Custom text',

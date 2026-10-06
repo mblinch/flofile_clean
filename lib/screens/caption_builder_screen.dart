@@ -38,6 +38,7 @@ import '../utils/burst_chain_helper.dart';
 import '../flo_layout_constants.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/card_container.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Writes IPTC keyword bag and XMP/IPTC **Subject** so apps like Photo Mechanic
 /// show keywords (PM often reads `Subject` / dc:subject; IPTC-only is easy to miss).
@@ -3610,7 +3611,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     // Header with title
                     Row(
                       children: [
-                        Icon(Icons.settings,
+                        PhosphorIcon(PhosphorIconsRegular.gear,
                             size: 16, color: Colors.grey.shade600),
                         const SizedBox(width: 6),
                         Text(
@@ -5043,7 +5044,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.keyboard, size: 14, color: Colors.grey.shade600),
+                    PhosphorIcon(PhosphorIconsRegular.keyboard, size: 14, color: Colors.grey.shade600),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -5056,7 +5057,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
                     ),
                     GestureDetector(
                       onTap: () => Navigator.of(ctx).pop(),
-                      child: Icon(Icons.close,
+                      child: PhosphorIcon(PhosphorIconsRegular.x,
                           size: 14, color: Colors.grey.shade500),
                     ),
                   ],
@@ -5577,8 +5578,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.warning,
+          PhosphorIcon(PhosphorIconsRegular.warning,
             color: Colors.red.shade600,
             size: 16,
           ),

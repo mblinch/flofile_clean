@@ -23,31 +23,49 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Existing roster data (teams/players) — keep permissive for sync jobs;
-    // tighten separately if you add rules for sports/** paths.
-    match /sports/{sportId}/teams/{teamId} {
+    // League-API roster cache — signed-in read; writes via sync jobs / Admin SDK.
+    match /sports/{sportId} {
       allow read: if isSignedIn();
       allow write: if false;
-      match /players/{playerId} {
+      match /teams/{teamId} {
         allow read: if isSignedIn();
         allow write: if false;
+        match /players/{playerId} {
+          allow read: if isSignedIn();
+          allow write: if false;
+        }
       }
     }
 
-    // Tank01 RapidAPI mirror — same shape as sports/...; admin may sync from
-    // the app, signed-in users may read.
-    match /sports_tank01/{sportId}/teams/{teamId} {
+    // Tank01 RapidAPI mirror — admin may edit from website admin + desktop app;
+    // signed-in users may read.
+    match /sports_tank01/{sportId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
-      match /players/{playerId} {
+      match /teams/{teamId} {
         allow read: if isSignedIn();
         allow write: if isAdmin();
+        match /players/{playerId} {
+          allow read: if isSignedIn();
+          allow write: if isAdmin();
+        }
       }
     }
 
     match /roster_sync/{docId} {
       allow read: if isAdmin();
       allow write: if isAdmin();
+    }
+
+    // Signed-in users may file a report when they hit a roster conflict UI.
+    // Admins read them; a Cloud Function emails the owner on create.
+    match /roster_issue_reports/{reportId} {
+      allow create: if isSignedIn()
+        && request.resource.data.userUid == request.auth.uid
+        && request.resource.data.kind is string
+        && request.resource.data.teamName is string;
+      allow read: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     // Per-user settings (captions, verbs, FTP profiles, etc.).

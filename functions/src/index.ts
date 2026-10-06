@@ -7,6 +7,8 @@
  * - `tank01RosterSync`: Tank01 → sports_tank01, daily at 11:00 ET; emails
  *    `dev@flofilecaptions.com` (same Resend setup as nightly roster sync).
  * - `runTank01RosterSyncNow`: admin callable for a manual Tank01 mirror run.
+ * - `onRosterIssueReportCreated`: emails admins when a user files a
+ *    `roster_issue_reports/{id}` doc (duplicate jersey or player data issue).
  *
  * Firestore config (doc `roster_sync/config`):
  *   enabled?: boolean    default true
@@ -25,6 +27,7 @@
 
 import { initializeApp } from "firebase-admin/app";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions/v2";
@@ -763,5 +766,195 @@ export const runTank01RosterSyncNow = onCall(
       );
     }
     return runTank01Sync("manual");
+  },
+);
+
+/**
+ * Emails admins when a signed-in caption user files a roster issue report
+ * (duplicate dialog, session jersey edit, or player wrong-number / spelling).
+ * Triggered by client writes to `roster_issue_reports/{id}`.
+ */
+export const onRosterIssueReportCreated = onDocumentCreated(
+  {
+    document: "roster_issue_reports/{reportId}",
+    memory: "256MiB",
+    timeoutSeconds: 60,
+  },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+
+    const db = getFirestore();
+    const [rosterSnap, tank01Snap] = await Promise.all([
+      db.doc("roster_sync/config").get(),
+      db.doc("tank01_sync/config").get(),
+    ]);
+    const rosterCfg = (rosterSnap.data() ?? {}) as RosterSyncConfig;
+    const tank01Cfg = (tank01Snap.data() ?? {}) as Tank01SyncConfig;
+    const apiKey = (
+      tank01Cfg.resendApiKey ??
+      rosterCfg.resendApiKey ??
+      ""
+    ).trim();
+    if (!apiKey) {
+      logger.warn("resendApiKey missing; skipping roster issue report email.");
+      return;
+    }
+    const to = (
+      tank01Cfg.emailSummaryTo ??
+      rosterCfg.emailSummaryTo ??
+      TANK01_EMAIL_DEFAULT_TO
+    ).trim();
+    const from = (
+      tank01Cfg.emailSummaryFrom ??
+      rosterCfg.emailSummaryFrom ??
+      "FloFile Roster Issues <onboarding@resend.dev>"
+    ).trim();
+
+    const kind = String(data.kind ?? "unknown");
+    const teamName = String(data.teamName ?? "Unknown team");
+    const sportId = String(data.sportId ?? "unknown");
+    const userEmail = String(data.userEmail ?? "(unknown user)");
+    const userName = String(data.userDisplayName ?? "").trim();
+    const userLine = userName
+      ? `${userName} <${userEmail}>`
+      : userEmail;
+
+    let subject = `[Roster issue] ${teamName} · ${sportId}`;
+    let text: string;
+
+    if (kind === "playerDataIssue") {
+      const side = String(data.side ?? "unknown");
+      const note = String(data.note ?? "").trim();
+      const issueTypes = Array.isArray(data.issueTypes)
+        ? data.issueTypes.map((x) => String(x))
+        : [];
+      const labels = issueTypes.map((t) => {
+        if (t === "wrongNumber") return "wrong jersey number";
+        if (t === "spelling") return "spelling mistake";
+        if (t === "dontUsePlayer") return "don't use this player";
+        return t;
+      });
+      const issueLabel =
+        labels.length > 0 ? labels.join(" + ") : "player data issue";
+      const player =
+        data.player && typeof data.player === "object"
+          ? (data.player as {
+              fullName?: unknown;
+              jerseyNumber?: unknown;
+              playerId?: unknown;
+              position?: unknown;
+            })
+          : {};
+      const fullName = String(player.fullName ?? "").trim() || "(unknown)";
+      const jersey = String(player.jerseyNumber ?? "").trim() || "?";
+      const playerId = String(player.playerId ?? "").trim();
+      const position = String(player.position ?? "").trim();
+
+      subject = `[Roster issue] ${issueLabel} · ${teamName}`;
+      text = [
+        "A signed-in FloFile user reported a player data problem.",
+        "",
+        `Issue: ${issueLabel}`,
+        `User: ${userLine}`,
+        `Sport: ${sportId}`,
+        `Team: ${teamName}`,
+        `Side: ${side}`,
+        `Player: #${jersey} ${fullName}`,
+        ...(position ? [`Position: ${position}`] : []),
+        ...(playerId ? [`Player id: ${playerId}`] : []),
+        `Report id: ${event.params.reportId}`,
+        "",
+        note ? `Note:\n${note}` : "Note: (none)",
+        "",
+        "Check the website admin Roster issues tab or Tank01 mirror if a permanent fix is needed.",
+      ].join("\n");
+    } else if (kind === "sessionJerseyEdit") {
+      const changes = Array.isArray(data.changes) ? data.changes : [];
+      const changeLines = changes
+        .map((raw) => {
+          if (!raw || typeof raw !== "object") return "";
+          const row = raw as {
+            fullName?: unknown;
+            fromJersey?: unknown;
+            toJersey?: unknown;
+            position?: unknown;
+          };
+          const name = String(row.fullName ?? "").trim() || "(unknown)";
+          const from = String(row.fromJersey ?? "").trim() || "?";
+          const to = String(row.toJersey ?? "").trim() || "?";
+          const pos = String(row.position ?? "").trim();
+          const base = `  #${from} → #${to}  ${name}`;
+          return pos ? `${base} (${pos})` : base;
+        })
+        .filter(Boolean);
+
+      subject = `[Roster issue] session jersey edit · ${teamName}`;
+      text = [
+        "A signed-in FloFile user changed jersey number(s) for this session.",
+        "",
+        `User: ${userLine}`,
+        `Sport: ${sportId}`,
+        `Team: ${teamName}`,
+        `Report id: ${event.params.reportId}`,
+        "",
+        "Changes:",
+        ...(changeLines.length ? changeLines : ["  (none listed)"]),
+        "",
+        "These edits are session-only in the app (not written to the shared roster).",
+        "Update the website admin roster / Tank01 mirror if a permanent fix is needed.",
+      ].join("\n");
+    } else {
+      const conflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
+      const conflictLines = conflicts.flatMap((raw) => {
+        if (!raw || typeof raw !== "object") return [] as string[];
+        const c = raw as { jersey?: unknown; players?: unknown };
+        const jersey = String(c.jersey ?? "?").trim();
+        const players = Array.isArray(c.players) ? c.players : [];
+        const names = players
+          .map((p) => {
+            if (!p || typeof p !== "object") return "";
+            const row = p as { fullName?: unknown; position?: unknown };
+            const name = String(row.fullName ?? "").trim();
+            const pos = String(row.position ?? "").trim();
+            if (!name) return "";
+            return pos ? `  - ${name} (${pos})` : `  - ${name}`;
+          })
+          .filter(Boolean);
+        return [`#${jersey}`, ...names, ""];
+      });
+
+      text = [
+        "A signed-in FloFile user hit a duplicate jersey conflict.",
+        "",
+        `User: ${userLine}`,
+        `Sport: ${sportId}`,
+        `Team: ${teamName}`,
+        `Report id: ${event.params.reportId}`,
+        "",
+        "Conflicts:",
+        ...(conflictLines.length ? conflictLines : ["  (none listed)"]),
+        "Session-only jersey edits may have been applied in the app.",
+        "Check the website admin Roster issues tab or Tank01 mirror if a permanent fix is needed.",
+      ].join("\n");
+    }
+
+    try {
+      await sendResendEmail({ apiKey, from, to, subject, text });
+      logger.info("Sent roster issue report email", {
+        reportId: event.params.reportId,
+        kind,
+        to,
+        teamName,
+        sportId,
+      });
+    } catch (e) {
+      logger.error("Failed to send roster issue report email", {
+        message: e instanceof Error ? e.message : String(e),
+        reportId: event.params.reportId,
+        kind,
+      });
+      throw e;
+    }
   },
 );

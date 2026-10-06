@@ -57,6 +57,30 @@ void main() {
     expect(controller.selectedPlayers.single.player, same(second));
   });
 
+  test('commitCustomPlayer adds, selects, and can pin a custom name', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto Blue Jays'
+      ..awayTeam = 'New York Yankees'
+      ..homeRoster = [player('Bo Bichette', '11')];
+
+    final error = controller.commitCustomPlayer(
+      isHome: true,
+      fullName: 'Jane Doe',
+      jerseyNumber: '99',
+      pin: true,
+    );
+    expect(error, isNull);
+    expect(
+      controller.homeRoster.any((p) => p.fullName == 'Jane Doe'),
+      isTrue,
+    );
+    expect(controller.selectedPlayers.single.player.fullName, 'Jane Doe');
+    expect(controller.pinnedPlayer?.player.fullName, 'Jane Doe');
+    expect(controller.pinnedPlayer?.isHome, isTrue);
+    expect(controller.lastCustomPlayerName, 'Jane Doe');
+    expect(controller.lastCustomPlayerJersey, '99');
+  });
+
   test('uses plural caption wording for multiple players', () {
     final controller = CaptionV2Controller()
       ..homeTeam = 'Toronto Blue Jays'

@@ -12,6 +12,7 @@ import 'app_styled_dialogs.dart';
 import 'caption_fields_widget.dart' show CustomButton;
 import 'thumbnail_popup_dialog.dart';
 import 'oriented_file_preview.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class ThumbnailGridWidget extends StatefulWidget {
   final List<String> imagePaths;
@@ -194,8 +195,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
             children: [
               Icon(
                 active
-                    ? Icons.visibility_off_outlined
-                    : Icons.visibility_outlined,
+                    ? PhosphorIconsRegular.eyeSlash
+                    : PhosphorIconsRegular.eye,
                 size: 15,
                 color: active ? AppTokens.accentDeep : AppTokens.inkSecondary,
               ),
@@ -279,8 +280,8 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                         ),
                         child: Icon(
                           widget.isExpanded
-                              ? Icons.keyboard_arrow_down
-                              : Icons.keyboard_arrow_up,
+                              ? PhosphorIconsRegular.caretDown
+                              : PhosphorIconsRegular.caretUp,
                           size: 15,
                           color: widget.isExpanded
                               ? AppTokens.accentDeep
@@ -308,8 +309,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                             BorderRadius.circular(AppTokens.radiusControl),
                         border: Border.all(color: AppTokens.cardBorder),
                       ),
-                      child: const Icon(
-                        Icons.image_search,
+                      child: const PhosphorIcon(PhosphorIconsRegular.magnifyingGlass,
                         size: 14,
                         color: AppTokens.inkSecondary,
                       ),
@@ -330,7 +330,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildThumbnailSizeButton(
-                  icon: Icons.remove,
+                  icon: PhosphorIconsRegular.minus,
                   onTap: () => _adjustThumbSizeStep(-1),
                 ),
                 Padding(
@@ -347,7 +347,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                   ),
                 ),
                 _buildThumbnailSizeButton(
-                  icon: Icons.add,
+                  icon: PhosphorIconsRegular.plus,
                   onTap: () => _adjustThumbSizeStep(1),
                 ),
               ],
@@ -369,7 +369,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         child: SizedBox(
           width: 24,
           height: 24,
-          child: Icon(icon, size: 12, color: AppTokens.inkSecondary),
+          child: PhosphorIcon(icon, size: 12, color: AppTokens.inkSecondary),
         ),
       ),
     );
@@ -711,7 +711,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.grid_view, size: 48, color: Colors.grey),
+              PhosphorIcon(PhosphorIconsRegular.squaresFour, size: 48, color: Colors.grey),
               SizedBox(height: 8),
               Text(
                 'No Images',
@@ -926,8 +926,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                       border: Border.all(
                                           color: Colors.white, width: 2),
                                     ),
-                                    child: const Icon(
-                                      Icons.check,
+                                    child: const PhosphorIcon(PhosphorIconsRegular.check,
                                       size: 12,
                                       color: Colors.white,
                                     ),
@@ -938,8 +937,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 Positioned(
                                   bottom: 4,
                                   right: 4,
-                                  child: Icon(
-                                    Icons.save,
+                                  child: PhosphorIcon(PhosphorIconsRegular.floppyDisk,
                                     size: (_thumbSize * 0.09).clamp(11.0, 18.0),
                                     color: Colors.green.shade700,
                                   ),
@@ -950,7 +948,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                 const Positioned(
                                   bottom: 4,
                                   left: 4,
-                                  child: Icon(Icons.lock,
+                                  child: PhosphorIcon(PhosphorIconsRegular.lock,
                                       size: 12, color: Colors.black54),
                                 ),
                               // Main content on top
@@ -1094,8 +1092,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                                       imagePath]! <
                                                   1.0) ...[
                                             // Currently uploading
-                                            Icon(
-                                              Icons.cloud_upload,
+                                            PhosphorIcon(PhosphorIconsRegular.cloudArrowUp,
                                               size: _thumbSize * 0.2,
                                               color: const Color(0xFF0052CC),
                                             ),
@@ -1124,8 +1121,7 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
                                             ),
                                           ] else ...[
                                             // Queued
-                                            Icon(
-                                              Icons.schedule,
+                                            PhosphorIcon(PhosphorIconsRegular.clock,
                                               size: _thumbSize * 0.2,
                                               color: Colors.orange,
                                             ),
@@ -1213,19 +1209,19 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         AppPopupMenu.tile(
           value: 'paste_metadata',
           label: 'Paste Metadata ($selectedCount)',
-          icon: Icons.paste_outlined,
+          icon: PhosphorIconsRegular.clipboardText,
         ),
         const PopupMenuDivider(height: 1),
         AppPopupMenu.tile(
           value: 'ftp_images',
           label: 'FTP Images ($selectedCount)',
-          icon: Icons.cloud_upload_outlined,
+          icon: PhosphorIconsRegular.cloudArrowUp,
         ),
         const PopupMenuDivider(height: 1),
         AppPopupMenu.tile(
           value: 'delete_images',
           label: 'Delete Images ($selectedCount)',
-          icon: Icons.delete_outline,
+          icon: PhosphorIconsRegular.trash,
           destructive: true,
         ),
       ];
@@ -1234,59 +1230,59 @@ class ThumbnailGridWidgetState extends State<ThumbnailGridWidget> {
         AppPopupMenu.tile(
           value: 'copy_metadata',
           label: 'Copy Metadata',
-          icon: Icons.copy_outlined,
+          icon: PhosphorIconsRegular.copy,
         ),
         AppPopupMenu.tile(
           value: 'paste_metadata',
           label: 'Paste Metadata',
-          icon: Icons.paste_outlined,
+          icon: PhosphorIconsRegular.clipboardText,
         ),
         AppPopupMenu.tile(
           value: 'apply_iptc_template',
           label: 'Apply IPTC Template',
-          icon: Icons.description_outlined,
+          icon: PhosphorIconsRegular.fileText,
         ),
         if (widget.onEditMetadata != null)
           AppPopupMenu.tile(
             value: 'edit_iptc',
             label: 'Edit IPTC',
-            icon: Icons.edit_outlined,
+            icon: PhosphorIconsRegular.pencilSimple,
           ),
         if (widget.onEditInPhotoshop != null)
           AppPopupMenu.tile(
             value: 'edit_photoshop',
             label: 'Edit in Photoshop',
-            icon: Icons.brush_outlined,
+            icon: PhosphorIconsRegular.paintBrush,
           ),
         const PopupMenuDivider(height: 1),
         if (widget.uploadedImages.contains(imagePath))
           AppPopupMenu.tile(
             value: 'remove_ftp',
             label: 'Remove FTP Status',
-            icon: Icons.cloud_done_outlined,
+            icon: PhosphorIconsRegular.cloudCheck,
           )
         else
           AppPopupMenu.tile(
             value: 'ftp_image',
             label: 'FTP Image',
-            icon: Icons.cloud_upload_outlined,
+            icon: PhosphorIconsRegular.cloudArrowUp,
           ),
         const PopupMenuDivider(height: 1),
         AppPopupMenu.tile(
           value: 'open',
           label: 'Open in Finder',
-          icon: Icons.open_in_new,
+          icon: PhosphorIconsRegular.arrowSquareOut,
         ),
         AppPopupMenu.tile(
           value: 'rename',
           label: 'Rename Image',
-          icon: Icons.drive_file_rename_outline,
+          icon: PhosphorIconsRegular.pencilSimple,
         ),
         const PopupMenuDivider(height: 1),
         AppPopupMenu.tile(
           value: 'delete',
           label: 'Delete Image',
-          icon: Icons.delete_outline,
+          icon: PhosphorIconsRegular.trash,
           destructive: true,
         ),
       ];

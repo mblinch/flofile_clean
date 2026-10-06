@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/app_styled_dialogs.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class CustomNameEntryResult {
   const CustomNameEntryResult({required this.name, this.jersey});
@@ -69,10 +70,10 @@ class CustomNameField extends StatelessWidget {
       child: Container(
         height: 28,
         decoration: BoxDecoration(
-          color: tokens.badgeFill,
+          color: tokens.sunken,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: pinned ? tokens.accent : tokens.divider,
+            color: pinned ? FfTokens.pinned : tokens.divider,
           ),
         ),
         child: Row(
@@ -116,6 +117,7 @@ class CustomNameField extends StatelessWidget {
                 controller: nameController,
                 focusNode: nameFocusNode,
                 readOnly: pinned,
+                maxLines: 1,
                 textInputAction: TextInputAction.done,
                 onChanged: (_) => onChanged?.call(),
                 onSubmitted: (_) => onSubmit(),
@@ -138,14 +140,22 @@ class CustomNameField extends StatelessWidget {
               ),
             ),
             _CustomNameAction(
-              icon: Icons.history,
+              icon: PhosphorIconsRegular.clockCounterClockwise,
               tooltip: 'Use last custom name',
               tokens: tokens,
               enabled: canUseLast,
               onTap: onUseLast,
             ),
             _CustomNameAction(
-              icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+              icon: PhosphorIconsRegular.check,
+              tooltip: 'Add custom player',
+              tokens: tokens,
+              enabled: !pinned && nameController.text.trim().isNotEmpty,
+              selected: false,
+              onTap: onSubmit,
+            ),
+            _CustomNameAction(
+              icon: pinned ? PhosphorIconsFill.pushPin : PhosphorIconsRegular.pushPin,
               tooltip: pinned ? 'Unpin custom name' : 'Pin custom name',
               tokens: tokens,
               enabled: canPin,
@@ -185,11 +195,11 @@ class _CustomNameAction extends StatelessWidget {
         child: SizedBox(
           width: 25,
           height: 28,
-          child: Icon(
+          child: PhosphorIcon(
             icon,
             size: 14,
             color: enabled
-                ? (selected ? tokens.accent : tokens.textSecondary)
+                ? (selected ? FfTokens.pinned : tokens.textSecondary)
                 : tokens.divider,
           ),
         ),

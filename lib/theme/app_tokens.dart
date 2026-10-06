@@ -14,46 +14,46 @@ abstract class AppTokens {
   // Color — accent (aliased from flo_layout_constants.dart)
   // ---------------------------------------------------------------------------
 
-  /// Dark slate used for selection and primary actions (#2A4858).
-  static const Color accent = kFloTealDark;
+  /// Teal accent (--color-accent): focus, toggles, selection bar.
+  static const Color accent = kFloTealLight;
 
-  /// Light fill behind selected chips/rows (#E4EEF2).
+  /// Selected chip/row fill (--color-accent-soft).
   static const Color accentTint = kFloTealSelectedFill;
 
-  /// Mid slate between [accent] and the light gradient endpoint (#3A5F78).
+  /// Mid muted (--color-text-muted).
   static const Color midSlate = kFloTealMid;
 
-  /// Pressed/emphasis step darker than [accent].
-  static const Color accentDeep = Color(0xFF1D323E);
+  /// Pressed/emphasis surface (--color-elevated).
+  static const Color accentDeep = Color(0xFF181D22);
 
-  /// Top chrome bar gradient (#4A7A96 → #2A4858).
+  /// Top chrome bar (flat elevated; gradient API retained).
   static const LinearGradient topBarGradient = kFloTealGradientHorizontal;
 
-  /// Fixed near-black surface used by the compact top chrome.
-  static const Color topBarSurface = Color(0xFF181B20);
+  /// Fixed elevated surface used by the compact top chrome.
+  static const Color topBarSurface = Color(0xFF181D22);
 
-  /// Hairline beneath the compact top chrome.
-  static const Color topBarBorder = Color(0xFF3B4047);
+  /// Hairline beneath the compact top chrome (--color-divider).
+  static const Color topBarBorder = Color(0x1EE8EEF4);
 
-  /// Primary content rendered over dark top chrome.
-  static const Color onAccent = Color(0xFFFFFFFF);
+  /// Primary content rendered over dark top chrome (--color-text).
+  static const Color onAccent = Color(0xFFE8EEF4);
 
   /// Secondary content rendered over dark top chrome.
-  static const Color onAccentMuted = Color(0xFFB7BEC8);
+  static const Color onAccentMuted = Color(0xFF959AA0);
 
   /// Low-emphasis separators and outlines over dark top chrome.
-  static const Color onAccentSubtle = Color(0xFF69717C);
+  static const Color onAccentSubtle = Color(0xFF6A6E73);
 
   /// Hover/splash wash used by controls on dark top chrome.
-  static const Color onAccentOverlay = Color(0x14FFFFFF);
+  static const Color onAccentOverlay = Color(0x14E8EEF4);
 
   /// Translucent fill for badges rendered over dark top chrome.
-  static const Color topBarBadgeFill = Color(0x26FFFFFF);
+  static const Color topBarBadgeFill = Color(0x26E8EEF4);
 
-  /// Semantic admin badge colors.
+  /// Semantic admin badge colors (--gold).
   static const Color adminAccent = Color(0xFFE8C547);
   static const Color adminTint = Color(0x59E8C547);
-  static const Color adminText = Color(0xFFFFF3C4);
+  static const Color adminText = Color(0xFF1A1606);
 
   // ---------------------------------------------------------------------------
   // Color — neutrals

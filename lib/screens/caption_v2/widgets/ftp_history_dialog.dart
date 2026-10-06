@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/ftp_history.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 Future<void> showFtpHistoryDialog(
   BuildContext context,
@@ -42,7 +43,7 @@ Future<void> showFtpHistoryDialog(
                         IconButton(
                           tooltip: 'Close',
                           onPressed: () => Navigator.of(context).pop(),
-                          icon: Icon(Icons.close, color: tokens.textSecondary),
+                          icon: PhosphorIcon(PhosphorIconsRegular.x, color: tokens.textSecondary),
                         ),
                       ],
                     ),
@@ -100,11 +101,11 @@ class _HistoryRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            entry.success ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+            entry.success ? PhosphorIconsRegular.cloudCheck : PhosphorIconsRegular.cloudSlash,
             size: 16,
             color: entry.success
                 ? const Color(0xFF3DDC84)
-                : const Color(0xFFFF6B6B),
+                : const Color(0xFFF07167),
           ),
           const SizedBox(width: 10),
           Expanded(

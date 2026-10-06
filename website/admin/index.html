@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — FloFile Captions</title>
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="theme-color" content="#10141B">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/styles.css?v=cool-slate">
+  <link rel="stylesheet" href="/css/admin.css?v=cool-slate">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="page-bg admin-shell">
+    <header class="site-header">
+      <div class="wrap header-inner">
+        <a class="brand" href="/">
+          <span class="brand-mark" aria-hidden="true"></span>
+          FloFile Captions
+        </a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">Menu</button>
+        <nav id="site-nav" class="nav" aria-label="Primary">
+          <a href="/">Home</a>
+          <a href="/admin/">Admin</a>
+          <span id="admin-user-chip" class="admin-user-chip" hidden></span>
+          <button id="admin-sign-out" class="btn btn-ghost btn-sm" type="button" hidden>Sign out</button>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main" class="admin-main">
+      <div class="wrap">
+        <section id="view-signed-out" class="admin-card">
+          <div class="glow" style="--glow-w: 360px; --glow-h: 240px;">
+            <h1>Sign in</h1>
+          </div>
+          <p>
+            Sign in with Google to open the roster admin. Only FloFile admin
+            accounts can edit Tank01 rosters or scan jersey issues.
+          </p>
+          <button id="admin-sign-in" class="btn btn-primary" type="button">
+            Sign in with Google
+          </button>
+        </section>
+
+        <section id="view-denied" class="admin-card" hidden>
+          <div class="glow" style="--glow-w: 420px; --glow-h: 260px;">
+            <h1>Admin access required</h1>
+          </div>
+          <p>
+            You’re signed in, but this account isn’t on the admin list.
+            Use an approved FloFile admin Google account, or ask the owner to
+            grant access.
+          </p>
+          <button class="btn btn-secondary" type="button" onclick="document.getElementById('admin-sign-out').click()">
+            Sign out
+          </button>
+        </section>
+
+        <section id="view-admin" class="admin-card" hidden>
+          <div class="glow" style="--glow-w: 400px; --glow-h: 250px;">
+            <h1>Roster admin</h1>
+          </div>
+          <p>
+            Edit the Tank01 mirror (<code>sports_tank01</code>). Jersey edits are
+            marked <code>jerseySource: manual</code> so sync won’t wipe them.
+          </p>
+
+          <div class="admin-tabs" role="tablist">
+            <button id="tab-rosters" class="admin-tab is-active" type="button" role="tab">Rosters</button>
+            <button id="tab-issues" class="admin-tab" type="button" role="tab">Roster issues</button>
+          </div>
+
+          <p id="admin-status" class="admin-status" aria-live="polite"></p>
+
+          <div id="panel-rosters">
+            <div class="admin-filters">
+              <div class="admin-field">
+                <label for="sport-select">Sport</label>
+                <select id="sport-select" class="admin-select"></select>
+              </div>
+              <div class="admin-field" style="min-width: 220px; flex: 1">
+                <label for="team-select">Team</label>
+                <select id="team-select" class="admin-select"></select>
+              </div>
+              <button id="reload-roster" class="btn btn-secondary btn-sm" type="button">Reload</button>
+              <button id="add-player" class="btn btn-primary btn-sm" type="button">Add player</button>
+            </div>
+
+            <div class="admin-table-wrap">
+              <table class="admin-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Pos</th>
+                    <th>Source</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="player-table-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div id="panel-issues" hidden>
+            <div class="admin-filters">
+              <div class="admin-field">
+                <label for="issues-sport-select">Sport</label>
+                <select id="issues-sport-select" class="admin-select"></select>
+              </div>
+              <button id="scan-issues" class="btn btn-primary btn-sm" type="button">
+                Scan jersey issues
+              </button>
+            </div>
+            <p class="admin-muted" style="margin-bottom: 12px">
+              Google opens <code>{league} player {name}</code> in your default browser
+              (no jersey number). Set # writes a manual jersey on the Tank01 player doc.
+            </p>
+            <div id="issues-list"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap footer-stack">
+        <p class="footer-legal">© 2026 1001746423 Ontario Inc. · Admin console</p>
+      </div>
+    </footer>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/admin-rosters.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>

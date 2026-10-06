@@ -22,6 +22,7 @@ import '../../../services/ftpclient_service.dart';
 import '../../../services/flo_caption_mark.dart';
 import '../../../services/iptc_template_apply_service.dart';
 import '../../../services/iptc_template_import_service.dart';
+import '../../../services/jersey_ocr_channel.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/mlb_inning_feature_gate.dart';
 import '../../../services/mlb_inning_from_timestamp_service.dart';
@@ -32,6 +33,7 @@ import '../../../utils/exiftool_helper.dart';
 import '../../../utils/default_verb_keywords.dart';
 import '../../../utils/image_file_ready.dart';
 import '../../../utils/native_file_picker.dart';
+import '../../../utils/oriented_image_bytes.dart';
 import '../widgets/frame_status_dot.dart';
 import 'burst_groups.dart';
 import 'caption_transfer_payload.dart';
@@ -80,6 +82,43 @@ class RosterHit {
   const RosterHit({required this.player, required this.isHome});
   final Player player;
   final bool isHome;
+}
+
+/// How an OCR token matched a roster player.
+enum JerseyOcrMatchKind { jersey, name }
+
+/// Roster player matched from on-device OCR on the current frame.
+class JerseyOcrSuggestion {
+  const JerseyOcrSuggestion({
+    required this.player,
+    required this.isHome,
+    required this.confidence,
+    required this.matchedText,
+    required this.matchKind,
+  });
+
+  final Player player;
+  final bool isHome;
+  final double confidence;
+
+  /// Raw OCR token that produced this match.
+  final String matchedText;
+  final JerseyOcrMatchKind matchKind;
+
+  String get jersey => (player.jerseyNumber ?? '').trim();
+}
+
+/// Result of a manual OCR test scan on the current frame.
+class OcrScanResult {
+  const OcrScanResult({
+    required this.supported,
+    required this.hits,
+    required this.matches,
+  });
+
+  final bool supported;
+  final List<JerseyOcrHit> hits;
+  final List<JerseyOcrSuggestion> matches;
 }
 
 enum FirebarResultKind { player, verb }
@@ -375,12 +414,23 @@ class CaptionV2Controller extends ChangeNotifier {
   Timer? _folderIngestTimer;
   Timer? _folderPollTimer;
   int _folderWatchGeneration = 0;
+  int _previewWarmGeneration = 0;
   String? _watchedFolder;
   final Set<String> _pendingIngest = {};
   final Map<String, int> _imageContentStamp = {};
   final Map<String, int> _fileLength = {};
   final Map<String, int> _fileModifiedMs = {};
   final Map<String, int> _fileChangedMs = {};
+
+  /// OCR roster matches for [currentPath].
+  List<JerseyOcrSuggestion> jerseySuggestions = const [];
+
+  /// Raw OCR tokens from the last scan (numbers + names).
+  List<JerseyOcrHit> jerseyOcrHits = const [];
+  bool jerseyOcrBusy = false;
+  int _jerseyOcrToken = 0;
+  Timer? _jerseyOcrTimer;
+  final Map<String, List<JerseyOcrHit>> _jerseyOcrCache = {};
 
   static const _sessionImageExtensions = {
     '.jpg',
@@ -1937,6 +1987,7 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
     await loadFolder(folderPath);
 
+    // loadFolder awaits saved/uploaded marks + preview EXIF before returning.
     sessionLoading = false;
     sessionLoadingLabel = null;
     sessionReady = true;
@@ -2028,6 +2079,7 @@ class CaptionV2Controller extends ChangeNotifier {
     selectedImagePaths.clear();
     homeRoster = const [];
     awayRoster = const [];
+    _clearJerseyOcrState(clearCache: true);
     singleTeamMode = false;
     captionSelectionStarted = false;
     selectedPlayers.clear();
@@ -2098,6 +2150,7 @@ class CaptionV2Controller extends ChangeNotifier {
     } finally {
       rostersLoading = false;
       notifyListeners();
+      _scheduleJerseyOcr();
     }
   }
 
@@ -2106,6 +2159,7 @@ class CaptionV2Controller extends ChangeNotifier {
     if (home != null) homeRoster = _sortPlayers(home);
     if (away != null) awayRoster = _sortPlayers(away);
     notifyListeners();
+    _scheduleJerseyOcr();
   }
 
   static String _rosterSourceFor(String sport, bool useTank01Firebase) {
@@ -2131,10 +2185,23 @@ class CaptionV2Controller extends ChangeNotifier {
     await loadFolder(dir);
   }
 
+  void _setSessionLoadingLabel(String label) {
+    if (!sessionLoading) return;
+    if (sessionLoadingLabel == label) return;
+    sessionLoadingLabel = label;
+    notifyListeners();
+  }
+
   Future<void> loadFolder(String dirPath) async {
+    final blockingLoad = sessionReady;
     loadingImages = true;
+    if (blockingLoad) {
+      sessionLoading = true;
+      sessionLoadingLabel = 'Loading images…';
+    }
     notifyListeners();
     final generation = ++_folderWatchGeneration;
+    _previewWarmGeneration++; // cancel any in-flight warm for the prior folder
     _stopFolderWatch();
     try {
       await NativeFilePicker.ensureMediaReadPermission();
@@ -2144,6 +2211,7 @@ class CaptionV2Controller extends ChangeNotifier {
         currentIndex = 0;
         return;
       }
+      _setSessionLoadingLabel('Scanning photo folder…');
       final listed = await _listSessionImages(dirPath);
       if (generation != _folderWatchGeneration) return;
       final ready = <String>[];
@@ -2174,12 +2242,16 @@ class CaptionV2Controller extends ChangeNotifier {
       captionedImages.clear();
       sentImages.clear();
       captureByPath.clear();
+      currentIptcMeta = {};
       _imageContentStamp.clear();
       _fileLength.clear();
       _fileModifiedMs.clear();
       _fileChangedMs.clear();
       _startFolderWatch(dirPath, generation);
-      unawaited(_finishFolderMetadata(dirPath, generation));
+      // Wait for saved/uploaded marks + preview EXIF before revealing the UI,
+      // so header/footer and status icons don't pop in later.
+      await _finishFolderMetadata(dirPath, generation);
+      if (generation != _folderWatchGeneration) return;
       unawaited(_ingestFolderAdditions(generation));
       for (final path in pending) {
         unawaited(_addImageWhenReady(path, generation));
@@ -2187,15 +2259,30 @@ class CaptionV2Controller extends ChangeNotifier {
     } finally {
       if (generation == _folderWatchGeneration) {
         loadingImages = false;
+        if (blockingLoad) {
+          sessionLoading = false;
+          sessionLoadingLabel = null;
+        }
         notifyListeners();
+        _schedulePreviewWarmup();
+        _scheduleJerseyOcr();
       }
     }
   }
 
-  /// Capture times, saved-caption marks, and an on-import IPTC template run
-  /// after the pictures are already on screen.
+  /// Capture times, saved/uploaded marks, on-import IPTC, and current-frame
+  /// EXIF for the preview header/footer. Awaited before the session UI opens.
   Future<void> _finishFolderMetadata(String dirPath, int generation) async {
     if (generation != _folderWatchGeneration) return;
+    if (imagePaths.isEmpty) {
+      currentIptcMeta = {};
+      notifyListeners();
+      return;
+    }
+
+    _setSessionLoadingLabel(
+      'Reading capture times (${imagePaths.length} photos)…',
+    );
     await _loadCaptureTimes();
     if (generation != _folderWatchGeneration) return;
     // [_loadCaptureTimes] re-sorts by capture time. Always keep the first
@@ -2203,15 +2290,86 @@ class CaptionV2Controller extends ChangeNotifier {
     // when the alphabetically-first file wasn't the earliest capture.
     currentIndex = 0;
     notifyListeners();
+
+    _setSessionLoadingLabel('Checking saved & uploaded status…');
     final marked = await FloCaptionMark.savedPaths(List<String>.from(imagePaths));
     if (generation != _folderWatchGeneration) return;
     savedImages.addAll(marked);
     captionedImages.addAll(marked);
     await _restoreSavedPrefs(dirPath);
+    _restoreSentFromFtpHistory();
     await _applyIptcTemplateOnImportIfEnabled();
     if (generation != _folderWatchGeneration) return;
+
+    _setSessionLoadingLabel('Loading photo details…');
     await _refreshFrameIptc();
     notifyListeners();
+  }
+
+  /// Re-apply successful FTP history onto [sentImages] for this folder.
+  void _restoreSentFromFtpHistory() {
+    if (imagePaths.isEmpty || ftpHistory.isEmpty) return;
+    final inFolder = imagePaths.toSet();
+    for (final entry in ftpHistory) {
+      if (!entry.success) continue;
+      if (!inFolder.contains(entry.path)) continue;
+      sentImages.add(entry.path);
+      savedImages.add(entry.path);
+      captionedImages.add(entry.path);
+    }
+  }
+
+  /// Decode nearby thumbs + main previews into [OrientedImageBytes] cache.
+  void _schedulePreviewWarmup() {
+    if (imagePaths.isEmpty) return;
+    final gen = ++_previewWarmGeneration;
+    unawaited(_warmPreviews(gen));
+  }
+
+  Future<void> _warmPreviews(int gen) async {
+    final paths = List<String>.from(imagePaths);
+    if (paths.isEmpty) return;
+    final index = currentIndex.clamp(0, paths.length - 1);
+    final jobs = <OrientedPrefetchJob>[];
+    final seen = <String>{};
+
+    void addJob(String path, int maxWidth) {
+      final key = '$path|$maxWidth';
+      if (!seen.add(key)) return;
+      jobs.add(OrientedPrefetchJob(path: path, maxWidth: maxWidth));
+    }
+
+    // Current + neighbors at preview size (main photo pane).
+    for (final i in [index, index + 1, index - 1, index + 2]) {
+      if (i < 0 || i >= paths.length) continue;
+      addJob(paths[i], OrientedImageBytes.previewMaxWidth);
+    }
+
+    // All grid thumbs, head-first so the top of the strip fills first and
+    // fast scroll further down still hits cache as warmup continues.
+    for (var i = 0; i < paths.length; i++) {
+      addJob(paths[i], OrientedImageBytes.thumbMaxWidth);
+    }
+
+    await OrientedImageBytes.prefetchAll(
+      jobs,
+      isCurrent: () => gen == _previewWarmGeneration,
+    );
+  }
+
+  /// Warm grid thumbs for [paths] (scroll-ahead). Safe to call often.
+  void warmThumbnailPaths(Iterable<String> paths) {
+    final jobs = <OrientedPrefetchJob>[
+      for (final path in paths)
+        OrientedPrefetchJob(
+          path: path,
+          maxWidth: OrientedImageBytes.thumbMaxWidth,
+        ),
+    ];
+    if (jobs.isEmpty) return;
+    unawaited(
+      OrientedImageBytes.prefetchAll(jobs, isCurrent: () => true),
+    );
   }
 
   bool _isSessionImagePath(String path) {
@@ -2338,6 +2496,10 @@ class CaptionV2Controller extends ChangeNotifier {
         if (index >= 0) currentIndex = index;
         if (announce || currentChanged || removed > 0) {
           await _refreshFrameIptc();
+        }
+        if (currentChanged) {
+          _invalidateJerseyOcrCacheFor(current);
+          _scheduleJerseyOcr();
         }
       }
       if (announce) {
@@ -2539,6 +2701,9 @@ class CaptionV2Controller extends ChangeNotifier {
       _fileChangedMs[path] = stat.changed.millisecondsSinceEpoch;
     } catch (_) {}
     notifyListeners();
+    if (path == currentPath) {
+      _scheduleJerseyOcr();
+    }
     unawaited(() async {
       if (await FloCaptionMark.isSaved(path)) {
         savedImages.add(path);
@@ -2907,6 +3072,7 @@ class CaptionV2Controller extends ChangeNotifier {
     } else {
       notifyListeners();
     }
+    _scheduleJerseyOcr();
     return null;
   }
 
@@ -5004,7 +5170,9 @@ class CaptionV2Controller extends ChangeNotifier {
     mlbTimestampLoading = false;
     _mlbTimestampToken++;
     notifyListeners();
+    _schedulePreviewWarmup();
     unawaited(_refreshFrameIptc());
+    _scheduleJerseyOcr();
   }
 
   void nextFrame({bool keepSearchOpen = false}) =>
@@ -5014,6 +5182,363 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Re-read the current frame after an external IPTC or file operation.
   Future<void> refreshCurrentFrameMetadata() => _refreshFrameIptc();
+
+  // ---------------------------------------------------------------------------
+  // Jersey / name OCR suggestions
+  // ---------------------------------------------------------------------------
+
+  void _clearJerseyOcrState({bool clearCache = false}) {
+    _jerseyOcrTimer?.cancel();
+    _jerseyOcrTimer = null;
+    _jerseyOcrToken++;
+    jerseySuggestions = const [];
+    jerseyOcrHits = const [];
+    jerseyOcrBusy = false;
+    if (clearCache) _jerseyOcrCache.clear();
+  }
+
+  void _invalidateJerseyOcrCacheFor(String path) {
+    _jerseyOcrCache.removeWhere((key, _) => key.startsWith('$path|'));
+  }
+
+  /// Debounced auto-scan of the current frame for jersey numbers + names.
+  void _scheduleJerseyOcr() {
+    if (!JerseyOcrChannel.supported) {
+      if (jerseySuggestions.isNotEmpty ||
+          jerseyOcrHits.isNotEmpty ||
+          jerseyOcrBusy) {
+        jerseySuggestions = const [];
+        jerseyOcrHits = const [];
+        jerseyOcrBusy = false;
+        notifyListeners();
+      }
+      return;
+    }
+
+    _jerseyOcrTimer?.cancel();
+    // Drop stale matches immediately when the frame changes.
+    if (jerseySuggestions.isNotEmpty || jerseyOcrHits.isNotEmpty) {
+      jerseySuggestions = const [];
+      jerseyOcrHits = const [];
+      notifyListeners();
+    }
+
+    _jerseyOcrTimer = Timer(const Duration(milliseconds: 180), () {
+      _jerseyOcrTimer = null;
+      unawaited(runOcrTestScan(force: false));
+    });
+  }
+
+  /// Manual / auto OCR on the current frame (numbers + names). macOS only.
+  ///
+  /// When [regionOfInterest] is set (loupe), Vision scans only that crop.
+  Future<OcrScanResult> runOcrTestScan({
+    bool force = true,
+    JerseyOcrRegion? regionOfInterest,
+  }) async {
+    if (!JerseyOcrChannel.supported) {
+      jerseySuggestions = const [];
+      jerseyOcrHits = const [];
+      jerseyOcrBusy = false;
+      notifyListeners();
+      return const OcrScanResult(
+        supported: false,
+        hits: [],
+        matches: [],
+      );
+    }
+
+    final path = currentPath;
+    final token = ++_jerseyOcrToken;
+    if (path == null) {
+      jerseySuggestions = const [];
+      jerseyOcrHits = const [];
+      jerseyOcrBusy = false;
+      notifyListeners();
+      return const OcrScanResult(
+        supported: true,
+        hits: [],
+        matches: [],
+      );
+    }
+
+    int mtimeMs = 0;
+    try {
+      mtimeMs = (await File(path).lastModified()).millisecondsSinceEpoch;
+    } catch (_) {}
+    if (token != _jerseyOcrToken) {
+      return OcrScanResult(
+        supported: true,
+        hits: jerseyOcrHits,
+        matches: jerseySuggestions,
+      );
+    }
+
+    final customWords = _ocrCustomWords();
+    final roiKey = regionOfInterest == null
+        ? 'full'
+        : '${regionOfInterest.x.toStringAsFixed(3)},'
+            '${regionOfInterest.y.toStringAsFixed(3)},'
+            '${regionOfInterest.width.toStringAsFixed(3)},'
+            '${regionOfInterest.height.toStringAsFixed(3)}';
+    final cacheKey =
+        '$path|$mtimeMs|$roiKey|${customWords.length}|${customWords.hashCode}';
+    late final List<JerseyOcrHit> hits;
+    final cached = force ? null : _jerseyOcrCache[cacheKey];
+    if (cached != null) {
+      hits = cached;
+    } else {
+      jerseyOcrBusy = true;
+      notifyListeners();
+      hits = await JerseyOcrChannel.recognize(
+        path: path,
+        customWords: customWords,
+        regionOfInterest: regionOfInterest,
+      );
+      if (token != _jerseyOcrToken) {
+        return OcrScanResult(
+          supported: true,
+          hits: jerseyOcrHits,
+          matches: jerseySuggestions,
+        );
+      }
+      _jerseyOcrCache[cacheKey] = hits;
+      while (_jerseyOcrCache.length > 64) {
+        _jerseyOcrCache.remove(_jerseyOcrCache.keys.first);
+      }
+    }
+
+    final suggestions = _matchJerseyOcrHits(hits);
+    if (token != _jerseyOcrToken) {
+      return OcrScanResult(
+        supported: true,
+        hits: jerseyOcrHits,
+        matches: jerseySuggestions,
+      );
+    }
+    jerseyOcrHits = hits;
+    jerseySuggestions = suggestions;
+    jerseyOcrBusy = false;
+    notifyListeners();
+    return OcrScanResult(
+      supported: true,
+      hits: hits,
+      matches: suggestions,
+    );
+  }
+
+  /// OCR the loupe region (Vision-normalized ROI, origin bottom-left).
+  Future<OcrScanResult> runOcrLoupeScan(JerseyOcrRegion region) =>
+      runOcrTestScan(force: true, regionOfInterest: region);
+
+  /// Roster last names + jersey numbers for Vision `customWords` bias.
+  List<String> _ocrCustomWords() {
+    final words = <String>{};
+    void addRoster(List<Player> roster) {
+      for (final player in roster) {
+        final jersey = (player.jerseyNumber ?? '').trim();
+        if (RegExp(r'^\d{1,2}$').hasMatch(jersey)) {
+          words.add(jersey);
+          words.add('#$jersey');
+        }
+        final last = playerLastName(player).trim();
+        if (last.length >= 3) {
+          words.add(last);
+          words.add(last.toUpperCase());
+        }
+        final first = player.firstName.trim();
+        if (first.length >= 3) words.add(first);
+      }
+    }
+
+    addRoster(homeRoster);
+    addRoster(awayRoster);
+    final sorted = words.toList()..sort();
+    if (sorted.length <= 200) return sorted;
+    return sorted.sublist(0, 200);
+  }
+
+  List<JerseyOcrSuggestion> _matchJerseyOcrHits(List<JerseyOcrHit> hits) {
+    if (hits.isEmpty) return const [];
+
+    final bestByPlayerKey = <String, JerseyOcrSuggestion>{};
+    // Players that got both a jersey and a nearby name hit — boost later.
+    final jerseyHitPlayers = <String>{};
+    final nameHitPlayers = <String>{};
+
+    double hitSpatialBoost(JerseyOcrHit hit) {
+      final cx = hit.x + hit.width * 0.5;
+      final cy = hit.y + hit.height * 0.5;
+      final centerDist = ((cx - 0.5) * (cx - 0.5) + (cy - 0.5) * (cy - 0.5));
+      final centerFactor = (1.0 - (centerDist * 2.2)).clamp(0.0, 1.0);
+      final area = (hit.width * hit.height).clamp(0.0, 0.25);
+      final sizeFactor = (area / 0.02).clamp(0.0, 1.0);
+      return centerFactor * 0.10 + sizeFactor * 0.08;
+    }
+
+    void consider({
+      required Player player,
+      required bool isHome,
+      required JerseyOcrHit hit,
+      required JerseyOcrMatchKind kind,
+      required int nameScore,
+      double confidenceBoost = 0,
+    }) {
+      final playerKey =
+          '${isHome ? 'h' : 'a'}|${player.playerId ?? player.fullName}|'
+          '${player.jerseyNumber ?? ''}';
+      if (kind == JerseyOcrMatchKind.jersey) {
+        jerseyHitPlayers.add(playerKey);
+      } else {
+        nameHitPlayers.add(playerKey);
+      }
+      final existing = bestByPlayerKey[playerKey];
+      // Prefer jersey matches, then tighter name scores, then confidence.
+      final rank = kind == JerseyOcrMatchKind.jersey ? 0 : (10 + nameScore);
+      final existingRank = existing == null
+          ? 999
+          : (existing.matchKind == JerseyOcrMatchKind.jersey
+              ? 0
+              : 10 + _playerMatchScore(
+                  existing.player,
+                  _normalizeFirebarText(existing.matchedText),
+                ));
+      final conf = (hit.confidence + confidenceBoost + hitSpatialBoost(hit))
+          .clamp(0.0, 1.0);
+      if (existing != null && existingRank < rank) return;
+      if (existing != null &&
+          existingRank == rank &&
+          existing.confidence >= conf) {
+        return;
+      }
+      bestByPlayerKey[playerKey] = JerseyOcrSuggestion(
+        player: player,
+        isHome: isHome,
+        confidence: conf,
+        matchedText: hit.text,
+        matchKind: kind,
+      );
+    }
+
+    Iterable<String> queryTokens(String raw) sync* {
+      final cleaned = raw.replaceFirst(RegExp(r'^#+'), '').trim();
+      if (cleaned.isEmpty) return;
+      yield cleaned;
+      for (final part in cleaned.split(RegExp(r'[\s\-/]+'))) {
+        final token = part.trim();
+        if (token.isNotEmpty && token != cleaned) yield token;
+      }
+      // "O'Neill21" / "Judge99" style glue.
+      final glued = RegExp(r'^(.*?)(\d{1,2})$').firstMatch(cleaned);
+      if (glued != null) {
+        final name = glued.group(1)?.trim() ?? '';
+        final digits = glued.group(2) ?? '';
+        if (name.length >= 3) yield name;
+        if (digits.isNotEmpty) yield digits;
+      }
+    }
+
+    void matchHit(JerseyOcrHit hit) {
+      for (final raw in queryTokens(hit.text)) {
+        final query = _normalizeFirebarText(raw);
+        if (query.isEmpty) continue;
+
+        final jerseyKey = _normalizeJerseyKey(raw);
+        final isJerseyToken = jerseyKey != null &&
+            RegExp(r'^\d{1,2}$').hasMatch(jerseyKey);
+
+        void scanRoster(List<Player> roster, {required bool isHome}) {
+          for (final player in roster) {
+            if (isJerseyToken) {
+              final playerJersey = _normalizeJerseyKey(player.jerseyNumber);
+              if (playerJersey != null && playerJersey == jerseyKey) {
+                consider(
+                  player: player,
+                  isHome: isHome,
+                  hit: hit,
+                  kind: JerseyOcrMatchKind.jersey,
+                  nameScore: 0,
+                );
+                continue;
+              }
+            }
+
+            // Skip very short name tokens (noise); allow 1–2 digit jerseys above.
+            if (query.length < 3) continue;
+            final score = _playerMatchScore(player, query);
+            // Exact / strong prefix only — avoid loose "contains" false hits.
+            if (score > 7) continue;
+            consider(
+              player: player,
+              isHome: isHome,
+              hit: hit,
+              kind: JerseyOcrMatchKind.name,
+              nameScore: score,
+            );
+          }
+        }
+
+        scanRoster(homeRoster, isHome: true);
+        scanRoster(awayRoster, isHome: false);
+      }
+    }
+
+    for (final hit in hits) {
+      matchHit(hit);
+    }
+
+    // Boost players confirmed by both jersey + name text in the same frame.
+    for (final key in jerseyHitPlayers.intersection(nameHitPlayers)) {
+      final existing = bestByPlayerKey[key];
+      if (existing == null) continue;
+      bestByPlayerKey[key] = JerseyOcrSuggestion(
+        player: existing.player,
+        isHome: existing.isHome,
+        confidence: (existing.confidence + 0.12).clamp(0.0, 1.0),
+        matchedText: existing.matchedText,
+        matchKind: existing.matchKind,
+      );
+    }
+
+    final out = bestByPlayerKey.values.toList()
+      ..sort((a, b) {
+        final aBoth = jerseyHitPlayers.contains(
+              '${a.isHome ? 'h' : 'a'}|${a.player.playerId ?? a.player.fullName}|'
+              '${a.player.jerseyNumber ?? ''}',
+            ) &&
+            nameHitPlayers.contains(
+              '${a.isHome ? 'h' : 'a'}|${a.player.playerId ?? a.player.fullName}|'
+              '${a.player.jerseyNumber ?? ''}',
+            );
+        final bBoth = jerseyHitPlayers.contains(
+              '${b.isHome ? 'h' : 'a'}|${b.player.playerId ?? b.player.fullName}|'
+              '${b.player.jerseyNumber ?? ''}',
+            ) &&
+            nameHitPlayers.contains(
+              '${b.isHome ? 'h' : 'a'}|${b.player.playerId ?? b.player.fullName}|'
+              '${b.player.jerseyNumber ?? ''}',
+            );
+        if (aBoth != bBoth) return aBoth ? -1 : 1;
+        final byKind = a.matchKind.index.compareTo(b.matchKind.index);
+        if (byKind != 0) return byKind;
+        final byConf = b.confidence.compareTo(a.confidence);
+        if (byConf != 0) return byConf;
+        final byJersey = (int.tryParse(a.jersey) ?? 999)
+            .compareTo(int.tryParse(b.jersey) ?? 999);
+        if (byJersey != 0) return byJersey;
+        return a.player.fullName.compareTo(b.player.fullName);
+      });
+    if (out.length <= 12) return out;
+    return out.sublist(0, 12);
+  }
+
+  static String? _normalizeJerseyKey(String? raw) {
+    final trimmed = raw?.trim() ?? '';
+    if (trimmed.isEmpty) return null;
+    final parsed = int.tryParse(trimmed);
+    if (parsed != null) return parsed.toString();
+    return trimmed.toLowerCase();
+  }
 
   Future<Map<String, String>> readIptcPanelValues(String path) async {
     final metadata = await IptcTemplateImportService.readMetadata(path);
@@ -5103,6 +5628,7 @@ class CaptionV2Controller extends ChangeNotifier {
     await _persistSaved();
     notifyListeners();
     await _refreshFrameIptc();
+    _scheduleJerseyOcr();
     return true;
   }
 
@@ -6565,6 +7091,8 @@ class CaptionV2Controller extends ChangeNotifier {
   void dispose() {
     _folderWatchGeneration++;
     _stopFolderWatch();
+    _jerseyOcrTimer?.cancel();
+    _jerseyOcrTimer = null;
     _prefs?.captionFieldVisibilityRevision.removeListener(
       _onCaptionFieldVisibilityChanged,
     );

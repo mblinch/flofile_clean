@@ -1,9 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dropdown_flutter/custom_dropdown.dart';
 
-import '../services/admin_service.dart';
-import '../services/app_defaults_firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/camera_serial_service.dart';
 import '../services/preferences_service.dart';
@@ -14,12 +14,33 @@ import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 import 'caption_layout_builder_dialog.dart';
 import 'ftp_settings_panel.dart';
+import 'personal_verb_editor.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class PreferencesDialog extends StatefulWidget {
   /// When set, called to open the FTP Settings dialog (e.g. from right-click on FTP button). Shown as an option in the FTP section.
   final VoidCallback? onOpenFtpSettings;
 
-  const PreferencesDialog({super.key, this.onOpenFtpSettings});
+  /// Open on the Verbs tab (e.g. right-click → Edit verb).
+  final bool openVerbs;
+
+  /// Verb to select when [openVerbs] is true.
+  final String? initialVerbKey;
+
+  /// When true with [openVerbs], start creating a new verb.
+  final bool createVerbOnOpen;
+
+  /// Fired after personal verb catalog saves (e.g. reload live caption session).
+  final Future<void> Function(String sport)? onVerbCatalogChanged;
+
+  const PreferencesDialog({
+    super.key,
+    this.onOpenFtpSettings,
+    this.openVerbs = false,
+    this.initialVerbKey,
+    this.createVerbOnOpen = false,
+    this.onVerbCatalogChanged,
+  });
 
   @override
   State<PreferencesDialog> createState() => _PreferencesDialogState();
@@ -28,7 +49,7 @@ class PreferencesDialog extends StatefulWidget {
 enum _PrefsCategory {
   application,
   ftp,
-  teamVerb,
+  verbs,
 }
 
 class _PreferencesDialogState extends State<PreferencesDialog> {
@@ -38,17 +59,18 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   final TextEditingController _resolutionController = TextEditingController();
   final TextEditingController _mlbInningTzController = TextEditingController();
   String _sportForDefault = 'baseball';
-  String _publishSport = 'baseball';
   Map<String, dynamic>? _currentPreferences;
   bool _isLoading = true;
-  bool _isAdmin = false;
   bool _appDefaultsBusy = false;
-  _PrefsCategory _selectedCategory = _PrefsCategory.application;
+  late _PrefsCategory _selectedCategory;
+
   FfTokens get _t => Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
 
   @override
   void initState() {
     super.initState();
+    _selectedCategory =
+        widget.openVerbs ? _PrefsCategory.verbs : _PrefsCategory.application;
     _initializePreferences();
   }
 
@@ -71,10 +93,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     });
 
     _currentPreferences = await _preferencesService.exportAllPreferences();
-    final admin = await AdminService.isCurrentUserAdmin();
 
     setState(() {
-      _isAdmin = admin;
       _isLoading = false;
       _photoshopPathController.text =
           _currentPreferences?['photoshopPath']?.toString() ?? '';
@@ -89,120 +109,193 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     });
   }
 
+  InputDecoration _fieldDecoration({String? hintText}) {
+    final radius = BorderRadius.circular(6);
+    return InputDecoration(
+      isDense: true,
+      filled: true,
+      fillColor: _t.sunken,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      hintText: hintText,
+      hintStyle: TextStyle(fontSize: 11, color: _t.textTertiary),
+      border: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: _t.accent.withValues(alpha: 0.55)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: _t.accent.withValues(alpha: 0.55)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: _t.accent, width: 1.2),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: radius,
+        borderSide: BorderSide(color: _t.divider),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     const sidebarWidth = 180.0;
     const contentPadding = 28.0;
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      child: Container(
-        width: 860,
-        height: 640,
-        decoration: BoxDecoration(
-          color: _t.surface,
-          borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-          border: Border.all(color: _t.divider),
-          boxShadow: [
-            BoxShadow(
-              color: _t.bg.withValues(alpha: 0.55),
-              blurRadius: 20,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-          child: Column(
-            children: [
-              // Header
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                decoration: BoxDecoration(
-                  color: _t.surface,
-                  border: Border(
-                    bottom: BorderSide(color: _t.divider, width: 1),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      'Preferences',
-                      style: _t.labelStyle.copyWith(
-                        fontSize: 13,
-                        color: _t.text,
-                      ),
+    final size = MediaQuery.sizeOf(context);
+    final width = math.min(1200.0, size.width * 0.94);
+    final height = math.min(720.0, size.height * 0.90);
+
+    return AppDialogFfStyle(
+      enabled: true,
+      child: Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: _t.surface,
+            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+            border: Border.all(color: _t.accent.withValues(alpha: 0.85)),
+            boxShadow: [
+              ...FfTokens.accentButtonGlow(_t.accent),
+              BoxShadow(
+                color: _t.bg.withValues(alpha: 0.55),
+                blurRadius: 20,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+            child: Column(
+              children: [
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color.lerp(_t.accent, _t.surface, 0.82)!,
+                        _t.surface,
+                      ],
                     ),
-                    const Spacer(),
-                    Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => Navigator.pop(context),
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.all(4),
-                          child: Icon(
-                            Icons.close,
-                            size: 20,
-                            color: _t.textSecondary,
+                    border: Border(
+                      bottom: BorderSide(color: _t.divider, width: 1),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Preferences',
+                        style: _t.labelStyle.copyWith(
+                          fontSize: 13,
+                          color: _t.text,
+                        ),
+                      ),
+                      const Spacer(),
+                      Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => Navigator.pop(context),
+                          borderRadius: BorderRadius.circular(4),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: PhosphorIcon(
+                              PhosphorIconsRegular.x,
+                              size: 20,
+                              color: _t.textSecondary,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-
-              // Sidebar + content
-              Expanded(
-                child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // Left: category list
-                          Container(
-                            width: sidebarWidth,
-                            decoration: BoxDecoration(
-                              color: _t.sunken,
-                              border: Border(
-                                right: BorderSide(color: _t.divider),
+                Expanded(
+                  child: _isLoading
+                      ? Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _t.accent,
+                          ),
+                        )
+                      : Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              width: sidebarWidth,
+                              decoration: BoxDecoration(
+                                color: _t.sunken,
+                                border: Border(
+                                  right: BorderSide(color: _t.divider),
+                                ),
+                              ),
+                              child: ListView(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                children: [
+                                  _buildSidebarTile(
+                                    _PrefsCategory.application,
+                                    'Application',
+                                  ),
+                                  Divider(
+                                      height: 1,
+                                      thickness: 1,
+                                      color: _t.divider),
+                                  _buildSidebarTile(
+                                    _PrefsCategory.ftp,
+                                    'FTP',
+                                  ),
+                                  Divider(
+                                      height: 1,
+                                      thickness: 1,
+                                      color: _t.divider),
+                                  _buildSidebarTile(
+                                    _PrefsCategory.verbs,
+                                    'Verbs',
+                                  ),
+                                ],
                               ),
                             ),
-                            child: ListView(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              children: [
-                                _buildSidebarTile(
-                                  _PrefsCategory.application,
-                                  'Application',
+                            Expanded(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Color.lerp(_t.accent, _t.bg, 0.88)!,
+                                      _t.bg,
+                                    ],
+                                  ),
                                 ),
-                                Divider(
-                                    height: 1, thickness: 1, color: _t.divider),
-                                _buildSidebarTile(
-                                  _PrefsCategory.ftp,
-                                  'FTP',
-                                ),
-                                Divider(
-                                    height: 1, thickness: 1, color: _t.divider),
-                                _buildSidebarTile(
-                                  _PrefsCategory.teamVerb,
-                                  'Team & Verb',
-                                ),
-                              ],
+                                child: _selectedCategory ==
+                                        _PrefsCategory.verbs
+                                    ? Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          12,
+                                          16,
+                                          12,
+                                        ),
+                                        child: _buildVerbsContent(),
+                                      )
+                                    : SingleChildScrollView(
+                                        padding: const EdgeInsets.all(
+                                            contentPadding),
+                                        child: _buildCategoryContent(),
+                                      ),
+                              ),
                             ),
-                          ),
-                          // Right: selected category content
-                          Expanded(
-                            child: SingleChildScrollView(
-                              padding: const EdgeInsets.all(contentPadding),
-                              child: _buildCategoryContent(),
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ],
+                          ],
+                        ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -247,8 +340,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         return _buildApplicationContent();
       case _PrefsCategory.ftp:
         return _buildFtpContent();
-      case _PrefsCategory.teamVerb:
-        return _buildTeamVerbContent();
+      case _PrefsCategory.verbs:
+        return const SizedBox.shrink();
     }
   }
 
@@ -382,26 +475,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                             FilteringTextInputFormatter.digitsOnly
                           ],
                           style: TextStyle(fontSize: 11, color: _t.text),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 10),
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6)),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide: BorderSide(color: _t.divider),
-                            ),
-                            disabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide: BorderSide(color: _t.divider),
-                            ),
-                            hintText: 'e.g. 3000',
-                            hintStyle: TextStyle(
-                              fontSize: 11,
-                              color: _t.textSecondary,
-                            ),
-                          ),
+                          decoration: _fieldDecoration(hintText: 'e.g. 3000'),
                           onSubmitted: (text) async {
                             if (!resolutionEnabled) return;
                             final v = int.tryParse(text);
@@ -440,21 +514,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                           child: TextField(
                             controller: _photoshopPathController,
                             style: TextStyle(fontSize: 11, color: _t.text),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(6)),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                borderSide: BorderSide(color: _t.divider),
-                              ),
+                            decoration: _fieldDecoration(
                               hintText: 'Path to Photoshop.app',
-                              hintStyle: TextStyle(
-                                fontSize: 11,
-                                color: _t.textSecondary,
-                              ),
                             ),
                             onSubmitted: (text) async {
                               await _preferencesService.savePhotoshopPath(
@@ -503,19 +564,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   child: TextField(
                     controller: _mlbInningTzController,
                     style: TextStyle(fontSize: 11, color: _t.text),
-                    decoration: InputDecoration(
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(6)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide: BorderSide(color: _t.divider),
-                      ),
+                    decoration: _fieldDecoration(
                       hintText: 'e.g. America/New_York',
-                      hintStyle:
-                          TextStyle(fontSize: 11, color: _t.textSecondary),
                     ),
                     onSubmitted: (text) async {
                       await _preferencesService.setMlbInningExifTimezone(text);
@@ -572,7 +622,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 ElevatedGreyButton(
                   label: 'Caption Layout',
                   fontSize: 11,
-                  icon: Icons.view_agenda_outlined,
+                  icon: PhosphorIconsRegular.rows,
                   onPressed: () async {
                     await CaptionLayoutBuilderDialog.show(context);
                     if (!mounted) return;
@@ -619,18 +669,17 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                       decoration: CustomDropdownDecoration(
                         closedFillColor: _t.sunken,
                         expandedFillColor: _t.surface,
-                        closedBorder: Border.all(color: _t.divider),
-                        expandedBorder: Border.all(color: _t.divider),
+                        closedBorder: Border.all(
+                          color: _t.accent.withValues(alpha: 0.55),
+                        ),
+                        expandedBorder: Border.all(
+                          color: _t.accent.withValues(alpha: 0.85),
+                        ),
                         closedBorderRadius: BorderRadius.circular(6),
                         expandedBorderRadius: BorderRadius.circular(8),
-                        closedShadow: [
-                          BoxShadow(
-                            color: _t.bg.withValues(alpha: 0.2),
-                            blurRadius: 4,
-                            offset: const Offset(0, 1),
-                          ),
-                        ],
+                        closedShadow: FfTokens.accentButtonGlow(_t.accent),
                         expandedShadow: [
+                          ...FfTokens.accentButtonGlow(_t.accent),
                           BoxShadow(
                             color: _t.bg.withValues(alpha: 0.55),
                             blurRadius: 10,
@@ -677,6 +726,39 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 ],
               ),
             )),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: _t.divider),
+        ),
+        Text(
+          'App originals',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: _t.text,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Restore verb layouts and caption structures from the cloud catalog '
+          'published by FloFile admins. Your FTP and caption library are not changed.',
+          style: TextStyle(fontSize: 11, color: _t.textSecondary),
+        ),
+        if (AuthService.instance.isSignedIn) ...[
+          const SizedBox(height: 8),
+          Text(
+            'While signed in, your personal settings (captions, verbs, FTP) '
+            'sync to your account automatically.',
+            style: TextStyle(fontSize: 11, color: _t.textSecondary),
+          ),
+        ],
+        const SizedBox(height: 10),
+        ElevatedGreyButton(
+          label: _appDefaultsBusy ? 'Restoring…' : 'Restore app originals',
+          fontSize: 11,
+          icon: PhosphorIconsRegular.cloudArrowDown,
+          onPressed: _appDefaultsBusy ? null : _restoreAppOriginals,
+        ),
       ],
     );
   }
@@ -736,146 +818,19 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     );
   }
 
-  Widget _buildTeamVerbContent() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildModernPreferenceItem(
-          'Category Order',
-          (_currentPreferences?['categoryOrder'] as List?)?.join(', ') ??
-              'Default',
-          icon: Icons.list,
-        ),
-        const SizedBox(height: 8),
-        _buildModernPreferenceItem(
-          'Favorite Verbs',
-          '${(_currentPreferences?['favoriteVerbs'] as List?)?.length ?? 0} verbs',
-          icon: Icons.star,
-        ),
-        const SizedBox(height: 8),
-        _buildModernPreferenceItem(
-          'Favorite Teams',
-          '${(_currentPreferences?['favoriteTeams'] as List?)?.length ?? 0} teams',
-          icon: Icons.sports_baseball,
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'App originals',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: _t.text,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Restore verb layouts and caption structures from the cloud catalog '
-          'published by FloFile admins. Your FTP and caption library are not changed.',
-          style: TextStyle(fontSize: 11, color: _t.textSecondary),
-        ),
-        if (AuthService.instance.isSignedIn) ...[
-          const SizedBox(height: 8),
-          Text(
-            'While signed in, your personal settings (captions, verbs, FTP) '
-            'sync to your account automatically.',
-            style: TextStyle(fontSize: 11, color: _t.textSecondary),
-          ),
-        ],
-        const SizedBox(height: 10),
-        ElevatedGreyButton(
-          label: _appDefaultsBusy ? 'Restoring…' : 'Restore app originals',
-          fontSize: 11,
-          icon: Icons.cloud_download_outlined,
-          onPressed: _appDefaultsBusy ? null : _restoreAppOriginals,
-        ),
-        if (_isAdmin) ...[
-          const SizedBox(height: 20),
-          Text(
-            'Admin — publish defaults',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: _t.text,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Saves your current verb arrangement to Firebase for all users '
-            '(used on restore and first sign-in).',
-            style: TextStyle(fontSize: 11, color: _t.textSecondary),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: 220,
-            child: DropdownFlutter<String>(
-              hintText: 'Sport',
-              items: const [
-                'Baseball',
-                'Hockey',
-                'Basketball',
-                'WNBA',
-                'Soccer'
-              ],
-              initialItem: _publishSport == 'wnba'
-                  ? 'WNBA'
-                  : _publishSport[0].toUpperCase() + _publishSport.substring(1),
-              closedHeaderPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              expandedHeaderPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              listItemPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: CustomDropdownDecoration(
-                closedFillColor: _t.sunken,
-                expandedFillColor: _t.surface,
-                closedBorder: Border.all(color: _t.divider),
-                expandedBorder: Border.all(color: _t.divider),
-                closedBorderRadius: BorderRadius.circular(6),
-                expandedBorderRadius: BorderRadius.circular(8),
-                hintStyle: TextStyle(fontSize: 11, color: _t.textSecondary),
-                headerStyle: TextStyle(fontSize: 11, color: _t.text),
-                listItemStyle: TextStyle(fontSize: 11, color: _t.text),
-              ),
-              onChanged: (label) {
-                if (label == null) return;
-                final map = {
-                  'Baseball': 'baseball',
-                  'Hockey': 'hockey',
-                  'Basketball': 'basketball',
-                  'WNBA': 'wnba',
-                  'Soccer': 'soccer',
-                };
-                setState(() => _publishSport = map[label] ?? 'baseball');
-              },
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              ElevatedGreyButton(
-                label: _appDefaultsBusy
-                    ? 'Publishing…'
-                    : 'Publish verb defaults (sport)',
-                fontSize: 11,
-                icon: Icons.cloud_upload_outlined,
-                isAdmin: true,
-                onPressed: _appDefaultsBusy
-                    ? null
-                    : () => _publishVerbsForSport(_publishSport),
-              ),
-              ElevatedGreyButton(
-                label: _appDefaultsBusy ? 'Publishing…' : 'Publish all sports',
-                fontSize: 11,
-                icon: Icons.cloud_upload_outlined,
-                isAdmin: true,
-                onPressed: _appDefaultsBusy ? null : _publishAllVerbs,
-              ),
-            ],
-          ),
-        ],
-      ],
+  Widget _buildVerbsContent() {
+    final sport =
+        _sportForDefault.isEmpty ? 'baseball' : _sportForDefault;
+    return PersonalVerbEditor(
+      key: ValueKey(
+        'prefs-verbs-$sport-${widget.initialVerbKey ?? ''}-'
+        '${widget.createVerbOnOpen}',
+      ),
+      prefs: _preferencesService,
+      initialSport: sport,
+      initialVerbKey: widget.initialVerbKey,
+      createOnOpen: widget.createVerbOnOpen,
+      onCatalogChanged: widget.onVerbCatalogChanged,
     );
   }
 
@@ -914,72 +869,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     }
   }
 
-  Future<void> _publishVerbsForSport(String sport) async {
-    final ok = await showAppConfirmDialog(
-      context: context,
-      title: 'Publish verb defaults?',
-      message: 'This updates app originals for $sport for all signed-in users '
-          '(on restore and new installs). Continue?',
-      cancelLabel: 'Cancel',
-      confirmLabel: 'Publish',
-    );
-    if (ok != true || !mounted) return;
-    setState(() => _appDefaultsBusy = true);
-    try {
-      final bySport = await _preferencesService.exportVerbSettingsBySport();
-      final data = bySport[sport];
-      if (data == null) throw StateError('No verb data for $sport');
-      await AppDefaultsFirestoreService.publishVerbsForSport(sport, data);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Published verb defaults for $sport.'),
-          backgroundColor: const Color(0xFF4A7A96),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Publish failed: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _appDefaultsBusy = false);
-    }
-  }
-
-  Future<void> _publishAllVerbs() async {
-    final ok = await showAppConfirmDialog(
-      context: context,
-      title: 'Publish all verb defaults?',
-      message:
-          'This updates app originals for every sport in Firebase. Continue?',
-      cancelLabel: 'Cancel',
-      confirmLabel: 'Publish all',
-    );
-    if (ok != true || !mounted) return;
-    setState(() => _appDefaultsBusy = true);
-    try {
-      final bySport = await _preferencesService.exportVerbSettingsBySport();
-      await AppDefaultsFirestoreService.publishAllVerbs(bySport);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Published verb defaults for all sports.'),
-          backgroundColor: Color(0xFF4A7A96),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-            content: Text('Publish failed: $e'), backgroundColor: Colors.red),
-      );
-    } finally {
-      if (mounted) setState(() => _appDefaultsBusy = false);
-    }
-  }
-
   Widget _buildAccountSection() {
     final user = AuthService.instance.currentUser;
     final email = user?.email?.trim();
@@ -993,6 +882,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         Text(
           'Account',
           style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: _t.text,
@@ -1038,7 +928,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     String label,
     String value, {
     VoidCallback? onTap,
-    IconData? icon,
   }) {
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1070,8 +959,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             ),
           ),
           if (onTap != null)
-            Icon(
-              Icons.chevron_right,
+            PhosphorIcon(PhosphorIconsRegular.caretRight,
               size: 14,
               color: _t.textSecondary,
             ),

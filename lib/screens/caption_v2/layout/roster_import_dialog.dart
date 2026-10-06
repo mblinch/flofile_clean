@@ -5,6 +5,7 @@ import '../../../services/mlb_api_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../data/roster_text_parser.dart';
 import 'duplicate_jersey_dialog.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class RosterImportResult {
   const RosterImportResult({
@@ -122,6 +123,7 @@ class _SingleRosterImportDialogState extends State<_SingleRosterImportDialog> {
       context,
       players: parsed.players(_nameOrder),
       teamName: teamName,
+      sportId: widget.sport,
     );
     if (!mounted || players == null) return;
     Navigator.pop(
@@ -164,7 +166,7 @@ class _SingleRosterImportDialogState extends State<_SingleRosterImportDialog> {
                   IconButton(
                     tooltip: 'Close',
                     onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: t.textSecondary),
+                    icon: PhosphorIcon(PhosphorIconsRegular.x, color: t.textSecondary),
                   ),
                 ],
               ),
@@ -214,7 +216,7 @@ class _SingleRosterImportDialogState extends State<_SingleRosterImportDialog> {
                 children: [
                   OutlinedButton.icon(
                     onPressed: _paste,
-                    icon: const Icon(Icons.content_paste, size: 16),
+                    icon: const PhosphorIcon(PhosphorIconsRegular.clipboardText, size: 16),
                     label: const Text('Paste from clipboard'),
                   ),
                   const SizedBox(width: 8),
@@ -489,7 +491,7 @@ class _RosterManagerDialogState extends State<_RosterManagerDialog> {
                   IconButton(
                     tooltip: 'Close',
                     onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: t.textSecondary),
+                    icon: PhosphorIcon(PhosphorIconsRegular.x, color: t.textSecondary),
                   ),
                 ],
               ),
@@ -661,7 +663,7 @@ class _AddPlayerDialogState extends State<_AddPlayerDialog> {
                     tooltip: 'Close',
                     visualDensity: VisualDensity.compact,
                     onPressed: () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: t.textSecondary),
+                    icon: PhosphorIcon(PhosphorIconsRegular.x, color: t.textSecondary),
                   ),
                 ],
               ),
@@ -813,7 +815,7 @@ class _RosterColumn extends StatelessWidget {
               child: Center(
                 child: OutlinedButton.icon(
                   onPressed: onPaste,
-                  icon: const Icon(Icons.content_paste_outlined, size: 16),
+                  icon: const PhosphorIcon(PhosphorIconsRegular.clipboardText, size: 16),
                   label: const Text('Paste roster'),
                 ),
               ),
@@ -825,7 +827,7 @@ class _RosterColumn extends StatelessWidget {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: onAddPlayer,
-                icon: const Icon(Icons.person_add_alt_1, size: 15),
+                icon: const PhosphorIcon(PhosphorIconsRegular.userPlus, size: 15),
                 label: const Text('Add player'),
               ),
             ),
@@ -1052,7 +1054,7 @@ class _RosterImportDialogState extends State<_RosterImportDialog> {
                   IconButton(
                     tooltip: 'Close',
                     onPressed: _close,
-                    icon: Icon(Icons.close, color: t.textSecondary),
+                    icon: PhosphorIcon(PhosphorIconsRegular.x, color: t.textSecondary),
                   ),
                 ],
               ),
@@ -1111,7 +1113,7 @@ class _RosterImportDialogState extends State<_RosterImportDialog> {
                 children: [
                   OutlinedButton.icon(
                     onPressed: _paste,
-                    icon: const Icon(Icons.content_paste, size: 16),
+                    icon: const PhosphorIcon(PhosphorIconsRegular.clipboardText, size: 16),
                     label: const Text('Paste from clipboard'),
                   ),
                   const SizedBox(width: 8),
@@ -1126,7 +1128,7 @@ class _RosterImportDialogState extends State<_RosterImportDialog> {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    Icon(Icons.check_circle, size: 16, color: t.accent),
+                    PhosphorIcon(PhosphorIconsRegular.checkCircle, size: 16, color: t.accent),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(

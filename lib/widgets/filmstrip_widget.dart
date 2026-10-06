@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_styled_dialogs.dart';
 import 'oriented_file_preview.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class FilmstripWidget extends StatelessWidget {
   final List<String> imagePaths;
@@ -61,7 +62,7 @@ class FilmstripWidget extends StatelessWidget {
                   ElevatedGreyButton(
                     label: 'Show All Thumbnails',
                     fontSize: 12,
-                    icon: Icons.grid_view,
+                    icon: PhosphorIconsRegular.squaresFour,
                     onPressed: onShowThumbnails,
                   ),
                 ],
@@ -127,8 +128,7 @@ class FilmstripWidget extends StatelessWidget {
                                 color: Colors.green.shade600,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(
-                                Icons.check,
+                              child: const PhosphorIcon(PhosphorIconsRegular.check,
                                 color: Colors.white,
                                 size: 10,
                               ),
@@ -145,8 +145,7 @@ class FilmstripWidget extends StatelessWidget {
                                 color: Colors.orange.shade600,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(
-                                Icons.schedule,
+                              child: const PhosphorIcon(PhosphorIconsRegular.clock,
                                 color: Colors.white,
                                 size: 10,
                               ),
@@ -224,8 +223,7 @@ class FilmstripWidget extends StatelessWidget {
                                 color: Colors.purple.shade600,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(
-                                Icons.bookmark,
+                              child: const PhosphorIcon(PhosphorIconsFill.bookmarkSimple,
                                 color: Colors.white,
                                 size: 10,
                               ),
@@ -243,8 +241,7 @@ class FilmstripWidget extends StatelessWidget {
                                 color: Colors.red.shade600,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(
-                                Icons.lock,
+                              child: const PhosphorIcon(PhosphorIconsRegular.lock,
                                 color: Colors.white,
                                 size: 10,
                               ),

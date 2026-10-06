@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import '../services/mlb_api_service.dart';
 import '../services/preferences_service.dart';
 import '../utils/baseball_tags_popup_rows.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class PlayerPopupCaptionBoard extends StatefulWidget {
   final String? homeTeamName;
@@ -793,7 +794,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                 borderRadius: BorderRadius.circular(kFloInningButtonRadius),
               ),
             ),
-            child: Icon(
+            child: PhosphorIcon(
               icon,
               size: 12,
               color: enabled
@@ -826,7 +827,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                 inningButton('Pre-Game'),
                 ...inningLabels.map(inningButton),
                 pageButton(
-                  icon: Icons.remove,
+                  icon: PhosphorIconsRegular.minus,
                   enabled: page > 0,
                   onPressed: page > 0
                       ? () => setState(() {
@@ -836,7 +837,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       : null,
                 ),
                 pageButton(
-                  icon: Icons.add,
+                  icon: PhosphorIconsRegular.plus,
                   enabled: page < 2,
                   onPressed: page < 2
                       ? () => setState(() {
@@ -962,7 +963,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                     ),
                   ),
                   child: Icon(
-                    _showPlayoffOvertimes ? Icons.remove : Icons.add,
+                    _showPlayoffOvertimes ? PhosphorIconsRegular.minus : PhosphorIconsRegular.plus,
                     size: 12,
                     color: _showPlayoffOvertimes
                         ? Colors.blue.shade700
@@ -1089,8 +1090,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
             borderRadius: BorderRadius.circular(3),
           ),
         ),
-        child: Icon(
-          Icons.swap_horiz,
+        child: PhosphorIcon(PhosphorIconsRegular.arrowsLeftRight,
           size: 12,
           color: Colors.grey.shade700,
         ),
@@ -1275,15 +1275,13 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                     ),
                                   ),
                                   const SizedBox(width: 6),
-                                  Icon(
-                                    Icons.star,
+                                  PhosphorIcon(PhosphorIconsFill.star,
                                     size: 14,
                                     color: Colors.amber,
                                   ),
                                 ],
                               ),
-                              trailing: Icon(
-                                Icons.expand_more,
+                              trailing: PhosphorIcon(PhosphorIconsRegular.caretDown,
                                 size: 16,
                                 color: Colors.grey.shade600,
                               ),
@@ -1402,8 +1400,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                                         padding:
                                                             const EdgeInsets
                                                                 .only(right: 4),
-                                                        child: Icon(
-                                                          Icons.push_pin,
+                                                        child: PhosphorIcon(PhosphorIconsFill.pushPin,
                                                           size: 12,
                                                           color: Colors
                                                               .orange.shade700,
@@ -1439,8 +1436,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                                       ),
                                                     Icon(
                                                       isExpanded
-                                                          ? Icons.expand_less
-                                                          : Icons.expand_more,
+                                                          ? PhosphorIconsRegular.caretUp
+                                                          : PhosphorIconsRegular.caretDown,
                                                       size: 14,
                                                       color:
                                                           Colors.grey.shade400,
@@ -1656,8 +1653,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                                   padding:
                                                       const EdgeInsets.only(
                                                           right: 4),
-                                                  child: Icon(
-                                                    Icons.push_pin,
+                                                  child: PhosphorIcon(PhosphorIconsFill.pushPin,
                                                     size: 12,
                                                     color: Colors
                                                         .orange.shade700,
@@ -1693,8 +1689,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                                 ),
                                               Icon(
                                                 isVerbExpanded
-                                                    ? Icons.expand_less
-                                                    : Icons.expand_more,
+                                                    ? PhosphorIconsRegular.caretUp
+                                                    : PhosphorIconsRegular.caretDown,
                                                 size: 14,
                                                 color: Colors.grey.shade400,
                                               ),
@@ -1771,7 +1767,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                   ),
                                   child: Row(
                                     children: [
-                                      Icon(Icons.add,
+                                      PhosphorIcon(PhosphorIconsRegular.plus,
                                           size: 14,
                                           color: Colors.blue.shade600),
                                       const SizedBox(width: 8),
@@ -1904,7 +1900,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                           opacity: isBeingDragged ? 0.5 : 1.0,
                                           child: Row(
                                             children: [
-                                              Icon(Icons.drag_indicator,
+                                              PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
                                                   size: 16,
                                                   color:
                                                       Colors.grey.shade400),
@@ -1923,8 +1919,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                               ),
                                               Icon(
                                                 isCatExpanded
-                                                    ? Icons.expand_less
-                                                    : Icons.expand_more,
+                                                    ? PhosphorIconsRegular.caretUp
+                                                    : PhosphorIconsRegular.caretDown,
                                                 size: 16,
                                                 color: Colors.grey.shade600,
                                               ),
@@ -2106,8 +2102,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                   });
                 }
               },
-              icon: Icon(
-                Icons.copy,
+              icon: PhosphorIcon(PhosphorIconsRegular.copy,
                 size: 12,
                 color: Colors.grey.shade700,
               ),
@@ -2150,8 +2145,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                         });
                       }
                     },
-              icon: Icon(
-                Icons.cloud_upload,
+              icon: PhosphorIcon(PhosphorIconsRegular.cloudArrowUp,
                 size: 12,
                 color:
                     widget.isFtpDisabled ? Colors.grey.shade400 : Colors.white,
@@ -2260,10 +2254,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
             children: [
               Icon(
                 statusText == 'This picture has been uploaded.'
-                    ? Icons.check_circle
+                    ? PhosphorIconsRegular.checkCircle
                     : statusText == 'This picture has not been uploaded'
-                        ? Icons.cloud_upload_outlined
-                        : Icons.cloud_upload,
+                        ? PhosphorIconsRegular.cloudArrowUp
+                        : PhosphorIconsRegular.cloudArrowUp,
                 size: 12,
                 color: iconColor,
               ),
@@ -2613,7 +2607,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           child: Row(
             children: [
               Icon(
-                isFavorite ? Icons.star : Icons.star_border,
+                isFavorite ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
                 size: 16,
                 color: isFavorite ? Colors.amber : Colors.grey.shade600,
               ),
@@ -2633,8 +2627,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           height: 32,
           child: Row(
             children: [
-              Icon(
-                Icons.edit,
+              PhosphorIcon(PhosphorIconsRegular.pencilSimple,
                 size: 16,
                 color: Colors.grey.shade600,
               ),
@@ -2654,8 +2647,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
           height: 32,
           child: Row(
             children: [
-              Icon(
-                Icons.delete,
+              PhosphorIcon(PhosphorIconsRegular.trash,
                 size: 16,
                 color: Colors.red.shade600,
               ),
@@ -3363,7 +3355,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
-                                isHome ? Icons.home : Icons.flight,
+                                isHome ? PhosphorIconsRegular.house : PhosphorIconsRegular.airplane,
                                 size: 14,
                                 color: Colors.grey.shade800,
                               ),
@@ -3385,7 +3377,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       ]
                     : [
                         Icon(
-                          isHome ? Icons.home : Icons.flight,
+                          isHome ? PhosphorIconsRegular.house : PhosphorIconsRegular.airplane,
                           size: 14,
                           color: Colors.grey.shade800,
                         ),
@@ -3434,8 +3426,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                         children: [
                           Icon(
                             _viewStyle == 'grid'
-                                ? Icons.view_module
-                                : Icons.view_list,
+                                ? PhosphorIconsRegular.squaresFour
+                                : PhosphorIconsRegular.list,
                             size: 12,
                             color: Colors.grey.shade700,
                           ),
@@ -3470,8 +3462,8 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                       ),
                       child: Icon(
                         _sortAscending
-                            ? Icons.arrow_upward
-                            : Icons.arrow_downward,
+                            ? PhosphorIconsRegular.arrowUp
+                            : PhosphorIconsRegular.arrowDown,
                         size: 13,
                         color: Colors.grey.shade700,
                       ),
@@ -3492,7 +3484,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                         value: _sortBy,
                         isDense: true,
                         underline: const SizedBox(),
-                        icon: Icon(Icons.arrow_drop_down,
+                        icon: PhosphorIcon(PhosphorIconsRegular.caretDown,
                             size: 13, color: Colors.grey.shade700),
                         style: TextStyle(
                             fontSize: 10, color: Colors.grey.shade700),
@@ -3566,12 +3558,12 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                     hintText: 'Type name(s) or number(s) followed by Enter',
                     hintStyle:
                         TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                    prefixIcon: Icon(Icons.dialpad_outlined,
+                    prefixIcon: PhosphorIcon(PhosphorIconsRegular.gridNine,
                         size: 14, color: Colors.grey.shade600),
                     suffixIcon:
                         (isHome ? _homeSearchText : _awaySearchText).isNotEmpty
                             ? IconButton(
-                                icon: Icon(Icons.clear, size: 14),
+                                icon: PhosphorIcon(PhosphorIconsRegular.x, size: 14),
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
                                 onPressed: () {
@@ -3711,8 +3703,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               if (isFirstPlayer && isLeftSide)
                                 Padding(
                                   padding: const EdgeInsets.only(right: 4),
-                                  child: Icon(
-                                    Icons.circle,
+                                  child: PhosphorIcon(PhosphorIconsRegular.circle,
                                     size: 8,
                                     color: Colors.grey.shade700,
                                   ),
@@ -3721,8 +3712,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               if (isSticky)
                                 Padding(
                                   padding: EdgeInsets.only(right: 4),
-                                  child: Icon(
-                                    Icons.push_pin,
+                                  child: PhosphorIcon(PhosphorIconsFill.pushPin,
                                     size: 10,
                                     color: Colors.orange.shade700,
                                   ),
@@ -3749,8 +3739,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               if (isFirstPlayer && !isLeftSide)
                                 Padding(
                                   padding: const EdgeInsets.only(left: 4),
-                                  child: Icon(
-                                    Icons.circle,
+                                  child: PhosphorIcon(PhosphorIconsRegular.circle,
                                     size: 8,
                                     color: Colors.grey.shade700,
                                   ),
@@ -3914,8 +3903,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                       Positioned(
                                         top: 2,
                                         right: 2,
-                                        child: Icon(
-                                          Icons.circle,
+                                        child: PhosphorIcon(PhosphorIconsRegular.circle,
                                           size: 8,
                                           color: Colors.grey.shade700,
                                         ),
@@ -3925,8 +3913,7 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                                       Positioned(
                                         top: 2,
                                         left: 2,
-                                        child: Icon(
-                                          Icons.push_pin,
+                                        child: PhosphorIcon(PhosphorIconsFill.pushPin,
                                           size: 10,
                                           color: Colors.orange.shade700,
                                         ),

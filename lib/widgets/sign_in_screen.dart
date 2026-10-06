@@ -5,6 +5,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../services/auth_service.dart';
 import '../theme/ff_tokens.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Full-screen sign-in gate: Google → Firebase Auth.
 ///
@@ -193,8 +194,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(
-                                      Icons.g_mobiledata_rounded,
+                                    PhosphorIcon(PhosphorIconsRegular.googleLogo,
                                       size: 26,
                                       color: !canGoogle
                                           ? t.textSecondary

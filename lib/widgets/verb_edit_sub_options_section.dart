@@ -34,15 +34,12 @@ class VerbEditSubOptionsSection extends StatefulWidget {
 
 class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
   late final TextEditingController _celebrationPhrase;
-  late final TextEditingController _celebrationTypes;
 
   @override
   void initState() {
     super.initState();
     _celebrationPhrase =
         TextEditingController(text: widget.value.celebrationPhrase);
-    _celebrationTypes =
-        TextEditingController(text: widget.value.celebrationTypes);
   }
 
   @override
@@ -52,16 +49,11 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
         _celebrationPhrase.text != widget.value.celebrationPhrase) {
       _celebrationPhrase.text = widget.value.celebrationPhrase;
     }
-    if (oldWidget.value.celebrationTypes != widget.value.celebrationTypes &&
-        _celebrationTypes.text != widget.value.celebrationTypes) {
-      _celebrationTypes.text = widget.value.celebrationTypes;
-    }
   }
 
   @override
   void dispose() {
     _celebrationPhrase.dispose();
-    _celebrationTypes.dispose();
     super.dispose();
   }
 
@@ -87,17 +79,7 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
 
     final defaults =
         VerbSubOptions.defaultsFor(widget.verbLabel, sport: widget.sport);
-    final showCelebrationTypes = showCelebration &&
-        VerbSubOptions.isCelebrationVerb(widget.verbLabel);
     final isHit = VerbSubOptions.isHitVerb(widget.verbLabel);
-    final chipsHint =
-        VerbSubOptions.defaultCelebrationTypesForSport(widget.sport);
-
-    final blurb = showRbi && showCelebration
-        ? 'Optional RBI and celebration wording for this verb.'
-        : showRbi
-            ? 'Optional RBI counts for this verb (baseball).'
-            : 'Optional celebration wording for this verb.';
 
     final isHomeRun = widget.verbLabel == 'Home Run';
     final rbiBlock = showRbi
@@ -159,7 +141,7 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
     final celebrationBlock = showCelebration
         ? _optionBlock(
             label: 'Reactions',
-            explanation: 'Comma-separated phrases',
+            explanation: '',
             enabled: widget.value.celebrationEnabled,
             defaultOn: defaults.celebrationEnabled,
             onEnabledChanged: (v) =>
@@ -168,29 +150,15 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
               AppDialogLabeledTextField(
                 label: '',
                 controller: _celebrationPhrase,
-                hintText: VerbSubOptions.suggestedReactionPhrases,
                 maxLines: 1,
                 enabled: widget.value.celebrationEnabled,
-                bottomGap: showCelebrationTypes ? 8 : 0,
+                bottomGap: 0,
                 onChanged: (_) => _patch(
                   (o) =>
                       o.copyWith(celebrationPhrase: _celebrationPhrase.text),
                 ),
               ),
-              if (showCelebrationTypes)
-                AppDialogLabeledTextField(
-                  label: '',
-                  controller: _celebrationTypes,
-                  hintText: chipsHint,
-                  maxLines: 1,
-                  enabled: widget.value.celebrationEnabled,
-                  bottomGap: 0,
-                  onChanged: (_) => _patch(
-                    (o) =>
-                        o.copyWith(celebrationTypes: _celebrationTypes.text),
-                  ),
-                )
-              else if (!isHit) ...[
+              if (!isHit) ...[
                 const SizedBox(height: 4),
                 Builder(
                   builder: (context) {
@@ -257,22 +225,6 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
                   color: t.text.withValues(alpha: 0.70),
                 )
               : kAppDialogFieldLabelStyle,
-        ),
-        const SizedBox(height: 4),
-        Text(
-          blurb,
-          style: t != null
-              ? t.metaStyle.copyWith(
-                  fontSize: 10,
-                  color: t.textSecondary,
-                  height: 1.35,
-                )
-              : const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 10,
-                  color: Color(0xFF888888),
-                  height: 1.35,
-                ),
         ),
         const SizedBox(height: 6),
         blocks,
@@ -367,15 +319,17 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
             ),
           ),
         ],
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            explanation,
-            style: explanationStyle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+        if (explanation.trim().isNotEmpty) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              explanation,
+              style: explanationStyle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-        ),
+        ],
       ],
     );
 
@@ -395,13 +349,13 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
         ),
         border: Border.all(color: border),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           header,
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Opacity(
             opacity: enabled ? 1 : 0.45,
             child: IgnorePointer(

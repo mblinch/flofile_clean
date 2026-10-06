@@ -1,0 +1,103 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+
+/// One text token from on-device Vision OCR (jersey digits or name-like words).
+class JerseyOcrHit {
+  const JerseyOcrHit({
+    required this.text,
+    required this.confidence,
+    this.x = 0,
+    this.y = 0,
+    this.width = 0,
+    this.height = 0,
+  });
+
+  final String text;
+  final double confidence;
+
+  /// Vision-normalized box (origin bottom-left, 0–1).
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+
+  factory JerseyOcrHit.fromMap(Map<dynamic, dynamic> map) {
+    final box = map['boundingBox'];
+    final boxMap = box is Map ? box : const <dynamic, dynamic>{};
+    return JerseyOcrHit(
+      text: (map['text'] as String? ?? '').trim(),
+      confidence: (map['confidence'] as num?)?.toDouble() ?? 0,
+      x: (boxMap['x'] as num?)?.toDouble() ?? 0,
+      y: (boxMap['y'] as num?)?.toDouble() ?? 0,
+      width: (boxMap['width'] as num?)?.toDouble() ?? 0,
+      height: (boxMap['height'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+/// Normalized Vision ROI (origin bottom-left).
+class JerseyOcrRegion {
+  const JerseyOcrRegion({
+    required this.x,
+    required this.y,
+    required this.width,
+    required this.height,
+  });
+
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+
+  Map<String, double> toMap() => {
+        'x': x,
+        'y': y,
+        'width': width,
+        'height': height,
+      };
+}
+
+/// macOS Vision text OCR via platform channel. No-op elsewhere.
+class JerseyOcrChannel {
+  JerseyOcrChannel._();
+
+  static const MethodChannel _channel = MethodChannel(
+    'caption_writer/jersey_ocr',
+  );
+
+  /// High enough for small / arched jersey glyphs.
+  static const int defaultMaxPixelDimension = 2400;
+
+  static bool get supported =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+
+  /// Returns text hits (digits + names), highest confidence / spatial score first.
+  ///
+  /// [customWords] biases Vision toward roster last names / jersey numbers.
+  /// [regionOfInterest] limits the scan (loupe / subject crop).
+  static Future<List<JerseyOcrHit>> recognize({
+    required String path,
+    int maxPixelDimension = defaultMaxPixelDimension,
+    List<String> customWords = const [],
+    JerseyOcrRegion? regionOfInterest,
+  }) async {
+    if (!supported || path.isEmpty) return const [];
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>('recognize', {
+        'path': path,
+        'maxPixelDimension': maxPixelDimension,
+        if (customWords.isNotEmpty) 'customWords': customWords,
+        if (regionOfInterest != null)
+          'regionOfInterest': regionOfInterest.toMap(),
+      });
+      if (raw == null || raw.isEmpty) return const [];
+      return [
+        for (final item in raw)
+          if (item is Map) JerseyOcrHit.fromMap(item),
+      ];
+    } catch (e, st) {
+      debugPrint('JerseyOcrChannel.recognize failed: $e\n$st');
+      return const [];
+    }
+  }
+}

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Inline Firebar. The three workspace columns are its result list.
 class CaptionV2SearchBar extends StatefulWidget {
@@ -138,108 +139,182 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
       },
       child: Container(
         height: active ? 72 : 32,
-        padding: const EdgeInsets.fromLTRB(2, 0, 6, 0),
+        padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
         decoration: BoxDecoration(
-          color: tokens.surface,
-          borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+          color: tokens.sunken,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: tokens.divider),
         ),
         child: Column(
           children: [
-            SizedBox(
-              height: 32,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 132,
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.local_fire_department,
-                          size: 15,
-                          color: FfTokens.firebar,
-                        ),
-                        const SizedBox(width: 4),
-                        SizedBox(
-                          width: 52,
-                          child: Text(
-                            'Firebar',
-                            maxLines: 1,
-                            softWrap: false,
-                            style: FfTokens.captionTitle.copyWith(
-                              fontSize: 14,
-                              letterSpacing: 0.4,
-                              height: 1,
-                              foreground: Paint()
-                                ..shader = const LinearGradient(
-                                  colors: [
-                                    Color(0xFFE8763A),
-                                    Color(0xFFE8763A),
-                                  ],
-                                ).createShader(
-                                  const Rect.fromLTWH(0, 0, 70, 20),
-                                ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Container(
-                          width: 34,
-                          height: 22,
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: tokens.badgeFill,
-                            borderRadius: BorderRadius.circular(5),
-                          ),
-                          child: Text(
-                            '⌘K',
-                            style: tokens.keyHintStyle.copyWith(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              height: 1,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
+            if (!active)
+              Expanded(
+                child: Row(
+                  children: [
+                    const PhosphorIcon(PhosphorIconsRegular.flame,
+                      size: 15,
+                      color: FfTokens.firebar,
                     ),
-                  ),
-                  Container(width: 1, height: 16, color: tokens.divider),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Focus(
-                      onKeyEvent: _handleKey,
-                      child: TextField(
-                        key: const ValueKey('firebar-input'),
-                        enabled: active,
-                        focusNode: widget.focusNode,
-                        controller: widget.textController,
-                        maxLines: 1,
-                        style: tokens.metaStyle.copyWith(
-                          color: tokens.text,
-                          fontSize: 12,
-                        ),
-                        cursorColor: FfTokens.firebar,
-                        decoration: InputDecoration(
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding:
-                              const EdgeInsets.symmetric(vertical: 6),
-                          hintText: controller.firebarOptionPrompt ??
-                              'Type a name, jersey number, or verb',
-                          hintStyle: tokens.metaStyle.copyWith(
-                            color: tokens.text.withValues(alpha: 0.38),
-                            fontSize: 12,
-                          ),
-                        ),
-                        onChanged: controller.setSearchQuery,
-                        onSubmitted: (_) {
-                          controller.commitSelectedFirebarResult();
-                          widget.textController.clear();
-                        },
+                    const SizedBox(width: 5),
+                    Text(
+                      'Firebar',
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                        height: 1,
+                        color: FfTokens.firebar,
                       ),
                     ),
-                  ),
-                  if (active) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: tokens.divider),
+                      ),
+                      child: Text(
+                        '⌘K',
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0,
+                          height: 1,
+                          color: tokens.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(width: 1, height: 14, color: tokens.divider),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Focus(
+                        onKeyEvent: _handleKey,
+                        child: TextField(
+                          key: const ValueKey('firebar-input'),
+                          enabled: active,
+                          focusNode: widget.focusNode,
+                          controller: widget.textController,
+                          maxLines: 1,
+                          style: tokens.metaStyle.copyWith(
+                            color: tokens.text,
+                            fontSize: 12,
+                          ),
+                          cursorColor: FfTokens.firebar,
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 6),
+                            hintText: controller.firebarOptionPrompt ??
+                                'Type a name, jersey number, or verb',
+                            hintStyle: tokens.metaStyle.copyWith(
+                              color: tokens.text.withValues(alpha: 0.38),
+                              fontSize: 12,
+                            ),
+                          ),
+                          onChanged: controller.setSearchQuery,
+                          onSubmitted: (_) {
+                            controller.commitSelectedFirebarResult();
+                            widget.textController.clear();
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              SizedBox(
+                height: 32,
+                child: Row(
+                  children: [
+                    const PhosphorIcon(PhosphorIconsRegular.flame,
+                      size: 15,
+                      color: FfTokens.firebar,
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'Firebar',
+                      maxLines: 1,
+                      softWrap: false,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0,
+                        height: 1,
+                        color: FfTokens.firebar,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 2,
+                      ),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: tokens.divider),
+                      ),
+                      child: Text(
+                        '⌘K',
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 0,
+                          height: 1,
+                          color: tokens.textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(width: 1, height: 14, color: tokens.divider),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Focus(
+                        onKeyEvent: _handleKey,
+                        child: TextField(
+                          key: const ValueKey('firebar-input'),
+                          enabled: active,
+                          focusNode: widget.focusNode,
+                          controller: widget.textController,
+                          maxLines: 1,
+                          style: tokens.metaStyle.copyWith(
+                            color: tokens.text,
+                            fontSize: 12,
+                          ),
+                          cursorColor: FfTokens.firebar,
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 6),
+                            hintText: controller.firebarOptionPrompt ??
+                                'Type a name, jersey number, or verb',
+                            hintStyle: tokens.metaStyle.copyWith(
+                              color: tokens.text.withValues(alpha: 0.38),
+                              fontSize: 12,
+                            ),
+                          ),
+                          onChanged: controller.setSearchQuery,
+                          onSubmitted: (_) {
+                            controller.commitSelectedFirebarResult();
+                            widget.textController.clear();
+                          },
+                        ),
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       controller.firebarShowShiftEnterSaveHint
@@ -256,10 +331,8 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                       ),
                     ),
                   ],
-                ],
+                ),
               ),
-            ),
-            if (active) ...[
               Divider(height: 1, color: tokens.divider),
               Expanded(
                 child: Align(
@@ -482,11 +555,11 @@ class _FirebarChip extends StatelessWidget {
                     isHome: result.isHome!,
                   ))) ...[
             const SizedBox(width: 4),
-            Icon(
-              Icons.push_pin_rounded,
+            PhosphorIcon(PhosphorIconsFill.pushPin,
               size: 12,
-              color:
-                  subdued ? tokens.text.withValues(alpha: 0.38) : tokens.accent,
+              color: subdued
+                  ? tokens.text.withValues(alpha: 0.38)
+                  : FfTokens.pinned,
             ),
           ],
           const SizedBox(width: 4),

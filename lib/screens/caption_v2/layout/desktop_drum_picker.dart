@@ -10,15 +10,18 @@ import '../data/effective_verb_catalog.dart';
 import '../widgets/base_row.dart';
 import '../widgets/celebration_dropdown.dart';
 import '../widgets/custom_name_entry.dart';
+import '../widgets/pinned_player_bar.dart';
+import '../widgets/quiet_filter_field.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/verb_tile.dart';
 import 'caption_v2_verb_editor.dart';
+import 'duplicate_jersey_dialog.dart';
+import 'player_data_issue_dialog.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 enum DrumLane { home, verbs, away }
 
 enum DrumPickerMode { scroll, infinite }
-
-enum _VerbLaneMode { cascade, sidePanel }
 
 /// Desktop shows all three lanes; mobile swipes one lane at a time.
 enum DrumLayout { sideBySide, paged }
@@ -60,9 +63,8 @@ class _DrumPickerState extends State<DrumPicker> {
   int _awayIndex = 0;
   String? _homeLetterFilter;
   String? _awayLetterFilter;
-  bool _numberMode = false;
+  bool _numberMode = true;
   bool _verbAccordionCollapsed = false;
-  _VerbLaneMode _verbLaneMode = _VerbLaneMode.cascade;
   final _homeFilter = TextEditingController();
   final _awayFilter = TextEditingController();
   final _customVerbController = TextEditingController();
@@ -309,12 +311,6 @@ class _DrumPickerState extends State<DrumPicker> {
     final length = _lengthFor(lane);
     if (length == 0) return;
     if (lane == DrumLane.verbs) {
-      if (_verbLaneMode != _VerbLaneMode.cascade) {
-        final next = (_verbIndex + delta).clamp(0, length - 1);
-        if (next == _verbIndex) return;
-        _setIndex(lane, next);
-        return;
-      }
       if (_verbAccordionCollapsed) {
         setState(() => _verbAccordionCollapsed = false);
       }
@@ -389,8 +385,8 @@ class _DrumPickerState extends State<DrumPicker> {
         home.columnCount > away.columnCount ? home.columnCount : away.columnCount;
     final rows = home.rowCount > away.rowCount ? home.rowCount : away.rowCount;
     return _NumberGridMetrics(
-      columnCount: cols.clamp(1, 20),
-      rowCount: rows.clamp(1, 20),
+      columnCount: cols.clamp(1, _NumberRoster.maxColumns),
+      rowCount: rows.clamp(1, 40),
       needsOtherRow: home.needsOtherRow || away.needsOtherRow,
     );
   }
@@ -535,6 +531,7 @@ class _DrumPickerState extends State<DrumPicker> {
       _columnShell(
         tokens: tokens,
         armed: _armedLane == DrumLane.home,
+        whiteOutline: true,
         child: _rosterLane(
           tokens: tokens,
           lane: DrumLane.home,
@@ -546,6 +543,7 @@ class _DrumPickerState extends State<DrumPicker> {
       _columnShell(
         tokens: tokens,
         armed: _armedLane == DrumLane.verbs,
+        accentOutline: true,
         child: _verbLane(tokens),
       ),
     ];
@@ -554,6 +552,7 @@ class _DrumPickerState extends State<DrumPicker> {
         _columnShell(
           tokens: tokens,
           armed: _armedLane == DrumLane.away,
+          whiteOutline: true,
           child: _rosterLane(
             tokens: tokens,
             lane: DrumLane.away,
@@ -601,7 +600,11 @@ class _DrumPickerState extends State<DrumPicker> {
             children: [
               for (var i = 0; i < lanes.length; i++) ...[
                 if (i > 0) const SizedBox(width: 8),
-                Expanded(flex: 100, child: lanes[i]),
+                // Player / verbs / player → 35 / 30 / 35.
+                Expanded(
+                  flex: i == 1 ? 30 : 35,
+                  child: lanes[i],
+                ),
               ],
             ],
           );
@@ -616,18 +619,25 @@ class _DrumPickerState extends State<DrumPicker> {
     required FfTokens tokens,
     required bool armed,
     required Widget child,
+    bool accentOutline = false,
+    bool whiteOutline = false,
   }) {
+    final outlined = accentOutline || whiteOutline || armed;
+    // Don't clip the outer shell — that would cut off the glow.
     return Container(
-      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: tokens.surface,
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
         border: Border.all(
-          color: armed ? tokens.accent : tokens.divider,
-          width: armed ? FfTokens.focusOutlineWidth : 1,
+          color: outlined ? tokens.accent : tokens.divider,
+          width: 1,
         ),
+        boxShadow: outlined ? FfTokens.accentButtonGlow(tokens.accent) : null,
       ),
-      child: child,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(FfTokens.radiusCard),
+        child: child,
+      ),
     );
   }
 
@@ -636,9 +646,8 @@ class _DrumPickerState extends State<DrumPicker> {
     DrumLane lane,
     String title,
   ) {
-    final armed = _armedLane == lane;
     final isRoster = lane != DrumLane.verbs;
-    const headerHeight = 26.0;
+    const headerHeight = 32.0;
     return Container(
       height: headerHeight,
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -650,142 +659,56 @@ class _DrumPickerState extends State<DrumPicker> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            title,
-            style: FfTokens.captionTitle.copyWith(
-              color: armed ? tokens.accent : tokens.text,
-              fontSize: 15,
-              letterSpacing: -0.45,
-              height: 1,
-            ),
+            title.toUpperCase(),
+            style: isRoster
+                ? FfTokens.teamAbbrLabel(color: tokens.text)
+                : FfTokens.panelLabel(color: tokens.text),
             textHeightBehavior: const TextHeightBehavior(
               applyHeightToFirstAscent: false,
               applyHeightToLastDescent: false,
             ),
           ),
           if (isRoster) ...[
-            if (widget.onEditRosters != null)
-              Padding(
-                padding: const EdgeInsets.only(left: 4, right: 2),
-                child: IconButton(
-                  onPressed: widget.onEditRosters,
-                  tooltip: 'Edit rosters',
-                  padding: const EdgeInsets.all(2),
-                  constraints:
-                      const BoxConstraints.tightFor(width: 22, height: 22),
-                  visualDensity: VisualDensity.compact,
-                  iconSize: 12,
-                  color: tokens.textSecondary,
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              ),
-            const SizedBox(width: 4),
-            Expanded(
-              child: Container(
-                height: 22,
-                padding: const EdgeInsets.symmetric(horizontal: 7),
-                decoration: BoxDecoration(
-                  color: tokens.sunken,
-                  borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-                ),
-                alignment: Alignment.centerLeft,
-                child: SizedBox(
-                  height: 14,
-                  width: double.infinity,
-                  child: TextField(
-                    key: ValueKey('drum-search-${lane.name}'),
-                    controller: _filterFor(lane),
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 12,
-                      fontWeight: FfTokens.weightRegular,
-                      color: tokens.text,
-                      height: 1,
-                    ),
-                    cursorColor: tokens.accent,
-                    cursorHeight: 12,
-                    decoration: const InputDecoration(
-                      isCollapsed: true,
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                    onChanged: (_) => _onRosterFilterChanged(lane),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 2),
-            InkWell(
-              key: ValueKey('drum-sort-${lane.name}'),
-              onTap: controller.cycleRosterSortField,
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                child: Text(
-                  controller.rosterSortFieldLabel(),
-                  style: tokens.metaStyle.copyWith(
-                    color: tokens.textSecondary,
-                    height: 1,
-                    fontSize: 12,
-                  ),
-                  textHeightBehavior: const TextHeightBehavior(
-                    applyHeightToFirstAscent: false,
-                    applyHeightToLastDescent: false,
-                  ),
-                ),
-              ),
-            ),
-            InkWell(
-              key: ValueKey('drum-sort-dir-${lane.name}'),
-              onTap: controller.toggleRosterSortDirection,
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                child: Text(
-                  controller.rosterSortDirectionLabel(),
-                  style: tokens.metaStyle.copyWith(
-                    color: tokens.textSecondary,
-                    height: 1,
-                    fontSize: 12,
-                  ),
-                  textHeightBehavior: const TextHeightBehavior(
-                    applyHeightToFirstAscent: false,
-                    applyHeightToLastDescent: false,
-                  ),
-                ),
-              ),
-            ),
-            Tooltip(
-              message: 'Number rows',
-              child: InkWell(
-                key: ValueKey('drum-number-mode-${lane.name}'),
-                onTap: () => setState(() {
-                  _numberMode = !_numberMode;
-                  if (_numberMode) {
-                    _homeLetterFilter = null;
-                    _awayLetterFilter = null;
-                  }
-                }),
-                borderRadius: BorderRadius.circular(6),
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: Icon(
-                    Icons.grid_view_rounded,
-                    size: 14,
-                    color: _numberMode
-                        ? tokens.accent
-                        : tokens.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          ] else ...[
             const Spacer(),
-            _VerbModeMenu(
-              mode: _verbLaneMode,
+            _GhostHeaderIcon(
+              key: ValueKey('drum-number-mode-${lane.name}'),
+              tooltip: 'Grid view',
+              icon: PhosphorIconsRegular.squaresFour,
+              active: _numberMode,
               tokens: tokens,
-              onSelected: (mode) => setState(() => _verbLaneMode = mode),
+              onTap: () => setState(() {
+                _numberMode = !_numberMode;
+                if (_numberMode) {
+                  _homeLetterFilter = null;
+                  _awayLetterFilter = null;
+                }
+              }),
             ),
+            if (!_numberMode) ...[
+              _GhostHeaderIcon(
+                key: ValueKey('drum-sort-${lane.name}'),
+                tooltip: 'Sort by number',
+                label: controller.rosterSortFieldLabel(),
+                tokens: tokens,
+                onTap: controller.cycleRosterSortField,
+              ),
+              _GhostHeaderIcon(
+                key: ValueKey('drum-sort-dir-${lane.name}'),
+                tooltip: controller.rosterSortAscending
+                    ? 'Ascending'
+                    : 'Descending',
+                label: controller.rosterSortDirectionLabel(),
+                tokens: tokens,
+                onTap: controller.toggleRosterSortDirection,
+              ),
+            ],
+            if (widget.onEditRosters != null)
+              _GhostHeaderIcon(
+                tooltip: 'Rename team',
+                icon: PhosphorIconsRegular.pencilSimple,
+                tokens: tokens,
+                onTap: widget.onEditRosters!,
+              ),
           ],
         ],
       ),
@@ -851,6 +774,10 @@ class _DrumPickerState extends State<DrumPicker> {
                     ),
                     onCommit: (player) =>
                         _commit(lane, rosterIndexOf(player)),
+                    onPin: (player) => controller.togglePlayerPin(
+                      player,
+                      isHome: lane == DrumLane.home,
+                    ),
                     onSecondaryTap: (player, position) => _editRosterPlayer(
                       context,
                       player: player,
@@ -864,6 +791,10 @@ class _DrumPickerState extends State<DrumPicker> {
                     players: visiblePlayers,
                     tokens: tokens,
                     nameFor: controller.playerListName,
+                    isPinned: (player) => controller.isPlayerPinned(
+                      player,
+                      isHome: lane == DrumLane.home,
+                    ),
                     onBack: () => setState(() {
                       if (lane == DrumLane.home) {
                         _homeLetterFilter = null;
@@ -872,6 +803,18 @@ class _DrumPickerState extends State<DrumPicker> {
                       }
                     }),
                     onSelect: (player) => _commit(lane, rosterIndexOf(player)),
+                    onPin: (player) => controller.togglePlayerPin(
+                      player,
+                      isHome: lane == DrumLane.home,
+                    ),
+                    onGoogle: (player) => openPlayerGoogleSearch(
+                      fullName: player.fullName,
+                      sportId: controller.sport,
+                    ),
+                    onReport: (player) => _reportRosterPlayer(
+                      player: player,
+                      isHome: lane == DrumLane.home,
+                    ),
                     onEdit: (player, position) => _editRosterPlayer(
                       context,
                       player: player,
@@ -892,10 +835,26 @@ class _DrumPickerState extends State<DrumPicker> {
                           player,
                           isHome: lane == DrumLane.home,
                         ),
+                        isPinned: (player) => controller.isPlayerPinned(
+                          player,
+                          isHome: lane == DrumLane.home,
+                        ),
                         onTarget: (index) => _setIndex(
                             lane, rosterIndexOf(visiblePlayers[index])),
                         onCommit: (index) =>
                             _commit(lane, rosterIndexOf(visiblePlayers[index])),
+                        onPin: (player) => controller.togglePlayerPin(
+                          player,
+                          isHome: lane == DrumLane.home,
+                        ),
+                        onGoogle: (player) => openPlayerGoogleSearch(
+                          fullName: player.fullName,
+                          sportId: controller.sport,
+                        ),
+                        onReport: (player) => _reportRosterPlayer(
+                          player: player,
+                          isHome: lane == DrumLane.home,
+                        ),
                         onEditPlayer: (player, position) => _editRosterPlayer(
                           context,
                           player: player,
@@ -928,6 +887,8 @@ class _DrumPickerState extends State<DrumPicker> {
       );
     }
 
+    final sortByName = controller.rosterSort != RosterSortMode.number;
+    final showLetterRail = !_numberMode && sortByName;
     final scrubber = _RosterScrubber(
       players: players,
       activeIndex: selectedIndex,
@@ -957,10 +918,22 @@ class _DrumPickerState extends State<DrumPicker> {
     return Column(
       children: [
         _header(tokens, lane, title),
+        PinnedPlayerBar(
+          controller: controller,
+          isHome: isHome,
+          tokens: tokens,
+          filter: QuietFilterField(
+            key: ValueKey('drum-search-${lane.name}'),
+            controller: _filterFor(lane),
+            tokens: tokens,
+            height: 24,
+            onChanged: (_) => _onRosterFilterChanged(lane),
+          ),
+        ),
         Expanded(
           child: Row(
             children: [
-              if (!_numberMode) scrubber,
+              if (showLetterRail) scrubber,
               playerList(),
             ],
           ),
@@ -992,6 +965,10 @@ class _DrumPickerState extends State<DrumPicker> {
   }
 
   bool _customNamePinned({required bool isHome}) {
+    final pinned = controller.pinnedPlayer;
+    if (pinned == null || pinned.isHome != isHome) return false;
+    final id = pinned.player.playerId?.trim();
+    if (id != null && id.isNotEmpty) return false;
     final nameController =
         isHome ? _homeCustomNameController : _awayCustomNameController;
     final jerseyController =
@@ -1011,6 +988,9 @@ class _DrumPickerState extends State<DrumPicker> {
   void _syncCustomNameFromPin({required bool isHome}) {
     final pinned = controller.pinnedPlayer;
     if (pinned == null || pinned.isHome != isHome) return;
+    // Only mirror custom pins (no league playerId) into the footer field.
+    final id = pinned.player.playerId?.trim();
+    if (id != null && id.isNotEmpty) return;
     final nameFocus = isHome ? _homeCustomNameFocus : _awayCustomNameFocus;
     final jerseyFocus =
         isHome ? _homeCustomJerseyFocus : _awayCustomJerseyFocus;
@@ -1081,6 +1061,22 @@ class _DrumPickerState extends State<DrumPicker> {
     );
     _showCustomNameError(error);
     setState(() {});
+  }
+
+  Future<void> _reportRosterPlayer({
+    required Player player,
+    required bool isHome,
+  }) async {
+    final team = isHome ? controller.homeTeam : controller.awayTeam;
+    final abbr = isHome ? controller.homeAbbr : controller.awayAbbr;
+    final teamName = team.trim().isEmpty ? abbr : team;
+    await submitPlayerDataIssueReport(
+      context: context,
+      teamName: teamName,
+      sportId: controller.sport,
+      side: isHome ? 'home' : 'away',
+      player: player,
+    );
   }
 
   Future<void> _editRosterPlayer(
@@ -1160,61 +1156,16 @@ class _DrumPickerState extends State<DrumPicker> {
       for (final category in _categories) category: _verbsForCategory(category),
     };
     final selectedKey = controller.selectedVerb;
-    final categoryVerbs = _verbs;
-    final verbIndex = _verbIndex.clamp(
-      0,
-      categoryVerbs.isEmpty ? 0 : categoryVerbs.length - 1,
-    );
+    void selectPinnedVerb(EffectiveVerb verb) {
+      _arm(DrumLane.verbs);
+      controller.selectVerb(verb.key);
+    }
 
-    Widget verbBody() {
-      final scrubber = _VerbCategoryScrubber(
-        categories: _categories,
-        activeCategory: _category,
-        armed: armed,
-        tokens: tokens,
-        labelFor: _displayCategory,
-        onSelect: _jumpToVerbCategory,
-      );
-      switch (_verbLaneMode) {
-        case _VerbLaneMode.sidePanel:
-          if (categoryVerbs.isEmpty) {
-            return Row(
-              children: [
-                scrubber,
-                Expanded(
-                  child: Center(
-                    child: Text('No verbs', style: tokens.metaStyle),
-                  ),
-                ),
-              ],
-            );
-          }
-          return Row(
-            children: [
-              scrubber,
-              Expanded(
-                child: _VerbRows(
-                  key: const ValueKey('verb-side-list'),
-                  controller: controller,
-                  verbs: categoryVerbs,
-                  selectedIndex: verbIndex,
-                  selectedVerbKey: selectedKey,
-                  armed: armed,
-                  tokens: tokens,
-                  leadingPadding: 10,
-                  scrollable: true,
-                  onVerbArmed: (index) {
-                    _arm(DrumLane.verbs);
-                    _setIndex(DrumLane.verbs, index);
-                    _commit(DrumLane.verbs, index);
-                  },
-                  onToggleFavorite: _toggleVerbFavorite,
-                ),
-              ),
-            ],
-          );
-        case _VerbLaneMode.cascade:
-          return _VerbAccordion(
+    return Column(
+      children: [
+        _header(tokens, DrumLane.verbs, 'VERBS'),
+        Expanded(
+          child: _VerbAccordion(
             controller: controller,
             categories: _categories,
             verbsByCategory: orderedVerbsByCategory,
@@ -1225,24 +1176,15 @@ class _DrumPickerState extends State<DrumPicker> {
             armed: armed,
             tokens: tokens,
             onCategorySelected: _selectCategory,
-            onPinnedVerbTap: (verb) {
-              _arm(DrumLane.verbs);
-              controller.selectVerb(verb.key);
-            },
+            onPinnedVerbTap: selectPinnedVerb,
             onVerbArmed: (index) {
               _arm(DrumLane.verbs);
               _setIndex(DrumLane.verbs, index);
               _commit(DrumLane.verbs, index);
             },
             onToggleFavorite: _toggleVerbFavorite,
-          );
-      }
-    }
-
-    return Column(
-      children: [
-        _header(tokens, DrumLane.verbs, 'VERBS'),
-        Expanded(child: verbBody()),
+          ),
+        ),
         Divider(height: 1, color: tokens.divider),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
@@ -1288,10 +1230,10 @@ class _DrumCustomVerbField extends StatelessWidget {
     return Container(
       height: 28,
       decoration: BoxDecoration(
-        color: tokens.badgeFill,
+        color: tokens.sunken,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: pinned ? tokens.accent : tokens.divider,
+          color: pinned ? FfTokens.pinned : tokens.divider,
         ),
       ),
       child: Row(
@@ -1301,6 +1243,7 @@ class _DrumCustomVerbField extends StatelessWidget {
               controller: textController,
               focusNode: focusNode,
               readOnly: pinned,
+              maxLines: 1,
               onChanged: onChanged,
               spellCheckConfiguration: floSpellCheckConfiguration(),
               contextMenuBuilder: floSpellCheckContextMenuBuilder,
@@ -1321,14 +1264,14 @@ class _DrumCustomVerbField extends StatelessWidget {
             ),
           ),
           _DrumCustomVerbAction(
-            icon: Icons.history,
+            icon: PhosphorIconsRegular.clockCounterClockwise,
             tooltip: 'Use last custom verb',
             tokens: tokens,
             enabled: canUseLast,
             onTap: onUseLast,
           ),
           _DrumCustomVerbAction(
-            icon: pinned ? Icons.push_pin : Icons.push_pin_outlined,
+            icon: pinned ? PhosphorIconsFill.pushPin : PhosphorIconsRegular.pushPin,
             tooltip: pinned ? 'Unpin custom verb' : 'Pin custom verb',
             tokens: tokens,
             enabled: textController.text.trim().isNotEmpty,
@@ -1367,11 +1310,11 @@ class _DrumCustomVerbAction extends StatelessWidget {
         child: SizedBox(
           width: 25,
           height: 28,
-          child: Icon(
+          child: PhosphorIcon(
             icon,
             size: 14,
             color: enabled
-                ? (selected ? tokens.accent : tokens.textSecondary)
+                ? (selected ? FfTokens.pinned : tokens.textSecondary)
                 : tokens.divider,
           ),
         ),
@@ -1399,7 +1342,8 @@ class _VerbAccordion extends StatelessWidget {
 
   static const preferredHeaderHeight = 34.0;
   static const minHeaderHeight = 28.0;
-  static const pinnedBarHeight = 22.0;
+  /// Must match [_PinnedHintBar] fixed height (padding + label + bottom border).
+  static const pinnedBarHeight = 26.0;
   static const rowHeight = 24.0;
   static const rbiExtrasHeight = 32.0;
   static const baseExtrasHeight = 32.0;
@@ -1493,6 +1437,14 @@ class _VerbAccordion extends StatelessWidget {
               .clamp(minHeaderHeight, preferredHeaderHeight);
         }
 
+        // Re-check with the resolved header height — float/rounding can leave
+        // a couple of pixels short of what the Column actually paints.
+        final resolvedHeight = pinnedHeight +
+            categories.length * headerHeight +
+            openBodyHeight;
+        final stillOverflows =
+            bounded && resolvedHeight > constraints.maxHeight + 0.5;
+
         final column = Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1501,8 +1453,7 @@ class _VerbAccordion extends StatelessWidget {
               tokens: tokens,
               controller: controller,
               verb: pinned,
-              selected: pinnedSelected ||
-                  (pinned != null && selectedVerbKey == null && armed),
+              selected: pinnedSelected,
               committed: pinnedSelected,
               showRbi: pinned != null &&
                   pinnedSelected &&
@@ -1534,7 +1485,7 @@ class _VerbAccordion extends StatelessWidget {
                 category: category,
                 displayCategory: _displayCategory(category),
                 verbs: verbsByCategory[category] ?? const <EffectiveVerb>[],
-                headerHeight: headerHeight,
+                headerHeight: stillOverflows ? minHeaderHeight : headerHeight,
                 open: !collapsed && category == selectedCategory,
                 selectedIndex: selectedIndex,
                 selectedVerbKey: selectedVerbKey,
@@ -1547,7 +1498,7 @@ class _VerbAccordion extends StatelessWidget {
           ],
         );
 
-        if (!needsScroll) return column;
+        if (!needsScroll && !stillOverflows) return column;
 
         return SingleChildScrollView(
           physics: const ClampingScrollPhysics(),
@@ -1591,28 +1542,21 @@ class _VerbAccordionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const favoritesGold = Color(0xFFFFD166);
     final isFavorites = category == 'Favorites';
-    final headerColor = isFavorites
-        ? favoritesGold
-        : tokens.accent;
-    final divider = open
-        ? headerColor.withValues(alpha: 0.34)
-        : (isFavorites
-            ? favoritesGold.withValues(alpha: 0.22)
-            : tokens.divider);
+    final labelColor = isFavorites
+        ? FfTokens.favorites
+        : (open ? tokens.text : tokens.textSecondary);
+    final divider = isFavorites
+        ? FfTokens.favoritesBorder
+        : tokens.divider;
     return Column(
       children: [
         Material(
-          color: open
-              ? headerColor.withValues(alpha: 0.13)
-              : (isFavorites
-                  ? favoritesGold.withValues(alpha: 0.07)
-                  : Colors.transparent),
+          color: isFavorites ? FfTokens.favoritesFill : Colors.transparent,
           child: InkWell(
             key: ValueKey('verb-accordion-$category'),
             onTap: onOpen,
-            hoverColor: tokens.text.withValues(alpha: 0.06),
+            hoverColor: tokens.hover,
             child: Container(
               height: headerHeight,
               padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1623,30 +1567,19 @@ class _VerbAccordionSection extends StatelessWidget {
                 children: [
                   Icon(
                     open
-                        ? Icons.keyboard_arrow_down
-                        : Icons.keyboard_arrow_right,
+                        ? PhosphorIconsRegular.caretDown
+                        : PhosphorIconsRegular.caretRight,
                     size: 14,
-                    color: open || isFavorites
-                        ? headerColor.withValues(alpha: open ? 1 : 0.72)
-                        : tokens.text.withValues(alpha: 0.38),
+                    color: labelColor,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      displayCategory,
+                      displayCategory.toUpperCase(),
                       maxLines: 1,
+                      softWrap: false,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily:
-                            open ? FfTokens.labelFamily : FfTokens.fontFamily,
-                        fontSize: 15,
-                        height: 1.0,
-                        fontWeight: open ? FontWeight.w600 : FontWeight.w400,
-                        letterSpacing: open ? -0.2 : 0,
-                        color: open || isFavorites
-                            ? headerColor.withValues(alpha: open ? 1 : 0.78)
-                            : tokens.text.withValues(alpha: 0.76),
-                      ),
+                      style: FfTokens.categoryLabel(color: labelColor),
                     ),
                   ),
                 ],
@@ -1666,7 +1599,7 @@ class _VerbAccordionSection extends StatelessWidget {
                   selectedVerbKey: selectedVerbKey,
                   armed: armed,
                   tokens: tokens,
-                  leadingPadding: 34,
+                  leadingPadding: 30,
                   fontSize: 13.5,
                   onVerbArmed: onVerbArmed,
                   onToggleFavorite: onToggleFavorite,
@@ -1746,11 +1679,11 @@ class _VerbRowsState extends State<_VerbRows> {
 
   Widget _row(int index) {
     final verb = widget.verbs[index];
+    // Only the committed/caption verb gets the teal selected fill.
+    // Do not highlight the keyboard cursor index (often 0) when nothing is
+    // selected — that made the top cascade verb look permanently selected.
     final committed = widget.selectedVerbKey == verb.key;
-    final selected = committed ||
-        (widget.selectedVerbKey == null &&
-            widget.armed &&
-            index == widget.selectedIndex);
+    final selected = committed;
     final showRbi = committed && widget.controller.verbNeedsRbi(verb.key);
     final showBase = committed && widget.controller.verbNeedsBase(verb.key);
     final showCelebration =
@@ -1847,42 +1780,34 @@ class _PinnedVerbSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const pinnedTeal = Color(0xFF6EC8C4);
     final hasVerb = verb != null;
     final hasOptionRows = showRbi || showBase || showCelebration;
-    final bar = Container(
+    final bar = _PinnedHintBar(
       height: height,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: pinnedTeal.withValues(alpha: hasVerb ? 0.12 : 0.06),
-        border: Border(
-          bottom: BorderSide(
-            color: pinnedTeal.withValues(alpha: hasVerb ? 0.32 : 0.18),
-          ),
-        ),
-      ),
+      tokens: tokens,
+      hasContent: hasVerb,
       child: Row(
         children: [
           Icon(
-            hasVerb ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-            size: 10,
-            color: pinnedTeal.withValues(alpha: hasVerb ? 0.95 : 0.50),
+            hasVerb ? PhosphorIconsFill.pushPin : PhosphorIconsRegular.pushPin,
+            size: 11,
+            color: tokens.textTertiary,
           ),
           const SizedBox(width: 4),
           Text(
             'Pinned',
             maxLines: 1,
+            softWrap: false,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontFamily: FfTokens.labelFamily,
-              fontSize: 13,
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11.5,
               height: 1.0,
               fontWeight: FontWeight.w600,
-              letterSpacing: 0.1,
-              color: pinnedTeal.withValues(alpha: hasVerb ? 1 : 0.55),
+              color: tokens.textTertiary,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: hasVerb
                 ? CmdClick(
@@ -1897,10 +1822,11 @@ class _PinnedVerbSlot extends StatelessWidget {
                             child: Text(
                               verb!.label,
                               maxLines: 1,
+                              softWrap: false,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontFamily: FfTokens.labelFamily,
-                                fontSize: selected ? 14.5 : 13.5,
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 11.5,
                                 height: 1.0,
                                 fontWeight: FontWeight.w500,
                                 color: selected
@@ -1911,37 +1837,22 @@ class _PinnedVerbSlot extends StatelessWidget {
                           ),
                           if (committed) ...[
                             const SizedBox(width: 4),
-                            Icon(
-                              Icons.check,
+                            PhosphorIcon(PhosphorIconsRegular.check,
                               size: 12,
-                              color: tokens.accent,
+                              color: tokens.textSecondary,
                             ),
                           ],
                         ],
                       ),
                     ),
                   )
-                : Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '(CMD ⌘ click a verb in the menu to pin)',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: FfTokens.labelFamily,
-                        fontSize: 11,
-                        height: 1.0,
-                        fontWeight: FontWeight.w400,
-                        color: tokens.text.withValues(alpha: 0.38),
-                      ),
-                    ),
-                  ),
+                : const SizedBox.shrink(),
           ),
           if (hasVerb)
             TextButton(
               onPressed: () => controller.toggleVerbPin(verb!.key),
               style: TextButton.styleFrom(
-                foregroundColor: pinnedTeal,
+                foregroundColor: tokens.textTertiary,
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -1950,11 +1861,11 @@ class _PinnedVerbSlot extends StatelessWidget {
               child: Text(
                 'Unpin',
                 style: TextStyle(
-                  fontFamily: FfTokens.labelFamily,
+                  fontFamily: FfTokens.fontFamily,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   height: 1.0,
-                  color: pinnedTeal.withValues(alpha: 0.95),
+                  color: tokens.textTertiary,
                 ),
               ),
             ),
@@ -1962,57 +1873,49 @@ class _PinnedVerbSlot extends StatelessWidget {
       ),
     );
 
-    if (!hasOptionRows) {
-      return ColoredBox(
-        color: const Color(0xFF6EC8C4).withValues(alpha: 0.06),
-        child: bar,
-      );
-    }
+    if (!hasOptionRows) return bar;
 
-    return ColoredBox(
-      color: const Color(0xFF6EC8C4).withValues(alpha: 0.06),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          bar,
-          if (showRbi)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 3, 8, 1),
-              child: RbiRow(
-                value: rbi,
-                compact: true,
-                homeRunStyle: verb?.key == 'Home Run',
-                onChanged: onRbiChanged,
-              ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        bar,
+        if (showRbi)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 3, 8, 1),
+            child: RbiRow(
+              value: rbi,
+              compact: true,
+              homeRunStyle: verb?.key == 'Home Run',
+              onChanged: onRbiChanged,
             ),
-          if (showBase)
-            Padding(
-              padding: EdgeInsets.fromLTRB(10, showRbi ? 4 : 3, 8, 1),
-              child: BaseRow(
-                value: selectedBase,
-                compact: true,
-                onChanged: onBaseChanged,
-              ),
+          ),
+        if (showBase)
+          Padding(
+            padding: EdgeInsets.fromLTRB(10, showRbi ? 4 : 3, 8, 1),
+            child: BaseRow(
+              value: selectedBase,
+              compact: true,
+              onChanged: onBaseChanged,
             ),
-          if (showCelebration)
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                10,
-                (showRbi || showBase) ? 4 : 3,
-                8,
-                2,
-              ),
-              child: CelebrationDropdown(
-                compact: true,
-                reactions: reactionOptions,
-                celebrations: const <String>[],
-                selected: celebrationType,
-                onChanged: onCelebrationChanged,
-              ),
+          ),
+        if (showCelebration)
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              10,
+              (showRbi || showBase) ? 4 : 3,
+              8,
+              2,
             ),
-        ],
-      ),
+            child: CelebrationDropdown(
+              compact: true,
+              reactions: reactionOptions,
+              celebrations: const <String>[],
+              selected: celebrationType,
+              onChanged: onCelebrationChanged,
+            ),
+          ),
+      ],
     );
   }
 }
@@ -2288,7 +2191,9 @@ class _VerbAccordionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bright = selected || hovered;
+    final fill = selected
+        ? tokens.selected
+        : (hovered ? tokens.hover : null);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: CmdClick(
@@ -2298,53 +2203,53 @@ class _VerbAccordionRow extends StatelessWidget {
         onCmdTap: () => controller.toggleVerbPin(verb.key),
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
-        child: Container(
-          height: _VerbAccordion.rowHeight,
-          padding: EdgeInsets.only(left: leadingPadding, right: 4),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 16,
-                child: controller.isVerbPinned(verb.key)
-                    ? Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Icon(
-                          Icons.push_pin_rounded,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Container(
+            height: _VerbAccordion.rowHeight,
+            padding: EdgeInsets.only(left: leadingPadding - 6, right: 4),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+              // Same selected outline as player rows: 2px accent left bar.
+              border: selected
+                  ? Border(
+                      left: BorderSide(color: tokens.accent, width: 2),
+                    )
+                  : null,
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 14,
+                  child: controller.isVerbPinned(verb.key)
+                      ? PhosphorIcon(PhosphorIconsFill.pushPin,
                           size: 10,
-                          color: tokens.text.withValues(alpha: 0.22),
-                        ),
-                      )
-                    : null,
-              ),
-              Expanded(
-                child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 40),
-                  curve: Curves.easeOut,
-                  style: TextStyle(
-                    fontFamily: FfTokens.labelFamily,
-                    fontSize: bright ? fontSize + 1.5 : fontSize,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: bright ? -0.25 : 0,
-                    color: bright
-                        ? tokens.text
-                        : tokens.text.withValues(alpha: 0.68),
-                  ),
+                          color: FfTokens.pinned,
+                        )
+                      : null,
+                ),
+                Expanded(
                   child: Text(
                     verb.label,
                     maxLines: 1,
+                    softWrap: false,
                     overflow: TextOverflow.ellipsis,
+                    style: FfTokens.rosterName(
+                      color: tokens.text,
+                      selected: selected,
+                    ),
                   ),
                 ),
-              ),
-              if (committed) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.check,
-                  size: 12,
-                  color: tokens.accent,
-                ),
+                if (committed) ...[
+                  const SizedBox(width: 4),
+                  PhosphorIcon(PhosphorIconsRegular.check,
+                    size: 12,
+                    color: tokens.textSecondary,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -2407,6 +2312,10 @@ class _FilteredPlayerList extends StatelessWidget {
     required this.nameFor,
     required this.onBack,
     required this.onSelect,
+    this.isPinned,
+    this.onPin,
+    this.onGoogle,
+    this.onReport,
     this.onEdit,
   });
 
@@ -2416,6 +2325,10 @@ class _FilteredPlayerList extends StatelessWidget {
   final String Function(Player) nameFor;
   final VoidCallback onBack;
   final ValueChanged<Player> onSelect;
+  final bool Function(Player)? isPinned;
+  final ValueChanged<Player>? onPin;
+  final ValueChanged<Player>? onGoogle;
+  final ValueChanged<Player>? onReport;
   final void Function(Player player, Offset globalPosition)? onEdit;
 
   @override
@@ -2435,7 +2348,7 @@ class _FilteredPlayerList extends StatelessWidget {
               minimumSize: Size.zero,
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
-            icon: const Icon(Icons.arrow_back, size: 13),
+            icon: const PhosphorIcon(PhosphorIconsRegular.arrowLeft, size: 13),
             label: Text(
               'Back · $letter',
               style: tokens.metaStyle.copyWith(color: tokens.textSecondary),
@@ -2448,108 +2361,26 @@ class _FilteredPlayerList extends StatelessWidget {
             key: const ValueKey('filtered-player-list'),
             padding: const EdgeInsets.symmetric(vertical: 2),
             itemCount: players.length,
-            itemExtent: 20,
+            itemExtent: 22,
             itemBuilder: (context, index) {
               final player = players[index];
-              return InkWell(
-                onTap: () => onSelect(player),
+              return _HoverablePlayerActionsRow(
+                tokens: tokens,
+                jersey: player.jerseyNumber ?? '—',
+                name: nameFor(player),
+                pinned: isPinned?.call(player) ?? false,
+                onSelect: () => onSelect(player),
+                onPin: onPin == null ? null : () => onPin!(player),
+                onGoogle: onGoogle == null ? null : () => onGoogle!(player),
+                onReport: onReport == null ? null : () => onReport!(player),
                 onSecondaryTapDown: onEdit == null
                     ? null
                     : (details) => onEdit!(player, details.globalPosition),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 22,
-                        child: Text(
-                          player.jerseyNumber ?? '—',
-                          textAlign: TextAlign.right,
-                          style: tokens.jerseyStyle.copyWith(fontSize: 10.5),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          nameFor(player),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: FfTokens.labelFamily,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w500,
-                            color: tokens.text,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               );
             },
           ),
         ),
       ],
-    );
-  }
-}
-
-class _VerbModeMenu extends StatelessWidget {
-  const _VerbModeMenu({
-    required this.mode,
-    required this.tokens,
-    required this.onSelected,
-  });
-
-  final _VerbLaneMode mode;
-  final FfTokens tokens;
-  final ValueChanged<_VerbLaneMode> onSelected;
-
-  static String label(_VerbLaneMode mode) {
-    switch (mode) {
-      case _VerbLaneMode.cascade:
-        return 'Cascade list';
-      case _VerbLaneMode.sidePanel:
-        return 'Side panel list';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<_VerbLaneMode>(
-      key: const ValueKey('verb-view-mode'),
-      tooltip: 'Verb view',
-      color: tokens.surface,
-      surfaceTintColor: tokens.surface,
-      position: PopupMenuPosition.under,
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        for (final value in _VerbLaneMode.values)
-          PopupMenuItem(
-            value: value,
-            height: 32,
-            child: Text(
-              label(value),
-              style: tokens.metaStyle.copyWith(
-                color: value == mode ? tokens.accent : tokens.text,
-                fontWeight: value == mode ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ),
-      ],
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label(mode),
-            style: tokens.metaStyle.copyWith(
-              color: tokens.text,
-              fontSize: 12,
-            ),
-          ),
-          Icon(Icons.arrow_drop_down, size: 16, color: tokens.textSecondary),
-        ],
-      ),
     );
   }
 }
@@ -2575,6 +2406,7 @@ class _NumberRoster extends StatelessWidget {
     required this.tokens,
     required this.isSelected,
     required this.onCommit,
+    this.onPin,
     this.onSecondaryTap,
   });
 
@@ -2585,7 +2417,20 @@ class _NumberRoster extends StatelessWidget {
   final FfTokens tokens;
   final bool Function(Player player) isSelected;
   final ValueChanged<Player> onCommit;
+  final ValueChanged<Player>? onPin;
   final void Function(Player player, Offset globalPosition)? onSecondaryTap;
+
+  /// Always 4 across. Small screens: slight rectangle; larger: square.
+  static const int minColumns = 4;
+  static const int maxColumns = 4;
+  static const double minCell = 44.0;
+  static const double maxCell = 140.0;
+  static const double maxJerseyFont = 28.0;
+  /// Wider-than-tall aspect used at small sizes (W/H).
+  static const double smallAspect = 1.28;
+  /// Below this width → full rectangle; above → full square.
+  static const double rectBlendStart = 58.0;
+  static const double squareBlendEnd = 96.0;
 
   static int? _jersey(Player player) =>
       int.tryParse(player.jerseyNumber?.trim() ?? '');
@@ -2596,9 +2441,25 @@ class _NumberRoster extends StatelessWidget {
     return parts.sublist(1).join(' ');
   }
 
-  /// Decade rows (0–9 … 90–99) plus an optional catch-all for odd numbers.
+  static int _wrappedRows(int count, int perRow) =>
+      count <= 0 ? 0 : ((count + perRow - 1) ~/ perRow);
+
+  static List<List<Player>> _chunk(List<Player> players, int perRow) {
+    if (players.isEmpty) return const [];
+    final out = <List<Player>>[];
+    for (var i = 0; i < players.length; i += perRow) {
+      final end = i + perRow;
+      out.add(players.sublist(i, end > players.length ? players.length : end));
+    }
+    return out;
+  }
+
+  /// Band key for 0–19, 20–39, … 80–99.
+  static int _bandKey(int number) => (number ~/ 20) * 20;
+
+  /// Double-decade bands (0–19 … 80–99) plus an optional catch-all.
   static _NumberGridMetrics gridMetrics(List<Player> players) {
-    final decades = <int, int>{};
+    final bands = <int, int>{};
     var other = 0;
     for (final player in players) {
       final number = _jersey(player);
@@ -2606,24 +2467,31 @@ class _NumberRoster extends StatelessWidget {
         other++;
         continue;
       }
-      final key = (number ~/ 10) * 10;
-      decades[key] = (decades[key] ?? 0) + 1;
+      final key = _bandKey(number);
+      bands[key] = (bands[key] ?? 0) + 1;
     }
     var columnCount = 1;
-    for (final count in decades.values) {
+    for (final count in bands.values) {
       if (count > columnCount) columnCount = count;
     }
     if (other > columnCount) columnCount = other;
+    // Estimate with minColumns; LayoutBuilder may use more when wide.
+    const perRow = minColumns;
+    var visualRows = 0;
+    for (final count in bands.values) {
+      visualRows += _wrappedRows(count, perRow);
+    }
+    if (other > 0) visualRows += _wrappedRows(other, perRow);
     return _NumberGridMetrics(
-      columnCount: columnCount,
-      rowCount: decades.length + (other > 0 ? 1 : 0),
+      columnCount: columnCount.clamp(1, maxColumns),
+      rowCount: visualRows.clamp(1, 40),
       needsOtherRow: other > 0,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final decades = <int, List<Player>>{};
+    final byBand = <int, List<Player>>{};
     final other = <Player>[];
     for (final player in players) {
       final number = _jersey(player);
@@ -2631,9 +2499,9 @@ class _NumberRoster extends StatelessWidget {
         other.add(player);
         continue;
       }
-      decades.putIfAbsent((number ~/ 10) * 10, () => []).add(player);
+      byBand.putIfAbsent(_bandKey(number), () => []).add(player);
     }
-    for (final group in decades.values) {
+    for (final group in byBand.values) {
       group.sort((a, b) {
         final byNumber = _jersey(a)!.compareTo(_jersey(b)!);
         if (byNumber != 0) return byNumber;
@@ -2642,20 +2510,29 @@ class _NumberRoster extends StatelessWidget {
     }
     other.sort((a, b) => a.fullName.compareTo(b.fullName));
 
-    final rows = <List<Player>>[
-      for (var decade = 0; decade <= 90; decade += 10)
-        if ((decades[decade] ?? const <Player>[]).isNotEmpty)
-          decades[decade]!,
-      if (includeOtherRow && other.isNotEmpty) other,
-    ];
-
-    final colCount = columns.clamp(1, 20);
+    // Unchunked band groups — wrap count decided from available width.
+    final bandTitles = <String>[];
+    final bandGroups = <List<Player>>[];
+    for (var band = 0; band <= 80; band += 20) {
+      final group = byBand[band];
+      if (group == null || group.isEmpty) continue;
+      bandTitles.add('$band–${band + 19}');
+      bandGroups.add(group);
+    }
+    if (includeOtherRow && other.isNotEmpty) {
+      bandTitles.add('Other');
+      bandGroups.add(other);
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        const pad = 4.0;
-        const gapX = 2.0;
-        const gapY = 2.0;
+        const pad = 10.0;
+        const gapX = 4.0;
+        const gapY = 4.0;
+        const dividerH = 1.0;
+        const dividerPad = 6.0;
+        const titleW = 20.0;
+        const titleGap = 4.0;
         final maxW = constraints.maxWidth;
         final maxH = constraints.maxHeight;
         if (!maxW.isFinite || !maxH.isFinite || maxW <= 0 || maxH <= 0) {
@@ -2663,65 +2540,202 @@ class _NumberRoster extends StatelessWidget {
         }
 
         final availW = (maxW - pad * 2).clamp(1.0, 10000.0);
-        final availH = (maxH - pad * 2).clamp(1.0, 10000.0);
-        final rowCount = rows.length;
-        final layoutRows = layoutRowCount > rowCount ? layoutRowCount : rowCount;
-        final rowPitch = availH / layoutRows;
-        final colPitch = availW / colCount;
-        final side = ((rowPitch < colPitch ? rowPitch : colPitch) - gapY)
-            .clamp(10.0, 72.0);
-        final showNames = side >= 26;
-        final nameSize = (side * 0.17).clamp(5.0, 7.5);
-        final jerseySize = showNames
-            ? (side * 0.30).clamp(8.0, 13.0)
-            : (side * 0.44).clamp(9.0, 16.0);
+        // Tiny safety so rounding/padding can't push past the viewport.
+        final availH = (maxH - pad * 2 - 2.0).clamp(1.0, 10000.0);
+        final gridW = (availW - titleW - titleGap).clamp(1.0, 10000.0);
 
-        if (rows.isEmpty) {
+        // Always 4 across — slight rectangles when small, squares when large.
+        final dividerCount =
+            bandGroups.length > 1 ? bandGroups.length - 1 : 0;
+        final dividerSpace = dividerCount * (dividerH + dividerPad * 2);
+        const perRow = maxColumns;
+        final bands = [
+          for (final group in bandGroups) _chunk(group, perRow),
+        ];
+
+        var actualRows = 0;
+        for (final band in bands) {
+          actualRows += band.length;
+        }
+        final rows =
+            layoutRowCount > actualRows ? layoutRowCount : actualRows;
+        final rowGaps = gapY * (rows > 1 ? rows - 1 : 0);
+        final colGaps = gapX * (perRow > 1 ? perRow - 1 : 0);
+        final sideW = ((gridW - colGaps) / perRow).clamp(1.0, maxCell);
+        final sideH =
+            ((availH - rowGaps - dividerSpace) / rows).clamp(1.0, maxCell);
+
+        // Rectangle: fill width, a bit shorter. Square: equal side.
+        final rectW = sideW;
+        final rectH = (sideH < sideW / smallAspect)
+            ? sideH
+            : (sideW / smallAspect).clamp(minCell, maxCell);
+        final squareSide =
+            (sideW < sideH ? sideW : sideH).clamp(minCell, maxCell);
+
+        // 0 = small/rect, 1 = large/square.
+        final blend = ((squareSide - rectBlendStart) /
+                (squareBlendEnd - rectBlendStart))
+            .clamp(0.0, 1.0);
+        final cellW = rectW + (squareSide - rectW) * blend;
+        final cellH = rectH + (squareSide - rectH) * blend;
+        final showNames = cellH >= 20;
+        // Bump type a bit once the window is wide enough (~1350+).
+        final windowW = MediaQuery.sizeOf(context).width;
+        final wideBoost = ((windowW - 1200) / (1350 - 1200)).clamp(0.0, 1.0);
+        final nameScale = 0.16 + 0.04 * wideBoost;
+        final jerseyScale = showNames
+            ? 0.38 + 0.06 * wideBoost
+            : 0.52 + 0.06 * wideBoost;
+        final nameSize =
+            (cellH * nameScale).clamp(8.0, 14.0 + 3.0 * wideBoost);
+        // One shared size for every tile (no per-number FittedBox scaling).
+        final jerseySize = (cellH * jerseyScale)
+            .clamp(10.0, maxJerseyFont + 4.0 * wideBoost);
+
+        if (bands.isEmpty) {
           return const SizedBox.expand();
+        }
+
+        Widget bandTitle(String title, double bandHeight) {
+          // Rotated label must fit inside bandHeight or short bands overlap.
+          return SizedBox(
+            width: titleW,
+            height: bandHeight,
+            child: ClipRect(
+              child: Center(
+                // quarterTurns: 1 → reads top→bottom so lower number is on top.
+                child: RotatedBox(
+                  quarterTurns: 1,
+                  child: SizedBox(
+                    width: bandHeight,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.center,
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        softWrap: false,
+                        textAlign: TextAlign.center,
+                        style: tokens.microStyle.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          height: 1,
+                          fontSize: 13,
+                          shadows: [
+                            Shadow(
+                              color: Colors.white.withValues(alpha: 0.45),
+                              blurRadius: 7,
+                            ),
+                            Shadow(
+                              color: Colors.white.withValues(alpha: 0.2),
+                              blurRadius: 12,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
         }
 
         return Padding(
           padding: const EdgeInsets.all(pad),
           child: Column(
             children: [
-              for (var i = 0; i < rowCount; i++)
-                Padding(
-                  padding: EdgeInsets.only(
-                    top: i == 0 ? 0 : gapY / 2,
-                    bottom: i == rowCount - 1 ? 0 : gapY / 2,
-                  ),
-                  child: SizedBox(
-                    height: side,
-                    child: Row(
-                      children: [
-                        for (var slot = 0; slot < rows[i].length; slot++) ...[
-                          if (slot > 0) SizedBox(width: gapX),
-                          SizedBox(
-                            width: side,
-                            height: side,
-                            child: _NumberCell(
-                              player: rows[i][slot],
-                              lastName: _lastName(rows[i][slot]),
-                              selected: isSelected(rows[i][slot]),
-                              tokens: tokens,
-                              height: side,
-                              nameSize: nameSize,
-                              jerseySize: jerseySize,
-                              showName: showNames,
-                              onTap: () => onCommit(rows[i][slot]),
-                              onSecondaryTap: onSecondaryTap == null
-                                  ? null
-                                  : (position) => onSecondaryTap!(
-                                        rows[i][slot],
-                                        position,
-                                      ),
-                            ),
-                          ),
-                        ],
-                      ],
+              for (var b = 0; b < bands.length; b++) ...[
+                if (b > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: dividerPad),
+                    child: Container(
+                      height: dividerH,
+                      width: double.infinity,
+                      color: tokens.accent.withValues(alpha: 0.75),
                     ),
                   ),
+                Builder(
+                  builder: (context) {
+                    final bandRows = bands[b].length;
+                    final bandHeight = cellH * bandRows +
+                        gapY * (bandRows > 1 ? bandRows - 1 : 0);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        bandTitle(bandTitles[b], bandHeight),
+                        const SizedBox(width: titleGap),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              for (var r = 0; r < bands[b].length; r++)
+                                Padding(
+                                  padding: EdgeInsets.only(
+                                    top: r == 0 ? 0 : gapY / 2,
+                                    bottom: r == bands[b].length - 1
+                                        ? 0
+                                        : gapY / 2,
+                                  ),
+                                  child: SizedBox(
+                                    height: cellH,
+                                    child: Row(
+                                      children: [
+                                        for (var slot = 0;
+                                            slot < bands[b][r].length;
+                                            slot++) ...[
+                                          if (slot > 0) SizedBox(width: gapX),
+                                          SizedBox(
+                                            width: cellW,
+                                            height: cellH,
+                                            child: _NumberCell(
+                                              player: bands[b][r][slot],
+                                              lastName: _lastName(
+                                                bands[b][r][slot],
+                                              ),
+                                              selected: isSelected(
+                                                bands[b][r][slot],
+                                              ),
+                                              tokens: tokens,
+                                              width: cellW,
+                                              height: cellH,
+                                              nameSize: nameSize,
+                                              jerseySize: jerseySize,
+                                              showName: showNames,
+                                              onTap: () => onCommit(
+                                                bands[b][r][slot],
+                                              ),
+                                              onPin: onPin == null
+                                                  ? null
+                                                  : () => onPin!(
+                                                        bands[b][r][slot],
+                                                      ),
+                                              onSecondaryTap:
+                                                  onSecondaryTap == null
+                                                      ? null
+                                                      : (position) =>
+                                                          onSecondaryTap!(
+                                                            bands[b][r]
+                                                                [slot],
+                                                            position,
+                                                          ),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
+              ],
             ],
           ),
         );
@@ -2730,17 +2744,19 @@ class _NumberRoster extends StatelessWidget {
   }
 }
 
-class _NumberCell extends StatelessWidget {
+class _NumberCell extends StatefulWidget {
   const _NumberCell({
     required this.player,
     required this.lastName,
     required this.selected,
     required this.tokens,
+    required this.width,
     required this.height,
     required this.nameSize,
     required this.jerseySize,
     required this.showName,
     required this.onTap,
+    this.onPin,
     this.onSecondaryTap,
   });
 
@@ -2748,75 +2764,153 @@ class _NumberCell extends StatelessWidget {
   final String lastName;
   final bool selected;
   final FfTokens tokens;
+  final double width;
   final double height;
   final double nameSize;
   final double jerseySize;
   final bool showName;
   final VoidCallback onTap;
+  final VoidCallback? onPin;
   final ValueChanged<Offset>? onSecondaryTap;
 
   @override
+  State<_NumberCell> createState() => _NumberCellState();
+}
+
+class _NumberCellState extends State<_NumberCell> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? tokens.accent.withValues(alpha: 0.18)
-          : tokens.sunken,
-      borderRadius: BorderRadius.circular(4),
-      child: InkWell(
-        onTap: onTap,
-        onSecondaryTapDown: onSecondaryTap == null
-            ? null
-            : (details) => onSecondaryTap!(details.globalPosition),
-        borderRadius: BorderRadius.circular(4),
-        child: SizedBox(
-          height: height,
-          width: height,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: selected ? tokens.accent : tokens.divider,
-              ),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: height - 4),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        player.jerseyNumber ?? '—',
-                        maxLines: 1,
-                        textAlign: TextAlign.center,
-                        style: tokens.jerseyStyle.copyWith(
-                          fontSize: jerseySize,
-                          height: 1,
-                          color: selected ? tokens.accent : tokens.text,
-                        ),
-                      ),
-                      if (showName) ...[
-                        SizedBox(height: (height * 0.04).clamp(1.0, 2.0)),
-                        Text(
-                          lastName,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontFamily: FfTokens.labelFamily,
-                            fontSize: nameSize,
-                            height: 1,
-                            fontWeight: FontWeight.w500,
-                            color:
-                                selected ? tokens.text : tokens.textSecondary,
+    final tokens = widget.tokens;
+    final selected = widget.selected;
+    final width = widget.width;
+    final height = widget.height;
+    final showName = widget.showName;
+    final nameSize = widget.nameSize;
+    final jerseySize = widget.jerseySize;
+    final hovering = _hovered;
+    final glowColor = hovering ? Colors.white : FfTokens.panelOutline;
+    final borderColor = hovering
+        ? Colors.white.withValues(alpha: 0.92)
+        : FfTokens.panelOutline;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          boxShadow: FfTokens.accentButtonGlow(glowColor),
+        ),
+        child: Material(
+          color: selected
+              ? tokens.accent.withValues(alpha: 0.18)
+              : tokens.elevated,
+          borderRadius: BorderRadius.circular(4),
+          child: CmdClick(
+            onTap: widget.onTap,
+            onCmdTap: widget.onPin,
+            onSecondaryTapDown: widget.onSecondaryTap == null
+                ? null
+                : (details) =>
+                    widget.onSecondaryTap!(details.globalPosition),
+            child: SizedBox(
+              height: height,
+              width: width,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  child: LayoutBuilder(
+                    builder: (context, cell) {
+                      const nameGap = 1.0;
+                      final nameH = showName ? nameSize : 0.0;
+                      // Keep a little inset so numbers don't fill the whole band.
+                      final numberH = ((cell.maxHeight -
+                                  nameH -
+                                  (showName ? nameGap : 0.0)) *
+                              0.88 -
+                              5.0)
+                          .clamp(1.0, cell.maxHeight);
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            height: numberH,
+                            width: cell.maxWidth,
+                            child: Center(
+                              child: Text(
+                                widget.player.jerseyNumber ?? '—',
+                                maxLines: 1,
+                                softWrap: false,
+                                textAlign: TextAlign.center,
+                                style: tokens.jerseyStyle.copyWith(
+                                  fontSize: jerseySize,
+                                  height: 1,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                  color: selected
+                                      ? tokens.accent
+                                      : tokens.text,
+                                  shadows: [
+                                    Shadow(
+                                      color:
+                                          glowColor.withValues(alpha: 0.85),
+                                      blurRadius: 10,
+                                    ),
+                                    Shadow(
+                                      color:
+                                          glowColor.withValues(alpha: 0.45),
+                                      blurRadius: 18,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
-                    ],
+                          if (showName) ...[
+                            const SizedBox(height: nameGap),
+                            SizedBox(
+                              height: nameH,
+                              width: cell.maxWidth,
+                              child: Center(
+                                child: Text(
+                                  widget.lastName,
+                                  maxLines: 1,
+                                  softWrap: false,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontFamily: FfTokens.labelFamily,
+                                    fontSize: nameSize,
+                                    height: 1,
+                                    fontWeight: FontWeight.w500,
+                                    color: selected
+                                        ? tokens.text
+                                        : tokens.textSecondary,
+                                    shadows: [
+                                      Shadow(
+                                        color:
+                                            glowColor.withValues(alpha: 0.45),
+                                        blurRadius: 6,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -2839,6 +2933,10 @@ class _HoverPlayerList extends StatefulWidget {
     required this.isSelected,
     required this.onTarget,
     required this.onCommit,
+    this.isPinned,
+    this.onPin,
+    this.onGoogle,
+    this.onReport,
     this.onEditPlayer,
   });
 
@@ -2849,8 +2947,12 @@ class _HoverPlayerList extends StatefulWidget {
   final FfTokens tokens;
   final String Function(Player) nameFor;
   final bool Function(Player) isSelected;
+  final bool Function(Player)? isPinned;
   final ValueChanged<int> onTarget;
   final ValueChanged<int> onCommit;
+  final ValueChanged<Player>? onPin;
+  final ValueChanged<Player>? onGoogle;
+  final ValueChanged<Player>? onReport;
   final void Function(Player player, Offset globalPosition)? onEditPlayer;
 
   @override
@@ -2858,7 +2960,7 @@ class _HoverPlayerList extends StatefulWidget {
 }
 
 class _HoverPlayerListState extends State<_HoverPlayerList> {
-  static const _itemExtent = 20.0;
+  static const _itemExtent = 22.0;
   static const _magDuration = Duration(milliseconds: 40);
   final ScrollController _scrollController = ScrollController();
   double? _pointerY;
@@ -2922,104 +3024,263 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
         physics: const ClampingScrollPhysics(),
         itemBuilder: (context, index) {
           final player = widget.players[index];
-          final targeted = index == widget.selectedIndex;
           final focal = index == (_focalIndex ?? widget.selectedIndex);
           final selected = widget.isSelected(player);
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
+          final pinned = widget.isPinned?.call(player) ?? false;
+          final showActions = focal && _hovering;
+          return CmdClick(
             onTap: () {
               setState(() => _focalIndex = index);
               widget.onTarget(index);
               widget.onCommit(index);
             },
+            onCmdTap: widget.onPin == null
+                ? null
+                : () {
+                    setState(() => _focalIndex = index);
+                    widget.onTarget(index);
+                    widget.onPin!(player);
+                  },
             onSecondaryTapDown: widget.onEditPlayer == null
                 ? null
                 : (details) =>
                     widget.onEditPlayer!(player, details.globalPosition),
-            child: AnimatedContainer(
-              key: ValueKey(
-                'scroll-${widget.laneKey}-player-$index',
-              ),
-              duration: _magDuration,
-              curve: Curves.easeOut,
+            child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              color: selected
-                  ? widget.tokens.accent.withValues(alpha: 0.22)
-                  : focal && widget.armed
-                      ? widget.tokens.accent.withValues(alpha: 0.15)
-                      : Colors.transparent,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 22,
-                    child: AnimatedDefaultTextStyle(
-                      duration: _magDuration,
-                      curve: Curves.easeOut,
-                      style: widget.tokens.jerseyStyle.copyWith(
-                        fontSize: focal ? 11.5 : 10.5,
-                        color: focal
-                            ? widget.tokens.accent
-                            : widget.tokens.textSecondary,
-                      ),
+              child: AnimatedContainer(
+                key: ValueKey(
+                  'scroll-${widget.laneKey}-player-$index',
+                ),
+                duration: _magDuration,
+                curve: Curves.easeOut,
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? widget.tokens.selected
+                      : (focal && _hovering
+                          ? widget.tokens.hover
+                          : Colors.transparent),
+                  borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 20,
                       child: Text(
                         player.jerseyNumber ?? '—',
                         textAlign: TextAlign.right,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: FfTokens.rosterJersey(
+                          color: widget.tokens.textTertiary,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: AnimatedDefaultTextStyle(
-                      duration: _magDuration,
-                      curve: Curves.easeOut,
-                      style: TextStyle(
-                        fontFamily: FfTokens.labelFamily,
-                        fontSize: focal ? 15.0 : 13.5,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: focal ? -0.25 : 0,
-                        color: focal
-                            ? widget.tokens.text
-                            : widget.tokens.text.withValues(alpha: 0.74),
-                      ),
+                    const SizedBox(width: 6),
+                    Expanded(
                       child: Text(
                         widget.nameFor(player),
                         maxLines: 1,
+                        softWrap: false,
                         overflow: TextOverflow.ellipsis,
+                        style: FfTokens.rosterName(
+                          color: widget.tokens.text,
+                          selected: selected,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  SizedBox(
-                    width: 12,
-                    child: Opacity(
-                      opacity: selected || (targeted && _hovering) ? 1 : 0,
-                      child: Center(
-                        child: selected
-                            ? Icon(
-                                Icons.check,
-                                size: 12,
-                                color: widget.armed
-                                    ? widget.tokens.accent
-                                    : widget.tokens.textSecondary,
-                              )
-                            : Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: widget.armed
-                                      ? widget.tokens.accent
-                                      : widget.tokens.textSecondary,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
+                    if (showActions) ...[
+                      if (widget.onPin != null)
+                        _PlayerMenuHoverAction(
+                          tooltip: pinned
+                              ? 'Unpin for next frames'
+                              : 'Pin for next frames',
+                          icon: PhosphorIconsFill.pushPin,
+                          color: FfTokens.pinned,
+                          onTap: () => widget.onPin!(player),
+                        ),
+                      if (widget.onGoogle != null)
+                        _PlayerMenuHoverAction(
+                          tooltip: 'Google this player',
+                          icon: PhosphorIconsRegular.magnifyingGlass,
+                          color: widget.tokens.textSecondary,
+                          onTap: () => widget.onGoogle!(player),
+                        ),
+                      if (widget.onReport != null)
+                        _PlayerMenuHoverAction(
+                          tooltip: 'Report wrong number or spelling',
+                          icon: PhosphorIconsRegular.flag,
+                          color: widget.tokens.textSecondary,
+                          onTap: () => widget.onReport!(player),
+                        ),
+                    ] else if (pinned) ...[
+                      const SizedBox(width: 2),
+                      PhosphorIcon(PhosphorIconsFill.pushPin,
+                        size: 11,
+                        color: FfTokens.pinned,
                       ),
-                    ),
-                  ),
-                ],
+                    ],
+                  ],
+                ),
               ),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Compact hover actions for filtered letter lists.
+class _HoverablePlayerActionsRow extends StatefulWidget {
+  const _HoverablePlayerActionsRow({
+    required this.tokens,
+    required this.jersey,
+    required this.name,
+    required this.pinned,
+    required this.onSelect,
+    this.onPin,
+    this.onGoogle,
+    this.onReport,
+    this.onSecondaryTapDown,
+  });
+
+  final FfTokens tokens;
+  final String jersey;
+  final String name;
+  final bool pinned;
+  final VoidCallback onSelect;
+  final VoidCallback? onPin;
+  final VoidCallback? onGoogle;
+  final VoidCallback? onReport;
+  final GestureTapDownCallback? onSecondaryTapDown;
+
+  @override
+  State<_HoverablePlayerActionsRow> createState() =>
+      _HoverablePlayerActionsRowState();
+}
+
+class _HoverablePlayerActionsRowState
+    extends State<_HoverablePlayerActionsRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final showActions = _hovered &&
+        (widget.onPin != null ||
+            widget.onGoogle != null ||
+            widget.onReport != null);
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: CmdClick(
+        onTap: widget.onSelect,
+        onCmdTap: widget.onPin,
+        onSecondaryTapDown: widget.onSecondaryTapDown,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              color: _hovered ? widget.tokens.hover : Colors.transparent,
+              borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  child: Text(
+                    widget.jersey,
+                    textAlign: TextAlign.right,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: FfTokens.rosterJersey(
+                      color: widget.tokens.textTertiary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    widget.name,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: FfTokens.rosterName(
+                      color: widget.tokens.text,
+                      selected: false,
+                    ),
+                  ),
+                ),
+                if (showActions) ...[
+                  if (widget.onPin != null)
+                    _PlayerMenuHoverAction(
+                      tooltip: widget.pinned
+                          ? 'Unpin for next frames'
+                          : 'Pin for next frames',
+                      icon: PhosphorIconsFill.pushPin,
+                      color: FfTokens.pinned,
+                      onTap: widget.onPin!,
+                    ),
+                  if (widget.onGoogle != null)
+                    _PlayerMenuHoverAction(
+                      tooltip: 'Google this player',
+                      icon: PhosphorIconsRegular.magnifyingGlass,
+                      color: widget.tokens.textSecondary,
+                      onTap: widget.onGoogle!,
+                    ),
+                  if (widget.onReport != null)
+                    _PlayerMenuHoverAction(
+                      tooltip: 'Report wrong number or spelling',
+                      icon: PhosphorIconsRegular.flag,
+                      color: widget.tokens.textSecondary,
+                      onTap: widget.onReport!,
+                    ),
+                ] else if (widget.pinned) ...[
+                  const SizedBox(width: 2),
+                  PhosphorIcon(PhosphorIconsFill.pushPin,
+                    size: 11,
+                    color: FfTokens.pinned,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayerMenuHoverAction extends StatelessWidget {
+  const _PlayerMenuHoverAction({
+    required this.tooltip,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: PhosphorIcon(icon, size: 12, color: color),
+          ),
+        ),
       ),
     );
   }
@@ -3439,8 +3700,7 @@ class _DrumWheelState<T> extends State<_DrumWheel<T>> {
               ),
               if (committed) ...[
                 const SizedBox(width: 6),
-                Icon(
-                  Icons.check,
+                PhosphorIcon(PhosphorIconsRegular.check,
                   size: atGate ? 14 : 12,
                   color: widget.armed
                       ? widget.tokens.accent
@@ -3595,6 +3855,148 @@ class _VerbCategoryScrubber extends StatelessWidget {
   }
 }
 
+class _PinnedHintBar extends StatefulWidget {
+  const _PinnedHintBar({
+    required this.tokens,
+    required this.hasContent,
+    required this.child,
+    this.height,
+    this.hint = '· ⌘-click a verb to pin',
+  });
+
+  final FfTokens tokens;
+  final bool hasContent;
+  final Widget child;
+  final double? height;
+  final String hint;
+
+  @override
+  State<_PinnedHintBar> createState() => _PinnedHintBarState();
+}
+
+class _PinnedHintBarState extends State<_PinnedHintBar> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Container(
+        height: widget.height ?? _VerbAccordion.pinnedBarHeight,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: widget.hasContent
+                  ? FfTokens.pinnedDivider
+                  : widget.tokens.divider,
+            ),
+          ),
+        ),
+        child: Stack(
+          alignment: Alignment.centerLeft,
+          children: [
+            widget.child,
+            if (!widget.hasContent)
+              Positioned(
+                left: 72,
+                right: 8,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: _hovered ? 1 : 0,
+                    child: Text(
+                      widget.hint,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11.5,
+                        height: 1.0,
+                        fontWeight: FontWeight.w400,
+                        color: widget.tokens.textTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GhostHeaderIcon extends StatefulWidget {
+  const _GhostHeaderIcon({
+    super.key,
+    required this.tooltip,
+    required this.tokens,
+    required this.onTap,
+    this.icon,
+    this.label,
+    this.active = false,
+  });
+
+  final String tooltip;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+  final IconData? icon;
+  final String? label;
+  final bool active;
+
+  @override
+  State<_GhostHeaderIcon> createState() => _GhostHeaderIconState();
+}
+
+class _GhostHeaderIconState extends State<_GhostHeaderIcon> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hovered || widget.active
+        ? widget.tokens.text
+        : widget.tokens.textSecondary;
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _hovered ? widget.tokens.hover : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: widget.icon != null
+                ? PhosphorIcon(widget.icon!, size: 13, color: color)
+                : Text(
+                    widget.label ?? '',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1,
+                      color: color,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _RosterScrubber extends StatelessWidget {
   const _RosterScrubber({
     required this.players,
@@ -3633,12 +4035,6 @@ class _RosterScrubber extends StatelessWidget {
             : _initial(players[activeIndex.clamp(0, players.length - 1)]));
     return Container(
       width: 24,
-      decoration: BoxDecoration(
-        border: Border(
-          left: onLeft ? BorderSide.none : BorderSide(color: tokens.divider),
-          right: onLeft ? BorderSide(color: tokens.divider) : BorderSide.none,
-        ),
-      ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -3653,7 +4049,7 @@ class _RosterScrubber extends StatelessWidget {
                   child: Text(
                     entry.key,
                     style: TextStyle(
-                      fontFamily: FfTokens.labelFamily,
+                      fontFamily: FfTokens.fontFamily,
                       fontSize: 9.5,
                       fontWeight: FontWeight.w600,
                       color: armed && active == entry.key

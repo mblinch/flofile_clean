@@ -6,6 +6,7 @@ import 'dart:io';
 import '../utils/exiftool_helper.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 class MetadataPresetDialog extends StatefulWidget {
   final Map<String, String>? currentPreset;
@@ -168,7 +169,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                 // Header
                 Row(
                   children: [
-                    Icon(Icons.save, size: 16, color: Colors.grey.shade600),
+                    PhosphorIcon(PhosphorIconsRegular.floppyDisk, size: 16, color: Colors.grey.shade600),
                     const SizedBox(width: 6),
                     Text(
                       'Save Template',
@@ -472,7 +473,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
             // Header with title
             Row(
               children: [
-                Icon(Icons.settings, size: 16, color: Colors.grey.shade600),
+                PhosphorIcon(PhosphorIconsRegular.gear, size: 16, color: Colors.grey.shade600),
                 const SizedBox(width: 6),
                 Text(
                   'IPTC Metadata Settings',
@@ -514,7 +515,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                         value: selectedPreset,
                         hint: Row(
                           children: [
-                            Icon(Icons.settings,
+                            PhosphorIcon(PhosphorIconsRegular.gear,
                                 size: 16, color: Colors.grey.shade600),
                             const SizedBox(width: 6),
                             Text('Select an IPTC profile',
@@ -527,7 +528,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                                 value: preset,
                                 child: Row(
                                   children: [
-                                    Icon(Icons.settings,
+                                    PhosphorIcon(PhosphorIconsRegular.gear,
                                         size: 16, color: Colors.grey.shade600),
                                     const SizedBox(width: 6),
                                     Text(preset,
@@ -544,7 +545,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                         selectedItemBuilder: (context) => [
                           Row(
                             children: [
-                              Icon(Icons.settings,
+                              PhosphorIcon(PhosphorIconsRegular.gear,
                                   size: 16, color: Colors.grey.shade600),
                               const SizedBox(width: 6),
                               Text('Select an IPTC profile',
@@ -723,7 +724,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.calendar_today,
+                      PhosphorIcon(PhosphorIconsRegular.calendarBlank,
                           size: 12, color: Colors.grey.shade600),
                       const SizedBox(width: 4),
                       Text(

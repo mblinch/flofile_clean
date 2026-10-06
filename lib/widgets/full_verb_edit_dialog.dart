@@ -10,6 +10,7 @@ import '../utils/default_verb_keywords.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 import 'verb_edit_plural_field.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Edit Verb dialog: category/verb browser + editor.
 class FullVerbEditDialog extends StatefulWidget {
@@ -366,8 +367,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                         child: SizedBox(
                           width: 18,
                           height: 18,
-                          child: Icon(
-                            Icons.add,
+                          child: PhosphorIcon(PhosphorIconsRegular.plus,
                             size: 12,
                             color: t?.accent ?? kFloTealDark,
                           ),
@@ -423,8 +423,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
               borderRadius: BorderRadius.circular(8),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Icon(
-                  Icons.close,
+                child: PhosphorIcon(PhosphorIconsRegular.x,
                   size: 11,
                   color: enabled
                       ? (t?.accent ?? kFloTealMid)
@@ -1275,8 +1274,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                     ? null
                     : () => _save(asDefault: false, closeAfter: false),
                 style: FilledButton.styleFrom(
-                  backgroundColor: t.accent,
-                  foregroundColor: t.inkOnAccent,
+                  backgroundColor: FfTokens.gold,
+                  foregroundColor: FfTokens.inkOnGold,
                 ),
                 child: Text(_isCreating ? 'Create' : 'Save'),
               ),
@@ -1377,7 +1376,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                       IconButton(
                         tooltip: 'Close',
                         onPressed: _busy ? null : _onCancel,
-                        icon: Icon(Icons.close, color: t.textSecondary),
+                        icon: PhosphorIcon(PhosphorIconsRegular.x, color: t.textSecondary),
                       ),
                     ],
                   ),
@@ -1425,11 +1424,15 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 ),
                 filledButtonTheme: FilledButtonThemeData(
                   style: FilledButton.styleFrom(
-                    backgroundColor: t.accent,
-                    foregroundColor: t.inkOnAccent,
+                    backgroundColor: FfTokens.gold,
+                    foregroundColor: FfTokens.inkOnGold,
+                    disabledBackgroundColor:
+                        FfTokens.gold.withValues(alpha: 0.4),
+                    disabledForegroundColor:
+                        FfTokens.inkOnGold.withValues(alpha: 0.4),
                     textStyle: t.metaStyle.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: t.inkOnAccent,
+                      color: FfTokens.inkOnGold,
                     ),
                   ),
                 ),
@@ -1456,7 +1459,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                   borderRadius: BorderRadius.circular(4),
                   child: const Padding(
                     padding: EdgeInsets.all(4),
-                    child: Icon(Icons.close, size: 16, color: Colors.white70),
+                    child: PhosphorIcon(PhosphorIconsRegular.x, size: 16, color: Colors.white70),
                   ),
                 ),
               ),
@@ -1583,8 +1586,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                             alignment: Alignment.centerLeft,
                             child: TextButton.icon(
                               onPressed: _busy ? null : _startCreateVerb,
-                              icon: Icon(
-                                Icons.add,
+                              icon: PhosphorIcon(PhosphorIconsRegular.plus,
                                 size: 15,
                                 color: t.text,
                               ),
@@ -1604,7 +1606,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                           )
                         : OutlinedButton.icon(
                             onPressed: _busy ? null : _startCreateVerb,
-                            icon: const Icon(Icons.add, size: 14),
+                            icon: const PhosphorIcon(PhosphorIconsRegular.plus, size: 14),
                             label: const Text(
                               'Create verb',
                               style: TextStyle(
@@ -1703,15 +1705,14 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                       index: categoryIndex,
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
-                        child: Icon(
-                          Icons.drag_indicator,
+                        child: PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
                           size: 16,
                           color: drag,
                         ),
                       ),
                     ),
                     Icon(
-                      expanded ? Icons.expand_more : Icons.chevron_right,
+                      expanded ? PhosphorIconsRegular.caretDown : PhosphorIconsRegular.caretRight,
                       size: 16,
                       color: categorySelected ? accent : muted,
                     ),
@@ -1790,8 +1791,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 index: verbIndex,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: Icon(
-                    Icons.drag_indicator,
+                  child: PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
                     size: 14,
                     color: drag,
                   ),
@@ -1816,7 +1816,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                   child: Padding(
                     padding: const EdgeInsets.all(4),
                     child: Icon(
-                      fav ? Icons.star : Icons.star_border,
+                      fav ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
                       size: 14,
                       color: fav ? FfTokens.firebar : starOff,
                     ),
@@ -1911,7 +1911,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                           borderRadius: BorderRadius.circular(6),
                           onTap: _toggleFavorite,
                           child: Icon(
-                            _isFavorite ? Icons.star : Icons.star_border,
+                            _isFavorite ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
                             size: 20,
                             color: _isFavorite
                                 ? FfTokens.firebar
@@ -2021,7 +2021,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         _optionCheckbox(
           value: _withTeammates,
           label:
-              'With teammates (first pick acts; other same-team picks after “with”)',
+              'With teammates — celebrates with teammates Heater Ace #24 and Dunkin Deuces #8 (pick from teams selected)',
           onChanged: (v) => setState(() => _withTeammates = v),
           compact: true,
           textColor: _v2?.textSecondary ?? Colors.white,

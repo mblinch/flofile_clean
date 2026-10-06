@@ -6,6 +6,7 @@ import '../../../widgets/oriented_file_preview.dart';
 import '../data/caption_v2_controller.dart';
 import '../widgets/frame_status_dot.dart';
 import 'caption_v2_photo_actions.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 Future<void> showCaptionV2ThumbnailOverview(
   BuildContext context,
@@ -95,7 +96,7 @@ class _CaptionV2ThumbnailOverviewState
               ),
               child: Row(
                 children: [
-                  Icon(Icons.photo_library_outlined,
+                  PhosphorIcon(PhosphorIconsRegular.images,
                       size: 17, color: tokens.accent),
                   const SizedBox(width: 8),
                   Text(
@@ -104,7 +105,7 @@ class _CaptionV2ThumbnailOverviewState
                   ),
                   const Spacer(),
                   _SizeButton(
-                    icon: Icons.remove,
+                    icon: PhosphorIconsRegular.minus,
                     tooltip: 'Smaller thumbnails',
                     tokens: tokens,
                     onTap:
@@ -119,7 +120,7 @@ class _CaptionV2ThumbnailOverviewState
                     ),
                   ),
                   _SizeButton(
-                    icon: Icons.add,
+                    icon: PhosphorIconsRegular.plus,
                     tooltip: 'Larger thumbnails',
                     tokens: tokens,
                     onTap:
@@ -129,7 +130,7 @@ class _CaptionV2ThumbnailOverviewState
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     tooltip: 'Close',
-                    icon: const Icon(Icons.close_rounded),
+                    icon: const PhosphorIcon(PhosphorIconsRegular.x),
                     color: tokens.textSecondary,
                     iconSize: 18,
                   ),
@@ -191,14 +192,15 @@ class _CaptionV2ThumbnailOverviewState
                                         cacheWidth: _cacheWidth,
                                       ),
                                     ),
-                                    Positioned(
-                                      right: 5,
-                                      bottom: 5,
-                                      child: FrameStatusDot(
-                                        state: state,
-                                        size: 10,
+                                    if (state != FrameState.todo)
+                                      Positioned(
+                                        top: 5,
+                                        right: 5,
+                                        child: FrameStatusBadges(
+                                          saved: true,
+                                          sent: state == FrameState.sent,
+                                        ),
                                       ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -252,7 +254,7 @@ class _SizeButton extends StatelessWidget {
     return IconButton(
       onPressed: onTap,
       tooltip: tooltip,
-      icon: Icon(icon),
+      icon: PhosphorIcon(icon),
       color: tokens.textSecondary,
       disabledColor: tokens.textSecondary.withValues(alpha: 0.3),
       iconSize: 16,

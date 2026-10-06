@@ -7,6 +7,9 @@ import 'package:timezone/data/latest.dart' as tz_data;
 import 'firebase_options.dart';
 import 'flo_layout_constants.dart';
 import 'theme/app_tokens.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
+
+import 'theme/ff_icons.dart';
 import 'theme/ff_tokens.dart';
 import 'screens/caption_builder_screen.dart';
 import 'screens/caption_v2/caption_v2_flag.dart';
@@ -125,8 +128,7 @@ class DmgWarningApp extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
-                  Icons.warning_amber_rounded,
+                const PhosphorIcon(PhosphorIconsRegular.warning,
                   size: 64,
                   color: Colors.orange,
                 ),
@@ -203,6 +205,7 @@ class MyApp extends StatelessWidget {
             scaffoldBackgroundColor: AppTokens.canvas,
             useMaterial3: true,
             fontFamily: 'Inter',
+            iconTheme: const IconThemeData(size: FfIcons.size),
             extensions: const <ThemeExtension<dynamic>>[FfTokens.light],
             scrollbarTheme: ScrollbarThemeData(
               thickness: const WidgetStatePropertyAll(kFloScrollbarThickness),
@@ -227,13 +230,46 @@ class MyApp extends StatelessWidget {
             ),
           ),
           darkTheme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: FfTokens.dark.accent,
-              brightness: Brightness.dark,
+            colorScheme: ColorScheme.dark(
+              primary: FfTokens.dark.accent,
+              onPrimary: FfTokens.dark.inkOnAccent,
+              secondary: FfTokens.dark.accent,
+              onSecondary: FfTokens.dark.inkOnAccent,
+              surface: FfTokens.dark.surface,
+              onSurface: FfTokens.dark.text,
+              error: FfTokens.danger,
+              onError: FfTokens.inkOnGold,
             ),
             scaffoldBackgroundColor: FfTokens.dark.bg,
+            canvasColor: FfTokens.dark.bg,
+            cardColor: FfTokens.dark.surface,
+            dialogTheme: DialogThemeData(
+              backgroundColor: FfTokens.dark.surface,
+            ),
             useMaterial3: true,
             fontFamily: FfTokens.fontFamily,
+            iconTheme: IconThemeData(
+              size: FfIcons.size,
+              color: FfTokens.dark.text,
+            ),
+            textTheme: ThemeData(brightness: Brightness.dark).textTheme.apply(
+                  fontFamily: FfTokens.fontFamily,
+                  bodyColor: FfTokens.dark.text,
+                  displayColor: FfTokens.dark.text,
+                ).copyWith(
+                  bodyLarge: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    letterSpacing: 0,
+                  ),
+                  bodyMedium: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    letterSpacing: 0,
+                  ),
+                  bodySmall: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    letterSpacing: 0,
+                  ),
+                ),
             extensions: const <ThemeExtension<dynamic>>[FfTokens.dark],
             focusColor: FfTokens.dark.accent.withValues(alpha: 0.0),
             splashFactory: NoSplash.splashFactory,

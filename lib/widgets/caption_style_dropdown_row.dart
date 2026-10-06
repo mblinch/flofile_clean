@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/ff_tokens.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// One row in the caption-style dropdown (label + optional lock/saved icon + star).
 class CaptionStyleDropdownListRow extends StatelessWidget {
@@ -37,8 +38,7 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
             if (showLockIcon)
               Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: Icon(
-                  Icons.lock_outline,
+                child: PhosphorIcon(PhosphorIconsRegular.lock,
                   size: 13,
                   color: t.textSecondary,
                 ),
@@ -46,8 +46,7 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
             else if (showSavedIcon)
               Padding(
                 padding: const EdgeInsets.only(right: 6),
-                child: Icon(
-                  Icons.bookmark_outline,
+                child: PhosphorIcon(PhosphorIconsRegular.bookmarkSimple,
                   size: 14,
                   color: t.textSecondary,
                 ),
@@ -73,7 +72,7 @@ class CaptionStyleDropdownListRow extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(4),
                 child: Icon(
-                  isFavorite ? Icons.star : Icons.star_border,
+                  isFavorite ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
                   size: 16,
                   color: isFavorite
                       ? const Color(0xFFE6B84A)

@@ -1,17 +1,25 @@
+import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../services/jersey_ocr_channel.dart';
+import '../../../theme/ff_glow.dart';
+import '../../../theme/ff_icons.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../utils/oriented_image_bytes.dart';
 import '../../../widgets/oriented_file_preview.dart';
 import '../data/caption_v2_controller.dart';
 import '../widgets/frame_status_dot.dart';
 import '../widgets/transmit_progress_overlay.dart';
 import 'caption_v2_photo_actions.dart';
 import 'caption_v2_thumbnail_overview.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 enum _BrowseScope { all, toCaption, captioned, toFtp, ftp }
 
@@ -78,6 +86,10 @@ String _formatShutter(String raw) {
 
 class _PhotoColumnState extends State<PhotoColumn> {
   static const double _handleHeight = 14;
+  /// Keep a usable large preview — never collapse it away.
+  static const double _minPreviewFraction = 0.28;
+  static const double _maxPreviewFraction = 0.85;
+  static const double _minPreviewPixels = 180;
   double _previewFraction = 0.6;
 
   @override
@@ -101,8 +113,13 @@ class _PhotoColumnState extends State<PhotoColumn> {
       builder: (context, constraints) {
         final availableHeight =
             (constraints.maxHeight - _handleHeight).clamp(0.0, double.infinity);
-        final previewHeight =
-            availableHeight * _previewFraction.clamp(0.05, 0.95);
+        final minFraction = availableHeight <= 0
+            ? _minPreviewFraction
+            : (_minPreviewPixels / availableHeight)
+                .clamp(_minPreviewFraction, _maxPreviewFraction);
+        final fraction =
+            _previewFraction.clamp(minFraction, _maxPreviewFraction);
+        final previewHeight = availableHeight * fraction;
         final windowSize = MediaQuery.sizeOf(context);
         final windowMaxColumns =
             windowSize.width >= 1600 && windowSize.height >= 1000 ? 8 : 6;
@@ -124,10 +141,12 @@ class _PhotoColumnState extends State<PhotoColumn> {
               tokens: t,
               onDrag: (delta) {
                 if (availableHeight <= 0) return;
+                final dragMin = (_minPreviewPixels / availableHeight)
+                    .clamp(_minPreviewFraction, _maxPreviewFraction);
                 setState(() {
                   _previewFraction =
                       (_previewFraction + delta / availableHeight)
-                          .clamp(0.05, 0.95);
+                          .clamp(dragMin, _maxPreviewFraction);
                 });
               },
               onReset: () => setState(() => _previewFraction = 0.6),
@@ -204,15 +223,11 @@ class _PhotoInfoHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final path = controller.currentPath;
-    if (path == null || controller.imagePaths.isEmpty) {
+    final total = controller.imagePaths.length;
+    if (path == null || total == 0) {
       return const SizedBox.shrink();
     }
 
-    final date = _meta(const [
-      'DateTimeOriginal',
-      'CreateDate',
-      'ModifyDate',
-    ]);
     final make = _meta(const ['Make']);
     final model = _meta(const ['Model']);
     final lens = _meta(const ['LensModel', 'Lens', 'LensID']);
@@ -223,62 +238,48 @@ class _PhotoInfoHeader extends StatelessWidget {
     final focal = double.tryParse(focalRaw);
     final iso = _meta(const ['ISO']);
 
-    final exposureDetails = <String>[
+    final exposureLine = [
       if (iso.isNotEmpty) 'ISO $iso',
       if (shutter.isNotEmpty) shutter,
       if (fNumber != null) 'f/${fNumber.toStringAsFixed(1)}',
       if (focalRaw.isNotEmpty)
         focal == null ? '${focalRaw}mm' : '${focal.toInt()}mm',
-    ];
-    final dateLabel = date.isEmpty ? '' : _formatExifDateTime(date);
+    ].join(' · ');
     final camera = '$make $model'.trim();
+    final cameraLine = [
+      if (camera.isNotEmpty) camera,
+      if (lens.isNotEmpty) lens,
+    ].join(' · ');
 
-    final detailSpans = <InlineSpan>[];
-    void addDetail(String value, {Color? color}) {
-      if (value.isEmpty) return;
-      if (detailSpans.isNotEmpty) {
-        detailSpans.add(
-          TextSpan(
-            text: '  ·  ',
-            style: TextStyle(
-              color: tokens.textSecondary.withValues(alpha: 0.55),
-            ),
-          ),
-        );
-      }
-      detailSpans.add(
-        TextSpan(
-          text: value,
-          style: TextStyle(color: color ?? tokens.textSecondary),
-        ),
-      );
-    }
+    final micro = tokens.metaStyle.copyWith(
+      fontSize: tokens.textSizeMicro,
+      height: 1.2,
+      color: tokens.textSecondary,
+    );
 
-    if (exposureDetails.isNotEmpty) {
-      addDetail(exposureDetails.join(' · '), color: tokens.accent);
-    }
-    addDetail(dateLabel);
-    addDetail(camera);
-    addDetail(lens);
+    final oneLineParts = <String>[
+      if (exposureLine.isNotEmpty) exposureLine,
+      if (cameraLine.isNotEmpty) cameraLine,
+    ];
+    final oneLineText = oneLineParts.join('  ·  ');
 
-    if (detailSpans.isEmpty) return const SizedBox.shrink();
+    if (oneLineText.isEmpty) return const SizedBox.shrink();
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+      height: _PhotoCard.metaBarHeight,
+      padding: _PhotoCard.metaBarPadding,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: tokens.sunken,
+        color: FfTokens.photoHeader,
         border: Border(bottom: BorderSide(color: tokens.divider)),
       ),
-      child: RichText(
+      child: Text(
+        oneLineText,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        text: TextSpan(
-          style: tokens.metaStyle.copyWith(
-            fontSize: tokens.textSizeMicro,
-          ),
-          children: detailSpans,
-        ),
+        textAlign: TextAlign.center,
+        style: micro,
       ),
     );
   }
@@ -292,6 +293,9 @@ class _PhotoCard extends StatelessWidget {
     required this.onSavePrevious,
     required this.onSaveNext,
   });
+
+  static const double metaBarHeight = 30;
+  static const EdgeInsets metaBarPadding = EdgeInsets.fromLTRB(8, 0, 8, 0);
 
   final CaptionV2Controller controller;
   final String? path;
@@ -327,111 +331,107 @@ class _PhotoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state =
-        path == null ? FrameState.todo : controller.frameStateFor(path!);
-    final savedLabel = state == FrameState.todo
-        ? null
-        : (state == FrameState.sent ? 'Sent' : 'Saved');
     final width = _meta(const ['ImageWidth', 'ExifImageWidth']);
     final height = _meta(const ['ImageHeight', 'ExifImageHeight']);
     final fileSize = path == null ? '' : _formatFileSize(path!);
-    final total = controller.imagePaths.length;
-    final counter =
-        path != null && total > 0 ? '${controller.currentIndex + 1}/$total' : '';
-    final technicalInfo = [
-      if (path != null) p.basename(path!),
+    final fileName = path == null ? '' : p.basename(path!);
+    final dateRaw = _meta(const [
+      'DateTimeOriginal',
+      'CreateDate',
+      'ModifyDate',
+    ]);
+    final dateLabel = dateRaw.isEmpty ? '' : _formatExifDateTime(dateRaw);
+    final fileMeta = [
       if (width.isNotEmpty && height.isNotEmpty) '$width×$height',
       if (fileSize.isNotEmpty) fileSize,
+      if (dateLabel.isNotEmpty) dateLabel,
     ].join(' · ');
 
     return Container(
       decoration: BoxDecoration(
         color: tokens.surface,
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-        border: Border.all(color: tokens.divider),
+        border: Border.all(color: tokens.accent.withValues(alpha: 0.85)),
+        boxShadow: FfTokens.accentButtonGlow(tokens.accent),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: [
-          if (path != null) _PhotoInfoHeader(controller: controller, tokens: tokens),
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                ColoredBox(
-                  color: tokens.sunken,
-                  child: path == null
-                      ? Center(
-                          child: TextButton(
-                            onPressed: controller.pickImageFolder,
-                            child: Text(
-                              'Open photo folder',
-                              style: tokens.labelStyle.copyWith(
-                                color: tokens.accent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(FfTokens.radiusCard),
+        child: Column(
+          children: [
+            if (path != null)
+              _PhotoInfoHeader(controller: controller, tokens: tokens),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  ColoredBox(
+                    color: FfTokens.photoHeader,
+                    child: path == null
+                        ? Center(
+                            child: TextButton(
+                              onPressed: controller.pickImageFolder,
+                              child: Text(
+                                'Open photo folder',
+                                style: tokens.labelStyle.copyWith(
+                                  color: tokens.accent,
+                                ),
                               ),
                             ),
-                          ),
-                        )
-                      : GestureDetector(
-                          onSecondaryTapDown: (details) =>
-                              showCaptionV2PhotoMenu(
-                            context: context,
-                            controller: controller,
-                            imagePath: path!,
-                            position: details.globalPosition,
-                          ),
-                          onDoubleTap: () => showCaptionV2Zoom(context, path!),
-                          child: OrientedFilePreview(
+                          )
+                        : _PhotoLoupePreview(
                             path: path!,
                             version: controller.imageContentStamp(path!),
-                            fit: BoxFit.contain,
-                            cacheWidth: 1600,
+                            tokens: tokens,
+                            controller: controller,
+                            onOpenZoom: () =>
+                                showCaptionV2Zoom(context, path!),
+                            onSecondaryTapDown: (details) =>
+                                showCaptionV2PhotoMenu(
+                              context: context,
+                              controller: controller,
+                              imagePath: path!,
+                              position: details.globalPosition,
+                            ),
                           ),
-                        ),
-                ),
-                if (savedLabel != null)
-                  Positioned(
-                    left: 10,
-                    top: 10,
-                    child: _StatusPill(
-                      label: savedLabel,
-                      tokens: tokens,
-                      accent: false,
-                    ),
-                  ),
-                if (path != null)
-                  Positioned(
-                    right: 10,
-                    top: 10,
-                    child: _StatusPill(
-                      label: state == FrameState.sent ? 'Sent' : 'Not sent',
-                      tokens: tokens,
-                      accent: state == FrameState.sent,
-                    ),
                   ),
                 if (path != null) ...[
                   Positioned(
+                    top: 10,
+                    left: 10,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _PhotoOcrScanButton(
+                          controller: controller,
+                          tokens: tokens,
+                        ),
+                        if (controller.jerseySuggestions.isNotEmpty ||
+                            controller.jerseyOcrBusy) ...[
+                          const SizedBox(height: 8),
+                          _PhotoOcrSuggestionChips(
+                            controller: controller,
+                            tokens: tokens,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: _PhotoPreviewStatusIcons(
+                      state: controller.frameStateFor(path!),
+                      tokens: tokens,
+                    ),
+                  ),
+                  Positioned(
                     right: 12,
                     bottom: 12,
-                    child: Tooltip(
-                      message: 'Zoom image',
-                      child: Material(
-                        color: tokens.surface.withValues(alpha: 0.88),
-                        shape: CircleBorder(
-                          side: BorderSide(color: tokens.divider),
-                        ),
-                        child: IconButton(
-                          onPressed: () => showCaptionV2Zoom(context, path!),
-                          icon: const Icon(Icons.zoom_in_rounded),
-                          color: tokens.text,
-                          iconSize: 20,
-                          constraints: const BoxConstraints.tightFor(
-                            width: 38,
-                            height: 38,
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
+                    child: _PhotoFrameCounter(
+                      index: controller.currentIndex + 1,
+                      total: controller.imagePaths.length,
+                      tokens: tokens,
                     ),
                   ),
                   Positioned(
@@ -475,77 +475,915 @@ class _PhotoCard extends StatelessWidget {
           if (path != null)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(8, 2, 4, 2),
+              height: metaBarHeight,
+              padding: metaBarPadding,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
+                color: FfTokens.photoHeader,
                 border: Border(top: BorderSide(color: tokens.divider)),
               ),
-              child: Row(
+              child: Builder(
+                builder: (context) {
+                  final barStyle = tokens.metaStyle.copyWith(
+                    fontSize: tokens.textSizeMicro,
+                    height: 1.2,
+                    color: tokens.textSecondary,
+                  );
+                  final line = [
+                    fileName,
+                    if (fileMeta.isNotEmpty) fileMeta,
+                  ].join('  ·  ');
+                  return Text(
+                    line,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: barStyle,
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoLoupePreview extends StatefulWidget {
+  const _PhotoLoupePreview({
+    required this.path,
+    required this.version,
+    required this.tokens,
+    required this.controller,
+    required this.onOpenZoom,
+    required this.onSecondaryTapDown,
+  });
+
+  final String path;
+  final int version;
+  final FfTokens tokens;
+  final CaptionV2Controller controller;
+  final VoidCallback onOpenZoom;
+  final GestureTapDownCallback onSecondaryTapDown;
+
+  @override
+  State<_PhotoLoupePreview> createState() => _PhotoLoupePreviewState();
+}
+
+class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
+    with SingleTickerProviderStateMixin {
+  static const double _loupeSize = 148;
+  static const double _holdLoupeSize = 196;
+  static const double _magnification = 3.0;
+
+  Offset? _cursor;
+  Size _viewport = Size.zero;
+  Uint8List? _bytes;
+  Size? _imageSize;
+  Uint8List? _fullBytes;
+  Size? _fullSize;
+  int _loadToken = 0;
+  Timer? _holdTimer;
+  Timer? _loupeOcrTimer;
+  bool _pointerDown = false;
+  late final AnimationController _holdAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _holdAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+    );
+    _holdAnim.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _loadBytes();
+  }
+
+  @override
+  void dispose() {
+    _holdTimer?.cancel();
+    _loupeOcrTimer?.cancel();
+    _holdAnim.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PhotoLoupePreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.path != widget.path || oldWidget.version != widget.version) {
+      _cancelHold();
+      _loadBytes();
+    }
+  }
+
+  void _onPointerDown(PointerDownEvent event) {
+    if (event.buttons != kPrimaryButton) return;
+    _pointerDown = true;
+    _setCursor(event.localPosition);
+    _holdTimer?.cancel();
+    _holdTimer = Timer(const Duration(milliseconds: 90), () {
+      if (!mounted || !_pointerDown) return;
+      _holdAnim.value = 1.0;
+      _scheduleLoupeOcr();
+    });
+  }
+
+  void _onPointerMove(PointerMoveEvent event) {
+    // MouseRegion.onHover often stops while a button is held; keep tracking.
+    _setCursor(event.localPosition);
+    if (_pointerDown && _holdAnim.value > 0) {
+      _scheduleLoupeOcr();
+    }
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _loupeOcrTimer?.cancel();
+    _loupeOcrTimer = null;
+    _pointerDown = false;
+    if (_holdAnim.value != 0) {
+      _holdAnim.value = 0;
+    }
+  }
+
+  /// Vision ROI under the loupe (normalized, origin bottom-left).
+  JerseyOcrRegion? _loupeRegion(Offset sampleAt, Rect imageRect) {
+    if (imageRect.width <= 0 || imageRect.height <= 0) return null;
+    final nx = ((sampleAt.dx - imageRect.left) / imageRect.width).clamp(0.0, 1.0);
+    final nyTop =
+        ((sampleAt.dy - imageRect.top) / imageRect.height).clamp(0.0, 1.0);
+    // ~28% of the frame around the loupe center — jersey number sized.
+    const half = 0.14;
+    final left = (nx - half).clamp(0.0, 1.0);
+    final top = (nyTop - half).clamp(0.0, 1.0);
+    final right = (nx + half).clamp(0.0, 1.0);
+    final bottom = (nyTop + half).clamp(0.0, 1.0);
+    final width = (right - left).clamp(0.04, 1.0);
+    final height = (bottom - top).clamp(0.04, 1.0);
+    // Convert top-left normalized → Vision bottom-left origin.
+    final visionY = (1.0 - top - height).clamp(0.0, 1.0);
+    return JerseyOcrRegion(
+      x: left,
+      y: visionY,
+      width: width,
+      height: height,
+    );
+  }
+
+  void _scheduleLoupeOcr() {
+    if (!JerseyOcrChannel.supported) return;
+    _loupeOcrTimer?.cancel();
+    _loupeOcrTimer = Timer(const Duration(milliseconds: 220), () {
+      if (!mounted || !_pointerDown || _holdAnim.value <= 0) return;
+      final cursor = _cursor;
+      final bytes = _bytes;
+      final imageSize = _imageSize;
+      if (cursor == null || bytes == null || imageSize == null) return;
+      final imageRect = _containRect(_viewport, imageSize);
+      if (imageRect.isEmpty) return;
+      final sampleAt = _clampToRect(cursor, imageRect);
+      final region = _loupeRegion(sampleAt, imageRect);
+      if (region == null) return;
+      unawaited(widget.controller.runOcrLoupeScan(region));
+    });
+  }
+
+  Offset _clampToRect(Offset point, Rect rect) {
+    return Offset(
+      point.dx.clamp(rect.left, rect.right),
+      point.dy.clamp(rect.top, rect.bottom),
+    );
+  }
+
+  Future<void> _loadBytes() async {
+    final token = ++_loadToken;
+    setState(() {
+      _bytes = null;
+      _imageSize = null;
+      _fullBytes = null;
+      _fullSize = null;
+      _cursor = null;
+    });
+    // Preview first for snappy hover, then full pixels for true 100% hold.
+    final bytes = await OrientedImageBytes.load(
+      widget.path,
+      maxWidth: OrientedImageBytes.previewMaxWidth,
+    );
+    if (!mounted || token != _loadToken || bytes == null) return;
+    final size = await _decodeImageSize(bytes);
+    if (!mounted || token != _loadToken) return;
+    setState(() {
+      _bytes = bytes;
+      _imageSize = size;
+    });
+    unawaited(_loadFullBytes(token));
+  }
+
+  Future<void> _loadFullBytes(int token) async {
+    final bytes = await OrientedImageBytes.load(
+      widget.path,
+      maxWidth: OrientedImageBytes.loupeMaxWidth,
+    );
+    if (!mounted || token != _loadToken || bytes == null) return;
+    final size = await _decodeImageSize(bytes);
+    if (!mounted || token != _loadToken || size == null) return;
+    setState(() {
+      _fullBytes = bytes;
+      _fullSize = size;
+    });
+  }
+
+  Future<Size?> _decodeImageSize(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final size = Size(
+        frame.image.width.toDouble(),
+        frame.image.height.toDouble(),
+      );
+      frame.image.dispose();
+      return size;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Rect _containRect(Size viewport, Size image) {
+    if (viewport.isEmpty || image.isEmpty) return Rect.zero;
+    final fitted = applyBoxFit(BoxFit.contain, image, viewport).destination;
+    return Alignment.center.inscribe(fitted, Offset.zero & viewport);
+  }
+
+  void _setCursor(Offset? next) {
+    if (_cursor == next) return;
+    setState(() => _cursor = next);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _bytes;
+    final imageSize = _imageSize;
+    final cursor = _cursor;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _viewport = Size(constraints.maxWidth, constraints.maxHeight);
+        final imageRect = bytes != null && imageSize != null
+            ? _containRect(_viewport, imageSize)
+            : Rect.zero;
+        final overImage = cursor != null &&
+            imageRect.isEmpty == false &&
+            imageRect.contains(cursor);
+        final showLoupe = cursor != null &&
+            imageRect.isEmpty == false &&
+            (overImage || _pointerDown);
+        final sampleAt = showLoupe
+            ? _clampToRect(cursor!, imageRect)
+            : null;
+
+        return MouseRegion(
+          cursor: SystemMouseCursors.zoomIn,
+          onHover: (event) => _setCursor(event.localPosition),
+          onExit: (_) {
+            if (_pointerDown) return;
+            _cancelHold();
+            _setCursor(null);
+          },
+          child: Listener(
+            onPointerDown: _onPointerDown,
+            onPointerMove: _onPointerMove,
+            onPointerUp: (_) => _cancelHold(),
+            onPointerCancel: (_) => _cancelHold(),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onDoubleTap: widget.onOpenZoom,
+              onSecondaryTapDown: widget.onSecondaryTapDown,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  if (counter.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+                  if (bytes == null)
+                    Center(
+                      child: SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: widget.tokens.accent,
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: tokens.selectedFill,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        counter,
-                        style: tokens.monoMetaStyle.copyWith(
-                          color: tokens.accent,
-                          fontSize: tokens.textSizeMicro,
-                          fontWeight: FfTokens.weightMedium,
+                    )
+                  else
+                    Image.memory(
+                      bytes,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                      gaplessPlayback: true,
+                    ),
+                  if (showLoupe && sampleAt != null) ...[
+                    _buildLoupe(
+                      cursor: cursor!,
+                      sampleAt: sampleAt,
+                      imageRect: imageRect,
+                    ),
+                    // Fixed chrome tip — don't glue copy to the loupe.
+                    const Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 10,
+                      child: IgnorePointer(
+                        child: Center(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Color(0xA6000000),
+                              borderRadius:
+                                  BorderRadius.all(Radius.circular(6)),
+                            ),
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              child: Text(
+                                'Hold for 100% + OCR  ·  Double-click to open',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
                   ],
-                  Expanded(
-                    child: Text(
-                      technicalInfo,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: tokens.microStyle.copyWith(fontSize: 10),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildLoupe({
+    required Offset cursor,
+    required Offset sampleAt,
+    required Rect imageRect,
+  }) {
+    final viewport = _viewport;
+    final bytes = _bytes;
+    if (bytes == null || viewport.isEmpty) return const SizedBox.shrink();
+
+    final t = _holdAnim.value;
+    // Prefer full-res once ready so hold can be true 100% (1:1 pixels).
+    final paintBytes = (t > 0 && _fullBytes != null) ? _fullBytes! : bytes;
+    final paintSize = (t > 0 && _fullSize != null) ? _fullSize! : _imageSize;
+    // 100% = one image pixel per logical screen pixel.
+    final oneToOne = (paintSize != null && imageRect.width > 0)
+        ? paintSize.width / imageRect.width
+        : _magnification;
+    final holdMagnification =
+        oneToOne > _magnification ? oneToOne : _magnification;
+    final magnification =
+        _magnification + (holdMagnification - _magnification) * t;
+    final loupeSize = _loupeSize + (_holdLoupeSize - _loupeSize) * t;
+
+    final maxLeft =
+        (viewport.width - loupeSize - 4).clamp(4.0, double.infinity);
+    final maxTop =
+        (viewport.height - loupeSize - 4).clamp(4.0, double.infinity);
+    final left = (cursor.dx - loupeSize / 2).clamp(4.0, maxLeft);
+    final top = (cursor.dy - loupeSize / 2).clamp(4.0, maxTop);
+
+    final localX = sampleAt.dx - imageRect.left;
+    final localY = sampleAt.dy - imageRect.top;
+    final magnifiedW = imageRect.width * magnification;
+    final magnifiedH = imageRect.height * magnification;
+
+    return Positioned(
+      left: left,
+      top: top,
+      child: IgnorePointer(
+        child: Container(
+          width: loupeSize,
+          height: loupeSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.92),
+              width: 2.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: ClipOval(
+            child: ColoredBox(
+              color: widget.tokens.sunken,
+              // Positioned (not Transform+SizedBox): Stack would otherwise
+              // clamp the magnified image to 148×148, then translate it away.
+              child: Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  Positioned(
+                    left: loupeSize / 2 - localX * magnification,
+                    top: loupeSize / 2 - localY * magnification,
+                    width: magnifiedW,
+                    height: magnifiedH,
+                    child: Image.memory(
+                      paintBytes,
+                      fit: BoxFit.fill,
+                      filterQuality: FilterQuality.high,
+                      gaplessPlayback: true,
                     ),
                   ),
-                  TextButton.icon(
-                    onPressed: controller.refreshingFolder
-                        ? null
-                        : controller.refreshOpenFolder,
-                    icon: controller.refreshingFolder
-                        ? SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: tokens.accent,
-                            ),
-                          )
-                        : Icon(
-                            Icons.refresh_rounded,
-                            size: 16,
-                            color: tokens.accent,
-                          ),
-                    label: Text(
-                      'Refresh',
-                      style: tokens.metaStyle.copyWith(
-                        fontSize: 12,
-                        color: tokens.accent,
-                        fontWeight: FontWeight.w600,
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.black.withValues(alpha: 0.18),
+                          width: 1,
+                        ),
                       ),
                     ),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: const Size(0, 28),
+                  ),
+                  Center(
+                    child: Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.75),
+                          width: 1.2,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoOcrSuggestionChips extends StatelessWidget {
+  const _PhotoOcrSuggestionChips({
+    required this.controller,
+    required this.tokens,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = controller.jerseySuggestions;
+    if (controller.jerseyOcrBusy && matches.isEmpty) {
+      return Material(
+        color: FfTokens.viewerChrome,
+        borderRadius: BorderRadius.circular(7),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(7),
+            border: Border.all(color: tokens.divider),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.5,
+                  color: tokens.accent,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Scanning…',
+                style: tokens.metaStyle.copyWith(
+                  fontSize: 11,
+                  color: tokens.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (matches.isEmpty) return const SizedBox.shrink();
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final match in matches.take(6))
+            _OcrMatchChip(
+              match: match,
+              tokens: tokens,
+              selected: controller.isPlayerSelected(
+                match.player,
+                isHome: match.isHome,
+              ),
+              onTap: () => controller.selectPlayer(
+                match.player,
+                isHome: match.isHome,
+              ),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _OcrMatchChip extends StatelessWidget {
+  const _OcrMatchChip({
+    required this.match,
+    required this.tokens,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final JerseyOcrSuggestion match;
+  final FfTokens tokens;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final jersey = match.jersey;
+    final label = [
+      if (jersey.isNotEmpty) '#$jersey',
+      match.player.fullName,
+    ].join(' ');
+    final side = match.isHome ? 'H' : 'A';
+    final kind = match.matchKind == JerseyOcrMatchKind.jersey ? '#' : 'Aa';
+    return Tooltip(
+      message:
+          '${match.isHome ? 'Home' : 'Away'} · matched “${match.matchedText}” '
+          '(${match.matchKind == JerseyOcrMatchKind.jersey ? 'jersey' : 'name'})',
+      child: Material(
+        color: selected
+            ? tokens.accent.withValues(alpha: 0.22)
+            : FfTokens.viewerChrome,
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(7),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(
+                color: selected
+                    ? tokens.accent.withValues(alpha: 0.55)
+                    : tokens.divider,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$side · $kind',
+                  style: tokens.metaStyle.copyWith(
+                    fontSize: 10,
+                    color: tokens.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tokens.metaStyle.copyWith(
+                      fontSize: 11,
+                      color: tokens.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PhotoOcrScanButton extends StatefulWidget {
+  const _PhotoOcrScanButton({
+    required this.controller,
+    required this.tokens,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+
+  @override
+  State<_PhotoOcrScanButton> createState() => _PhotoOcrScanButtonState();
+}
+
+class _PhotoOcrScanButtonState extends State<_PhotoOcrScanButton> {
+  bool _busy = false;
+
+  Future<void> _runScan() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final result = await widget.controller.runOcrTestScan(force: true);
+      if (!mounted) return;
+      await _showOcrScanDialog(
+        context: context,
+        controller: widget.controller,
+        tokens: widget.tokens,
+        result: result,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = widget.tokens;
+    final supported = JerseyOcrChannel.supported;
+    return Tooltip(
+      message: supported
+          ? 'Re-scan full frame (hold loupe to scan a spot)'
+          : 'OCR scan is macOS-only',
+      child: Material(
+        color: FfTokens.viewerChrome,
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          onTap: supported && !_busy ? _runScan : null,
+          borderRadius: BorderRadius.circular(7),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: tokens.divider),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_busy || widget.controller.jerseyOcrBusy)
+                  SizedBox(
+                    width: 13,
+                    height: 13,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 1.6,
+                      color: tokens.accent,
+                    ),
+                  )
+                else
+                  PhosphorIcon(
+                    PhosphorIconsRegular.scan,
+                    size: 14,
+                    color: supported
+                        ? tokens.text
+                        : tokens.text.withValues(alpha: 0.35),
+                  ),
+                const SizedBox(width: 6),
+                Text(
+                  'Scan',
+                  style: tokens.labelStyle.copyWith(
+                    fontSize: 11,
+                    height: 1.1,
+                    color: supported
+                        ? tokens.text
+                        : tokens.text.withValues(alpha: 0.35),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _showOcrScanDialog({
+  required BuildContext context,
+  required CaptionV2Controller controller,
+  required FfTokens tokens,
+  required OcrScanResult result,
+}) {
+  final hits = result.hits;
+  final matches = result.matches;
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      return AlertDialog(
+        backgroundColor: tokens.elevated,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(FfTokens.radiusCard),
+          side: BorderSide(color: tokens.divider),
+        ),
+        title: Text(
+          'OCR test scan',
+          style: tokens.labelStyle.copyWith(fontSize: 15),
+        ),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!result.supported)
+                Text(
+                  'On-device OCR is only available on macOS.',
+                  style: tokens.metaStyle.copyWith(color: tokens.textSecondary),
+                )
+              else ...[
+                Text(
+                  hits.isEmpty
+                      ? 'No text found in this frame.'
+                      : 'Found ${hits.length} text region${hits.length == 1 ? '' : 's'}.',
+                  style: tokens.metaStyle.copyWith(color: tokens.textSecondary),
+                ),
+                if (hits.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final hit in hits.take(24))
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: tokens.sunken,
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: tokens.divider),
+                          ),
+                          child: Text(
+                            hit.text,
+                            style: tokens.metaStyle.copyWith(
+                              fontSize: 11,
+                              color: tokens.text,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 14),
+                Text(
+                  matches.isEmpty
+                      ? 'No roster matches.'
+                      : 'Roster matches (${matches.length})',
+                  style: tokens.labelStyle.copyWith(
+                    fontSize: 12,
+                    color: tokens.textSecondary,
+                  ),
+                ),
+                if (matches.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 260),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: matches.length,
+                      separatorBuilder: (_, __) => Divider(
+                        height: 1,
+                        color: tokens.divider,
+                      ),
+                      itemBuilder: (context, index) {
+                        final match = matches[index];
+                        final side = match.isHome ? 'Home' : 'Away';
+                        final kind = match.matchKind == JerseyOcrMatchKind.jersey
+                            ? 'jersey'
+                            : 'name';
+                        final jersey = match.jersey;
+                        final label = [
+                          if (jersey.isNotEmpty) '#$jersey',
+                          match.player.fullName,
+                        ].join(' ');
+                        return ListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            label,
+                            style: tokens.metaStyle.copyWith(
+                              fontSize: 12,
+                              color: tokens.text,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '$side · matched “${match.matchedText}” ($kind) · '
+                            '${(match.confidence * 100).round()}%',
+                            style: tokens.metaStyle.copyWith(
+                              fontSize: 10,
+                              color: tokens.textSecondary,
+                            ),
+                          ),
+                          trailing: Text(
+                            'Select',
+                            style: tokens.labelStyle.copyWith(
+                              fontSize: 11,
+                              color: tokens.accent,
+                            ),
+                          ),
+                          onTap: () {
+                            controller.selectPlayer(
+                              match.player,
+                              isHome: match.isHome,
+                            );
+                            Navigator.of(ctx).pop();
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              'Close',
+              style: tokens.labelStyle.copyWith(color: tokens.accent),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _PhotoPreviewStatusIcons extends StatelessWidget {
+  const _PhotoPreviewStatusIcons({
+    required this.state,
+    required this.tokens,
+  });
+
+  final FrameState state;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final saved = state != FrameState.todo;
+    final sent = state == FrameState.sent;
+    return Material(
+      color: FfTokens.viewerChrome,
+      borderRadius: BorderRadius.circular(7),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: tokens.divider),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Tooltip(
+              message: saved ? 'Saved' : 'Not saved',
+              child: PhosphorIcon(PhosphorIconsRegular.floppyDisk,
+                size: 15,
+                color: saved
+                    ? FrameStatusColors.saved
+                    : tokens.text.withValues(alpha: 0.28),
+              ),
+            ),
+            const SizedBox(width: 7),
+            Tooltip(
+              message: sent ? "FTP'd" : 'Not sent',
+              child: PhosphorIcon(PhosphorIconsRegular.cloudArrowUp,
+                size: 15,
+                color: sent
+                    ? FrameStatusColors.sent
+                    : tokens.text.withValues(alpha: 0.28),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -576,12 +1414,12 @@ class PhotoSaveArrow extends StatelessWidget {
           onTap: onPressed,
           customBorder: const CircleBorder(),
           child: SizedBox.square(
-            dimension: 48,
+            dimension: 34,
             child: Icon(
               previous
-                  ? Icons.arrow_back_ios_new_rounded
-                  : Icons.arrow_forward_ios_rounded,
-              size: 22,
+                  ? PhosphorIconsRegular.caretLeft
+                  : PhosphorIconsRegular.caretRight,
+              size: 15,
               color: t.text,
             ),
           ),
@@ -621,16 +1459,46 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
   int _lastSessionGeneration = -1;
   bool _repairScheduled = false;
   String? _visibilitySignature;
+  int _lastWarmFirst = -1;
 
   CaptionV2Controller get controller => widget.controller;
   FfTokens get tokens => widget.tokens;
   Set<String> get _selectedPaths => controller.selectedImagePaths;
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_warmAheadOfScroll);
+  }
+
+  @override
   void dispose() {
+    _scrollController.removeListener(_warmAheadOfScroll);
     _focusNode.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _warmAheadOfScroll() {
+    if (!_scrollController.hasClients) return;
+    final paths = _visiblePaths;
+    if (paths.isEmpty) return;
+    final columns = _columnCount.clamp(2, widget.maxColumns);
+    final position = _scrollController.position;
+    final viewport = position.viewportDimension;
+    if (viewport <= 0) return;
+    // Match GridView childAspectRatio 0.88 + 8px padding/spacing roughly.
+    final cellH = (position.maxScrollExtent > 0 || paths.length > columns)
+        ? (viewport / 3.2)
+        : viewport;
+    final rowH = cellH + 8;
+    final firstRow = (position.pixels / rowH).floor().clamp(0, 1 << 20);
+    final first = (firstRow * columns).clamp(0, paths.length);
+    if (first == _lastWarmFirst) return;
+    _lastWarmFirst = first;
+    final end = (first + columns * 10).clamp(0, paths.length);
+    if (first >= end) return;
+    controller.warmThumbnailPaths(paths.sublist(first, end));
   }
 
   List<String> get _visiblePaths {
@@ -945,24 +1813,8 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     });
   }
 
-  int _thumbCacheWidth(int columns) {
-    switch (columns) {
-      case 2:
-        return 480;
-      case 3:
-        return 320;
-      case 4:
-        return 240;
-      case 5:
-        return 192;
-      case 6:
-        return 160;
-      case 7:
-        return 144;
-      default:
-        return 128;
-    }
-  }
+  /// Shared with [OrientedImageBytes] warmup so scroll hits the same cache keys.
+  int get _thumbCacheWidth => OrientedImageBytes.thumbMaxWidth;
 
   String _captureTime(String path) {
     final value = controller.captureByPath[path];
@@ -991,7 +1843,11 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
           borderRadius: BorderRadius.circular(FfTokens.radiusCard),
           border: Border.all(color: tokens.divider),
         ),
-        child: Text('No images', style: tokens.metaStyle),
+        child: FfGlow(
+          glowW: 260,
+          glowH: 160,
+          child: Text('No images', style: tokens.metaStyle),
+        ),
       );
     }
 
@@ -1013,7 +1869,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
           borderRadius: BorderRadius.circular(FfTokens.radiusCard),
           border: Border.all(
             color: widget.focused ? tokens.accent : tokens.divider,
-            width: widget.focused ? FfTokens.focusOutlineWidth : 1,
+            width: 1,
           ),
         ),
         clipBehavior: Clip.antiAlias,
@@ -1039,9 +1895,13 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
             Expanded(
               child: paths.isEmpty
                   ? Center(
-                      child: Text(
-                        'No images match current filters',
-                        style: tokens.metaStyle,
+                      child: FfGlow(
+                        glowW: 320,
+                        glowH: 180,
+                        child: Text(
+                          'No images match current filters',
+                          style: tokens.metaStyle,
+                        ),
                       ),
                     )
                   : LayoutBuilder(
@@ -1077,6 +1937,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                               GridView.builder(
                                 controller: _scrollController,
                                 padding: const EdgeInsets.all(8),
+                                cacheExtent: 2200,
                                 gridDelegate:
                                     SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: columns,
@@ -1099,9 +1960,6 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                   final borderColor = selected
                                       ? tokens.accent
                                       : tokens.divider;
-                                  final borderWidth = selected
-                                      ? FfTokens.focusOutlineWidth
-                                      : 1.0;
                                   return GestureDetector(
                                     key: ValueKey(path),
                                     onTap: () => _selectThumbnail(paths, i),
@@ -1114,26 +1972,17 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                     child: Tooltip(
                                       message: p.basename(path),
                                       child: Container(
-                                        padding: const EdgeInsets.all(4),
+                                        padding: const EdgeInsets.all(6),
                                         decoration: BoxDecoration(
                                           color: selected
-                                              ? tokens.selectedFill
-                                              : tokens.surface,
-                                          borderRadius: BorderRadius.circular(
-                                            FfTokens.radiusTile,
-                                          ),
+                                              ? tokens.hover
+                                              : FfTokens.card,
+                                          borderRadius:
+                                              BorderRadius.circular(7),
                                           border: Border.all(
                                             color: borderColor,
-                                            width: borderWidth,
+                                            width: 1,
                                           ),
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: tokens.text
-                                                  .withValues(alpha: 0.08),
-                                              blurRadius: 5,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
                                         ),
                                         clipBehavior: Clip.antiAlias,
                                         child: Column(
@@ -1154,8 +2003,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                                               path),
                                                       fit: BoxFit.contain,
                                                       cacheWidth:
-                                                          _thumbCacheWidth(
-                                                              columns),
+                                                          _thumbCacheWidth,
                                                     ),
                                                     if (controller
                                                             .transmitting &&
@@ -1172,56 +2020,31 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                                           compact: true,
                                                         ),
                                                       ),
-                                                    if (captioned || ftp)
-                                                      Positioned(
-                                                        top: 4,
-                                                        right: 4,
-                                                        child: Row(
-                                                          mainAxisSize:
-                                                              MainAxisSize.min,
-                                                          children: [
-                                                            if (captioned)
-                                                              _ThumbnailStatusIcon(
-                                                                icon: Icons
-                                                                    .save_rounded,
-                                                                tooltip:
-                                                                    'Captioned',
-                                                                tokens: tokens,
-                                                              ),
-                                                            if (captioned &&
-                                                                ftp)
-                                                              const SizedBox(
-                                                                  width: 3),
-                                                            if (ftp)
-                                                              _ThumbnailStatusIcon(
-                                                                icon: Icons
-                                                                    .cloud_upload_rounded,
-                                                                tooltip:
-                                                                    "FTP'd",
-                                                                tokens: tokens,
-                                                                color: const Color(
-                                                                    0xFF3DDC84),
-                                                              ),
-                                                          ],
-                                                        ),
+                                                    Positioned(
+                                                      top: 4,
+                                                      right: 4,
+                                                      child: FrameStatusBadges(
+                                                        saved: captioned,
+                                                        sent: ftp,
                                                       ),
+                                                    ),
                                                   ],
                                                 ),
                                               ),
                                             ),
                                             const SizedBox(height: 3),
-                                            FittedBox(
-                                              fit: BoxFit.scaleDown,
-                                              alignment: Alignment.center,
-                                              child: Text(
-                                                p.basename(path),
-                                                maxLines: 1,
-                                                textAlign: TextAlign.center,
-                                                style: tokens.monoMetaStyle
-                                                    .copyWith(
-                                                  color: tokens.text,
-                                                  fontSize: 9,
-                                                ),
+                                            Text(
+                                              _shortThumbName(p.basename(path)),
+                                              maxLines: 1,
+                                              softWrap: false,
+                                              overflow: TextOverflow.ellipsis,
+                                              textAlign: TextAlign.center,
+                                              style: tokens.monoMetaStyle
+                                                  .copyWith(
+                                                color: tokens.textSecondary,
+                                                fontSize: 10.5,
+                                                fontWeight:
+                                                    FfTokens.weightRegular,
                                               ),
                                             ),
                                             _captureTimeLabel(path),
@@ -1280,50 +2103,24 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     return Text(
       value,
       maxLines: 1,
+      softWrap: false,
+      overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
-      style: tokens.microStyle.copyWith(fontSize: 8.5),
+      style: TextStyle(
+        fontFamily: FfTokens.fontFamily,
+        fontSize: 10.5,
+        fontWeight: FfTokens.weightRegular,
+        letterSpacing: 0,
+        color: tokens.textTertiary,
+        height: 1.2,
+      ),
     );
   }
 }
 
-class _ThumbnailStatusIcon extends StatelessWidget {
-  const _ThumbnailStatusIcon({
-    required this.icon,
-    required this.tooltip,
-    required this.tokens,
-    this.emphasized = false,
-    this.color,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final FfTokens tokens;
-  final bool emphasized;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final tint = color ?? (emphasized ? tokens.accent : tokens.textSecondary);
-    final border = color ?? (emphasized ? tokens.accent : tokens.divider);
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        width: 20,
-        height: 20,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: tokens.surface.withValues(alpha: 0.90),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: border),
-        ),
-        child: Icon(
-          icon,
-          size: 13,
-          color: tint,
-        ),
-      ),
-    );
-  }
+String _shortThumbName(String name) {
+  if (name.length <= 18) return name;
+  return '…${name.substring(name.length - 16)}';
 }
 
 class _ThumbnailToolbar extends StatelessWidget {
@@ -1355,9 +2152,9 @@ class _ThumbnailToolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final sizeProgress = (maxColumns - columnCount) / (maxColumns - 2);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       decoration: BoxDecoration(
-        color: tokens.badgeFill,
+        color: FfTokens.photoHeader,
         border: Border(
           bottom: BorderSide(color: tokens.divider, width: 1),
         ),
@@ -1365,12 +2162,9 @@ class _ThumbnailToolbar extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            'Sort By:',
-            style: TextStyle(
-              color: tokens.textSecondary,
-              fontSize: 10,
-              fontWeight: FontWeight.w400,
-            ),
+            'SORT',
+            softWrap: false,
+            style: FfTokens.panelLabel(color: tokens.textSecondary),
           ),
           const SizedBox(width: 4),
           _ThumbnailSortDropdown(
@@ -1475,8 +2269,7 @@ class _ThumbnailSortDropdown extends StatelessWidget {
                   SizedBox(
                     width: 17,
                     child: value == sort
-                        ? Icon(
-                            Icons.check_rounded,
+                        ? PhosphorIcon(PhosphorIconsRegular.check,
                             size: 14,
                             color: tokens.accent,
                           )
@@ -1524,8 +2317,7 @@ class _ThumbnailSortDropdown extends StatelessWidget {
                 ),
               ),
             ),
-            Icon(
-              Icons.arrow_drop_down,
+            PhosphorIcon(PhosphorIconsRegular.caretDown,
               size: 14,
               color: tokens.textSecondary,
             ),
@@ -1651,8 +2443,7 @@ class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
                     SizedBox(
                       width: 17,
                       child: scope == widget.scope
-                          ? Icon(
-                              Icons.check_rounded,
+                          ? PhosphorIcon(PhosphorIconsRegular.check,
                               size: 14,
                               color: tokens.accent,
                             )
@@ -1718,8 +2509,7 @@ class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
                 ),
               ),
               const SizedBox(width: 2),
-              Icon(
-                Icons.arrow_drop_down,
+              PhosphorIcon(PhosphorIconsRegular.caretDown,
                 size: 14,
                 color: tokens.textSecondary,
               ),
@@ -1963,8 +2753,7 @@ class _ThumbnailRefreshButton extends StatelessWidget {
                       color: tokens.accent,
                     ),
                   )
-                : Icon(
-                    Icons.refresh_rounded,
+                : PhosphorIcon(PhosphorIconsRegular.arrowClockwise,
                     size: 15,
                     color: tokens.accent,
                   ),
@@ -1986,27 +2775,42 @@ class _ThumbnailOverviewButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Open large thumbnail view',
-      child: Material(
-        color: tokens.surface,
+    return Material(
+      color: tokens.surface,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(6),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
-          child: Container(
-            width: 26,
-            height: 22,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(color: tokens.divider),
-            ),
-            child: Icon(
-              Icons.image_search_outlined,
-              size: 15,
-              color: tokens.accent,
-            ),
+        child: Container(
+          height: 22,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: tokens.divider),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PhosphorIcon(
+                PhosphorIconsRegular.magnifyingGlass,
+                size: FfIcons.toolbarSize,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'Open larger thumbnails',
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  height: 1,
+                  color: tokens.textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2033,7 +2837,7 @@ class _ThumbnailZoomStepper extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         _ThumbnailSizeButton(
-          icon: Icons.remove,
+          icon: PhosphorIconsRegular.minus,
           tooltip: 'Smaller thumbnails',
           tokens: tokens,
           onTap: onSmaller,
@@ -2062,7 +2866,7 @@ class _ThumbnailZoomStepper extends StatelessWidget {
           ),
         ),
         _ThumbnailSizeButton(
-          icon: Icons.add,
+          icon: PhosphorIconsRegular.plus,
           tooltip: 'Larger thumbnails',
           tokens: tokens,
           onTap: onLarger,
@@ -2113,20 +2917,17 @@ class _ThumbnailScopeFooter extends StatelessWidget {
         break;
     }
     return Container(
-      padding: const EdgeInsets.fromLTRB(6, 2, 6, 2),
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       decoration: BoxDecoration(
-        color: tokens.badgeFill,
+        color: FfTokens.photoHeader,
         border: Border(top: BorderSide(color: tokens.divider)),
       ),
       child: Row(
         children: [
           Text(
-            'Filter:',
-            style: TextStyle(
-              color: tokens.textSecondary,
-              fontSize: 10,
-              fontWeight: FontWeight.w400,
-            ),
+            'FILTER',
+            softWrap: false,
+            style: FfTokens.panelLabel(color: tokens.textSecondary),
           ),
           const SizedBox(width: 4),
           _ThumbnailScopeDropdown(
@@ -2137,20 +2938,12 @@ class _ThumbnailScopeFooter extends StatelessWidget {
             sentCount: sentCount,
             onChanged: onScopeChanged,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              maxLines: 1,
-              textAlign: TextAlign.right,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: tokens.text.withValues(alpha: 0.45),
-                fontSize: 10,
-                fontWeight: FontWeight.w400,
-                height: 1.1,
-              ),
-            ),
+          const Spacer(),
+          Text(
+            text,
+            softWrap: false,
+            overflow: TextOverflow.ellipsis,
+            style: tokens.metaStyle.copyWith(color: tokens.textSecondary),
           ),
         ],
       ),
@@ -2182,7 +2975,7 @@ class _ThumbnailSizeButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(5),
           child: Padding(
             padding: const EdgeInsets.all(2),
-            child: Icon(icon, size: 13, color: tokens.textSecondary),
+            child: PhosphorIcon(icon, size: 13, color: tokens.textSecondary),
           ),
         ),
       ),
@@ -2190,29 +2983,41 @@ class _ThumbnailSizeButton extends StatelessWidget {
   }
 }
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({
-    required this.label,
+class _PhotoFrameCounter extends StatelessWidget {
+  const _PhotoFrameCounter({
+    super.key,
+    required this.index,
+    required this.total,
     required this.tokens,
-    required this.accent,
   });
 
-  final String label;
+  final int index;
+  final int total;
   final FfTokens tokens;
-  final bool accent;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: accent ? tokens.selectedFill : tokens.badgeFill,
-        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-        border: Border.all(
-          color: accent ? tokens.selectedBorder : tokens.divider,
+    return Material(
+      color: FfTokens.viewerChrome,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: tokens.divider),
+        ),
+        child: Text(
+          '$index / $total',
+          softWrap: false,
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: tokens.textSizeMicro,
+            fontWeight: FfTokens.weightMedium,
+            color: tokens.text,
+            height: 1,
+          ),
         ),
       ),
-      child: Text(label, style: tokens.metaStyle.copyWith(color: tokens.text)),
     );
   }
 }
@@ -2246,7 +3051,7 @@ class MobileFrameThumb extends StatelessWidget {
             ),
             clipBehavior: Clip.antiAlias,
             child: path == null
-                ? Icon(Icons.image_outlined, color: t.textSecondary, size: 20)
+                ? PhosphorIcon(PhosphorIconsRegular.image, color: t.textSecondary, size: 20)
                 : Stack(
                     fit: StackFit.expand,
                     children: [
@@ -2330,8 +3135,7 @@ class MobileFrameBanner extends StatelessWidget {
                     borderRadius: BorderRadius.circular(10),
                     child: path == null
                         ? Center(
-                            child: Icon(
-                              Icons.image_outlined,
+                            child: PhosphorIcon(PhosphorIconsRegular.image,
                               color: t.textSecondary,
                               size: 36,
                             ),

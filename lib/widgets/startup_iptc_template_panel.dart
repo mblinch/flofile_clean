@@ -6,6 +6,7 @@ import '../caption_style/wire_iptc_specs.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/iptc_template_apply_service.dart';
 import 'app_styled_dialogs.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Startup right column: compact IPTC checklist filled from folder files.
 class StartupIptcTemplatePanel extends StatelessWidget {
@@ -377,7 +378,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                                   ? 'Loading template…'
                                   : 'Load template…',
                               fontSize: 10,
-                              icon: Icons.upload_file_outlined,
+                              icon: PhosphorIconsRegular.uploadSimple,
                               isTealGradient: true,
                               fullWidth: true,
                               onPressed: _fieldsInactive ||
@@ -393,7 +394,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                             child: ElevatedGreyButton(
                               label: 'Load original values',
                               fontSize: 10,
-                              icon: Icons.restore_page_outlined,
+                              icon: PhosphorIconsRegular.arrowCounterClockwise,
                               fullWidth: true,
                               onPressed: _fieldsInactive ||
                                       isLoadTemplateLoading ||
@@ -409,7 +410,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                             child: ElevatedGreyButton(
                               label: 'Clear all',
                               fontSize: 10,
-                              icon: Icons.clear_all,
+                              icon: PhosphorIconsRegular.trash,
                               isDanger: true,
                               fullWidth: true,
                               onPressed: _fieldsInactive ||
@@ -466,7 +467,7 @@ class _IptcApplyModeHelpButton extends StatelessWidget {
             fontFamily: 'Inter',
             fontSize: 13,
             fontVariations: [FontVariation('wght', 700)],
-            color: Color(0xFF2A4858),
+            color: Color(0xFF3A6076),
           ),
         ),
         content: SizedBox(
@@ -525,8 +526,7 @@ class _IptcApplyModeHelpButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           child: Padding(
             padding: const EdgeInsets.all(2),
-            child: Icon(
-              Icons.help_outline,
+            child: PhosphorIcon(PhosphorIconsRegular.question,
               size: 12,
               color: Colors.grey.shade600,
             ),
@@ -1109,7 +1109,7 @@ class _WireTemplateDropdown extends StatelessWidget {
             fontFamily: 'Inter',
             fontSize: compact ? 10 : 11,
             fontVariations: const [FontVariation('wght', 600)],
-            color: const Color(0xFF2A4858),
+            color: const Color(0xFF3A6076),
           ),
         );
       },
@@ -1129,7 +1129,7 @@ class _WireTemplateDropdown extends StatelessWidget {
                 fontVariations: [
                   FontVariation('wght', isSelected ? 700 : 500),
                 ],
-                color: const Color(0xFF2A4858),
+                color: const Color(0xFF3A6076),
               ),
             ),
           ),

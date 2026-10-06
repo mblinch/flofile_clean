@@ -4,12 +4,12 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:path/path.dart' as p;
 
 import '../../services/admin_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/mlb_api_service.dart';
+import '../../theme/ff_glow.dart';
 import '../../theme/ff_tokens.dart';
 import '../../widgets/admin_screen.dart';
 import '../../widgets/app_styled_dialogs.dart';
@@ -33,6 +33,7 @@ import 'layout/verbs_column.dart';
 import 'widgets/caption_strip.dart';
 import 'widgets/ftp_history_dialog.dart';
 import 'widgets/transmit_dock.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Caption V2 screen — full layout + behaviour behind `CAPTION_V2`.
 class CaptionV2Screen extends StatefulWidget {
@@ -169,6 +170,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         context,
         players: _controller.homeRoster,
         teamName: _controller.homeTeam,
+        sportId: _controller.sport,
       );
       if (!mounted) return;
     }
@@ -178,6 +180,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         context,
         players: _controller.awayRoster,
         teamName: _controller.awayTeam,
+        sportId: _controller.sport,
       );
       if (!mounted) return;
     }
@@ -883,8 +886,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                                                       ),
                                                       child: Icon(
                                                         checked
-                                                            ? Icons.check
-                                                            : Icons.close,
+                                                            ? PhosphorIconsRegular.check
+                                                            : PhosphorIconsRegular.x,
                                                         size: 14,
                                                         color: checked
                                                             ? t.bg
@@ -967,13 +970,18 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
   }
 
-  Widget _withChrome(Widget body, {bool sessionActive = false}) {
+  Widget _withChrome(
+    Widget body, {
+    bool sessionActive = false,
+    String? title,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _TopChrome(
           controller: sessionActive ? _controller : null,
           onResetSession: sessionActive ? _controller.resetToStartup : null,
+          title: title,
         ),
         Expanded(child: body),
       ],
@@ -985,38 +993,25 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final c = _controller;
 
-    if (!c.sessionReady) {
-      if (c.sessionLoading) {
-        return Scaffold(
-          backgroundColor: t.bg,
-          body: _withChrome(
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: t.accent,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    c.sessionLoadingLabel ?? 'Loading…',
-                    style: t.secondaryLabelStyle,
-                  ),
-                ],
-              ),
-            ),
+    if (c.sessionLoading) {
+      return Scaffold(
+        backgroundColor: t.bg,
+        body: _withChrome(
+          _SessionLoadingPane(
+            tokens: t,
+            label: c.sessionLoadingLabel ?? 'Loading…',
           ),
-        );
-      }
+          title: c.sessionReady ? 'Loading folder' : 'New Session',
+        ),
+      );
+    }
+
+    if (!c.sessionReady) {
       return Scaffold(
         backgroundColor: t.bg,
         body: _withChrome(
           CaptionV2StartupScreen(onComplete: _onStartupComplete),
+          title: 'New Session',
         ),
       );
     }
@@ -1414,21 +1409,24 @@ class _TopChrome extends StatelessWidget {
   const _TopChrome({
     this.controller,
     this.onResetSession,
+    this.title,
   });
 
   final CaptionV2Controller? controller;
   final VoidCallback? onResetSession;
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final c = controller;
+    final headerTitle = title?.trim();
 
     return Container(
-      height: 30,
-      padding: const EdgeInsets.fromLTRB(8, 0, 6, 0),
+      height: 38,
+      padding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
       decoration: BoxDecoration(
-        color: t.surface,
+        color: Colors.transparent,
         border: Border(bottom: BorderSide(color: t.divider)),
       ),
       child: Row(
@@ -1438,49 +1436,35 @@ class _TopChrome extends StatelessWidget {
               message: 'Start a new caption session',
               waitDuration: const Duration(milliseconds: 400),
               child: Material(
-                color: t.selectedFill,
+                color: t.elevated,
                 borderRadius: BorderRadius.circular(999),
                 child: InkWell(
                   onTap: onResetSession,
                   borderRadius: BorderRadius.circular(999),
                   child: Container(
-                    height: 24,
-                    padding: const EdgeInsets.fromLTRB(6, 0, 10, 0),
+                    height: 28,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: t.accent.withValues(alpha: 0.45),
-                      ),
+                      border: Border.all(color: t.accentEdge),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: t.accent,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          alignment: Alignment.center,
-                          child: SvgPicture.asset(
-                            'assets/images/rocket_icon_white_only.svg',
-                            width: 11,
-                            height: 11,
-                            fit: BoxFit.contain,
-                            colorFilter: ColorFilter.mode(
-                              t.bg,
-                              BlendMode.srcIn,
-                            ),
-                          ),
+                        PhosphorIcon(PhosphorIconsRegular.arrowClockwise,
+                          size: 15,
+                          color: t.text,
                         ),
-                        const SizedBox(width: 6),
+                        const SizedBox(width: 7),
                         Text(
                           'Start New Session',
-                          style: t.metaStyle.copyWith(
-                            color: t.accent,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 11,
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0,
+                            height: 1,
+                            color: t.text,
                           ),
                         ),
                       ],
@@ -1488,8 +1472,39 @@ class _TopChrome extends StatelessWidget {
                   ),
                 ),
               ),
+            )
+          else if (headerTitle != null && headerTitle.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: FfGlow(
+                // Keep the spotlight centre on the letters — a tall ellipse
+                // drops the bright core well below a single-line title.
+                glowX: -0.20,
+                glowY: -1.10,
+                glowW: 168,
+                glowH: 40,
+                child: Text(
+                  headerTitle,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                    height: 1,
+                    color: t.text,
+                  ),
+                ),
+              ),
             ),
           const Spacer(),
+          if (c != null) ...[
+            FtpModeToggle(
+              enabled: c.ftpModeEnabled,
+              tokens: t,
+              onChanged: c.setFtpModeEnabled,
+            ),
+            const SizedBox(width: 8),
+          ],
           if (c?.rostersLoading == true) ...[
             SizedBox(
               width: 14,
@@ -1501,35 +1516,29 @@ class _TopChrome extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          if (c != null) ...[
-            _FtpModeToggle(
-              enabled: c.ftpModeEnabled,
-              tokens: t,
-              onChanged: c.setFtpModeEnabled,
-            ),
+          if (AdminService.isCurrentUserAdminSync() &&
+              defaultTargetPlatform == TargetPlatform.macOS) ...[
             const SizedBox(width: 4),
+            _AdminWindowSizeDropdown(tokens: t),
           ],
-          if (AdminService.isCurrentUserAdminSync()) ...[
-            const AdminBadgeButton(child: _TopAdminBadge()),
-            if (defaultTargetPlatform == TargetPlatform.macOS) ...[
-              const SizedBox(width: 4),
-              _AdminWindowSizeDropdown(tokens: t),
-            ],
-            const SizedBox(width: 6),
-          ],
-          if (AuthService.instance.isSignedIn)
+          if (AuthService.instance.isSignedIn) ...[
+            const SizedBox(width: 4),
             FloHeaderSignedInAs(
               foreground: t.text,
               foregroundMuted: t.textSecondary,
             ),
+          ],
+          if (AdminService.isCurrentUserAdminSync()) ...[
+            const SizedBox(width: 4),
+            const AdminBadgeButton(child: _TopAdminBadge()),
+          ],
           const SizedBox(width: 4),
           IconButton(
             onPressed: () => showDialog<void>(
               context: context,
               builder: (context) => const PreferencesDialog(),
             ),
-            icon: Icon(
-              Icons.settings_outlined,
+            icon: PhosphorIcon(PhosphorIconsRegular.gear,
               size: 17,
               color: t.textSecondary,
             ),
@@ -1537,48 +1546,6 @@ class _TopChrome extends StatelessWidget {
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.all(4),
             constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FtpModeToggle extends StatelessWidget {
-  const _FtpModeToggle({
-    required this.enabled,
-    required this.tokens,
-    required this.onChanged,
-  });
-
-  final bool enabled;
-  final FfTokens tokens;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: enabled
-          ? 'FTP mode on — FTP buttons and shortcuts are available'
-          : 'FTP mode off — FTP buttons and shortcuts are hidden',
-      waitDuration: const Duration(milliseconds: 400),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            'FTP',
-            style: tokens.metaStyle.copyWith(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 2),
-          Transform.scale(
-            scale: 0.55,
-            alignment: Alignment.centerLeft,
-            child: Switch.adaptive(
-              value: enabled,
-              onChanged: onChanged,
-              activeColor: tokens.accent,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
           ),
         ],
       ),
@@ -1594,16 +1561,15 @@ class _TopAdminBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: const Color(0x59E8C547),
+        color: FfTokens.gold,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE8C547)),
       ),
       child: const Text(
         'Admin',
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w600,
-          color: Color(0xFFFFF3C4),
+          color: FfTokens.inkOnGold,
           height: 1,
         ),
       ),
@@ -1650,7 +1616,7 @@ class _AdminWindowSizeDropdown extends StatelessWidget {
       height: 22,
       padding: const EdgeInsets.only(left: 6, right: 2),
       decoration: BoxDecoration(
-        color: tokens.sunken,
+        color: tokens.elevated,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: tokens.divider),
       ),
@@ -1660,8 +1626,7 @@ class _AdminWindowSizeDropdown extends StatelessWidget {
           isDense: true,
           isExpanded: true,
           dropdownColor: tokens.surface,
-          icon: Icon(
-            Icons.arrow_drop_down,
+          icon: PhosphorIcon(PhosphorIconsRegular.caretDown,
             size: 16,
             color: tokens.textSecondary,
           ),
@@ -1948,6 +1913,68 @@ class _MobileTab extends StatelessWidget {
             style: tokens.labelStyle.copyWith(
               color: selected ? tokens.text : tokens.textSecondary,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Full-session gate while rosters, folder scan, saved/uploaded marks, and
+/// preview EXIF finish — so the photo card never flashes empty chrome.
+class _SessionLoadingPane extends StatelessWidget {
+  const _SessionLoadingPane({
+    required this.tokens,
+    required this.label,
+  });
+
+  final FfTokens tokens;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 32,
+                height: 32,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: tokens.accent,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Preparing session',
+                textAlign: TextAlign.center,
+                style: tokens.labelStyle.copyWith(
+                  fontSize: tokens.textSizeBody,
+                  color: tokens.text,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: tokens.secondaryLabelStyle.copyWith(
+                  color: tokens.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Photo details and saved / uploaded status load before the workspace opens.',
+                textAlign: TextAlign.center,
+                style: tokens.metaStyle.copyWith(
+                  color: tokens.textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
       ),

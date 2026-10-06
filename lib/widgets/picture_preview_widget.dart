@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../utils/image_file_operations.dart';
 import '../theme/app_tokens.dart';
 import 'card_container.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 // Public interface for the picture preview widget state
 abstract class PicturePreviewWidgetState {
@@ -436,7 +437,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
             ),
             child: Row(
               children: [
-                Icon(Icons.photo_library,
+                PhosphorIcon(PhosphorIconsRegular.images,
                     size: 14, color: Colors.blue.shade700),
                 const SizedBox(width: 6),
                 Text(
@@ -604,7 +605,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.image, size: 48, color: Colors.grey),
+              PhosphorIcon(PhosphorIconsRegular.image, size: 48, color: Colors.grey),
               SizedBox(height: 8),
               Text(
                 'No Images Selected',
@@ -691,8 +692,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                 child: const SizedBox(
                                   width: 32,
                                   height: 32,
-                                  child: Icon(
-                                    Icons.zoom_in,
+                                  child: PhosphorIcon(PhosphorIconsRegular.magnifyingGlassPlus,
                                     color: Colors.white,
                                     size: 16,
                                   ),
@@ -730,7 +730,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                                 currentImagePath]! <
                                             1.0) ...[
                                       // Currently uploading
-                                      const Icon(Icons.rocket_launch,
+                                      const PhosphorIcon(PhosphorIconsRegular.rocketLaunch,
                                           color: Colors.blue, size: 16),
                                       const SizedBox(width: 4),
                                       Text(
@@ -743,7 +743,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                                       ),
                                     ] else ...[
                                       // Queued
-                                      const Icon(Icons.schedule,
+                                      const PhosphorIcon(PhosphorIconsRegular.clock,
                                           color: Colors.orange, size: 16),
                                       const SizedBox(width: 4),
                                       const Text(
@@ -816,7 +816,7 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(25),
                         ),
-                        child: const Icon(Icons.close,
+                        child: const PhosphorIcon(PhosphorIconsRegular.x,
                             color: Colors.white, size: 24),
                       ),
                     ),
@@ -843,59 +843,59 @@ class _PicturePreviewWidgetState extends State<PicturePreviewWidget>
       AppPopupMenu.tile(
         value: 'copy_metadata',
         label: 'Copy Metadata',
-        icon: Icons.copy_outlined,
+        icon: PhosphorIconsRegular.copy,
       ),
       AppPopupMenu.tile(
         value: 'paste_metadata',
         label: 'Paste Metadata',
-        icon: Icons.paste_outlined,
+        icon: PhosphorIconsRegular.clipboardText,
       ),
       AppPopupMenu.tile(
         value: 'apply_iptc_template',
         label: 'Apply IPTC Template',
-        icon: Icons.description_outlined,
+        icon: PhosphorIconsRegular.fileText,
       ),
       if (widget.onEditMetadata != null)
         AppPopupMenu.tile(
           value: 'edit_iptc',
           label: 'Edit IPTC',
-          icon: Icons.edit_outlined,
+          icon: PhosphorIconsRegular.pencilSimple,
         ),
       if (widget.onEditInPhotoshop != null)
         AppPopupMenu.tile(
           value: 'edit_photoshop',
           label: 'Edit in Photoshop',
-          icon: Icons.brush_outlined,
+          icon: PhosphorIconsRegular.paintBrush,
         ),
       const PopupMenuDivider(height: 1),
       if (widget.uploadedImages?.contains(imagePath) ?? false)
         AppPopupMenu.tile(
           value: 'remove_ftp',
           label: 'Remove FTP Status',
-          icon: Icons.cloud_done_outlined,
+          icon: PhosphorIconsRegular.cloudCheck,
         )
       else
         AppPopupMenu.tile(
           value: 'ftp_image',
           label: 'FTP Image',
-          icon: Icons.cloud_upload_outlined,
+          icon: PhosphorIconsRegular.cloudArrowUp,
         ),
       const PopupMenuDivider(height: 1),
       AppPopupMenu.tile(
         value: 'open',
         label: 'Open in Finder',
-        icon: Icons.open_in_new,
+        icon: PhosphorIconsRegular.arrowSquareOut,
       ),
       AppPopupMenu.tile(
         value: 'rename',
         label: 'Rename Image',
-        icon: Icons.drive_file_rename_outline,
+        icon: PhosphorIconsRegular.pencilSimple,
       ),
       const PopupMenuDivider(height: 1),
       AppPopupMenu.tile(
         value: 'delete',
         label: 'Delete Image',
-        icon: Icons.delete_outline,
+        icon: PhosphorIconsRegular.trash,
         destructive: true,
       ),
     ];

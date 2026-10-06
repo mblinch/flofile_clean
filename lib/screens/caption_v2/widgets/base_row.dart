@@ -30,7 +30,7 @@ class BaseRow extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(compact ? 2 : 4),
       decoration: BoxDecoration(
-        color: t.sunken,
+        color: t.elevated,
         borderRadius: BorderRadius.circular(FfTokens.radiusChip),
       ),
       child: Row(
@@ -85,8 +85,9 @@ class _BaseSegment extends StatelessWidget {
             decoration: BoxDecoration(
               color: selected ? tokens.selectedFill : null,
               borderRadius: BorderRadius.circular(FfTokens.radiusChip - 2),
-              border:
-                  selected ? Border.all(color: tokens.selectedBorder) : null,
+              border: selected
+                  ? Border(left: BorderSide(color: tokens.accent, width: 2))
+                  : null,
             ),
             child: Text(
               label,

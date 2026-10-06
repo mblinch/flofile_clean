@@ -15,11 +15,13 @@ import '../caption_style/sport_verb_categories.dart';
 import '../flo_layout_constants.dart';
 import '../services/admin_service.dart';
 import '../theme/app_tokens.dart';
+import '../theme/ff_icons.dart';
 import '../utils/baseball_tags_popup_rows.dart';
 import 'admin_screen.dart';
 import 'app_compact_checkbox.dart';
 import 'card_container.dart';
 import 'caption_layout_builder_dialog.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Which Keyboard Fire column Tab currently targets (left → right).
 enum _KbShortcutPanel { home, verbs, away }
@@ -370,7 +372,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 borderRadius: BorderRadius.circular(5)),
             child: Row(
               children: [
-                Icon(Icons.drag_indicator,
+                PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
                     size: 13, color: Colors.grey.shade700),
                 const SizedBox(width: 4),
                 SizedBox(
@@ -448,7 +450,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 borderRadius: BorderRadius.circular(5)),
             child: Row(
               children: [
-                Icon(Icons.drag_indicator,
+                PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
                     size: 13, color: Colors.grey.shade700),
                 const SizedBox(width: 4),
                 SizedBox(
@@ -1164,8 +1166,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 const SizedBox(width: 1),
                 Icon(
                   _kbPlayerSortAscending
-                      ? Icons.keyboard_arrow_up
-                      : Icons.keyboard_arrow_down,
+                      ? PhosphorIconsRegular.caretUp
+                      : PhosphorIconsRegular.caretDown,
                   size: 12,
                   color: AppTokens.accent,
                 ),
@@ -1233,8 +1235,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           borderRadius: BorderRadius.circular(AppTokens.radiusControl),
           child: const Padding(
             padding: EdgeInsets.all(6),
-            child: Icon(
-              Icons.add_rounded,
+            child: PhosphorIcon(PhosphorIconsRegular.plus,
               size: 14,
               color: AppTokens.accent,
             ),
@@ -2490,8 +2491,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(
-            Icons.edit_outlined,
+          PhosphorIcon(PhosphorIconsRegular.pencilSimple,
             size: 11,
             color: hasOverride ? const Color(0xFF1976D2) : Colors.grey.shade500,
           ),
@@ -2811,8 +2811,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               borderRadius: BorderRadius.circular(AppTokens.radiusKeycap),
               child: const Padding(
                 padding: EdgeInsets.all(3),
-                child: Icon(
-                  Icons.edit_outlined,
+                child: PhosphorIcon(PhosphorIconsRegular.pencilSimple,
                   size: 12,
                   color: AppTokens.accent,
                 ),
@@ -3156,7 +3155,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           value: 'edit',
           child: Row(
             children: [
-              Icon(Icons.edit, size: 16),
+              PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 16),
               SizedBox(width: 8),
               Text('Edit player'),
             ],
@@ -3166,7 +3165,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           value: 'add',
           child: Row(
             children: [
-              const Icon(Icons.person_add, size: 16),
+              const PhosphorIcon(PhosphorIconsRegular.userPlus, size: 16),
               const SizedBox(width: 8),
               Text('Add custom player to ${isHome ? 'Home' : 'Away'}'),
             ],
@@ -3339,8 +3338,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.visibility_off,
+                    PhosphorIcon(PhosphorIconsRegular.eyeSlash,
                       size: 15,
                       color: Colors.grey.shade600,
                     ),
@@ -3400,8 +3398,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 child: Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                  child: Icon(
-                    Icons.visibility,
+                  child: PhosphorIcon(PhosphorIconsRegular.eye,
                     size: 16,
                     color: Colors.grey.shade700,
                   ),
@@ -3960,8 +3957,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                 children: [
                   Icon(
                     _showKeyboardFireShortcutsHelp
-                        ? Icons.keyboard_arrow_down
-                        : Icons.keyboard_arrow_right,
+                        ? PhosphorIconsRegular.caretDown
+                        : PhosphorIconsRegular.caretRight,
                     size: 12,
                     color: Colors.grey.shade600,
                   ),
@@ -4045,7 +4042,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             child: SizedBox(
               width: 26,
               height: 22,
-              child: Icon(
+              child: PhosphorIcon(
                 icon,
                 size: 13,
                 color: selected ? AppTokens.accent : AppTokens.inkMuted,
@@ -4059,13 +4056,13 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
     final segments = [
       segment(
         selected: !_useSquarePlayerView,
-        icon: Icons.format_list_bulleted,
+        icon: PhosphorIconsRegular.listBullets,
         tooltip: 'List view (names)',
         onTap: () => setState(() => _useSquarePlayerView = false),
       ),
       segment(
         selected: _useSquarePlayerView,
-        icon: Icons.grid_view,
+        icon: PhosphorIconsRegular.squaresFour,
         tooltip: 'Number grid: rows 0–9, 10–19, 20–29 … (10 per row)',
         onTap: () => setState(() => _useSquarePlayerView = true),
       ),
@@ -4222,7 +4219,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         border: Border.all(color: Colors.grey.shade400),
                         borderRadius: BorderRadius.circular(2),
                       ),
-                      child: Icon(Icons.add,
+                      child: PhosphorIcon(PhosphorIconsRegular.plus,
                           size: 11, color: Colors.grey.shade700),
                     ),
                   ),
@@ -4554,7 +4551,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         child: ElevatedGreyButton(
           label: 'Compare rosters',
           fontSize: 10,
-          icon: Icons.compare_arrows,
+          icon: PhosphorIconsRegular.arrowsLeftRight,
           isAdmin: true,
           onPressed: () => AdminScreen.open(
             context,
@@ -4716,8 +4713,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.only(right: 2),
-                      child: Icon(
-                        Icons.drag_indicator,
+                      child: PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
                         size: 11,
                         color: Colors.grey.shade500,
                       ),
@@ -4748,8 +4744,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    Icon(
-                      Icons.chevron_right,
+                    PhosphorIcon(PhosphorIconsRegular.caretRight,
                       size: 11,
                       color: isSelected
                           ? Colors.grey.shade700
@@ -4893,8 +4888,8 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                           offset: const Offset(0, 1.0),
                                           child: Icon(
                                             _pinnedCustomVerb != null
-                                                ? Icons.push_pin
-                                                : Icons.push_pin_outlined,
+                                                ? PhosphorIconsFill.pushPin
+                                                : PhosphorIconsRegular.pushPin,
                                             size: 9,
                                             color: fg,
                                           ),
@@ -5006,8 +5001,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  Icon(
-                                    Icons.history,
+                                  PhosphorIcon(PhosphorIconsRegular.clockCounterClockwise,
                                     size: 12,
                                     color: (_lastCustomVerb == null ||
                                             _lastCustomVerb!.trim().isEmpty)
@@ -5217,8 +5211,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                     turns: isExpanded ? 0.25 : 0,
                                     duration: AppTokens.motionFast,
                                     curve: AppTokens.motionCurve,
-                                    child: Icon(
-                                      Icons.chevron_right,
+                                    child: PhosphorIcon(PhosphorIconsRegular.caretRight,
                                       size: 16,
                                       color: isExpanded
                                           ? AppTokens.surface
@@ -5499,8 +5492,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                                                 const Padding(
                                                   padding: EdgeInsets.only(
                                                       left: 4),
-                                                  child: Icon(
-                                                    Icons.push_pin,
+                                                  child: PhosphorIcon(PhosphorIconsFill.pushPin,
                                                     size: 12,
                                                     color: AppTokens.inkMuted,
                                                   ),
@@ -5791,8 +5783,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     width: 14,
                     child: selected != null &&
                             selected.toLowerCase() == phrase.toLowerCase()
-                        ? const Icon(
-                            Icons.check,
+                        ? const PhosphorIcon(PhosphorIconsRegular.check,
                             size: 12,
                             color: AppTokens.accent,
                           )
@@ -5871,13 +5862,9 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     width: _kbInlineReactionHeight,
                     height: _kbInlineReactionHeight,
                     child: Center(
-                      // 🎉's ink sits left in its em-box; shift right to look centered.
-                      child: Transform.translate(
-                        offset: const Offset(2.5, -0.5),
-                        child: const Text(
-                          '🎉',
-                          style: TextStyle(fontSize: 16, height: 1),
-                        ),
+                      child: PhosphorIcon(
+                        PhosphorIconsRegular.confetti,
+                        size: FfIcons.size,
                       ),
                     ),
                   ),
@@ -5896,8 +5883,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     child: SizedBox(
                       width: 14,
                       height: _kbInlineReactionHeight,
-                      child: Icon(
-                        Icons.keyboard_arrow_down,
+                      child: PhosphorIcon(PhosphorIconsRegular.caretDown,
                         size: 14,
                         color:
                             isActive ? AppTokens.accent : AppTokens.inkMuted,
@@ -6391,8 +6377,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     width: 14,
                     child: selected != null &&
                             selected.toLowerCase() == phrase.toLowerCase()
-                        ? const Icon(
-                            Icons.check,
+                        ? const PhosphorIcon(PhosphorIconsRegular.check,
                             size: 12,
                             color: AppTokens.accent,
                           )
@@ -6443,8 +6428,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     padding: EdgeInsets.symmetric(horizontal: inline ? 5 : 7),
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.celebration_outlined,
+                        PhosphorIcon(PhosphorIconsRegular.confetti,
                           size: inline ? 11 : 13,
                           color:
                               isActive ? AppTokens.accent : AppTokens.inkMuted,
@@ -6492,8 +6476,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   child: InkWell(
                     onTap: () => onArrowTap(arrowCtx),
                     child: Center(
-                      child: Icon(
-                        Icons.keyboard_arrow_down,
+                      child: PhosphorIcon(PhosphorIconsRegular.caretDown,
                         size: inline ? 13 : 15,
                         color: isActive
                             ? AppTokens.accent
@@ -6727,7 +6710,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
           child: Row(
             children: [
               Icon(
-                isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                isPinned ? PhosphorIconsFill.pushPin : PhosphorIconsRegular.pushPin,
                 size: 16,
                 color:
                     isPinned ? const Color(0xFFF59E0B) : Colors.grey.shade600,
@@ -6746,7 +6729,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         child: Row(
           children: [
             Icon(
-              isFavorite ? Icons.star : Icons.star_border,
+              isFavorite ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
               size: 16,
               color: isFavorite ? Colors.amber : Colors.grey.shade600,
             ),
@@ -6763,7 +6746,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         height: 32,
         child: Row(
           children: [
-            Icon(Icons.edit, size: 16, color: Colors.grey.shade600),
+            PhosphorIcon(PhosphorIconsRegular.pencilSimple, size: 16, color: Colors.grey.shade600),
             const SizedBox(width: 8),
             Text(
               'Edit Verb',
@@ -6777,7 +6760,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
         height: 32,
         child: Row(
           children: [
-            Icon(Icons.delete_outline, size: 16, color: Colors.grey.shade600),
+            PhosphorIcon(PhosphorIconsRegular.trash, size: 16, color: Colors.grey.shade600),
             const SizedBox(width: 8),
             Text(
               'Delete verb',
@@ -6983,7 +6966,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
   static const LinearGradient _btnGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
+    colors: [Color(0xFF4A7A96), Color(0xFF3A6076)],
   );
 
   Widget _btn({
@@ -7062,7 +7045,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                       value: 'ftp_settings',
                       child: Row(
                         children: [
-                          Icon(Icons.settings, size: 18, color: Colors.black87),
+                          PhosphorIcon(PhosphorIconsRegular.gear, size: 18, color: Colors.black87),
                           SizedBox(width: 8),
                           Text('FTP Settings'),
                         ],
@@ -7091,7 +7074,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                   gradient: const LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
+                    colors: [Color(0xFF4A7A96), Color(0xFF3A6076)],
                   ),
                   borderRadius: BorderRadius.zero,
                   border: Border.all(color: const Color(0xFF4A7A96)),
@@ -7103,7 +7086,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.cloud_upload,
+                      const PhosphorIcon(PhosphorIconsRegular.cloudArrowUp,
                           size: 11, color: Colors.white),
                       const SizedBox(width: 3),
                       Text(
@@ -7169,7 +7152,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.chevron_left, size: 12, color: Colors.white),
+                  const PhosphorIcon(PhosphorIconsRegular.caretLeft, size: 12, color: Colors.white),
                   const SizedBox(width: 2),
                   Flexible(
                     child: FittedBox(
@@ -7210,7 +7193,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                     ),
                   ),
                   const SizedBox(width: 2),
-                  const Icon(Icons.chevron_right,
+                  const PhosphorIcon(PhosphorIconsRegular.caretRight,
                       size: 12, color: Colors.white),
                 ],
               ),
@@ -7223,7 +7206,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.content_paste, size: 12, color: Colors.white),
+                  PhosphorIcon(PhosphorIconsRegular.clipboardText, size: 12, color: Colors.white),
                   SizedBox(width: 2),
                   Text('Paste',
                       style: TextStyle(
@@ -7241,7 +7224,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.history, size: 12, color: Colors.white),
+                  PhosphorIcon(PhosphorIconsRegular.clockCounterClockwise, size: 12, color: Colors.white),
                   SizedBox(width: 2),
                   Text('Paste Prev',
                       style: TextStyle(
@@ -7259,7 +7242,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.settings, size: 12, color: Colors.white),
+                  PhosphorIcon(PhosphorIconsRegular.gear, size: 12, color: Colors.white),
                   SizedBox(width: 4),
                   Text('FTP Settings',
                       style: TextStyle(
@@ -7278,7 +7261,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
               child: const Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.refresh, size: 12, color: Colors.white),
+                  PhosphorIcon(PhosphorIconsRegular.arrowClockwise, size: 12, color: Colors.white),
                   SizedBox(width: 2),
                   Text('Reset Caption',
                       style: TextStyle(
@@ -7710,8 +7693,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           (_baseballInningPage - 1).clamp(0, 2);
                     })
                 : null,
-            child: Icon(
-              Icons.remove,
+            child: PhosphorIcon(PhosphorIconsRegular.minus,
               size: 12,
               color: page > 0 ? AppTokens.inkSecondary : AppTokens.inkMuted,
             ),
@@ -7725,8 +7707,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                           (_baseballInningPage + 1).clamp(0, 2);
                     })
                 : null,
-            child: Icon(
-              Icons.add,
+            child: PhosphorIcon(PhosphorIconsRegular.plus,
               size: 12,
               color: page < 2 ? AppTokens.inkSecondary : AppTokens.inkMuted,
             ),
@@ -7857,7 +7838,7 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
             () => _showPlayoffOvertimes = !_showPlayoffOvertimes,
           ),
           child: Icon(
-            _showPlayoffOvertimes ? Icons.remove : Icons.add,
+            _showPlayoffOvertimes ? PhosphorIconsRegular.minus : PhosphorIconsRegular.plus,
             size: 12,
             color: _showPlayoffOvertimes
                 ? AppTokens.surface
@@ -8393,7 +8374,7 @@ class _KeywordShortcutEditorDialogState
                   )),
               child: Row(
                 children: [
-                  Icon(Icons.label_outline, size: 11, color: Colors.black54),
+                  PhosphorIcon(PhosphorIconsRegular.tag, size: 11, color: Colors.black54),
                   const SizedBox(width: 4),
                   Text(
                     widget.isEdit
@@ -8408,7 +8389,7 @@ class _KeywordShortcutEditorDialogState
                   const Spacer(),
                   GestureDetector(
                     onTap: () => Navigator.of(context).pop(),
-                    child: Icon(Icons.close,
+                    child: PhosphorIcon(PhosphorIconsRegular.x,
                         size: 13, color: Colors.grey.shade500),
                   ),
                 ],

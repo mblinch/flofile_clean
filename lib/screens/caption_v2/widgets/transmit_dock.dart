@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../theme/ff_tokens.dart';
 import 'frame_status_dot.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Compact caption actions shown beneath the all-at-once search field.
 class CaptionV2ActionRow extends StatelessWidget {
@@ -37,38 +38,33 @@ class CaptionV2ActionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final hideHints = MediaQuery.sizeOf(context).width < 1100;
     final buttons = <Widget>[
       _UtilityButton(
-        label: 'Save',
-        icon: Icons.chevron_left,
+        label: '‹ Save & Prev',
         tokens: t,
         onPressed: onSavePrevious,
       ),
       _UtilityButton(
         label: 'Copy',
-        icon: Icons.copy_outlined,
         tokens: t,
         onPressed: onCopy,
       ),
       _UtilityButton(
         label: 'Paste',
-        icon: Icons.content_paste,
         tokens: t,
         enabled: pasteEnabled,
         dimWhenDisabled: false,
         onPressed: onPaste,
       ),
       _UtilityButton(
-        label: 'Paste\nPrevious',
-        icon: Icons.history,
+        label: 'Paste Last',
         tokens: t,
         onPressed: onPastePrevious,
       ),
       _UtilityButton(
-        label: 'Save',
-        hint: '⌘S',
-        icon: Icons.chevron_right,
-        iconTrailing: true,
+        label: 'Save & Next',
+        hint: hideHints ? null : '⌘S ›',
         tokens: t,
         enabled: saveNextEnabled,
         onPressed: onSaveNext,
@@ -76,11 +72,8 @@ class CaptionV2ActionRow extends StatelessWidget {
       if (showTransmit)
         _UtilityButton(
           label: transmitLabel,
-          icon: Icons.send_outlined,
-          iconTrailing: true,
           tokens: t,
           enabled: transmitEnabled,
-          emphasized: true,
           onPressed: onTransmit,
         ),
     ];
@@ -92,26 +85,77 @@ class CaptionV2ActionRow extends StatelessWidget {
         children: [
           for (var i = 0; i < buttons.length; i++) ...[
             if (i > 0) const SizedBox(width: 4),
-            if (showTransmit && onFtpHistory != null && i == buttons.length - 1)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: IconButton(
-                  tooltip: 'FTP history',
-                  onPressed: onFtpHistory,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 32,
-                    height: 32,
-                  ),
-                  icon: Icon(
-                    Icons.history,
-                    size: 18,
-                    color: t.textSecondary,
-                  ),
+            Expanded(child: buttons[i]),
+            if (showTransmit &&
+                onFtpHistory != null &&
+                i == buttons.length - 1) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                tooltip: 'FTP history',
+                onPressed: onFtpHistory,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
+                icon: PhosphorIcon(
+                  PhosphorIconsRegular.clockCounterClockwise,
+                  size: 18,
+                  color: t.textSecondary,
                 ),
               ),
-            Expanded(child: buttons[i]),
+            ],
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class FtpModeToggle extends StatelessWidget {
+  const FtpModeToggle({
+    super.key,
+    required this.enabled,
+    required this.tokens,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final FfTokens tokens;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: enabled
+          ? 'FTP mode on — FTP buttons and shortcuts are available'
+          : 'FTP mode off — FTP buttons and shortcuts are hidden',
+      waitDuration: const Duration(milliseconds: 400),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'FTP Mode',
+            style: tokens.metaStyle.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 2),
+          Transform.scale(
+            scale: 0.55,
+            alignment: Alignment.centerLeft,
+            child: Switch.adaptive(
+              value: enabled,
+              onChanged: onChanged,
+              activeTrackColor: tokens.accent,
+              inactiveTrackColor: tokens.hover,
+              thumbColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return tokens.bg;
+                }
+                return tokens.textTertiary;
+              }),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
         ],
       ),
     );
@@ -225,7 +269,6 @@ class TransmitDock extends StatelessWidget {
           if (onCopy != null) ...[
             _UtilityButton(
               label: 'Copy',
-              icon: Icons.copy_outlined,
               tokens: t,
               onPressed: onCopy,
             ),
@@ -234,7 +277,6 @@ class TransmitDock extends StatelessWidget {
           if (onPaste != null) ...[
             _UtilityButton(
               label: 'Paste',
-              icon: Icons.content_paste,
               tokens: t,
               enabled: pasteEnabled,
               onPressed: onPaste,
@@ -243,27 +285,24 @@ class TransmitDock extends StatelessWidget {
           ],
           if (onPastePrevious != null) ...[
             _UtilityButton(
-              label: 'Paste prev',
-              icon: Icons.history,
+              label: 'Paste Last',
               tokens: t,
               onPressed: onPastePrevious,
             ),
             const SizedBox(width: 8),
           ],
           _OutlinedActionButton(
-            label: 'Save & next',
-            hint: '⌘S',
-            trailingIcon: Icons.chevron_right,
+            label: 'Save & Next',
+            hint: isMobile ? null : '⌘S ›',
             tokens: t,
             minHeight: btnMinH,
-            emphasized: true,
             enabled: saveNextEnabled,
             onPressed: onSaveNext,
           ),
           const SizedBox(width: 10),
           _OutlinedActionButton(
             label: 'Transmit',
-            hint: '⇧F',
+            hint: isMobile ? null : '⇧F',
             tokens: t,
             minHeight: btnMinH,
             enabled: transmitEnabled,
@@ -275,120 +314,138 @@ class TransmitDock extends StatelessWidget {
   }
 }
 
-class _UtilityButton extends StatelessWidget {
+class _UtilityButton extends StatefulWidget {
   const _UtilityButton({
     required this.label,
-    required this.icon,
     required this.tokens,
     required this.onPressed,
     this.hint,
     this.enabled = true,
-    this.iconTrailing = false,
     this.dimWhenDisabled = true,
-    this.emphasized = false,
+    this.primary = false,
   });
 
   final String label;
-  final IconData icon;
   final FfTokens tokens;
   final VoidCallback? onPressed;
   final String? hint;
   final bool enabled;
-  final bool iconTrailing;
   final bool dimWhenDisabled;
-  final bool emphasized;
+  final bool primary;
+
+  @override
+  State<_UtilityButton> createState() => _UtilityButtonState();
+}
+
+class _UtilityButtonState extends State<_UtilityButton> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(6),
-        boxShadow: emphasized
-            ? [
-                BoxShadow(
-                  color: tokens.accent.withValues(alpha: 0.45),
-                  blurRadius: 7,
-                  spreadRadius: 1,
-                ),
-              ]
-            : null,
-      ),
-      child: OutlinedButton(
-        onPressed: enabled ? onPressed : null,
-        style: OutlinedButton.styleFrom(
-          minimumSize: Size.zero,
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          visualDensity: VisualDensity.compact,
-          foregroundColor: emphasized ? tokens.inkOnAccent : tokens.text,
-          disabledForegroundColor: emphasized
-              ? (dimWhenDisabled
-                  ? tokens.inkOnAccent.withValues(alpha: 0.55)
-                  : tokens.inkOnAccent)
-              : (dimWhenDisabled ? tokens.textSecondary : tokens.text),
-          backgroundColor: emphasized ? tokens.accent : tokens.surface,
-          disabledBackgroundColor: emphasized
-              ? (dimWhenDisabled
-                  ? tokens.accent.withValues(alpha: 0.45)
-                  : tokens.accent)
-              : (dimWhenDisabled
-                  ? tokens.badgeFill.withValues(alpha: 0.45)
-                  : tokens.surface),
-          side: BorderSide(
-            color: emphasized
-                ? (enabled || !dimWhenDisabled
-                    ? tokens.text
-                    : tokens.text.withValues(alpha: 0.45))
-                : (enabled || !dimWhenDisabled
-                    ? tokens.divider
-                    : tokens.divider.withValues(alpha: .5)),
-            width: emphasized ? 1.5 : 1,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(6),
-          ),
+    final tokens = widget.tokens;
+    final primary = widget.primary;
+    final enabled = widget.enabled;
+    final dimWhenDisabled = widget.dimWhenDisabled;
+    final hovering = enabled && _hovered;
+
+    // Primary (Save & Next) = dark teal fill + white glowing outline.
+    // Hover: white rim + white glow for all variants.
+    final fg = primary ? Colors.white : tokens.text;
+    final bg = primary ? FfTokens.nocturneAccentSoft : tokens.surface;
+    final border = hovering || primary
+        ? Colors.white.withValues(alpha: 0.92)
+        : tokens.accent;
+    final disabledFill = primary
+        ? FfTokens.nocturneAccentSoft.withValues(alpha: 0.45)
+        : bg.withValues(alpha: 0.4);
+    final glowColor = hovering || primary ? Colors.white : tokens.accent;
+
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+      onExit: enabled ? (_) => setState(() => _hovered = false) : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: enabled ? FfTokens.accentButtonGlow(glowColor) : null,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!iconTrailing) ...[
-              Icon(icon, size: 15),
-              const SizedBox(width: 5),
-            ],
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
+        child: OutlinedButton(
+          onPressed: enabled ? widget.onPressed : null,
+          style: OutlinedButton.styleFrom(
+            minimumSize: Size.zero,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity.compact,
+            foregroundColor: fg,
+            disabledForegroundColor: dimWhenDisabled
+                ? (primary
+                    ? Colors.white.withValues(alpha: 0.45)
+                    : tokens.textSecondary)
+                : fg,
+            backgroundColor: bg,
+            disabledBackgroundColor: dimWhenDisabled ? disabledFill : bg,
+            side: BorderSide(
+              color: enabled || !dimWhenDisabled
+                  ? border
+                  : border.withValues(alpha: 0.4),
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.max,
+            children: [
+              Flexible(
                 child: Text(
-                  label,
-                  maxLines: label.contains('\n') ? 2 : 1,
+                  widget.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: FfTokens.captionTitle.copyWith(
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
                     fontSize: 11.5,
                     letterSpacing: -0.2,
-                    color: emphasized ? tokens.inkOnAccent : tokens.text,
+                    fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+                    color: fg,
                     height: 1,
+                    shadows: enabled
+                        ? [
+                            Shadow(
+                              color: glowColor.withValues(alpha: 0.55),
+                              blurRadius: 7,
+                            ),
+                          ]
+                        : null,
                   ),
                 ),
               ),
-            ),
-            if (hint != null) ...[
-              const SizedBox(width: 4),
-              Text(
-                hint!,
-                style: tokens.keyHintStyle.copyWith(
-                  fontSize: 10,
-                  color: emphasized
-                      ? tokens.inkOnAccent.withValues(alpha: 0.85)
-                      : tokens.textSecondary,
+              if (widget.hint != null) ...[
+                const SizedBox(width: 4),
+                Text(
+                  widget.hint!,
+                  softWrap: false,
+                  style: tokens.keyHintStyle.copyWith(
+                    fontSize: 10,
+                    color: primary
+                        ? Colors.white.withValues(alpha: 0.78)
+                        : tokens.textSecondary,
+                    shadows: enabled
+                        ? [
+                            Shadow(
+                              color: glowColor.withValues(alpha: 0.4),
+                              blurRadius: 5,
+                            ),
+                          ]
+                        : null,
+                  ),
                 ),
-              ),
+              ],
             ],
-            if (iconTrailing) ...[
-              const SizedBox(width: 5),
-              Icon(icon, size: 15),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -419,13 +476,12 @@ class _SessionCount extends StatelessWidget {
   }
 }
 
-class _OutlinedActionButton extends StatelessWidget {
+class _OutlinedActionButton extends StatefulWidget {
   const _OutlinedActionButton({
     required this.label,
     required this.tokens,
     required this.minHeight,
     this.hint,
-    this.trailingIcon,
     this.emphasized = false,
     this.enabled = true,
     this.onPressed,
@@ -435,52 +491,121 @@ class _OutlinedActionButton extends StatelessWidget {
   final FfTokens tokens;
   final double minHeight;
   final String? hint;
-  final IconData? trailingIcon;
   final bool emphasized;
   final bool enabled;
   final VoidCallback? onPressed;
 
   @override
+  State<_OutlinedActionButton> createState() => _OutlinedActionButtonState();
+}
+
+class _OutlinedActionButtonState extends State<_OutlinedActionButton> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final borderColor =
-        enabled ? tokens.accent : tokens.accent.withValues(alpha: 0.35);
-    final textColor = enabled ? tokens.text : tokens.textSecondary;
+    final tokens = widget.tokens;
+    final emphasized = widget.emphasized;
+    final enabled = widget.enabled;
+    final hovering = enabled && _hovered;
+    final glowColor = hovering || emphasized ? Colors.white : tokens.accent;
+
+    // Emphasized (Save & Next): dark teal fill + white glowing outline.
+    // Secondary (Transmit): transparent + teal outline glow.
+    // Hover: white rim + white glow.
+    final borderColor = emphasized
+        ? (enabled
+            ? Colors.white.withValues(alpha: 0.92)
+            : Colors.white.withValues(alpha: 0.35))
+        : (enabled
+            ? (hovering
+                ? Colors.white.withValues(alpha: 0.92)
+                : tokens.accent)
+            : tokens.accent.withValues(alpha: 0.35));
+    final textColor = emphasized
+        ? (enabled
+            ? Colors.white
+            : Colors.white.withValues(alpha: 0.45))
+        : (enabled ? tokens.text : tokens.textSecondary);
+    final fill = emphasized
+        ? (enabled
+            ? FfTokens.nocturneAccentSoft
+            : FfTokens.nocturneAccentSoft.withValues(alpha: 0.45))
+        : Colors.transparent;
+    final glow = !enabled ? null : FfTokens.accentButtonGlow(glowColor);
 
     return Opacity(
-      opacity: enabled ? 1 : 0.55,
-      child: Material(
-        type: emphasized ? MaterialType.canvas : MaterialType.transparency,
-        color: emphasized ? tokens.badgeFill : null,
-        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-          child: Container(
-            constraints: BoxConstraints(minHeight: minHeight),
-            padding: EdgeInsets.symmetric(
-              horizontal: emphasized ? 16 : 14,
-              vertical: 5,
-            ),
-            decoration: BoxDecoration(
+      opacity: emphasized ? 1 : (enabled ? 1 : 0.55),
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: enabled ? (_) => setState(() => _hovered = false) : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+            boxShadow: glow,
+          ),
+          child: Material(
+            color: fill,
+            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+            child: InkWell(
+              onTap: enabled ? widget.onPressed : null,
               borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-              border: Border.all(color: borderColor, width: 1.5),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: tokens.labelStyle.copyWith(color: textColor),
+              child: Container(
+                constraints:
+                    BoxConstraints(minHeight: widget.minHeight, minWidth: 0),
+                padding: EdgeInsets.symmetric(
+                  horizontal: emphasized ? 16 : 14,
+                  vertical: 5,
                 ),
-                if (hint != null) ...[
-                  const SizedBox(width: 8),
-                  Text(hint!, style: tokens.keyHintStyle),
-                ],
-                if (trailingIcon != null) ...[
-                  const SizedBox(width: 2),
-                  Icon(trailingIcon, size: 18, color: textColor),
-                ],
-              ],
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+                  border: Border.all(color: borderColor, width: 1.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.label,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.labelStyle.copyWith(
+                        color: textColor,
+                        fontWeight: emphasized ? FontWeight.w600 : null,
+                        shadows: enabled
+                            ? [
+                                Shadow(
+                                  color: glowColor.withValues(alpha: 0.55),
+                                  blurRadius: 7,
+                                ),
+                              ]
+                            : null,
+                      ),
+                    ),
+                    if (widget.hint != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.hint!,
+                        softWrap: false,
+                        style: tokens.keyHintStyle.copyWith(
+                          color: emphasized
+                              ? Colors.white.withValues(alpha: 0.78)
+                              : null,
+                          shadows: enabled
+                              ? [
+                                  Shadow(
+                                    color: glowColor.withValues(alpha: 0.4),
+                                    blurRadius: 5,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),

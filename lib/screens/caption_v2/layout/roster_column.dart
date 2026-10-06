@@ -1,12 +1,18 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
-import '../../../theme/ff_tokens.dart';
 import '../../../services/mlb_api_service.dart';
+import '../../../theme/ff_glow.dart';
+import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../widgets/custom_name_entry.dart';
+import '../widgets/pinned_player_bar.dart';
 import '../widgets/player_row.dart';
+import '../widgets/quiet_filter_field.dart';
 import 'caption_v2_verb_editor.dart';
+import 'duplicate_jersey_dialog.dart';
+import 'player_data_issue_dialog.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 enum RosterViewMode { classic, wheel, infinite }
 
@@ -91,6 +97,10 @@ class _RosterColumnState extends State<RosterColumn> {
   }
 
   bool get _customNamePinned {
+    final pinned = widget.controller.pinnedPlayer;
+    if (pinned == null || pinned.isHome != widget.isHome) return false;
+    final id = pinned.player.playerId?.trim();
+    if (id != null && id.isNotEmpty) return false;
     final name = _customNameController.text.trim();
     if (name.isEmpty) return false;
     final jersey = _customJerseyController.text.trim();
@@ -106,6 +116,10 @@ class _RosterColumnState extends State<RosterColumn> {
   void _syncCustomNameFromPin() {
     final pinned = widget.controller.pinnedPlayer;
     if (pinned == null || pinned.isHome != widget.isHome) return;
+    // Only mirror *custom* pins into the footer field. Roster pins use the
+    // pinned player bar and must not lock/overwrite this text field.
+    final id = pinned.player.playerId?.trim();
+    if (id != null && id.isNotEmpty) return;
     if (_customNameFocusNode.hasFocus || _customJerseyFocusNode.hasFocus) {
       return;
     }
@@ -150,7 +164,6 @@ class _RosterColumnState extends State<RosterColumn> {
 
   void _toggleCustomNamePin() {
     final name = _customNameController.text.trim();
-    final jersey = _customJerseyController.text.trim();
     if (name.isEmpty && widget.controller.canUseLastCustomPlayer) {
       _customNameController.text = widget.controller.lastCustomPlayerName;
       _customJerseyController.text = widget.controller.lastCustomPlayerJersey;
@@ -164,6 +177,24 @@ class _RosterColumnState extends State<RosterColumn> {
     );
     _showCustomNameError(error);
     setState(() {});
+  }
+
+  Future<void> _reportPlayerDataIssue(
+    BuildContext context,
+    CaptionV2Controller c,
+    Player player,
+  ) async {
+    final teamName =
+        (widget.isHome ? c.homeTeam : c.awayTeam).trim().isEmpty
+            ? (widget.isHome ? c.homeAbbr : c.awayAbbr)
+            : (widget.isHome ? c.homeTeam : c.awayTeam);
+    await submitPlayerDataIssueReport(
+      context: context,
+      teamName: teamName,
+      sportId: c.sport,
+      side: widget.isHome ? 'home' : 'away',
+      player: player,
+    );
   }
 
   Future<void> _playerContextMenu(
@@ -237,95 +268,113 @@ class _RosterColumnState extends State<RosterColumn> {
 
     return Focus(
       focusNode: _columnFocusNode,
-      child: Listener(
-        onPointerDown: (_) {
-          if (firebarActive) return;
-          _columnFocusNode.requestFocus();
-          c.setColumnFocus(widget.isHome ? 0 : 2);
-        },
-        child: CaptionV2ColumnCard(
-          focused: widget.focused,
-          header: _RosterHeaderBar(
-            abbr: abbr,
-            filter: _filter,
+      child: CaptionV2ColumnCard(
+        focused: widget.focused,
+        accentOutline: true,
+        header: _RosterHeaderBar(
+          abbr: abbr,
+          tokens: t,
+          onEditRosters: widget.onEditRosters,
+          trailing: _RosterViewToggle(
+            mode: _viewMode,
             tokens: t,
-            onEditRosters: widget.onEditRosters,
-            trailing: _RosterViewToggle(
-              mode: _viewMode,
-              tokens: t,
-              supportsInfinite: widget.onInfiniteRequested != null,
-              onChanged: (mode) {
+            supportsInfinite: widget.onInfiniteRequested != null,
+            onChanged: (mode) {
+              if (mode == RosterViewMode.wheel &&
+                  widget.onDrumRequested != null) {
+                widget.onDrumRequested!();
+                return;
+              }
+              if (mode == RosterViewMode.infinite &&
+                  widget.onInfiniteRequested != null) {
+                widget.onInfiniteRequested!();
+                return;
+              }
+              setState(() {
                 if (mode == RosterViewMode.wheel &&
-                    widget.onDrumRequested != null) {
-                  widget.onDrumRequested!();
-                  return;
+                    _viewMode == RosterViewMode.wheel) {
+                  _viewMode = RosterViewMode.classic;
+                } else {
+                  _viewMode = mode;
                 }
-                if (mode == RosterViewMode.infinite &&
-                    widget.onInfiniteRequested != null) {
-                  widget.onInfiniteRequested!();
-                  return;
-                }
-                setState(() {
-                  if (mode == RosterViewMode.wheel &&
-                      _viewMode == RosterViewMode.wheel) {
-                    _viewMode = RosterViewMode.classic;
-                  } else {
-                    _viewMode = mode;
-                  }
-                });
-              },
-            ),
-            onSort: c.cycleRosterSortField,
-            sortLabel: c.rosterSortFieldLabel(),
-            onSortDirection: c.toggleRosterSortDirection,
-            sortDirectionLabel: c.rosterSortDirectionLabel(),
-            onFilterChanged: () => setState(() {}),
+              });
+            },
           ),
-          child: Column(
-            children: [
-              if (!firebarActive)
-                _RosterPlayerIssuesBar(
-                  roster: roster,
-                  tokens: t,
-                  onEditPlayer: (player) async {
-                    final result = await showCustomNameEntryDialog(
-                      context: context,
-                      teamLabel: abbr,
-                      title: 'Set jersey number',
-                      confirmLabel: 'Save',
-                      initialName: player.fullName,
-                      initialJersey: player.jerseyNumber,
-                    );
-                    if (!mounted || result == null) return;
-                    final error = c.updatePlayer(
-                      isHome: widget.isHome,
-                      original: player,
-                      fullName: result.name,
-                      jerseyNumber: result.jersey,
-                    );
-                    if (error != null && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(error),
-                          duration: const Duration(seconds: 2),
+          onSort: c.cycleRosterSortField,
+          sortLabel: c.rosterSortFieldLabel(),
+          onSortDirection: c.toggleRosterSortDirection,
+          sortDirectionLabel: c.rosterSortDirectionLabel(),
+        ),
+        child: Column(
+          children: [
+            Expanded(
+              child: Listener(
+                onPointerDown: (_) {
+                  if (firebarActive) return;
+                  _columnFocusNode.requestFocus();
+                  c.setColumnFocus(widget.isHome ? 0 : 2);
+                },
+                child: Column(
+                  children: [
+                    if (!firebarActive)
+                      PinnedPlayerBar(
+                        controller: c,
+                        isHome: widget.isHome,
+                        tokens: t,
+                        filter: QuietFilterField(
+                          controller: _filter,
+                          tokens: t,
+                          height: 24,
+                          onChanged: (_) => setState(() {}),
                         ),
-                      );
-                    }
-                  },
-                ),
-              Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
+                      ),
+                    if (!firebarActive)
+                      _RosterPlayerIssuesBar(
+                        roster: roster,
+                        tokens: t,
+                        onEditPlayer: (player) async {
+                          final result = await showCustomNameEntryDialog(
+                            context: context,
+                            teamLabel: abbr,
+                            title: 'Set jersey number',
+                            confirmLabel: 'Save',
+                            initialName: player.fullName,
+                            initialJersey: player.jerseyNumber,
+                          );
+                          if (!mounted || result == null) return;
+                          final error = c.updatePlayer(
+                            isHome: widget.isHome,
+                            original: player,
+                            fullName: result.name,
+                            jerseyNumber: result.jersey,
+                          );
+                          if (error != null && mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(error),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
                     if (filtered.isEmpty) {
                       return Center(
-                        child: Text(
-                          firebarActive || q.isNotEmpty
-                              ? 'No match'
-                              : 'No players',
-                          style: t.metaStyle.copyWith(
-                            color: firebarActive || q.isNotEmpty
-                                ? t.text.withValues(alpha: 0.34)
-                                : null,
+                        child: FfGlow(
+                          glowW: 240,
+                          glowH: 150,
+                          child: Text(
+                            firebarActive || q.isNotEmpty
+                                ? 'No match'
+                                : 'No players',
+                            style: t.metaStyle.copyWith(
+                              color: firebarActive || q.isNotEmpty
+                                  ? t.text.withValues(alpha: 0.34)
+                                  : null,
+                            ),
                           ),
                         ),
                       );
@@ -420,8 +469,10 @@ class _RosterColumnState extends State<RosterColumn> {
                           jersey: pl.jerseyNumber ?? '—',
                           name: c.playerListName(pl),
                           selected: firebarActive ? false : selected,
-                          pinned: !firebarActive &&
-                              c.isPlayerPinned(pl, isHome: widget.isHome),
+                          pinned: c.isPlayerPinned(
+                            pl,
+                            isHome: widget.isHome,
+                          ),
                           firebarSelected: firebarActive &&
                               firebarResult?.key == selectedResult?.key,
                           highlightQuery: firebarActive
@@ -444,12 +495,16 @@ class _RosterColumnState extends State<RosterColumn> {
                                   }
                                 }
                               : () => c.selectPlayer(pl, isHome: widget.isHome),
-                          onPinTap: firebarActive
-                              ? null
-                              : () => c.togglePlayerPin(
-                                    pl,
-                                    isHome: widget.isHome,
-                                  ),
+                          onPinTap: () => c.togglePlayerPin(
+                                pl,
+                                isHome: widget.isHome,
+                              ),
+                          onGoogleTap: () => openPlayerGoogleSearch(
+                                fullName: pl.fullName,
+                                sportId: c.sport,
+                              ),
+                          onReportTap: () =>
+                              _reportPlayerDataIssue(context, c, pl),
                           onSecondaryTapDown: (details) => _playerContextMenu(
                             context,
                             c,
@@ -459,25 +514,28 @@ class _RosterColumnState extends State<RosterColumn> {
                         );
                       },
                     );
-                  },
+                        },
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              if (!firebarActive)
-                CustomNameField(
-                  nameController: _customNameController,
-                  jerseyController: _customJerseyController,
-                  nameFocusNode: _customNameFocusNode,
-                  jerseyFocusNode: _customJerseyFocusNode,
-                  tokens: t,
-                  pinned: _customNamePinned,
-                  canUseLast: c.canUseLastCustomPlayer,
-                  onChanged: () => setState(() {}),
-                  onSubmit: _submitCustomName,
-                  onTogglePin: _toggleCustomNamePin,
-                  onUseLast: _useLastCustomName,
-                ),
-            ],
-          ),
+            ),
+            if (!firebarActive)
+              CustomNameField(
+                nameController: _customNameController,
+                jerseyController: _customJerseyController,
+                nameFocusNode: _customNameFocusNode,
+                jerseyFocusNode: _customJerseyFocusNode,
+                tokens: t,
+                pinned: _customNamePinned,
+                canUseLast: c.canUseLastCustomPlayer,
+                onChanged: () => setState(() {}),
+                onSubmit: _submitCustomName,
+                onTogglePin: _toggleCustomNamePin,
+                onUseLast: _useLastCustomName,
+              ),
+          ],
         ),
       ),
     );
@@ -517,7 +575,7 @@ class _RosterViewToggle extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
+                PhosphorIcon(
                   icon,
                   size: 16,
                   color: selected ? tokens.accent : tokens.textSecondary,
@@ -551,13 +609,13 @@ class _RosterViewToggle extends StatelessWidget {
           const SizedBox(width: 2),
           button(
             value: RosterViewMode.wheel,
-            icon: Icons.swap_vert,
+            icon: PhosphorIconsRegular.arrowsDownUp,
             tooltip: 'Default',
           ),
           if (supportsInfinite)
             button(
               value: RosterViewMode.infinite,
-              icon: Icons.all_inclusive,
+              icon: PhosphorIconsRegular.infinity,
               tooltip: 'Drum wheel',
             ),
         ],
@@ -663,9 +721,9 @@ class _PlayerWheelState extends State<_PlayerWheel> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  t.sunken.withValues(alpha: 0.92),
+                  t.elevated.withValues(alpha: 0.92),
                   t.surface,
-                  t.sunken.withValues(alpha: 0.92),
+                  t.elevated.withValues(alpha: 0.92),
                 ],
                 stops: const [0, 0.5, 1],
               ),
@@ -823,8 +881,7 @@ class _PlayerWheelState extends State<_PlayerWheel> {
                                           ),
                                           if (selected) ...[
                                             const SizedBox(width: 6),
-                                            Icon(
-                                              Icons.check,
+                                            PhosphorIcon(PhosphorIconsRegular.check,
                                               size: 14,
                                               color: t.accent,
                                             ),
@@ -884,29 +941,25 @@ class _WheelScrollBehavior extends MaterialScrollBehavior {
 class _RosterHeaderBar extends StatelessWidget {
   const _RosterHeaderBar({
     required this.abbr,
-    required this.filter,
     required this.tokens,
     required this.trailing,
     required this.onSort,
     required this.sortLabel,
     required this.onSortDirection,
     required this.sortDirectionLabel,
-    required this.onFilterChanged,
     this.onEditRosters,
   });
 
-  static const double _controlHeight = 22;
-  static const double headerHeight = 26;
+  static const double _controlHeight = 24;
+  static const double headerHeight = 32;
 
   final String abbr;
-  final TextEditingController filter;
   final FfTokens tokens;
   final Widget trailing;
   final VoidCallback onSort;
   final String sortLabel;
   final VoidCallback onSortDirection;
   final String sortDirectionLabel;
-  final VoidCallback onFilterChanged;
   final VoidCallback? onEditRosters;
 
   @override
@@ -917,13 +970,8 @@ class _RosterHeaderBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            abbr,
-            style: FfTokens.captionTitle.copyWith(
-              color: tokens.text,
-              fontSize: 15,
-              letterSpacing: -0.45,
-              height: 1,
-            ),
+            abbr.toUpperCase(),
+            style: FfTokens.teamAbbrLabel(color: tokens.text),
             textHeightBehavior: const TextHeightBehavior(
               applyHeightToFirstAscent: false,
               applyHeightToLastDescent: false,
@@ -931,98 +979,96 @@ class _RosterHeaderBar extends StatelessWidget {
           ),
           if (onEditRosters != null)
             Padding(
-              padding: const EdgeInsets.only(left: 4, right: 2),
-              child: IconButton(
-                onPressed: onEditRosters,
-                tooltip: 'Edit rosters',
-                padding: const EdgeInsets.all(2),
-                constraints:
-                    const BoxConstraints.tightFor(width: 22, height: 22),
-                visualDensity: VisualDensity.compact,
-                iconSize: 12,
-                color: tokens.textSecondary,
-                icon: const Icon(Icons.edit_outlined),
+              padding: const EdgeInsets.only(left: 2, right: 2),
+              child: _RosterGhostIcon(
+                tooltip: 'Rename team',
+                icon: PhosphorIconsRegular.pencilSimple,
+                tokens: tokens,
+                onTap: onEditRosters!,
               ),
             ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Container(
-              height: _controlHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 7),
-              decoration: BoxDecoration(
-                color: tokens.sunken,
-                borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-              ),
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                height: 14,
-                width: double.infinity,
-                child: TextField(
-                  controller: filter,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FfTokens.weightRegular,
-                    color: tokens.text,
-                    height: 1,
-                  ),
-                  cursorColor: tokens.accent,
-                  cursorHeight: 12,
-                  decoration: const InputDecoration(
-                    isCollapsed: true,
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  onChanged: (_) => onFilterChanged(),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
+          const Spacer(),
           SizedBox(
             height: _controlHeight,
             child: Center(child: trailing),
           ),
           const SizedBox(width: 2),
-          InkWell(
+          _RosterGhostIcon(
+            tooltip: 'Sort by number',
+            label: sortLabel,
+            tokens: tokens,
             onTap: onSort,
-            borderRadius: BorderRadius.circular(6),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-              child: Text(
-                sortLabel,
-                style: tokens.metaStyle.copyWith(
-                  color: tokens.textSecondary,
-                  height: 1,
-                  fontSize: 12,
-                ),
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
-              ),
-            ),
           ),
-          InkWell(
+          _RosterGhostIcon(
+            tooltip: sortDirectionLabel == '↑' ? 'Ascending' : 'Descending',
+            label: sortDirectionLabel,
+            tokens: tokens,
             onTap: onSortDirection,
-            borderRadius: BorderRadius.circular(6),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              child: Text(
-                sortDirectionLabel,
-                style: tokens.metaStyle.copyWith(
-                  color: tokens.textSecondary,
-                  height: 1,
-                  fontSize: 12,
-                ),
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
-              ),
-            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RosterGhostIcon extends StatefulWidget {
+  const _RosterGhostIcon({
+    required this.tooltip,
+    required this.tokens,
+    required this.onTap,
+    this.icon,
+    this.label,
+  });
+
+  final String tooltip;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+  final IconData? icon;
+  final String? label;
+
+  @override
+  State<_RosterGhostIcon> createState() => _RosterGhostIconState();
+}
+
+class _RosterGhostIconState extends State<_RosterGhostIcon> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color =
+        _hovered ? widget.tokens.text : widget.tokens.textSecondary;
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: 26,
+            height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: _hovered ? widget.tokens.hover : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: widget.icon != null
+                ? PhosphorIcon(widget.icon!, size: 13, color: color)
+                : Text(
+                    widget.label ?? '',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      height: 1,
+                      color: color,
+                    ),
+                  ),
+          ),
+        ),
       ),
     );
   }
@@ -1129,8 +1175,7 @@ class _RosterPlayerIssuesBarState extends State<_RosterPlayerIssuesBar> {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.warning_amber_rounded,
+                  PhosphorIcon(PhosphorIconsRegular.warning,
                     size: 14,
                     color: t.accent,
                   ),
@@ -1145,7 +1190,7 @@ class _RosterPlayerIssuesBarState extends State<_RosterPlayerIssuesBar> {
                     ),
                   ),
                   Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    _expanded ? PhosphorIconsRegular.caretUp : PhosphorIconsRegular.caretDown,
                     size: 16,
                     color: t.textSecondary,
                   ),
@@ -1202,6 +1247,7 @@ class CaptionV2ColumnCard extends StatelessWidget {
     required this.child,
     required this.focused,
     this.showHeader = true,
+    this.accentOutline = false,
   });
 
   final Widget header;
@@ -1209,17 +1255,22 @@ class CaptionV2ColumnCard extends StatelessWidget {
   final bool focused;
   final bool showHeader;
 
+  /// When true, use the teal accent border even when not focused.
+  final bool accentOutline;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final outlined = accentOutline || focused;
     return Container(
       decoration: BoxDecoration(
         color: t.surface,
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
         border: Border.all(
-          color: focused ? t.accent : t.divider,
-          width: focused ? FfTokens.focusOutlineWidth : 1,
+          color: outlined ? t.accent : t.divider,
+          width: 1,
         ),
+        boxShadow: outlined ? FfTokens.accentButtonGlow(t.accent) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

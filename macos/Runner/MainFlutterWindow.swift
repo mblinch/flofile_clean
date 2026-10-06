@@ -61,6 +61,8 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       with: flutterViewController.registrar(forPlugin: "ColorManagedPreviewPlugin"))
     MacSpellCheckPlugin.register(
       with: flutterViewController.registrar(forPlugin: "MacSpellCheckPlugin"))
+    JerseyOcrPlugin.register(
+      with: flutterViewController.registrar(forPlugin: "JerseyOcrPlugin"))
 
     _installJerseyShortcutChannel(flutterViewController)
     _installJerseyEventMonitor()

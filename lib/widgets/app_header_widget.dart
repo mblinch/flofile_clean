@@ -16,6 +16,7 @@ import '../theme/app_tokens.dart';
 import 'app_compact_checkbox.dart';
 import 'flo_chrome_header.dart';
 import 'admin_screen.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Accent for compact checkboxes (matches Preferences / FTP blue).
 const Color _kHeaderPrefsBlue = Color(0xFF0052CC);
@@ -254,8 +255,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
         cursor: SystemMouseCursors.help,
         child: Padding(
           padding: const EdgeInsets.only(right: 3),
-          child: Icon(
-            Icons.help_outline,
+          child: PhosphorIcon(PhosphorIconsRegular.question,
             size: 11,
             color: Colors.grey.shade600,
           ),
@@ -361,7 +361,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
             widget.onBurstDetectionChanged?.call(_burstDetectionEnabled);
             widget.onPreferencesClosed?.call();
           },
-          icon: const Icon(Icons.settings, color: AppTokens.onAccent),
+          icon: const PhosphorIcon(PhosphorIconsRegular.gear, color: AppTokens.onAccent),
           tooltip: 'Preferences',
           iconSize: 16,
           padding: const EdgeInsets.all(4),
@@ -669,10 +669,10 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                       children: [
                         // Home/Away symbol
                         if (label == 'Home Team')
-                          Icon(Icons.home,
+                          PhosphorIcon(PhosphorIconsRegular.house,
                               size: 12, color: Colors.grey.shade700),
                         if (label == 'Away Team')
-                          Icon(Icons.flight_takeoff,
+                          PhosphorIcon(PhosphorIconsRegular.airplaneTakeoff,
                               size: 12, color: Colors.grey.shade700),
                         const SizedBox(width: 3),
                         Expanded(
@@ -705,8 +705,8 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                             padding: const EdgeInsets.all(2),
                             child: Icon(
                               _favoriteTeams.contains(item)
-                                  ? Icons.star
-                                  : Icons.star_border,
+                                  ? PhosphorIconsFill.star
+                                  : PhosphorIconsRegular.star,
                               size: 12,
                               color: _favoriteTeams.contains(item)
                                   ? Colors.amber
@@ -733,9 +733,9 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                 // Home/Away symbol for selected item
                 if (value != null) ...[
                   if (label == 'Home Team')
-                    Icon(Icons.home, size: 11, color: Colors.grey.shade700),
+                    PhosphorIcon(PhosphorIconsRegular.house, size: 11, color: Colors.grey.shade700),
                   if (label == 'Away Team')
-                    Icon(Icons.flight_takeoff,
+                    PhosphorIcon(PhosphorIconsRegular.airplaneTakeoff,
                         size: 11, color: Colors.grey.shade700),
                   const SizedBox(width: 3),
                   Expanded(
@@ -753,7 +753,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                     ),
                   ),
                 ],
-                const Icon(Icons.arrow_drop_down, size: 14),
+                const PhosphorIcon(PhosphorIconsRegular.caretDown, size: 14),
               ],
             ),
           ),
@@ -828,7 +828,7 @@ class _AppHeaderWidgetState extends State<AppHeaderWidget> {
                     return ListTile(
                       title: Text(team),
                       trailing: Icon(
-                        isFavorite ? Icons.star : Icons.star_border,
+                        isFavorite ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
                         color: isFavorite ? Colors.amber : Colors.grey,
                       ),
                       onTap: () {

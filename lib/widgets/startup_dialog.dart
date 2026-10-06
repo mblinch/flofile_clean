@@ -19,6 +19,7 @@ import '../services/iptc_template_apply_service.dart';
 import '../services/iptc_template_import_service.dart';
 import 'startup_iptc_template_panel.dart';
 import 'sport_selection_dialog.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 // Custom button widget with cursor styling (matching the one in caption_fields_widget.dart)
 class CustomButton extends StatelessWidget {
@@ -1663,8 +1664,7 @@ class _StartupDialogState extends State<StartupDialog> {
           IgnorePointer(
             child: Padding(
               padding: const EdgeInsets.only(right: 34),
-              child: Icon(
-                Icons.star,
+              child: PhosphorIcon(PhosphorIconsFill.star,
                 size: 14,
                 color: Colors.amber.shade700,
               ),
@@ -1748,7 +1748,7 @@ class _StartupDialogState extends State<StartupDialog> {
       child: Row(
         mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
         children: [
-          Icon(icon,
+          PhosphorIcon(icon,
               size: iconSize, color: iconColor ?? const Color(0xFF4A7A96)),
           const SizedBox(width: 5),
           Flexible(
@@ -1759,7 +1759,7 @@ class _StartupDialogState extends State<StartupDialog> {
                 fontFamily: 'Inter',
                 fontSize: 9,
                 fontVariations: [FontVariation('wght', 500)],
-                color: Color(0xFF2A4858),
+                color: Color(0xFF3A6076),
                 letterSpacing: -0.2,
               ),
             ),
@@ -1816,7 +1816,7 @@ class _StartupDialogState extends State<StartupDialog> {
           ElevatedGreyButton(
             label: 'Select game date',
             fontSize: 10,
-            icon: Icons.calendar_today,
+            icon: PhosphorIconsRegular.calendarBlank,
             onPressed: _selectDate,
           ),
           const SizedBox(width: 8),
@@ -1959,7 +1959,7 @@ class _StartupDialogState extends State<StartupDialog> {
                           ? 'Loading…'
                           : 'Pick images folder',
                       fontSize: 10,
-                      icon: Icons.folder_open,
+                      icon: PhosphorIconsRegular.folderOpen,
                       isTealGradient: true,
                       fullWidth: true,
                       onPressed: (!_sportChosen || isLoadingFolder)
@@ -1971,7 +1971,7 @@ class _StartupDialogState extends State<StartupDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _pill(
-                        icon: Icons.folder_outlined,
+                        icon: PhosphorIconsRegular.folder,
                         text: selectedFolderPath!,
                         expand: true,
                       ),
@@ -1979,7 +1979,7 @@ class _StartupDialogState extends State<StartupDialog> {
                     if (selectedGameDate != null) ...[
                       const SizedBox(width: 8),
                       _pill(
-                        icon: Icons.circle,
+                        icon: PhosphorIconsRegular.circle,
                         iconSize: 6,
                         iconColor: Colors.green,
                         text: _formatDate(selectedGameDate!),
@@ -2123,7 +2123,7 @@ class _StartupDialogState extends State<StartupDialog> {
                           ? 'Loading…'
                           : 'Pick images folder',
                       fontSize: 10,
-                      icon: Icons.folder_open,
+                      icon: PhosphorIconsRegular.folderOpen,
                       isTealGradient: true,
                       fullWidth: true,
                       onPressed: (!_sportChosen || isLoadingFolder)
@@ -2135,7 +2135,7 @@ class _StartupDialogState extends State<StartupDialog> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _pill(
-                        icon: Icons.folder_outlined,
+                        icon: PhosphorIconsRegular.folder,
                         text: selectedFolderPath!,
                         expand: true,
                       ),
@@ -2143,7 +2143,7 @@ class _StartupDialogState extends State<StartupDialog> {
                     if (selectedGameDate != null) ...[
                       const SizedBox(width: 8),
                       _pill(
-                        icon: Icons.circle,
+                        icon: PhosphorIconsRegular.circle,
                         iconSize: 6,
                         iconColor: Colors.green,
                         text: _formatDate(selectedGameDate!),
@@ -2254,7 +2254,7 @@ class _StartupDialogState extends State<StartupDialog> {
             ),
             child: const Row(
               children: [
-                Icon(Icons.error, color: Colors.red, size: 14),
+                PhosphorIcon(PhosphorIconsRegular.warningCircle, color: Colors.red, size: 14),
                 SizedBox(width: 4),
                 Text(
                   'Home and away teams must be different',
@@ -2353,14 +2353,14 @@ class _StartupDialogState extends State<StartupDialog> {
                   ? const LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
-                      colors: [Color(0xFF4A7A96), Color(0xFF2A4858)],
+                      colors: [Color(0xFF4A7A96), Color(0xFF3A6076)],
                     )
                   : null,
               color: _canProceed ? null : Colors.grey.shade200,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: _canProceed
-                    ? const Color(0xFF2A4858)
+                    ? const Color(0xFF3A6076)
                     : const Color(0xFFD0D0D0),
                 width: 0.7,
               ),
@@ -2377,8 +2377,7 @@ class _StartupDialogState extends State<StartupDialog> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.play_arrow_rounded,
+                PhosphorIcon(PhosphorIconsRegular.play,
                   size: 14,
                   color: _canProceed ? Colors.white : Colors.grey.shade500,
                 ),
@@ -2494,7 +2493,7 @@ class _StartupTeamAutocompleteState extends State<_StartupTeamAutocomplete> {
 
   static const _fieldStyle = TextStyle(
     fontSize: 11,
-    color: Color(0xFF2A4858),
+    color: Color(0xFF3A6076),
     fontWeight: FontWeight.w500,
   );
 
@@ -2554,8 +2553,7 @@ class _StartupTeamAutocompleteState extends State<_StartupTeamAutocomplete> {
       hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
       filled: true,
       fillColor: Colors.white,
-      suffixIcon: Icon(
-        Icons.arrow_drop_down,
+      suffixIcon: PhosphorIcon(PhosphorIconsRegular.caretDown,
         size: 18,
         color: Colors.grey.shade600,
       ),
@@ -2717,7 +2715,7 @@ class _StartupTeamAutocompleteState extends State<_StartupTeamAutocomplete> {
                             child: Padding(
                               padding: const EdgeInsets.all(4),
                               child: Icon(
-                                isFavorite ? Icons.star : Icons.star_border,
+                                isFavorite ? PhosphorIconsFill.star : PhosphorIconsRegular.star,
                                 size: 16,
                                 color: isFavorite
                                     ? Colors.amber
