@@ -402,17 +402,19 @@ class _PhotoCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _PhotoOcrScanButton(
-                          controller: controller,
-                          tokens: tokens,
-                        ),
-                        if (controller.jerseySuggestions.isNotEmpty ||
-                            controller.jerseyOcrBusy) ...[
-                          const SizedBox(height: 8),
-                          _PhotoOcrSuggestionChips(
+                        if (controller.jerseyOcrEnabled) ...[
+                          _PhotoOcrScanButton(
                             controller: controller,
                             tokens: tokens,
                           ),
+                          if (controller.jerseySuggestions.isNotEmpty ||
+                              controller.jerseyOcrBusy) ...[
+                            const SizedBox(height: 8),
+                            _PhotoOcrSuggestionChips(
+                              controller: controller,
+                              tokens: tokens,
+                            ),
+                          ],
                         ],
                       ],
                     ),
@@ -635,10 +637,11 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   }
 
   void _scheduleLoupeOcr() {
-    if (!JerseyOcrChannel.supported) return;
+    if (!widget.controller.jerseyOcrEnabled) return;
     _loupeOcrTimer?.cancel();
     _loupeOcrTimer = Timer(const Duration(milliseconds: 220), () {
       if (!mounted || !_pointerDown || _holdAnim.value <= 0) return;
+      if (!widget.controller.jerseyOcrEnabled) return;
       final cursor = _cursor;
       final bytes = _bytes;
       final imageSize = _imageSize;
@@ -790,26 +793,28 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                       imageRect: imageRect,
                     ),
                     // Fixed chrome tip — don't glue copy to the loupe.
-                    const Positioned(
+                    Positioned(
                       left: 0,
                       right: 0,
                       bottom: 10,
                       child: IgnorePointer(
                         child: Center(
                           child: DecoratedBox(
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               color: Color(0xA6000000),
                               borderRadius:
                                   BorderRadius.all(Radius.circular(6)),
                             ),
                             child: Padding(
-                              padding: EdgeInsets.symmetric(
+                              padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
                                 vertical: 5,
                               ),
                               child: Text(
-                                'Hold for 100% + OCR  ·  Double-click to open',
-                                style: TextStyle(
+                                widget.controller.jerseyOcrEnabled
+                                    ? 'Hold for 100% + OCR  ·  Double-click to open'
+                                    : 'Hold for 100%  ·  Double-click to open',
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w500,

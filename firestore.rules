@@ -23,30 +23,30 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // League-API roster cache — signed-in read; writes via sync jobs / Admin SDK.
+    // League-API roster cache — public read (sports data); writes via Admin SDK.
     match /sports/{sportId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if false;
       match /teams/{teamId} {
-        allow read: if isSignedIn();
+        allow read: if true;
         allow write: if false;
         match /players/{playerId} {
-          allow read: if isSignedIn();
+          allow read: if true;
           allow write: if false;
         }
       }
     }
 
-    // Tank01 RapidAPI mirror — admin may edit from website admin + desktop app;
-    // signed-in users may read.
+    // Tank01 RapidAPI mirror — public read so captioning works without sign-in;
+    // admin may edit from website admin + desktop app.
     match /sports_tank01/{sportId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin();
       match /teams/{teamId} {
-        allow read: if isSignedIn();
+        allow read: if true;
         allow write: if isAdmin();
         match /players/{playerId} {
-          allow read: if isSignedIn();
+          allow read: if true;
           allow write: if isAdmin();
         }
       }

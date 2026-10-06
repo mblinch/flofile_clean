@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Download — FloFile Captions for Mac</title>
-  <meta name="description" content="Download FloFile Captions for macOS, or contact us for early access. System requirements and product overview.">
+  <meta name="description" content="Sign in to download FloFile Captions for macOS. System requirements and product overview.">
   <meta name="theme-color" content="#10141B">
   <link rel="canonical" href="https://flofilecaptions.com/download.html">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="FloFile Captions">
   <meta property="og:title" content="Download — FloFile Captions">
-  <meta property="og:description" content="Get FloFile Captions for Mac.">
+  <meta property="og:description" content="Sign in to get FloFile Captions for Mac.">
   <meta property="og:url" content="https://flofilecaptions.com/download.html">
   <meta property="og:image" content="https://flofilecaptions.com/images/og-default.svg">
   <meta name="twitter:card" content="summary_large_image">
@@ -60,7 +60,8 @@
           <a href="/download.html" aria-current="page">Download</a>
           <a href="/contact.html">Contact</a>
           <a class="nav-cta-outline" href="/admin/">Sign in</a>
-          <a class="nav-cta" href="/download.html">Get the app</a>
+          <span id="download-user-chip" class="download-user-chip" hidden></span>
+          <button id="download-sign-out" class="btn btn-ghost btn-sm" type="button" hidden>Sign out</button>
         </nav>
       </div>
     </header>
@@ -72,18 +73,44 @@
           <h1>Get FloFile Captions</h1>
         </div>
         <p class="lede">
-          FloFile Captions runs on macOS. Public installers are not linked here yet;
-          request early access and we will follow up with Mac build details.
+          FloFile Captions runs on macOS. Sign in with Google to unlock the
+          current Mac beta download.
         </p>
 
         <p class="version-pill" style="margin-top: 1.5rem;">Product · FloFile Captions · macOS</p>
 
+        <p id="download-status" class="download-status" aria-live="polite"></p>
+
         <div class="download-cards download-cards-single">
-          <article class="card">
+          <article id="download-signed-out" class="card">
             <h2>macOS</h2>
-            <p>Designed for Apple silicon and Intel Macs used on assignment and at the laptop after the game.</p>
-            <p class="btn btn-soon">Available soon — contact us for early access</p>
-            <p class="early-access"><a href="/contact.html">Contact us</a> to request Mac early access.</p>
+            <p>
+              Sign in with the Google account you use for FloFile to download
+              the latest Mac beta build.
+            </p>
+            <button id="download-sign-in" class="btn btn-primary" type="button">
+              Sign in with Google
+            </button>
+          </article>
+
+          <article id="download-signed-in" class="card" hidden>
+            <h2>macOS</h2>
+            <p>
+              You’re signed in. Download the zip, unzip it, and open
+              <strong>FloFile Beta</strong>. macOS may ask you to confirm the
+              first launch.
+            </p>
+            <p id="mac-download-version" class="version-pill" style="margin-bottom: 1rem;">
+              FloFile Beta
+            </p>
+            <a
+              id="mac-download-btn"
+              class="btn btn-primary"
+              href="#"
+              rel="noopener noreferrer"
+            >
+              Download for Mac
+            </a>
           </article>
         </div>
 
@@ -122,6 +149,10 @@
       </div>
     </footer>
   </div>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="/js/firebase-config.js"></script>
+  <script src="/js/download-auth.js"></script>
   <script src="/js/main.js"></script>
 </body>
 </html>

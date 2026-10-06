@@ -431,6 +431,11 @@ h3 {
   color: var(--text);
 }
 
+.btn-sm {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.85rem;
+}
+
 .hero-meta {
   margin-top: 1.25rem;
   font-size: 0.85rem;
@@ -542,6 +547,26 @@ h3 {
 }
 
 /* Download page */
+.download-user-chip {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+
+.download-status {
+  min-height: 1.2em;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--accent);
+}
+
+.download-status.is-error {
+  color: #ff8a8a;
+}
+
 .download-cards {
   display: grid;
   gap: 1rem;

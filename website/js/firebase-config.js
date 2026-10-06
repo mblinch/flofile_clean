@@ -13,3 +13,10 @@ window.FLOFILE_ADMIN_EMAILS = [
   'projectflofile@gmail.com',
   'dev@flofilecaptions.com',
 ];
+
+/** Mac beta zip (GitHub Releases). Shown on /download.html after Google sign-in. */
+window.FLOFILE_MAC_DOWNLOAD = {
+  version: '2.0.16',
+  label: 'FloFile Beta 2.0.16',
+  url: 'https://github.com/mblinch/flofile_clean/releases/download/v2.0.16/FloFileBeta.zip',
+};

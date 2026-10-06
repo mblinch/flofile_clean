@@ -66,7 +66,7 @@ class JerseyOcrChannel {
   );
 
   /// High enough for small / arched jersey glyphs.
-  static const int defaultMaxPixelDimension = 2400;
+  static const int defaultMaxPixelDimension = 2800;
 
   static bool get supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;

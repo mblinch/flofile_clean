@@ -10,7 +10,7 @@ Prepared as a functional business website for **1001746423 Ontario Inc.** (Toron
 |------|---------|
 | `index.html` | Home, features, company attribution |
 | `about.html` | Company / product story |
-| `download.html` | Platform info + early-access contact (no broken download links) |
+| `download.html` | Google sign-in unlocks Mac beta zip download |
 | `privacy.html` | Privacy policy draft (PIPEDA, Firebase Google Sign-In, local photos) |
 | `terms.html` | Terms of use draft |
 | `contact.html` | Legal name, Toronto, mailto |
@@ -18,7 +18,8 @@ Prepared as a functional business website for **1001746423 Ontario Inc.** (Toron
 | `css/styles.css` | Dark-first theme + light mode |
 | `css/admin.css` | Admin console layout |
 | `js/main.js` | Mobile nav |
-| `js/firebase-config.js` | Firebase web app config + admin emails |
+| `js/firebase-config.js` | Firebase web app config + admin emails + Mac download URL |
+| `js/download-auth.js` | Download page Google sign-in gate |
 | `js/admin-rosters.js` | Auth, roster CRUD, issues scan + Google search |
 | `updates/latest.json` | App update manifest stub |
 | `.htaccess` | Force HTTPS |
@@ -56,7 +57,7 @@ Privacy and terms include an HTML comment `<!-- Draft — review before publishi
 2. Create the mailbox `dev@flofilecaptions.com` (confirm before Apple review if that is the public contact).
 3. Optionally edit About copy where marked with `<!-- EDIT: ... -->` comments.
 4. Replace favicon / OG image assets when you have final brand art.
-5. When public builds exist, link real installer URLs on `download.html` and update `updates/latest.json`.
+5. When shipping a new Mac beta, update `FLOFILE_MAC_DOWNLOAD` in `js/firebase-config.js` and `updates/latest.json`.
 
 Do **not** put passwords, API keys, or SFTP credentials in this repo or on the site.
 

@@ -432,6 +432,10 @@ class CaptionV2Controller extends ChangeNotifier {
   Timer? _jerseyOcrTimer;
   final Map<String, List<JerseyOcrHit>> _jerseyOcrCache = {};
 
+  /// Admin + preference gate for jersey OCR (UI + auto/loupe scans).
+  /// Default off until an admin enables it in Admin → Jersey OCR.
+  bool jerseyOcrEnabled = false;
+
   static const _sessionImageExtensions = {
     '.jpg',
     '.jpeg',
@@ -1812,10 +1816,12 @@ class CaptionV2Controller extends ChangeNotifier {
     applyVerbKeywords = await _prefs!.getApplyVerbKeywords();
     applyPlayerNamesToKeywords = await _prefs!.getApplyPlayerNamesToKeywords();
     ftpModeEnabled = await _prefs!.getFtpModeEnabled();
+    await _refreshJerseyOcrEnabled();
     _prefs!.captionFieldVisibilityRevision.addListener(
       _onCaptionFieldVisibilityChanged,
     );
     _prefs!.ftpProfilesRevision.addListener(_onFtpProfilesChanged);
+    _prefs!.jerseyOcrRevision.addListener(_onJerseyOcrPreferenceChanged);
     final syncId = await _prefs!.getSyncAccountId();
     mlbTimestampAvailable = MlbInningFeatureGate.isEnabled(syncId);
     final previous = await _prefs!.getLastSavedMetadata();
@@ -2136,16 +2142,13 @@ class CaptionV2Controller extends ChangeNotifier {
       }
     } catch (e) {
       rosterError = e.toString();
-      // Fallback demo roster so UI remains reviewable offline.
-      homeRoster = homeOverride == null
-          ? _demoRoster(homeTeam)
-          : _sortPlayers(homeOverride);
+      // Keep empty rosters on failure — never invent players from another sport.
+      homeRoster = homeOverride == null ? const [] : _sortPlayers(homeOverride);
       if (singleTeamMode || !hasOpponentTeam) {
         awayRoster = const [];
       } else {
-        awayRoster = awayOverride == null
-            ? _demoRoster(awayTeam)
-            : _sortPlayers(awayOverride);
+        awayRoster =
+            awayOverride == null ? const [] : _sortPlayers(awayOverride);
       }
     } finally {
       rostersLoading = false;
@@ -5201,9 +5204,38 @@ class CaptionV2Controller extends ChangeNotifier {
     _jerseyOcrCache.removeWhere((key, _) => key.startsWith('$path|'));
   }
 
+  void _onJerseyOcrPreferenceChanged() {
+    unawaited(_refreshJerseyOcrEnabled());
+  }
+
+  /// Reloads admin + preference gate. OCR stays off for non-admins / default.
+  Future<void> _refreshJerseyOcrEnabled() async {
+    final admin = await AdminService.isCurrentUserAdmin();
+    final prefOn = await _prefs?.getJerseyOcrEnabled() ?? false;
+    final next = admin && prefOn && JerseyOcrChannel.supported;
+    if (next == jerseyOcrEnabled) {
+      if (!next &&
+          (jerseySuggestions.isNotEmpty ||
+              jerseyOcrHits.isNotEmpty ||
+              jerseyOcrBusy)) {
+        _clearJerseyOcrState();
+        notifyListeners();
+      }
+      return;
+    }
+    jerseyOcrEnabled = next;
+    if (!next) {
+      _clearJerseyOcrState();
+      notifyListeners();
+      return;
+    }
+    notifyListeners();
+    _scheduleJerseyOcr();
+  }
+
   /// Debounced auto-scan of the current frame for jersey numbers + names.
   void _scheduleJerseyOcr() {
-    if (!JerseyOcrChannel.supported) {
+    if (!jerseyOcrEnabled) {
       if (jerseySuggestions.isNotEmpty ||
           jerseyOcrHits.isNotEmpty ||
           jerseyOcrBusy) {
@@ -5232,19 +5264,20 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Manual / auto OCR on the current frame (numbers + names). macOS only.
   ///
   /// When [regionOfInterest] is set (loupe), Vision scans only that crop.
+  /// Requires admin + Jersey OCR preference enabled.
   Future<OcrScanResult> runOcrTestScan({
     bool force = true,
     JerseyOcrRegion? regionOfInterest,
   }) async {
-    if (!JerseyOcrChannel.supported) {
+    if (!jerseyOcrEnabled) {
       jerseySuggestions = const [];
       jerseyOcrHits = const [];
       jerseyOcrBusy = false;
       notifyListeners();
-      return const OcrScanResult(
-        supported: false,
-        hits: [],
-        matches: [],
+      return OcrScanResult(
+        supported: JerseyOcrChannel.supported,
+        hits: const [],
+        matches: const [],
       );
     }
 
@@ -5332,30 +5365,45 @@ class CaptionV2Controller extends ChangeNotifier {
       runOcrTestScan(force: true, regionOfInterest: region);
 
   /// Roster last names + jersey numbers for Vision `customWords` bias.
+  ///
+  /// Vision caps at ~200 words and only applies them when language correction
+  /// is on — prioritize jersey digits, then last names, then first names.
   List<String> _ocrCustomWords() {
-    final words = <String>{};
+    final jerseys = <String>{};
+    final lasts = <String>{};
+    final firsts = <String>{};
     void addRoster(List<Player> roster) {
       for (final player in roster) {
         final jersey = (player.jerseyNumber ?? '').trim();
         if (RegExp(r'^\d{1,2}$').hasMatch(jersey)) {
-          words.add(jersey);
-          words.add('#$jersey');
+          jerseys.add(jersey);
+          jerseys.add('#$jersey');
         }
         final last = playerLastName(player).trim();
-        if (last.length >= 3) {
-          words.add(last);
-          words.add(last.toUpperCase());
+        if (last.length >= 2) {
+          lasts.add(last);
+          lasts.add(last.toUpperCase());
+          // Hyphen / space variants ("O'Neill", "Van Meter").
+          final compact = last.replaceAll(RegExp(r"[^A-Za-z]"), '');
+          if (compact.length >= 3 && compact != last) {
+            lasts.add(compact);
+            lasts.add(compact.toUpperCase());
+          }
         }
         final first = player.firstName.trim();
-        if (first.length >= 3) words.add(first);
+        if (first.length >= 3) firsts.add(first);
       }
     }
 
     addRoster(homeRoster);
     addRoster(awayRoster);
-    final sorted = words.toList()..sort();
-    if (sorted.length <= 200) return sorted;
-    return sorted.sublist(0, 200);
+
+    final jerseyList = jerseys.toList()..sort();
+    final lastList = lasts.toList()..sort();
+    final firstList = firsts.toList()..sort();
+    final out = <String>[...jerseyList, ...lastList, ...firstList];
+    if (out.length <= 200) return out;
+    return out.sublist(0, 200);
   }
 
   List<JerseyOcrSuggestion> _matchJerseyOcrHits(List<JerseyOcrHit> hits) {
@@ -5424,17 +5472,30 @@ class CaptionV2Controller extends ChangeNotifier {
       final cleaned = raw.replaceFirst(RegExp(r'^#+'), '').trim();
       if (cleaned.isEmpty) return;
       yield cleaned;
+      final digitFixed = _ocrDigitConfusionFix(cleaned);
+      if (digitFixed != null && digitFixed != cleaned) yield digitFixed;
       for (final part in cleaned.split(RegExp(r'[\s\-/]+'))) {
         final token = part.trim();
-        if (token.isNotEmpty && token != cleaned) yield token;
+        if (token.isNotEmpty && token != cleaned) {
+          yield token;
+          final partFixed = _ocrDigitConfusionFix(token);
+          if (partFixed != null && partFixed != token) yield partFixed;
+        }
       }
       // "O'Neill21" / "Judge99" style glue.
       final glued = RegExp(r'^(.*?)(\d{1,2})$').firstMatch(cleaned);
       if (glued != null) {
         final name = glued.group(1)?.trim() ?? '';
         final digits = glued.group(2) ?? '';
-        if (name.length >= 3) yield name;
+        if (name.length >= 2) yield name;
         if (digits.isNotEmpty) yield digits;
+      }
+      // "21O'Neill" style prefix digits.
+      final leading = RegExp(r'^(\d{1,2})([A-Za-z].+)$').firstMatch(cleaned);
+      if (leading != null) {
+        yield leading.group(1)!;
+        final name = leading.group(2)?.trim() ?? '';
+        if (name.length >= 2) yield name;
       }
     }
 
@@ -5464,7 +5525,20 @@ class CaptionV2Controller extends ChangeNotifier {
             }
 
             // Skip very short name tokens (noise); allow 1–2 digit jerseys above.
-            if (query.length < 3) continue;
+            if (query.length < 2) continue;
+            // 2-letter tokens: exact last-name match only (e.g. "Ng", "Li").
+            if (query.length < 3) {
+              final last = _normalizeFirebarText(playerLastName(player));
+              if (last != query) continue;
+              consider(
+                player: player,
+                isHome: isHome,
+                hit: hit,
+                kind: JerseyOcrMatchKind.name,
+                nameScore: 2,
+              );
+              continue;
+            }
             final score = _playerMatchScore(player, query);
             // Exact / strong prefix only — avoid loose "contains" false hits.
             if (score > 7) continue;
@@ -5533,11 +5607,58 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   static String? _normalizeJerseyKey(String? raw) {
-    final trimmed = raw?.trim() ?? '';
+    var trimmed = raw?.trim() ?? '';
     if (trimmed.isEmpty) return null;
-    final parsed = int.tryParse(trimmed);
-    if (parsed != null) return parsed.toString();
+    while (trimmed.startsWith('#')) {
+      trimmed = trimmed.substring(1).trim();
+    }
+    final digitFixed = _ocrDigitConfusionFix(trimmed) ?? trimmed;
+    final parsed = int.tryParse(digitFixed);
+    if (parsed != null && parsed >= 0 && parsed <= 99) {
+      return parsed.toString();
+    }
     return trimmed.toLowerCase();
+  }
+
+  /// Map common OCR letter↔digit confusions for 1–2 character jersey tokens.
+  static String? _ocrDigitConfusionFix(String raw) {
+    final text = raw.replaceFirst(RegExp(r'^#+'), '').trim();
+    if (text.isEmpty || text.length > 2) return null;
+    const map = {
+      'O': '0',
+      'o': '0',
+      'Q': '0',
+      'D': '0',
+      'I': '1',
+      'l': '1',
+      '|': '1',
+      'i': '1',
+      'Z': '2',
+      'z': '2',
+      'S': '5',
+      's': '5',
+      'G': '6',
+      'b': '6',
+      'T': '7',
+      'B': '8',
+      'g': '9',
+      'q': '9',
+    };
+    final buf = StringBuffer();
+    var changed = false;
+    for (final ch in text.split('')) {
+      if (RegExp(r'^\d$').hasMatch(ch)) {
+        buf.write(ch);
+      } else {
+        final digit = map[ch];
+        if (digit == null) return null;
+        buf.write(digit);
+        changed = true;
+      }
+    }
+    if (!changed) return text;
+    final out = buf.toString();
+    return RegExp(r'^\d{1,2}$').hasMatch(out) ? out : null;
   }
 
   Future<Map<String, String>> readIptcPanelValues(String path) async {
@@ -7028,65 +7149,6 @@ class CaptionV2Controller extends ChangeNotifier {
     return parts.sublist(1).join(' ');
   }
 
-  static List<Player> _demoRoster(String team) {
-    if (team.contains('Toronto')) {
-      return [
-        Player(
-            fullName: 'George Springer',
-            firstName: 'George',
-            jerseyNumber: '4',
-            displayName: 'George Springer #4'),
-        Player(
-            fullName: 'Bo Bichette',
-            firstName: 'Bo',
-            jerseyNumber: '11',
-            displayName: 'Bo Bichette #11'),
-        Player(
-            fullName: 'Vladimir Guerrero Jr.',
-            firstName: 'Vladimir',
-            jerseyNumber: '27',
-            displayName: 'Vladimir Guerrero Jr. #27'),
-        Player(
-            fullName: 'Alejandro Kirk',
-            firstName: 'Alejandro',
-            jerseyNumber: '30',
-            displayName: 'Alejandro Kirk #30'),
-        Player(
-            fullName: 'Daulton Varsho',
-            firstName: 'Daulton',
-            jerseyNumber: '25',
-            displayName: 'Daulton Varsho #25'),
-      ];
-    }
-    return [
-      Player(
-          fullName: 'Gunnar Henderson',
-          firstName: 'Gunnar',
-          jerseyNumber: '2',
-          displayName: 'Gunnar Henderson #2'),
-      Player(
-          fullName: 'Adley Rutschman',
-          firstName: 'Adley',
-          jerseyNumber: '35',
-          displayName: 'Adley Rutschman #35'),
-      Player(
-          fullName: 'Anthony Santander',
-          firstName: 'Anthony',
-          jerseyNumber: '25',
-          displayName: 'Anthony Santander #25'),
-      Player(
-          fullName: 'Jordan Westburg',
-          firstName: 'Jordan',
-          jerseyNumber: '11',
-          displayName: 'Jordan Westburg #11'),
-      Player(
-          fullName: 'Colton Cowser',
-          firstName: 'Colton',
-          jerseyNumber: '17',
-          displayName: 'Colton Cowser #17'),
-    ];
-  }
-
   @override
   void dispose() {
     _folderWatchGeneration++;
@@ -7097,6 +7159,7 @@ class CaptionV2Controller extends ChangeNotifier {
       _onCaptionFieldVisibilityChanged,
     );
     _prefs?.ftpProfilesRevision.removeListener(_onFtpProfilesChanged);
+    _prefs?.jerseyOcrRevision.removeListener(_onJerseyOcrPreferenceChanged);
     super.dispose();
   }
 }

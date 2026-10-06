@@ -82,6 +82,9 @@ class PreferencesService {
   /// Admin-only: when true, use league APIs + `sports/...` Firebase.
   /// When false (default), everyone — including admin — uses `sports_tank01/...`.
   static const String _keyUseOfficialLeagueApis = 'use_official_league_apis';
+  /// Admin-only: when true, jersey/name OCR may run in caption V2 (macOS).
+  /// Default off — even admins must opt in.
+  static const String _keyJerseyOcrEnabled = 'jersey_ocr_enabled';
   /// When false, caption V2 hides FTP buttons/shortcuts for the session.
   static const String _keyFtpModeEnabled = 'ftp_mode_enabled';
   /// JSON list of recent `{away,home}` matchups per sport (startup screen).
@@ -166,6 +169,9 @@ class PreferencesService {
   /// Bumped when FTP profiles or the current profile are saved.
   final ValueNotifier<int> ftpProfilesRevision = ValueNotifier<int>(0);
 
+  /// Bumped when jersey OCR admin preference is saved.
+  final ValueNotifier<int> jerseyOcrRevision = ValueNotifier<int>(0);
+
   bool _suppressCloudSync = false;
 
   PreferencesService._();
@@ -239,6 +245,19 @@ class PreferencesService {
     await prefs.setBool(_keyUseOfficialLeagueApis, enabled);
     // Keep legacy key inverted so older builds don't flip unexpectedly.
     await prefs.setBool(_keyUseTank01MlbRosters, !enabled);
+    _afterLocalPreferencesChanged();
+  }
+
+  /// Admin-only opt-in for on-device jersey / name OCR. Default: off.
+  Future<bool> getJerseyOcrEnabled() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyJerseyOcrEnabled) ?? false;
+  }
+
+  Future<void> saveJerseyOcrEnabled(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyJerseyOcrEnabled, enabled);
+    jerseyOcrRevision.value = jerseyOcrRevision.value + 1;
     _afterLocalPreferencesChanged();
   }
 

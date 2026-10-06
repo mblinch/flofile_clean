@@ -76,6 +76,7 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _busy = false;
   String? _error;
   late _AdminSection _section;
+  bool _jerseyOcrEnabled = false;
 
   AppDefaultsCatalog? _catalog;
   final Map<String, Map<String, dynamic>> _verbBundles = {};
@@ -129,6 +130,7 @@ class _AdminScreenState extends State<AdminScreen> {
     });
     try {
       _prefs = await PreferencesService.getInstance();
+      _jerseyOcrEnabled = await _prefs.getJerseyOcrEnabled();
       await AppDefaultsFirestoreService.loadCacheFromDisk();
       await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(
         forceNetwork: true,
@@ -1757,6 +1759,60 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  Widget _buildJerseyOcrToggle(FfTokens t) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: t.divider)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Jersey OCR',
+            style: t.labelStyle.copyWith(
+              fontSize: 11,
+              color: t.text,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'macOS on-device scan',
+            style: t.metaStyle.copyWith(
+              fontSize: 10,
+              color: t.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              AppCompactCheckbox(
+                value: _jerseyOcrEnabled,
+                onChanged: _busy
+                    ? null
+                    : (v) async {
+                        await _prefs.saveJerseyOcrEnabled(v);
+                        if (!mounted) return;
+                        setState(() => _jerseyOcrEnabled = v);
+                      },
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _jerseyOcrEnabled ? 'On' : 'Off',
+                  style: t.metaStyle.copyWith(
+                    fontSize: 11,
+                    color: t.text,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -1862,46 +1918,55 @@ class _AdminScreenState extends State<AdminScreen> {
                                       right: BorderSide(color: t.divider),
                                     ),
                                   ),
-                                  child: ListView(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
                                     children: [
-                                      _sidebarTile(
-                                        t,
-                                        _AdminSection.verbs,
-                                        'Verbs',
+                                      Expanded(
+                                        child: ListView(
+                                          padding: const EdgeInsets.symmetric(
+                                            vertical: 12,
+                                          ),
+                                          children: [
+                                            _sidebarTile(
+                                              t,
+                                              _AdminSection.verbs,
+                                              'Verbs',
+                                            ),
+                                            Divider(
+                                              height: 1,
+                                              thickness: 1,
+                                              color: t.divider,
+                                            ),
+                                            _sidebarTile(
+                                              t,
+                                              _AdminSection.captionStructures,
+                                              'Caption Structures',
+                                            ),
+                                            Divider(
+                                              height: 1,
+                                              thickness: 1,
+                                              color: t.divider,
+                                            ),
+                                            _sidebarTile(
+                                              t,
+                                              _AdminSection.rosterCompare,
+                                              'Roster Compare',
+                                            ),
+                                            Divider(
+                                              height: 1,
+                                              thickness: 1,
+                                              color: t.divider,
+                                            ),
+                                            _sidebarTile(
+                                              t,
+                                              _AdminSection.rosterIssues,
+                                              'Roster Issues',
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                      Divider(
-                                        height: 1,
-                                        thickness: 1,
-                                        color: t.divider,
-                                      ),
-                                      _sidebarTile(
-                                        t,
-                                        _AdminSection.captionStructures,
-                                        'Caption Structures',
-                                      ),
-                                      Divider(
-                                        height: 1,
-                                        thickness: 1,
-                                        color: t.divider,
-                                      ),
-                                      _sidebarTile(
-                                        t,
-                                        _AdminSection.rosterCompare,
-                                        'Roster Compare',
-                                      ),
-                                      Divider(
-                                        height: 1,
-                                        thickness: 1,
-                                        color: t.divider,
-                                      ),
-                                      _sidebarTile(
-                                        t,
-                                        _AdminSection.rosterIssues,
-                                        'Roster Issues',
-                                      ),
+                                      _buildJerseyOcrToggle(t),
                                     ],
                                   ),
                                 ),
