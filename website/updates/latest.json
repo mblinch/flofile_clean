@@ -1,1 +1,6 @@
-{ "version": "1.0.0", "notes": "", "mac_url": "", "min_supported": "1.0.0" }
+{
+  "version": "2.0.17",
+  "notes": "",
+  "mac_url": "https://github.com/mblinch/flofile_clean/releases/download/v2.0.17/FloFileBeta.zip",
+  "min_supported": "1.0.0"
+}
