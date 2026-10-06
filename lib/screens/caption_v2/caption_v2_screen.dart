@@ -2431,6 +2431,7 @@ class _JerseyColorGateState extends State<_JerseyColorGate> {
   int _token = 0;
   bool _pickingHome = true;
   String? _path;
+  Offset? _dropper;
 
   CaptionV2Controller get c => widget.controller;
 
@@ -2598,7 +2599,10 @@ class _JerseyColorGateState extends State<_JerseyColorGate> {
                 final box = Size(constraints.maxWidth, constraints.maxHeight);
                 final bytes = _bytes;
                 return MouseRegion(
-                  cursor: SystemMouseCursors.precise,
+                  cursor: SystemMouseCursors.none,
+                  onHover: (event) =>
+                      setState(() => _dropper = event.localPosition),
+                  onExit: (_) => setState(() => _dropper = null),
                   child: GestureDetector(
                   onTapUp: bytes == null ? null : (d) => _onTap(d, box),
                   child: DecoratedBox(
@@ -2622,46 +2626,30 @@ class _JerseyColorGateState extends State<_JerseyColorGate> {
                                 fit: BoxFit.contain,
                                 gaplessPlayback: true,
                               ),
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                bottom: 10,
-                                child: Center(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xCC101418),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 5,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.colorize,
-                                            size: 14,
-                                            color: t.accent,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            _pickingHome
-                                                ? 'Eyedropper · Home'
-                                                : 'Eyedropper · Away',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                              if (_dropper != null)
+                                Positioned(
+                                  left: _dropper!.dx - 4,
+                                  top: _dropper!.dy - 26,
+                                  child: const IgnorePointer(
+                                    child: Icon(
+                                      Icons.colorize,
+                                      size: 30,
+                                      color: Colors.white,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black,
+                                          blurRadius: 3,
+                                          offset: Offset(0, 1),
+                                        ),
+                                        Shadow(
+                                          color: Colors.black87,
+                                          blurRadius: 0,
+                                          offset: Offset(1, 1),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ),
-                              ),
                             ],
                           ),
                   ),
