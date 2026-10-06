@@ -48,6 +48,7 @@ class AdminScreen extends StatefulWidget {
   static Future<void> open(
     BuildContext context, {
     bool openRosterCompare = false,
+    Future<void> Function()? onClosed,
   }) async {
     final isAdmin = await AdminService.isCurrentUserAdmin();
     if (!context.mounted) return;
@@ -63,6 +64,7 @@ class AdminScreen extends StatefulWidget {
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (_) => AdminScreen(openRosterCompare: openRosterCompare),
     );
+    if (onClosed != null) await onClosed();
   }
 
   @override
@@ -76,7 +78,6 @@ class _AdminScreenState extends State<AdminScreen> {
   bool _busy = false;
   String? _error;
   late _AdminSection _section;
-  bool _jerseyOcrEnabled = false;
 
   AppDefaultsCatalog? _catalog;
   final Map<String, Map<String, dynamic>> _verbBundles = {};
@@ -130,7 +131,6 @@ class _AdminScreenState extends State<AdminScreen> {
     });
     try {
       _prefs = await PreferencesService.getInstance();
-      _jerseyOcrEnabled = await _prefs.getJerseyOcrEnabled();
       await AppDefaultsFirestoreService.loadCacheFromDisk();
       await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(
         forceNetwork: true,
@@ -564,58 +564,15 @@ class _AdminScreenState extends State<AdminScreen> {
 
   /// Firebase catalog plus unpublished local customs/order/deletes from prefs.
   Future<Map<String, dynamic>> _sportBundleForAdmin(String sport) async {
-    final bundle = _sportBundleFromCatalog(sport);
-    final localCustoms = await _prefs.getCustomVerbs(sport: sport);
-    final localDeleted = await _prefs.getDeletedVerbs(sport: sport);
-    final localFavorites = await _prefs.getFavoriteVerbs(sport: sport);
-    final localOrder = await _prefs.getVerbOrder(sport: sport);
-
-    final customsByKey = <String, Map<String, dynamic>>{};
-    for (final raw in ((bundle['customVerbs'] as List?) ?? const [])) {
-      if (raw is! Map) continue;
-      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-      if (key.isEmpty) continue;
-      customsByKey[key] = Map<String, dynamic>.from(raw);
-    }
-    for (final raw in localCustoms) {
-      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-      if (key.isEmpty) continue;
-      customsByKey[key] = Map<String, dynamic>.from(raw);
-    }
-    bundle['customVerbs'] = customsByKey.values.toList();
-
-    final deleted = <String>{
-      for (final value in ((bundle['deletedVerbs'] as List?) ?? const []))
-        value.toString(),
-      ...localDeleted.map((value) => value.toString()),
-    };
-    bundle['deletedVerbs'] = deleted.toList();
-
-    final favorites = <String>{
-      for (final value in ((bundle['favoriteVerbs'] as List?) ?? const []))
-        value.toString(),
-      ...localFavorites,
-    };
-    bundle['favoriteVerbs'] = favorites.toList();
-
-    final order = <String, List<String>>{};
-    final catalogOrder = bundle['verbOrder'];
-    if (catalogOrder is Map) {
-      catalogOrder.forEach((key, value) {
-        order[key.toString()] = value is List
-            ? value.map((item) => item.toString()).toList()
-            : <String>[];
-      });
-    }
-    localOrder.forEach((category, keys) {
-      final list = order.putIfAbsent(category, () => <String>[]);
-      for (final key in keys) {
-        if (!list.contains(key)) list.add(key);
-      }
-    });
-    bundle['verbOrder'] = order;
-
-    return VerbDefaultsBundle.ensureComplete(bundle, sport);
+    // Same merge rules as the live app so tombstones / local customVerbs
+    // authority cannot be undone by reopening Admin.
+    final bundle = await VerbUserCatalogService.loadMergedBundle(
+      prefs: _prefs,
+      sport: sport,
+    );
+    // Favorites are personal — never bake them into the admin publish draft.
+    bundle['favoriteVerbs'] = <String>[];
+    return bundle;
   }
 
   Map<String, dynamic> _emptySportBundle(String sport) =>
@@ -1759,60 +1716,6 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
-  Widget _buildJerseyOcrToggle(FfTokens t) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 14),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: t.divider)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Jersey OCR',
-            style: t.labelStyle.copyWith(
-              fontSize: 11,
-              color: t.text,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'macOS on-device scan',
-            style: t.metaStyle.copyWith(
-              fontSize: 10,
-              color: t.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              AppCompactCheckbox(
-                value: _jerseyOcrEnabled,
-                onChanged: _busy
-                    ? null
-                    : (v) async {
-                        await _prefs.saveJerseyOcrEnabled(v);
-                        if (!mounted) return;
-                        setState(() => _jerseyOcrEnabled = v);
-                      },
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  _jerseyOcrEnabled ? 'On' : 'Off',
-                  style: t.metaStyle.copyWith(
-                    fontSize: 11,
-                    color: t.text,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -1966,7 +1869,6 @@ class _AdminScreenState extends State<AdminScreen> {
                                           ],
                                         ),
                                       ),
-                                      _buildJerseyOcrToggle(t),
                                     ],
                                   ),
                                 ),
@@ -2834,10 +2736,12 @@ class AdminBadgeButton extends StatelessWidget {
     super.key,
     required this.child,
     this.openRosterCompare = false,
+    this.onClosed,
   });
 
   final Widget child;
   final bool openRosterCompare;
+  final Future<void> Function()? onClosed;
 
   @override
   Widget build(BuildContext context) {
@@ -2850,6 +2754,7 @@ class AdminBadgeButton extends StatelessWidget {
         onTap: () => AdminScreen.open(
           context,
           openRosterCompare: openRosterCompare,
+          onClosed: onClosed,
         ),
         child: child,
       ),

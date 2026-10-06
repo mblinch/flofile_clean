@@ -4,6 +4,18 @@ import '../../../theme/ff_tokens.dart';
 import 'frame_status_dot.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
+/// Dark teal fill for caption action chips (Save / Copy / Paste / FTP).
+const LinearGradient _kActionTealGradient = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0xFF243848), // top highlight
+    Color(0xFF15242E), // mid
+    Color(0xFF0E181F), // bottom shade
+  ],
+  stops: [0.0, 0.45, 1.0],
+);
+
 /// Compact caption actions shown beneath the all-at-once search field.
 class CaptionV2ActionRow extends StatelessWidget {
   const CaptionV2ActionRow({
@@ -339,6 +351,14 @@ class _UtilityButton extends StatefulWidget {
 
 class _UtilityButtonState extends State<_UtilityButton> {
   bool _hovered = false;
+  bool _pressed = false;
+
+  static List<Shadow> _textGlow(Color color) => [
+        Shadow(color: color.withValues(alpha: 0.95), blurRadius: 2),
+        Shadow(color: color.withValues(alpha: 0.75), blurRadius: 6),
+        Shadow(color: color.withValues(alpha: 0.45), blurRadius: 12),
+        Shadow(color: color.withValues(alpha: 0.22), blurRadius: 18),
+      ];
 
   @override
   Widget build(BuildContext context) {
@@ -347,104 +367,105 @@ class _UtilityButtonState extends State<_UtilityButton> {
     final enabled = widget.enabled;
     final dimWhenDisabled = widget.dimWhenDisabled;
     final hovering = enabled && _hovered;
+    final pressing = enabled && _pressed;
 
-    // Primary (Save & Next) = dark teal fill + white glowing outline.
-    // Hover: white rim + white glow for all variants.
-    final fg = primary ? Colors.white : tokens.text;
-    final bg = primary ? FfTokens.nocturneAccentSoft : tokens.surface;
+    // Teal gradient fill for the caption action row; hover brightens the rim.
+    final fg = Colors.white.withValues(alpha: enabled || !dimWhenDisabled ? 1 : 0.55);
     final border = hovering || primary
         ? Colors.white.withValues(alpha: 0.92)
-        : tokens.accent;
-    final disabledFill = primary
-        ? FfTokens.nocturneAccentSoft.withValues(alpha: 0.45)
-        : bg.withValues(alpha: 0.4);
+        : tokens.accent.withValues(alpha: enabled || !dimWhenDisabled ? 0.95 : 0.4);
     final glowColor = hovering || primary ? Colors.white : tokens.accent;
+    final gradient = pressing
+        ? const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFF1A2A36),
+              Color(0xFF0C141A),
+              Color(0xFF080E12),
+            ],
+            stops: [0.0, 0.45, 1.0],
+          )
+        : hovering
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF2E4658),
+                  Color(0xFF1A2E3A),
+                  Color(0xFF121F28),
+                ],
+                stops: [0.0, 0.45, 1.0],
+              )
+            : _kActionTealGradient;
 
     return MouseRegion(
       cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
       onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
-      onExit: enabled ? (_) => setState(() => _hovered = false) : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
-          boxShadow: enabled ? FfTokens.accentButtonGlow(glowColor) : null,
-        ),
-        child: OutlinedButton(
-          onPressed: enabled ? widget.onPressed : null,
-          style: OutlinedButton.styleFrom(
-            minimumSize: Size.zero,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
-            foregroundColor: fg,
-            disabledForegroundColor: dimWhenDisabled
-                ? (primary
-                    ? Colors.white.withValues(alpha: 0.45)
-                    : tokens.textSecondary)
-                : fg,
-            backgroundColor: bg,
-            disabledBackgroundColor: dimWhenDisabled ? disabledFill : bg,
-            side: BorderSide(
-              color: enabled || !dimWhenDisabled
-                  ? border
-                  : border.withValues(alpha: 0.4),
-            ),
-            shape: RoundedRectangleBorder(
+      onExit: enabled
+          ? (_) => setState(() {
+                _hovered = false;
+                _pressed = false;
+              })
+          : null,
+      child: GestureDetector(
+        onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapUp: enabled
+            ? (_) {
+                setState(() => _pressed = false);
+                widget.onPressed?.call();
+              }
+            : null,
+        onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 120),
+          opacity: enabled || !dimWhenDisabled ? 1 : 0.55,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(6),
+              gradient: gradient,
+              border: Border.all(color: border),
+              boxShadow: enabled ? FfTokens.accentButtonGlow(glowColor) : null,
             ),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.max,
-            children: [
-              Flexible(
-                child: Text(
-                  widget.label,
-                  maxLines: 1,
-                  softWrap: false,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 11.5,
-                    letterSpacing: -0.2,
-                    fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
-                    color: fg,
-                    height: 1,
-                    shadows: enabled
-                        ? [
-                            Shadow(
-                              color: glowColor.withValues(alpha: 0.55),
-                              blurRadius: 7,
-                            ),
-                          ]
-                        : null,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11.5,
+                      letterSpacing: -0.2,
+                      fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+                      color: fg,
+                      height: 1,
+                      shadows: enabled ? _textGlow(glowColor) : null,
+                    ),
                   ),
                 ),
-              ),
-              if (widget.hint != null) ...[
-                const SizedBox(width: 4),
-                Text(
-                  widget.hint!,
-                  softWrap: false,
-                  style: tokens.keyHintStyle.copyWith(
-                    fontSize: 10,
-                    color: primary
-                        ? Colors.white.withValues(alpha: 0.78)
-                        : tokens.textSecondary,
-                    shadows: enabled
-                        ? [
-                            Shadow(
-                              color: glowColor.withValues(alpha: 0.4),
-                              blurRadius: 5,
-                            ),
-                          ]
-                        : null,
+                if (widget.hint != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    widget.hint!,
+                    softWrap: false,
+                    style: tokens.keyHintStyle.copyWith(
+                      fontSize: 10,
+                      color: Colors.white.withValues(alpha: 0.85),
+                      shadows: enabled ? _textGlow(glowColor) : null,
+                    ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

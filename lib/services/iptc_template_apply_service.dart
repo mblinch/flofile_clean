@@ -1,4 +1,5 @@
 import '../caption_style/caption_template.dart';
+import '../caption_style/game_info.dart';
 import '../caption_style/wire_iptc_specs.dart';
 import '../helpers.dart';
 import '../utils/exiftool_helper.dart';
@@ -246,6 +247,40 @@ class IptcTemplateApplyService {
         values[toPanelKey(presetKey)];
     if (v == null || v.trim().isEmpty) return null;
     return v;
+  }
+
+  /// Wire-required panel labels that are blank in [values].
+  ///
+  /// Skips in-app generated fields (Caption / Personality) — those are filled
+  /// when saving captions, not from the startup template.
+  static List<String> missingRequiredLabels(
+    WireStyle wire,
+    Map<String, String> values,
+  ) {
+    final out = <String>[];
+    for (final spec in WireIptcSpecs.fieldsForPanel(wire)) {
+      if (spec.level != IptcFieldLevel.required) continue;
+      if (isInAppGeneratedFieldKey(spec.storageKey)) continue;
+      if (spec.storageKey == 'Caption' || spec.label == 'Caption') continue;
+      final v = lookupValue(values, spec.storageKey);
+      if (v == null || v.trim().isEmpty) out.add(spec.label);
+    }
+    return out;
+  }
+
+  /// Builds a [GameInfo] from IPTC panel / preset values for caption checks.
+  static GameInfo gameInfoFromPanelValues(Map<String, String> values) {
+    return GameInfo(
+      city: lookupValue(values, 'City') ?? '',
+      region: lookupValue(values, 'Province/State') ?? '',
+      country: lookupValue(values, 'Country') ?? '',
+      countryCode: lookupValue(values, 'Country Code') ?? '',
+      venue: lookupValue(values, 'Stadium') ??
+          lookupValue(values, 'Location') ??
+          '',
+      photographerName: lookupValue(values, 'Creator') ?? '',
+      agencyName: lookupValue(values, 'Credit') ?? '',
+    );
   }
 
   /// ExifTool CLI: hyphenated bare tags (e.g. [Sub-location]) must use `--Tag=value`

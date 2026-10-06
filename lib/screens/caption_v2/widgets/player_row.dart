@@ -18,6 +18,7 @@ class PlayerRow extends StatefulWidget {
     this.height,
     this.usageCount,
     this.selectionRole,
+    this.primarySelected = false,
     this.focused = false,
     this.pinned = false,
     this.firebarSelected = false,
@@ -35,6 +36,8 @@ class PlayerRow extends StatefulWidget {
   final double? height;
   final int? usageCount;
   final String? selectionRole;
+  /// First selected player (caption subject) — shows a small red marker.
+  final bool primarySelected;
   final bool focused;
   final bool pinned;
   final bool firebarSelected;
@@ -122,6 +125,22 @@ class _PlayerRowState extends State<PlayerRow> {
               ),
               child: Row(
                 children: [
+                  SizedBox(
+                    width: 6,
+                    child: widget.primarySelected
+                        ? Center(
+                            child: Container(
+                              width: veryCompact ? 5 : 6,
+                              height: veryCompact ? 5 : 6,
+                              decoration: const BoxDecoration(
+                                color: FfTokens.danger,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          )
+                        : null,
+                  ),
+                  SizedBox(width: veryCompact ? 2 : 3),
                   SizedBox(
                     width: 20,
                     child: Text(

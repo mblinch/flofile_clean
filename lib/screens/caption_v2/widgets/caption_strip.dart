@@ -3,6 +3,7 @@ import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
+import '../data/caption_v2_controller.dart' show CaptionProvenanceSpan;
 
 /// One editable value chip inside [CaptionStrip].
 class CaptionChipData {
@@ -32,6 +33,7 @@ class CaptionStrip extends StatelessWidget {
     required this.trailing,
     this.fullCaption,
     this.highlightPhrases = const [],
+    this.provenanceSpans = const [],
     this.onChipTap,
     this.inningLabel,
     this.timingUnitLabel = 'Inning',
@@ -87,6 +89,9 @@ class CaptionStrip extends StatelessWidget {
 
   /// Phrases within [fullCaption] drawn in Firebar orange.
   final List<String> highlightPhrases;
+
+  /// Phrases with hover tips explaining where caption pieces came from.
+  final List<CaptionProvenanceSpan> provenanceSpans;
 
   final ValueChanged<String>? onChipTap;
 
@@ -176,10 +181,22 @@ class CaptionStrip extends StatelessWidget {
                           hintText: captionHint,
                           tokens: t,
                           highlightPhrases: highlightPhrases,
+                          provenanceSpans: provenanceSpans,
                           onChanged: onCaptionChanged!,
                         )
                       : fullCaption != null && fullCaption!.trim().isNotEmpty
-                          ? Text(fullCaption!, style: t.captionStyle)
+                          ? Text.rich(
+                              _captionAnnotatedSpan(
+                                fullCaption!,
+                                firebarPhrases: highlightPhrases,
+                                provenance: provenanceSpans,
+                                base: t.captionStyle,
+                                firebarColor: FfTokens.firebar,
+                                provenanceColor: t.accent,
+                                tokens: t,
+                                interactiveTips: true,
+                              ),
+                            )
                           : Wrap(
                               crossAxisAlignment: WrapCrossAlignment.center,
                               spacing: 4,
@@ -275,6 +292,7 @@ class _CaptionEditor extends StatefulWidget {
     required this.tokens,
     required this.onChanged,
     this.highlightPhrases = const [],
+    this.provenanceSpans = const [],
   });
 
   final String value;
@@ -282,6 +300,7 @@ class _CaptionEditor extends StatefulWidget {
   final FfTokens tokens;
   final ValueChanged<String> onChanged;
   final List<String> highlightPhrases;
+  final List<CaptionProvenanceSpan> provenanceSpans;
 
   @override
   State<_CaptionEditor> createState() => _CaptionEditorState();
@@ -295,6 +314,11 @@ class _CaptionEditorState extends State<_CaptionEditor> {
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.value);
+    _focusNode.addListener(_onFocusChanged);
+  }
+
+  void _onFocusChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -310,16 +334,44 @@ class _CaptionEditorState extends State<_CaptionEditor> {
 
   @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChanged);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
+  bool get _hasAnnotations =>
+      widget.highlightPhrases.isNotEmpty || widget.provenanceSpans.isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
     final baseStyle = t.captionStyle;
-    final highlights = widget.highlightPhrases;
+    final text = _controller.text;
+
+    // Unfocused: show tip-able highlights. Tap/focus switches to the editor.
+    if (!_focusNode.hasFocus && _hasAnnotations && text.trim().isNotEmpty) {
+      return Focus(
+        focusNode: _focusNode,
+        child: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () => _focusNode.requestFocus(),
+          child: Text.rich(
+            _captionAnnotatedSpan(
+              text,
+              firebarPhrases: widget.highlightPhrases,
+              provenance: widget.provenanceSpans,
+              base: baseStyle,
+              firebarColor: FfTokens.firebar,
+              provenanceColor: t.accent,
+              tokens: t,
+              interactiveTips: true,
+            ),
+          ),
+        ),
+      );
+    }
+
     final field = TextField(
       controller: _controller,
       focusNode: _focusNode,
@@ -327,10 +379,11 @@ class _CaptionEditorState extends State<_CaptionEditor> {
       minLines: 2,
       keyboardType: TextInputType.multiline,
       textAlignVertical: TextAlignVertical.top,
-      style: highlights.isEmpty
-          ? baseStyle
-          : baseStyle.copyWith(color: Colors.transparent),
-      cursorColor: highlights.isEmpty ? t.accent : FfTokens.firebar,
+      style: _hasAnnotations
+          ? baseStyle.copyWith(color: Colors.transparent)
+          : baseStyle,
+      cursorColor:
+          widget.highlightPhrases.isNotEmpty ? FfTokens.firebar : t.accent,
       mouseCursor: SystemMouseCursors.text,
       spellCheckConfiguration: floSpellCheckConfiguration(),
       contextMenuBuilder: floSpellCheckContextMenuBuilder,
@@ -340,21 +393,25 @@ class _CaptionEditorState extends State<_CaptionEditor> {
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
         contentPadding: EdgeInsets.zero,
-        hintText: highlights.isEmpty ? widget.hintText : null,
+        hintText: _hasAnnotations ? null : widget.hintText,
         hintStyle: baseStyle.copyWith(color: t.textSecondary),
       ),
       onChanged: widget.onChanged,
     );
-    if (highlights.isEmpty) return field;
+    if (!_hasAnnotations) return field;
     return Stack(
       children: [
         IgnorePointer(
           child: Text.rich(
-            _captionHighlightSpan(
-              _controller.text,
-              highlights,
-              baseStyle,
-              FfTokens.firebar,
+            _captionAnnotatedSpan(
+              text,
+              firebarPhrases: widget.highlightPhrases,
+              provenance: widget.provenanceSpans,
+              base: baseStyle,
+              firebarColor: FfTokens.firebar,
+              provenanceColor: t.accent,
+              tokens: t,
+              interactiveTips: false,
             ),
           ),
         ),
@@ -364,49 +421,268 @@ class _CaptionEditorState extends State<_CaptionEditor> {
   }
 }
 
-class _CaptionRange {
-  const _CaptionRange(this.start, this.end);
+class _CaptionAnnoRange {
+  const _CaptionAnnoRange({
+    required this.start,
+    required this.end,
+    this.firebar = false,
+    this.tip,
+  });
 
   final int start;
   final int end;
+  final bool firebar;
+  final String? tip;
 }
 
-TextSpan _captionHighlightSpan(
-  String text,
-  List<String> highlights,
-  TextStyle base,
-  Color highlight,
-) {
-  final ranges = <_CaptionRange>[];
-  for (final phrase in highlights) {
+TextSpan _captionAnnotatedSpan(
+  String text, {
+  required List<String> firebarPhrases,
+  required List<CaptionProvenanceSpan> provenance,
+  required TextStyle base,
+  required Color firebarColor,
+  required Color provenanceColor,
+  required FfTokens tokens,
+  required bool interactiveTips,
+}) {
+  final ranges = <_CaptionAnnoRange>[];
+  for (final phrase in firebarPhrases) {
     if (phrase.isEmpty) continue;
     var from = 0;
     while (from < text.length) {
       final index = text.indexOf(phrase, from);
       if (index < 0) break;
-      ranges.add(_CaptionRange(index, index + phrase.length));
+      ranges.add(_CaptionAnnoRange(
+        start: index,
+        end: index + phrase.length,
+        firebar: true,
+      ));
+      from = index + phrase.length;
+    }
+  }
+  for (final span in provenance) {
+    final phrase = span.phrase;
+    if (phrase.isEmpty) continue;
+    var from = 0;
+    while (from < text.length) {
+      final index = text.indexOf(phrase, from);
+      if (index < 0) break;
+      ranges.add(_CaptionAnnoRange(
+        start: index,
+        end: index + phrase.length,
+        tip: span.tip,
+      ));
       from = index + phrase.length;
     }
   }
   if (ranges.isEmpty) return TextSpan(text: text, style: base);
-  ranges.sort((a, b) => a.start.compareTo(b.start));
+
+  ranges.sort((a, b) {
+    final byStart = a.start.compareTo(b.start);
+    if (byStart != 0) return byStart;
+    return b.end.compareTo(a.end);
+  });
+
+  // Merge overlapping ranges; firebar color wins, tips concatenate.
+  final merged = <_CaptionAnnoRange>[];
+  for (final range in ranges) {
+    if (merged.isEmpty || range.start >= merged.last.end) {
+      merged.add(range);
+      continue;
+    }
+    final prev = merged.removeLast();
+    final tip = <String>{
+      if (prev.tip != null && prev.tip!.isNotEmpty) prev.tip!,
+      if (range.tip != null && range.tip!.isNotEmpty) range.tip!,
+    }.join('\n');
+    merged.add(_CaptionAnnoRange(
+      start: prev.start,
+      end: prev.end > range.end ? prev.end : range.end,
+      firebar: prev.firebar || range.firebar,
+      tip: tip.isEmpty ? null : tip,
+    ));
+  }
+
   final children = <InlineSpan>[];
   var cursor = 0;
-  for (final range in ranges) {
+  for (final range in merged) {
     if (range.start < cursor) continue;
     if (range.start > cursor) {
       children.add(TextSpan(text: text.substring(cursor, range.start)));
     }
-    children.add(TextSpan(
-      text: text.substring(range.start, range.end),
-      style: base.copyWith(color: highlight),
-    ));
+    final phrase = text.substring(range.start, range.end);
+    final style = range.firebar
+        ? base.copyWith(color: firebarColor)
+        : base.copyWith(
+            color: base.color,
+            backgroundColor: provenanceColor.withValues(alpha: 0.16),
+            decoration: TextDecoration.underline,
+            decorationColor: provenanceColor.withValues(alpha: 0.7),
+            decorationStyle: TextDecorationStyle.dotted,
+          );
+    if (interactiveTips && range.tip != null && range.tip!.isNotEmpty) {
+      children.add(WidgetSpan(
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
+        child: _ProvenanceTip(
+          tip: range.tip!,
+          tokens: tokens,
+          child: Text(phrase, style: style),
+        ),
+      ));
+    } else {
+      children.add(TextSpan(text: phrase, style: style));
+    }
     cursor = range.end;
   }
   if (cursor < text.length) {
     children.add(TextSpan(text: text.substring(cursor)));
   }
   return TextSpan(style: base, children: children);
+}
+
+/// Dark, compact hover card for caption field provenance.
+class _ProvenanceTip extends StatelessWidget {
+  const _ProvenanceTip({
+    required this.tip,
+    required this.tokens,
+    required this.child,
+  });
+
+  final String tip;
+  final FfTokens tokens;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = tip
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+
+    return Tooltip(
+      waitDuration: const Duration(milliseconds: 280),
+      showDuration: const Duration(seconds: 6),
+      padding: EdgeInsets.zero,
+      margin: const EdgeInsets.only(top: 6),
+      decoration: const BoxDecoration(color: Colors.transparent),
+      richMessage: WidgetSpan(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 260),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            decoration: BoxDecoration(
+              color: tokens.elevated,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tokens.divider),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 14,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  lines.length > 1 ? 'SOURCES' : 'SOURCE',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.9,
+                    color: tokens.textTertiary,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                for (var i = 0; i < lines.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 3),
+                  _ProvenanceTipLine(line: lines[i], tokens: tokens),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _ProvenanceTipLine extends StatelessWidget {
+  const _ProvenanceTipLine({
+    required this.line,
+    required this.tokens,
+  });
+
+  final String line;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = line.split(' · ');
+    final source = parts.first.trim();
+    final detail = parts.length > 1 ? parts.sublist(1).join(' · ').trim() : '';
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 5),
+          child: Container(
+            width: 5,
+            height: 5,
+            decoration: BoxDecoration(
+              color: tokens.accent,
+              shape: BoxShape.circle,
+            ),
+          ),
+        ),
+        const SizedBox(width: 7),
+        Flexible(
+          child: detail.isEmpty
+              ? Text(
+                  source,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    height: 1.25,
+                    color: tokens.text,
+                  ),
+                )
+              : Text.rich(
+                  TextSpan(
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      height: 1.25,
+                      color: tokens.text,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: source,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      TextSpan(
+                        text: '  $detail',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          color: tokens.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
 }
 
 class _CaptionPanel extends StatefulWidget {
@@ -441,7 +717,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
         boxShadow: FfTokens.accentButtonGlow(t.accent),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
@@ -573,102 +849,84 @@ class _InningCardState extends State<_InningCard> {
     final canSquares = !widget.stepperOnly &&
         widget.inningLabel != null &&
         widget.onInningSelected != null;
-    final squareCount = widget.regulationCount +
-        ((widget.maxInning ?? widget.regulationCount) > widget.regulationCount
-            ? 1
-            : 0);
     final periodButtons = <Widget>[
       if (widget.onPreTap != null) ...[
-        Expanded(
-          flex: 100,
-          child: SizedBox(
-            height: 30,
-            child: _ToggleChip(
-              label: 'Pre',
-              selected: widget.preSelected,
-              tokens: t,
-              onTap: widget.onPreTap,
-            ),
+        SizedBox(
+          width: 44,
+          height: 30,
+          child: _ToggleChip(
+            label: 'Pre',
+            selected: widget.preSelected,
+            tokens: t,
+            onTap: widget.onPreTap,
           ),
         ),
-        if (canSquares || widget.inningLabel != null) const SizedBox(width: 6),
+        if (canSquares || widget.inningLabel != null) const SizedBox(width: 4),
       ],
       if (canSquares)
-        Expanded(
-          flex: 100 * (squareCount <= 0 ? 1 : squareCount),
-          child: _InningSquares(
-            selected: widget.inning ?? 1,
-            regulationCount: widget.regulationCount,
-            maxInning: widget.maxInning ?? (widget.regulationCount + 1),
-            extraLabel: widget.extraLabel,
-            segmentPrefix: widget.segmentPrefix,
-            quarterSelected: widget.selectedHalf == null,
-            tokens: t,
-            disabled: widget.inningDisabled,
-            onActivate: widget.onInningActivate,
-            onSelected: widget.onInningSelected!,
-          ),
+        _InningSquares(
+          selected: widget.inning ?? 1,
+          regulationCount: widget.regulationCount,
+          maxInning: widget.maxInning ?? (widget.regulationCount + 1),
+          extraLabel: widget.extraLabel,
+          segmentPrefix: widget.segmentPrefix,
+          quarterSelected: widget.selectedHalf == null,
+          tokens: t,
+          disabled: widget.inningDisabled,
+          onActivate: widget.onInningActivate,
+          onSelected: widget.onInningSelected!,
         )
       else if (widget.inningLabel != null)
-        Expanded(
-          flex: 100,
-          child: SizedBox(
-            height: 30,
-            child: _InningStepper(
-              label: widget.inningLabel!,
-              tokens: t,
-              onDecrement: widget.onInningDecrement,
-              onIncrement: widget.onInningIncrement,
-              disabled: widget.stepperOnly ? false : widget.inningDisabled,
-              onActivate: widget.onInningActivate,
-            ),
+        SizedBox(
+          height: 30,
+          child: _InningStepper(
+            label: widget.inningLabel!,
+            tokens: t,
+            onDecrement: widget.onInningDecrement,
+            onIncrement: widget.onInningIncrement,
+            disabled: widget.stepperOnly ? false : widget.inningDisabled,
+            onActivate: widget.onInningActivate,
           ),
         ),
       if (widget.onHalfSelected != null && canSquares) ...[
-        const SizedBox(width: 6),
-        Expanded(
-          flex: 100,
-          child: SizedBox(
-            height: 30,
-            child: _ToggleChip(
-              label: '1H',
-              selected: !widget.inningDisabled && widget.selectedHalf == '1H',
-              tokens: t,
-              onTap: () => widget.onHalfSelected!('1H'),
-            ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 40,
+          height: 30,
+          child: _ToggleChip(
+            label: '1H',
+            selected: !widget.inningDisabled && widget.selectedHalf == '1H',
+            tokens: t,
+            onTap: () => widget.onHalfSelected!('1H'),
           ),
         ),
-        const SizedBox(width: 6),
-        Expanded(
-          flex: 100,
-          child: SizedBox(
-            height: 30,
-            child: _ToggleChip(
-              label: '2H',
-              selected: !widget.inningDisabled && widget.selectedHalf == '2H',
-              tokens: t,
-              onTap: () => widget.onHalfSelected!('2H'),
-            ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 40,
+          height: 30,
+          child: _ToggleChip(
+            label: '2H',
+            selected: !widget.inningDisabled && widget.selectedHalf == '2H',
+            tokens: t,
+            onTap: () => widget.onHalfSelected!('2H'),
           ),
         ),
       ],
       if (widget.onPostTap != null) ...[
-        if (canSquares || widget.inningLabel != null) const SizedBox(width: 6),
-        Expanded(
-          flex: 100,
-          child: SizedBox(
-            height: 30,
-            child: _ToggleChip(
-              label: 'Post',
-              selected: widget.postSelected,
-              tokens: t,
-              onTap: widget.onPostTap,
-            ),
+        if (canSquares || widget.inningLabel != null) const SizedBox(width: 4),
+        SizedBox(
+          width: 48,
+          height: 30,
+          child: _ToggleChip(
+            label: 'Post',
+            selected: widget.postSelected,
+            tokens: t,
+            onTap: widget.onPostTap,
           ),
         ),
       ],
       if (widget.mlbTimestampVisible) ...[
-        const SizedBox(width: 6),
+        const SizedBox(width: 4),
         SizedBox(
           width: 108,
           height: 30,
@@ -684,7 +942,6 @@ class _InningCardState extends State<_InningCard> {
     ];
 
     return SizedBox(
-      width: double.infinity,
       height: 30,
       child: Row(
         children: [
@@ -703,9 +960,10 @@ class _InningCardState extends State<_InningCard> {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'PERIOD',
+                    widget.timingUnitLabel.toUpperCase(),
                     maxLines: 1,
                     softWrap: false,
+                    overflow: TextOverflow.ellipsis,
                     style: FfTokens.panelLabel(
                       color: timingOn
                           ? t.textSecondary
@@ -716,12 +974,13 @@ class _InningCardState extends State<_InningCard> {
               ),
             ),
           ),
-          Expanded(
-            child: Opacity(
-              opacity: timingOn || widget.stepperOnly ? 1 : 0.4,
-              child: IgnorePointer(
-                ignoring: !(timingOn || widget.stepperOnly),
-                child: Row(children: periodButtons),
+          Opacity(
+            opacity: timingOn || widget.stepperOnly ? 1 : 0.4,
+            child: IgnorePointer(
+              ignoring: !(timingOn || widget.stepperOnly),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: periodButtons,
               ),
             ),
           ),
@@ -1048,9 +1307,12 @@ class _InningSquaresState extends State<_InningSquares> {
         child: IgnorePointer(
           ignoring: widget.disabled,
           child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               if (showBack) ...[
-                Expanded(
+                SizedBox(
+                  width: 34,
+                  height: 30,
                   child: _InningNavSquare(
                     icon: PhosphorIconsRegular.arrowLeft,
                     tokens: widget.tokens,
@@ -1061,7 +1323,9 @@ class _InningSquaresState extends State<_InningSquares> {
               ],
               for (var i = 0; i < innings.length; i++) ...[
                 if (i > 0) const SizedBox(width: 4),
-                Expanded(
+                SizedBox(
+                  width: 34,
+                  height: 30,
                   child: _InningSquare(
                     label: widget.segmentPrefix == null
                         ? '${innings[i]}'
@@ -1076,7 +1340,9 @@ class _InningSquaresState extends State<_InningSquares> {
               ],
               if (showForward) ...[
                 const SizedBox(width: 4),
-                Expanded(
+                SizedBox(
+                  width: 34,
+                  height: 30,
                   child: _InningNavSquare(
                     icon: PhosphorIconsRegular.arrowRight,
                     tokens: widget.tokens,
@@ -1086,7 +1352,9 @@ class _InningSquaresState extends State<_InningSquares> {
               ],
               if (showExtraSlot) ...[
                 const SizedBox(width: 4),
-                Expanded(
+                SizedBox(
+                  width: 34,
+                  height: 30,
                   child: _InningSquare(
                     label: widget.extraLabel,
                     selected: widget.quarterSelected &&
@@ -1138,7 +1406,9 @@ class _InningSquareState extends State<_InningSquare> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
           height: 30,
+          width: double.infinity,
           alignment: Alignment.center,
+          clipBehavior: Clip.none,
           decoration: BoxDecoration(
             color: widget.selected
                 ? t.selected
@@ -1147,6 +1417,8 @@ class _InningSquareState extends State<_InningSquare> {
             border: Border.all(
               color: widget.selected ? t.accent : t.divider,
             ),
+            boxShadow:
+                widget.selected ? FfTokens.selectionGlow(t.accent) : null,
           ),
           child: Text(
             widget.label,
@@ -1405,7 +1677,10 @@ class _ToggleChipState extends State<_ToggleChip> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 120),
+          width: double.infinity,
+          height: double.infinity,
           alignment: Alignment.center,
+          clipBehavior: Clip.none,
           decoration: BoxDecoration(
             color: selected
                 ? tokens.selected
@@ -1414,6 +1689,8 @@ class _ToggleChipState extends State<_ToggleChip> {
             border: Border.all(
               color: selected ? tokens.accent : tokens.divider,
             ),
+            boxShadow:
+                selected ? FfTokens.selectionGlow(tokens.accent) : null,
           ),
           child: Text(
             widget.label,

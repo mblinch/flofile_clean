@@ -14,8 +14,10 @@ import '../../../caption_style/game_info.dart';
 import '../../../config/tank01_config.dart';
 import '../../../services/admin_service.dart';
 import '../../../services/api_manager.dart';
+import '../../../services/app_defaults_firestore_service.dart';
 import '../../../services/current_user_service.dart';
 import '../../../services/iptc_template_apply_service.dart';
+import '../../../services/iptc_template_import_service.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
@@ -36,6 +38,7 @@ class CaptionV2StartupResult {
     this.homeRoster,
     this.awayRoster,
     this.singleTeamMode = false,
+    this.homeWearsDark,
   });
 
   final String sport;
@@ -47,6 +50,24 @@ class CaptionV2StartupResult {
 
   /// When true, the session has one roster only ([homeTeam]); [awayTeam] is empty.
   final bool singleTeamMode;
+
+  /// Which bench wears the dark jersey tonight (OCR home/away tie-break).
+  /// Null → the controller's sport default.
+  final bool? homeWearsDark;
+}
+
+/// Sport default for "home wears dark" — hockey yes, basketball/baseball no.
+bool? defaultHomeWearsDark(String? sport) {
+  switch ((sport ?? '').trim().toLowerCase()) {
+    case 'hockey':
+      return true;
+    case 'basketball':
+    case 'wnba':
+    case 'baseball':
+      return false;
+    default:
+      return null;
+  }
 }
 
 /// FloFile V2 initial screen — sport, folder, teams via API, then Go Time.
@@ -93,6 +114,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   IptcApplyMode _iptcMode = IptcApplyMode.none;
   IptcApplyMode _preferredWriteMode = IptcApplyMode.onSave;
   String _iptcStatus = "Don't write IPTC";
+  List<String> _missingCaptionIptc = const [];
+  bool _scanningIptc = false;
+  int _iptcScanGen = 0;
   bool _ftpModeEnabled = true;
 
   CaptionStyleCatalog? _styleCatalog;
@@ -118,6 +142,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   bool get _sportChosen => _sport != null && _sport!.isNotEmpty;
   bool get _folderChosen => _folderPath != null && _folderPath!.isNotEmpty;
+
+  /// Who wears dark tonight. Defaults by sport; the user can flip it.
+  bool? _homeWearsDark;
 
   bool get _homeFilled => _homeTeam != null && _homeTeam!.isNotEmpty;
   bool get _awayFilled => _awayTeam != null && _awayTeam!.isNotEmpty;
@@ -188,6 +215,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     return 'Add ${missing[0]}, ${missing[1]} and ${missing[2]} to start.';
   }
 
+  String? get _iptcWarningText {
+    if (!_folderChosen) return null;
+    if (_scanningIptc) return 'Scanning folder IPTC for caption fields…';
+    if (_missingCaptionIptc.isEmpty) return null;
+    final fields = _missingCaptionIptc.join(', ');
+    if (_writeIptc) {
+      return 'Missing IPTC for caption: $fields';
+    }
+    return 'Missing IPTC for caption: $fields — turn on Write IPTC or fix files';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -205,6 +243,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   Future<void> _bootstrap() async {
     try {
       _prefs = await PreferencesService.getInstance();
+      // Match legacy StartupDialog: fetch public appDefaults so skip-sign-in
+      // users get Firebase verbs, caption styles, IPTC catalog, game IDs.
+      await _prefs!.ensureAppDefaultsHydrated();
       _useOfficialLeagueApis = await _prefs!.getUseOfficialLeagueApis();
       _isAdmin = await AdminService.isCurrentUserAdmin();
       _iptcMode = await _prefs!.getIptcApplyMode();
@@ -214,6 +255,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _iptcStatus = await _iptcStatusFromPrefs();
       _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
       await _loadCaptionStyles();
+      await _refreshIptcCaptionWarning();
       if (!mounted) return;
       setState(() {});
 
@@ -289,6 +331,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _homeRoster = null;
       _awayRoster = null;
       _usingCustomRosters = false;
+      _homeWearsDark = defaultHomeWearsDark(sport);
     });
     try {
       _api.setSport(sport);
@@ -402,11 +445,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   Future<void> _setFolder(String path) async {
-    final count = await _countImages(path);
+    final files = await _imageFilesInFolder(path);
     if (!mounted) return;
     setState(() {
       _folderPath = path;
-      _imageCount = count;
+      _imageCount = files.length;
       _pickingFolder = false;
       _folderDragOver = false;
     });
@@ -414,22 +457,26 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('last_images_folder', path);
     } catch (_) {}
+    await _refreshIptcCaptionWarning();
   }
 
-  Future<int> _countImages(String dirPath) async {
+  Future<List<String>> _imageFilesInFolder(String dirPath) async {
     try {
-      var n = 0;
+      final out = <String>[];
       await for (final entity in Directory(dirPath).list(followLinks: false)) {
         if (entity is! File) continue;
         final name = p.basename(entity.path);
         if (name.startsWith('.') || name.startsWith('._')) continue;
         final lower = name.toLowerCase();
         if (lower.startsWith('tmp.') || lower.endsWith('.tmp')) continue;
-        if (_imageExtensions.contains(p.extension(lower))) n++;
+        if (_imageExtensions.contains(p.extension(lower))) {
+          out.add(entity.path);
+        }
       }
-      return n;
+      out.sort();
+      return out;
     } catch (_) {
-      return 0;
+      return const [];
     }
   }
 
@@ -511,6 +558,113 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _iptcMode = mode;
       _iptcStatus = status;
     });
+    await _refreshIptcCaptionWarning();
+  }
+
+  Future<void> _refreshIptcCaptionWarning() async {
+    final prefs = _prefs;
+    final gen = ++_iptcScanGen;
+    final folder = _folderPath?.trim() ?? '';
+    if (prefs == null || folder.isEmpty) {
+      if (!mounted || gen != _iptcScanGen) return;
+      setState(() {
+        _missingCaptionIptc = const [];
+        _scanningIptc = false;
+      });
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _scanningIptc = true);
+    }
+
+    try {
+      await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
+      final hidden = await prefs.getHiddenIptcTemplateIds();
+      final visible = await AppDefaultsFirestoreService.getVisibleIptcTemplates(
+        hiddenIds: hidden,
+      );
+      final selectedId = await prefs.getSelectedIptcTemplateId() ?? 'getty';
+      var wire = WireStyle.getty;
+      for (final t in visible) {
+        if (t.id == selectedId) {
+          wire = t.wireStyle;
+          break;
+        }
+      }
+      if (visible.isEmpty) {
+        for (final w in WireStyle.values) {
+          if (AppDefaultsFirestoreService.templateIdForWire(w) == selectedId) {
+            wire = w;
+            break;
+          }
+        }
+      }
+
+      // 1) Scan a sample of images from the chosen folder.
+      final files = await _imageFilesInFolder(folder);
+      if (gen != _iptcScanGen) return;
+      final sample = files.take(8).toList();
+      final fromFiles = <String, String>{};
+      if (sample.isNotEmpty) {
+        final batch =
+            await IptcTemplateImportService.readMetadataBatch(sample);
+        if (gen != _iptcScanGen) return;
+        for (final meta in batch.values) {
+          final panel = IptcTemplateImportService.panelValuesFromExiftool(meta);
+          panel.forEach((k, v) {
+            final trimmed = v.trim();
+            if (trimmed.isEmpty) return;
+            if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+              return;
+            }
+            fromFiles.putIfAbsent(k, () => trimmed);
+          });
+        }
+      }
+
+      // 2) If Write IPTC is on, template values fill gaps (on import/save).
+      final effective = Map<String, String>.from(fromFiles);
+      if (_writeIptc) {
+        var preset = await prefs.getIptcWirePreset(wire);
+        if (preset.isEmpty) {
+          for (final t in visible) {
+            if (t.wireStyle == wire && t.preset.isNotEmpty) {
+              preset = t.preset;
+              break;
+            }
+          }
+        }
+        final templatePanel =
+            IptcTemplateApplyService.denormalizeForPanel(preset);
+        templatePanel.forEach((k, v) {
+          final trimmed = v.trim();
+          if (trimmed.isEmpty) return;
+          if (IptcTemplateApplyService.isInAppGeneratedPlaceholder(trimmed)) {
+            return;
+          }
+          effective.putIfAbsent(k, () => trimmed);
+        });
+      }
+
+      final captionTemplate = _captionTemplate ?? CaptionTemplate.getty();
+      final missing = CaptionFormulaRenderer.missingCaptionIptcLabels(
+        template: captionTemplate,
+        game: IptcTemplateApplyService.gameInfoFromPanelValues(effective),
+        includeCreator: false,
+      );
+      if (!mounted || gen != _iptcScanGen) return;
+      setState(() {
+        _missingCaptionIptc = missing;
+        _scanningIptc = false;
+      });
+    } catch (_) {
+      if (!mounted || gen != _iptcScanGen) return;
+      setState(() {
+        _missingCaptionIptc = const [];
+        _scanningIptc = false;
+      });
+    }
   }
 
   Future<void> _setFtpMode(bool enabled) async {
@@ -526,6 +680,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       folderPath: _folderPath,
     );
     if (!mounted || summary == null) return;
+    await _refreshIptcCaptionWarning();
+    if (!mounted) return;
     setState(() {
       _iptcMode = summary.mode;
       if (summary.mode != IptcApplyMode.none) {
@@ -579,6 +735,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _selectedStyleToken = token;
       _captionTemplate = sportAware;
     });
+    await _refreshIptcCaptionWarning();
   }
 
   Future<void> _editStyles() async {
@@ -601,9 +758,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _captionTemplate = sportAware;
         _selectedStyleToken = catalog.activeToken;
       });
+      await _refreshIptcCaptionWarning();
       return;
     }
     await _loadCaptionStyles();
+    await _refreshIptcCaptionWarning();
   }
 
   void _swapTeams() {
@@ -682,6 +841,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         homeRoster: homeRoster,
         awayRoster: awayRoster,
         singleTeamMode: single,
+        homeWearsDark: single ? null : _homeWearsDark,
       ),
     );
   }
@@ -747,20 +907,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       focusNode: _rootFocus,
       autofocus: true,
       onKeyEvent: _onKey,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color.lerp(t.accent, t.bg, 0.62)!,
-              Color.lerp(t.accent, t.bg, 0.82)!,
-              t.bg,
-              Color.lerp(t.bg, t.sunken, 0.55)!,
-            ],
-            stops: const [0.0, 0.28, 0.62, 1.0],
-          ),
-        ),
+      child: ColoredBox(
+        color: t.bg,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 900;
@@ -910,7 +1058,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         : chosen
             ? t.divider
             : const Color(0x38E4EAF2); // rgba(228,234,242,.22)
-    final bg = _folderDragOver ? t.selected : t.bg;
+    final bg = _folderDragOver ? t.selected : t.sunken;
 
     final useDashed = !chosen && !_folderDragOver;
 
@@ -1137,6 +1285,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             ),
           ],
         ),
+        if (_sportChosen && _homeFilled && _awayFilled) ...[
+          const SizedBox(height: 8),
+          _JerseyColorRow(
+            awayTeam: _awayTeam ?? 'Away',
+            homeTeam: _homeTeam ?? 'Home',
+            homeWearsDark: _homeWearsDark,
+            onChanged: (value) => setState(() => _homeWearsDark = value),
+          ),
+        ],
         if (_loadingTeams && availableTeamsEmpty) ...[
           const SizedBox(height: 6),
           Text(
@@ -1262,13 +1419,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       children: [
         _OptionRow(
           title: 'Write IPTC',
-          description: "Embed the caption in each image's metadata",
+          description: (_missingCaptionIptc.isNotEmpty && !_scanningIptc)
+              ? (_iptcWarningText ??
+                  "Embed the caption in each image's metadata")
+              : "Embed the caption in each image's metadata",
           value: _writeIptc,
           onChanged: _setWriteIptc,
           trailing: _GhostButton(
             label: 'Edit IPTC',
-            onPressed: _writeIptc ? _openIptc : null,
+            onPressed: _folderChosen || _writeIptc ? _openIptc : null,
           ),
+          warning: _missingCaptionIptc.isNotEmpty && !_scanningIptc,
         ),
         const SizedBox(height: 6),
         _OptionRow(
@@ -1368,6 +1529,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 value: _outputLabel,
                 done: true,
               ),
+              if (_folderChosen)
+                _ReadyRow(
+                  label: 'IPTC',
+                  value: _scanningIptc
+                      ? 'Scanning folder…'
+                      : (_missingCaptionIptc.isEmpty
+                          ? 'Caption fields ready'
+                          : 'Missing ${_missingCaptionIptc.join(', ')}'),
+                  done: !_scanningIptc && _missingCaptionIptc.isEmpty,
+                  warning: !_scanningIptc && _missingCaptionIptc.isNotEmpty,
+                ),
               const SizedBox(height: 8),
               _GoTimeButton(
                 enabled: _canGo,
@@ -1376,14 +1548,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _goHint,
+                _iptcWarningText ?? _goHint,
                 textAlign: TextAlign.center,
-                maxLines: 2,
+                maxLines: 3,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
                   fontSize: 11,
-                  color: t.textTertiary,
+                  color: (_iptcWarningText != null &&
+                          _missingCaptionIptc.isNotEmpty &&
+                          !_scanningIptc)
+                      ? FfTokens.danger
+                      : t.textTertiary,
                 ),
               ),
             ],
@@ -2019,7 +2195,7 @@ class _SportChip extends StatelessWidget {
           height: 28,
           padding: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: selected ? t.selected : t.bg,
+            color: selected ? t.selected : t.sunken,
             borderRadius: BorderRadius.circular(6),
             border: Border.all(color: selected ? t.accent : t.divider),
             boxShadow:
@@ -2076,7 +2252,7 @@ class _StyleCard extends StatelessWidget {
           duration: const Duration(milliseconds: 120),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
           decoration: BoxDecoration(
-            color: selected ? t.selected : t.bg,
+            color: selected ? t.selected : t.sunken,
             borderRadius: BorderRadius.circular(7),
             border: Border.all(color: selected ? t.accent : t.divider),
             boxShadow:
@@ -2132,6 +2308,7 @@ class _OptionRow extends StatelessWidget {
     required this.onChanged,
     this.enabled = true,
     this.trailing,
+    this.warning = false,
   });
 
   final String title;
@@ -2140,12 +2317,15 @@ class _OptionRow extends StatelessWidget {
   final ValueChanged<bool> onChanged;
   final bool enabled;
   final Widget? trailing;
+  final bool warning;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final titleColor = enabled ? t.text : t.textSecondary;
-    final descColor = enabled ? t.textTertiary : t.textTertiary;
+    final descColor = warning
+        ? FfTokens.danger
+        : (enabled ? t.textTertiary : t.textTertiary);
     return Row(
       children: [
         Expanded(
@@ -2165,7 +2345,7 @@ class _OptionRow extends StatelessWidget {
               ),
               Text(
                 description,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
@@ -2312,7 +2492,7 @@ class _TeamDropdown extends StatelessWidget {
                     color: t.textTertiary,
                   ),
                   filled: true,
-                  fillColor: t.bg,
+                  fillColor: t.sunken,
                   contentPadding: const EdgeInsets.fromLTRB(12, 10, 40, 10),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -2404,7 +2584,7 @@ class _SwapButton extends StatelessWidget {
       width: 34,
       height: 34,
       child: Material(
-        color: t.bg,
+        color: t.sunken,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           onTap: enabled ? onPressed : null,
@@ -2422,6 +2602,144 @@ class _SwapButton extends StatelessWidget {
                 color: enabled ? t.text : t.textTertiary,
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Who's in dark tonight?" — Away / Home pills. Tells OCR which bench a
+/// dark or white jersey belongs to when both rosters share a number.
+class _JerseyColorRow extends StatelessWidget {
+  const _JerseyColorRow({
+    required this.awayTeam,
+    required this.homeTeam,
+    required this.homeWearsDark,
+    required this.onChanged,
+  });
+
+  final String awayTeam;
+  final String homeTeam;
+  final bool? homeWearsDark;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final answered = homeWearsDark != null;
+    // Unanswered: show the away/home order; answered: dark team first.
+    final darkTeam = homeWearsDark == true ? homeTeam : awayTeam;
+    final lightTeam = homeWearsDark == true ? awayTeam : homeTeam;
+    // Clicking either pill swaps who is dark; a sport default counts as
+    // an answer the user can flip.
+    void swap() => onChanged(homeWearsDark == true ? false : true);
+    return Row(
+      children: [
+        _JerseyPill(
+          heading: 'Dark Jersey',
+          team: answered ? darkTeam : '—',
+          dark: true,
+          active: answered,
+          onTap: swap,
+        ),
+        const SizedBox(width: 6),
+        _JerseyPill(
+          heading: 'Light Jersey',
+          team: answered ? lightTeam : '—',
+          dark: false,
+          active: answered,
+          onTap: swap,
+        ),
+        const SizedBox(width: 8),
+        _GhostButton(
+          label: answered ? 'Not sure' : 'Set',
+          onPressed: answered ? () => onChanged(null) : swap,
+        ),
+        const Spacer(),
+        Tooltip(
+          message: 'Click to swap. Text recognition uses this to tell home '
+              'from away when both teams share a jersey number.',
+          child: PhosphorIcon(
+            PhosphorIconsRegular.info,
+            size: 14,
+            color: t.textTertiary,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Dark Jersey — Maple Leafs" pill. Swatch shows the jersey tone.
+class _JerseyPill extends StatelessWidget {
+  const _JerseyPill({
+    required this.heading,
+    required this.team,
+    required this.dark,
+    required this.active,
+    required this.onTap,
+  });
+
+  final String heading;
+  final String team;
+  final bool dark;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return Material(
+      color: active ? FfTokens.nocturneAccentSoft : t.sunken,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 210),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: active ? t.accent : t.divider),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: dark ? const Color(0xFF14181C) : Colors.white,
+                  border: Border.all(color: t.divider),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                heading,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: active ? t.text : t.textSecondary,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  team,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w500,
+                    color: active ? t.textSecondary : t.textTertiary,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2492,7 +2810,7 @@ class _OutlinedAction extends StatelessWidget {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final enabled = onPressed != null;
     return Material(
-      color: t.bg,
+      color: t.sunken,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: onPressed,
@@ -2525,15 +2843,23 @@ class _ReadyRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.done,
+    this.warning = false,
   });
 
   final String label;
   final String value;
   final bool done;
+  final bool warning;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final markColor = warning
+        ? FfTokens.danger
+        : (done ? t.accent : t.divider);
+    final valueColor = warning
+        ? FfTokens.danger
+        : (done ? t.text : t.textTertiary);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
@@ -2543,19 +2869,23 @@ class _ReadyRow extends StatelessWidget {
             height: 14,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(
-                color: done ? t.accent : t.divider,
-              ),
-              color: done ? t.selected : Colors.transparent,
+              border: Border.all(color: markColor),
+              color: done && !warning ? t.selected : Colors.transparent,
             ),
             alignment: Alignment.center,
-            child: done
+            child: done && !warning
                 ? PhosphorIcon(
                     PhosphorIconsRegular.check,
                     size: 10,
                     color: t.accent,
                   )
-                : null,
+                : (warning
+                    ? const PhosphorIcon(
+                        PhosphorIconsRegular.warning,
+                        size: 10,
+                        color: FfTokens.danger,
+                      )
+                    : null),
           ),
           const SizedBox(width: 8),
           SizedBox(
@@ -2578,8 +2908,8 @@ class _ReadyRow extends StatelessWidget {
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
                 fontSize: 12.5,
-                fontWeight: done ? FontWeight.w500 : FontWeight.w400,
-                color: done ? t.text : t.textTertiary,
+                fontWeight: done || warning ? FontWeight.w500 : FontWeight.w400,
+                color: valueColor,
               ),
             ),
           ),

@@ -1,31 +1,50 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Camera serial → photographer mappings.
+///
+/// Stored locally in SharedPreferences and included in the signed-in user's
+/// Firebase prefs sync (`users/{uid}/preferences/current`).
 class CameraSerialService {
+  CameraSerialService._();
+
+  static final CameraSerialService instance = CameraSerialService._();
+
+  /// Backward-compatible constructor — always returns [instance].
+  factory CameraSerialService() => instance;
+
   static const String _cameraMappingsKey = 'camera_serial_mappings';
 
-  // Map of camera serial numbers to photographer data
-  Map<String, Map<String, String>> _cameraMappings = {};
+  /// Optional hook so [PreferencesService] can schedule a cloud upload without
+  /// a circular import.
+  static Future<void> Function()? onChangedForCloudSync;
 
-  // Get camera mappings (for backward compatibility)
+  Map<String, Map<String, String>> _cameraMappings = {};
+  bool _initialized = false;
+  bool _suppressCloudSync = false;
+
+  /// Bumped after local or cloud updates so open UIs can refresh.
+  final ValueNotifier<int> mappingsRevision = ValueNotifier<int>(0);
+
   Map<String, String> get cameraMappings {
-    Map<String, String> simpleMappings = {};
+    final simpleMappings = <String, String>{};
     _cameraMappings.forEach((serial, data) {
       simpleMappings[serial] = data['name'] ?? '';
     });
     return simpleMappings;
   }
 
-  // Get full camera data mappings
   Map<String, Map<String, String>> get fullCameraMappings =>
       Map.from(_cameraMappings);
 
-  // Initialize the service and load saved mappings
   Future<void> initialize() async {
+    if (_initialized) return;
     await _loadMappings();
+    _initialized = true;
   }
 
-  // Load camera mappings from SharedPreferences
   Future<void> _loadMappings() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -33,96 +52,221 @@ class CameraSerialService {
 
       if (mappingsJson != null && mappingsJson.isNotEmpty) {
         final Map<String, dynamic> decoded = jsonDecode(mappingsJson);
-
-        // Handle both old format (String) and new format (Map)
         _cameraMappings = decoded.map((key, value) {
-          if (value is Map<String, dynamic>) {
-            // New format with name and initials
-            return MapEntry(key, Map<String, String>.from(value));
-          } else {
-            // Old format - convert to new format
-            return MapEntry(key, {
-              'name': value.toString(),
-              'initials': '',
-            });
+          if (value is Map) {
+            return MapEntry(
+              key,
+              value.map((k, v) => MapEntry(k.toString(), v?.toString() ?? '')),
+            );
           }
+          return MapEntry(key, {
+            'name': value.toString(),
+            'initials': '',
+          });
         });
       }
-
-      print('Loaded ${_cameraMappings.length} camera serial mappings');
     } catch (e) {
       print('Error loading camera mappings: $e');
       _cameraMappings = {};
     }
   }
 
-  // Save camera mappings to SharedPreferences
-  Future<void> _saveMappings() async {
+  Future<void> _saveMappings({bool syncCloud = true}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final String mappingsJson = jsonEncode(_cameraMappings);
       await prefs.setString(_cameraMappingsKey, mappingsJson);
-      print('Saved ${_cameraMappings.length} camera serial mappings');
+      mappingsRevision.value++;
+      if (syncCloud && !_suppressCloudSync) {
+        final hook = onChangedForCloudSync;
+        if (hook != null) {
+          try {
+            await hook();
+          } catch (e) {
+            print('Camera serial cloud sync schedule failed: $e');
+          }
+        }
+      }
     } catch (e) {
       print('Error saving camera mappings: $e');
     }
   }
 
-  // Add or update a camera serial number mapping
-  Future<void> addCameraMapping(String serialNumber, String photographerName,
+  /// JSON-ready map for prefs / Firebase sync.
+  Map<String, Map<String, String>> exportMappings() {
+    return {
+      for (final entry in _cameraMappings.entries)
+        entry.key: Map<String, String>.from(entry.value),
+    };
+  }
+
+  /// Replace all mappings from a cloud/import bundle.
+  Future<void> importMappings(
+    dynamic raw, {
+    bool syncCloud = false,
+  }) async {
+    await initialize();
+    final next = <String, Map<String, String>>{};
+    if (raw is Map) {
+      raw.forEach((key, value) {
+        final serial = normalizeSerial(key.toString());
+        if (serial.isEmpty) return;
+        // Collapse case-variant duplicates onto one key.
+        String target = serial;
+        final lower = serial.toLowerCase();
+        for (final existing in next.keys) {
+          if (existing.toLowerCase() == lower) {
+            target = existing;
+            break;
+          }
+        }
+        if (value is Map) {
+          next[target] = {
+            'name': value['name']?.toString() ?? '',
+            'initials': value['initials']?.toString() ?? '',
+          };
+        } else if (value != null) {
+          next[target] = {
+            'name': value.toString(),
+            'initials': '',
+          };
+        }
+      });
+    }
+    _suppressCloudSync = !syncCloud;
+    try {
+      _cameraMappings = next;
+      await _saveMappings(syncCloud: syncCloud);
+    } finally {
+      _suppressCloudSync = false;
+    }
+  }
+
+  /// Trimmed serial used as the map key. Matching is case-insensitive so the
+  /// same camera cannot be stored twice under different casing.
+  static String normalizeSerial(String serialNumber) => serialNumber.trim();
+
+  /// Existing map key for [serialNumber], if any (case-insensitive).
+  String? existingSerialKey(String serialNumber) {
+    final needle = normalizeSerial(serialNumber);
+    if (needle.isEmpty) return null;
+    if (_cameraMappings.containsKey(needle)) return needle;
+    final lower = needle.toLowerCase();
+    for (final key in _cameraMappings.keys) {
+      if (key.toLowerCase() == lower) return key;
+    }
+    return null;
+  }
+
+  /// Adds or updates a mapping. Returns `true` if an existing serial was
+  /// updated (no second entry is created).
+  Future<bool> addCameraMapping(String serialNumber, String photographerName,
       {String initials = ''}) async {
-    if (serialNumber.trim().isEmpty || photographerName.trim().isEmpty) {
-      throw ArgumentError(
-          'Serial number and photographer name cannot be empty');
+    final result = await mergeMappings([
+      (
+        serial: serialNumber,
+        name: photographerName,
+        initials: initials,
+      ),
+    ]);
+    if (result.errors.isNotEmpty) {
+      throw ArgumentError(result.errors.first);
+    }
+    return result.updated > 0;
+  }
+
+  /// Bulk merge for Import / Paste. Same serial never creates a second row
+  /// (case-insensitive); later rows in [rows] win. Saves once.
+  Future<CameraSerialMergeResult> mergeMappings(
+    Iterable<({String serial, String name, String initials})> rows,
+  ) async {
+    await initialize();
+
+    // Dedupe within the import payload first (last occurrence wins).
+    final incoming = <String, Map<String, String>>{};
+    // Map lowercase serial → canonical key used in [incoming].
+    final incomingKeyByLower = <String, String>{};
+    final errors = <String>[];
+    var rowIndex = 0;
+    for (final row in rows) {
+      rowIndex++;
+      final serial = normalizeSerial(row.serial);
+      final name = row.name.trim();
+      if (serial.isEmpty || name.isEmpty) {
+        errors.add('Row $rowIndex: serial and name are required');
+        continue;
+      }
+      final lower = serial.toLowerCase();
+      final existingIncoming = incomingKeyByLower[lower];
+      if (existingIncoming != null && existingIncoming != serial) {
+        incoming.remove(existingIncoming);
+      }
+      incomingKeyByLower[lower] = serial;
+      incoming[serial] = {
+        'name': name,
+        'initials': row.initials.trim(),
+      };
     }
 
-    // Ensure service is initialized
-    await initialize();
+    var added = 0;
+    var updated = 0;
+    for (final entry in incoming.entries) {
+      final existingKey = existingSerialKey(entry.key);
+      if (existingKey != null) {
+        updated++;
+        if (existingKey != entry.key) {
+          _cameraMappings.remove(existingKey);
+        }
+      } else {
+        added++;
+      }
+      _cameraMappings[entry.key] = entry.value;
+    }
 
-    _cameraMappings[serialNumber.trim()] = {
-      'name': photographerName.trim(),
-      'initials': initials.trim(),
-    };
-    await _saveMappings();
+    if (added > 0 || updated > 0) {
+      await _saveMappings();
+    }
+    return CameraSerialMergeResult(
+      added: added,
+      updated: updated,
+      errors: errors,
+    );
   }
 
-  // Remove a camera serial number mapping
   Future<void> removeCameraMapping(String serialNumber) async {
     await initialize();
-    _cameraMappings.remove(serialNumber.trim());
+    final key = existingSerialKey(serialNumber);
+    if (key == null) return;
+    _cameraMappings.remove(key);
     await _saveMappings();
   }
 
-  // Get photographer name for a camera serial number
   String? getPhotographerForSerial(String serialNumber) {
-    if (serialNumber.trim().isEmpty) return null;
-    return _cameraMappings[serialNumber.trim()]?['name'];
+    final key = existingSerialKey(serialNumber);
+    if (key == null) return null;
+    return _cameraMappings[key]?['name'];
   }
 
-  // Get photographer initials for a camera serial number
   String? getPhotographerInitials(String serialNumber) {
-    if (serialNumber.trim().isEmpty) return null;
-    return _cameraMappings[serialNumber.trim()]?['initials'];
+    final key = existingSerialKey(serialNumber);
+    if (key == null) return null;
+    return _cameraMappings[key]?['initials'];
   }
 
-  // Get full photographer data for a camera serial number
   Map<String, String>? getPhotographerData(String serialNumber) {
-    if (serialNumber.trim().isEmpty) return null;
-    return _cameraMappings[serialNumber.trim()];
+    final key = existingSerialKey(serialNumber);
+    if (key == null) return null;
+    return _cameraMappings[key];
   }
 
-  // Check if a camera serial number is registered
   bool isCameraRegistered(String serialNumber) {
-    if (serialNumber.trim().isEmpty) return false;
-    return _cameraMappings.containsKey(serialNumber.trim());
+    return existingSerialKey(serialNumber) != null;
   }
 
-  // Get all camera serial numbers
   List<String> getAllSerialNumbers() {
     return _cameraMappings.keys.toList()..sort();
   }
 
-  // Get all photographer names
   List<String> getAllPhotographerNames() {
     return _cameraMappings.values
         .map((data) => data['name'] ?? '')
@@ -131,13 +275,11 @@ class CameraSerialService {
       ..sort();
   }
 
-  // Clear all mappings
   Future<void> clearAllMappings() async {
     _cameraMappings.clear();
     await _saveMappings();
   }
 
-  // Get camera info display string (Make Model • SN: SerialNumber)
   String getCameraDisplayInfo(Map<String, dynamic> exifData) {
     final make = exifData['Make']?.toString() ?? '';
     final model = exifData['Model']?.toString() ?? '';
@@ -158,16 +300,21 @@ class CameraSerialService {
     return 'Unknown Camera';
   }
 
-  // Auto-detect photographer from camera serial number in EXIF data
   String? detectPhotographerFromExif(Map<String, dynamic> exifData) {
-    final serialNumber = exifData['SerialNumber']?.toString();
-    if (serialNumber != null && serialNumber.isNotEmpty) {
-      return getPhotographerForSerial(serialNumber);
+    for (final key in const [
+      'SerialNumber',
+      'BodySerialNumber',
+      'InternalSerialNumber',
+      'CameraSerialNumber',
+    ]) {
+      final serialNumber = exifData[key]?.toString().trim() ?? '';
+      if (serialNumber.isNotEmpty) {
+        return getPhotographerForSerial(serialNumber);
+      }
     }
     return null;
   }
 
-  /// Get all unique photographer names for selection in unknown serial prompt
   List<String> getUniquePhotographerNames() {
     final names = <String>{};
     for (final mapping in _cameraMappings.values) {
@@ -179,19 +326,26 @@ class CameraSerialService {
     return names.toList()..sort();
   }
 
-  /// Add a serial number to an existing photographer
   Future<void> addSerialToExistingPhotographer(
       String serialNumber, String photographerName) async {
-    await initialize();
-    _cameraMappings[serialNumber.trim()] = {
-      'name': photographerName.trim(),
-      'initials': '', // Keep empty for now, could be updated later
-    };
-    await _saveMappings();
+    await addCameraMapping(serialNumber, photographerName);
   }
 
-  /// Check if a serial number is unknown (not in mappings)
   bool isSerialNumberUnknown(String serialNumber) {
-    return !_cameraMappings.containsKey(serialNumber.trim());
+    return !isCameraRegistered(serialNumber);
   }
+}
+
+class CameraSerialMergeResult {
+  const CameraSerialMergeResult({
+    required this.added,
+    required this.updated,
+    this.errors = const [],
+  });
+
+  final int added;
+  final int updated;
+  final List<String> errors;
+
+  int get touched => added + updated;
 }

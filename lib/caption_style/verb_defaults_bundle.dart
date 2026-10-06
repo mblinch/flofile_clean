@@ -17,6 +17,13 @@ class VerbDefaultsBundle {
   static bool isComplete(Map<String, dynamic>? bundle) =>
       bundle != null && bundle[catalogCompleteKey] == true;
 
+  /// Favorites are personal — never ship them in app-default / factory catalogs.
+  static Map<String, dynamic> withoutFavoriteVerbs(Map<String, dynamic> bundle) {
+    final next = Map<String, dynamic>.from(bundle);
+    next['favoriteVerbs'] = <String>[];
+    return next;
+  }
+
   /// Full factory sport catalog ready to publish / cache offline.
   static Map<String, dynamic> buildFactory(String sport) {
     final factory = SportVerbCategories.copyForSport(sport);
@@ -49,7 +56,22 @@ class VerbDefaultsBundle {
       'verbOverrides': overrides,
       'verbWordingDefaults': <String, dynamic>{},
       'customVerbWordings': <String, dynamic>{},
+      // verbKey → category for intentional moves of factory verbs.
+      'categoryOverrides': <String, String>{},
     };
+  }
+
+  /// Intentional category move for a factory verb, if any.
+  static String? pinnedCategoryFor(
+    Map<String, dynamic> bundle,
+    String verbKey,
+    String Function(String) remapCategory,
+  ) {
+    final raw = bundle['categoryOverrides'];
+    if (raw is! Map) return null;
+    final value = raw[verbKey]?.toString().trim() ?? '';
+    if (value.isEmpty) return null;
+    return remapCategory(value);
   }
 
   /// True when nearly every override shares one category while the factory
@@ -115,6 +137,14 @@ class VerbDefaultsBundle {
     final factory = buildFactory(sport);
     final factoryOverrides =
         Map<String, Map<String, dynamic>>.from(factory['verbOverrides'] as Map);
+    final normalizedSport = sport.trim().toLowerCase();
+    String remapCategory(String category) {
+      if (normalizedSport == 'hockey' &&
+          category.trim().toLowerCase() == 'reactions') {
+        return 'Non Game-Action';
+      }
+      return category;
+    }
     final factoryKeyByLower = <String, String>{
       for (final key in factoryOverrides.keys) key.toLowerCase(): key,
       // Renamed factory verbs (old key → current factory key).
@@ -183,7 +213,10 @@ class VerbDefaultsBundle {
           ..addAll(entry.value);
         merged['key'] = entry.key;
         merged['label'] = factoryRecord['label'] ?? entry.key;
-        merged['category'] = factoryRecord['category'];
+        final pinned = pinnedCategoryFor(next, entry.key, remapCategory);
+        merged['category'] = (pinned != null && pinned.isNotEmpty)
+            ? pinned
+            : factoryRecord['category'];
         // Alias renames should pick up current factory keywords (e.g. pitches)
         // while keeping any extra custom keywords the user already had.
         final factoryKeywords = <String>{
@@ -204,9 +237,13 @@ class VerbDefaultsBundle {
         final merged = Map<String, dynamic>.from(overrides[entry.key]!)
           ..addAll(entry.value);
         merged['key'] = entry.key;
-        // Factory verbs always keep their factory category so legacy catalogs
-        // (e.g. hockey Celebrates stuck under Offense) heal on load.
-        merged['category'] = factoryRecord['category'];
+        // Default: heal misfiled factory verbs back to factory categories.
+        // Intentional admin/user moves are stored in [categoryOverrides] so
+        // they survive persist/publish (plain `category` alone is not enough).
+        final pinned = pinnedCategoryFor(next, entry.key, remapCategory);
+        merged['category'] = (pinned != null && pinned.isNotEmpty)
+            ? pinned
+            : factoryRecord['category'];
         if ((merged['label'] ?? '').toString().trim().isEmpty) {
           merged['label'] = factoryRecord['label'] ?? entry.key;
         }
@@ -226,10 +263,10 @@ class VerbDefaultsBundle {
       addCategory(value.toString());
     }
     for (final value in ((next['categoryOrder'] as List?) ?? const [])) {
-      addCategory(value.toString());
+      addCategory(remapCategory(value.toString()));
     }
     for (final record in overrides.values) {
-      addCategory((record['category'] ?? '').toString());
+      addCategory(remapCategory((record['category'] ?? '').toString()));
     }
 
     final verbOrder = <String, List<String>>{};
@@ -275,14 +312,15 @@ class VerbDefaultsBundle {
         final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
         if (key.isEmpty) continue;
         customKeys.add(key);
-        final category = (raw['category'] ?? '').toString().trim();
+        final category =
+            remapCategory((raw['category'] ?? '').toString().trim());
         if (category.isNotEmpty) customCategory[key] = category;
       }
     }
     final incomingOrder = next['verbOrder'];
     if (incomingOrder is Map) {
       for (final entry in incomingOrder.entries) {
-        final category = entry.key.toString();
+        final category = remapCategory(entry.key.toString());
         final values = entry.value;
         if (values is! List) continue;
         for (final value in values) {
@@ -306,6 +344,24 @@ class VerbDefaultsBundle {
     next['categoryOrder'] = categoryOrder;
     next['verbOrder'] = verbOrder;
     next['verbOverrides'] = overrides;
+    // Normalize pinned moves; drop pins that match factory (no longer needed).
+    final normalizedPins = <String, String>{};
+    final rawPins = next['categoryOverrides'];
+    if (rawPins is Map) {
+      rawPins.forEach((rawKey, rawValue) {
+        final key = rawKey.toString();
+        if (!overrides.containsKey(key)) return;
+        final pinned = remapCategory(rawValue?.toString().trim() ?? '');
+        if (pinned.isEmpty) return;
+        final factoryCategory =
+            (factoryOverrides[key]?['category'] ?? '').toString();
+        if (pinned == factoryCategory) return;
+        normalizedPins[key] = pinned;
+      });
+    }
+    next['categoryOverrides'] = normalizedPins;
+    // Keep caller-supplied favorites for personal prefs merges; factory /
+    // publish paths clear them via [withoutFavoriteVerbs].
     next['favoriteVerbs'] =
         ((next['favoriteVerbs'] as List?) ?? const []).toList();
     next['favoriteTeams'] =

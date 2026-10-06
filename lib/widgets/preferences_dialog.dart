@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dropdown_flutter/custom_dropdown.dart';
@@ -10,7 +11,6 @@ import '../services/preferences_service.dart';
 import '../theme/ff_tokens.dart';
 import '../utils/native_file_picker.dart';
 import 'camera_serial_dialog.dart';
-import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 import 'caption_layout_builder_dialog.dart';
 import 'ftp_settings_panel.dart';
@@ -346,8 +346,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   }
 
   Widget _buildApplicationContent() {
+    final ftpMode = _currentPreferences?['ftpModeEnabled'] != false;
     final serialBylines = _currentPreferences?['serialNumberBylines'] == true;
     final burstOn = _currentPreferences?['burstDetectionEnabled'] == true;
+    final jerseyOcr = _currentPreferences?['jerseyOcrEnabled'] == true;
+    final showJerseyOcr = defaultTargetPlatform == TargetPlatform.macOS;
     final resolutionThreshold =
         _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
     final resolutionEnabled = resolutionThreshold > 0;
@@ -362,6 +365,37 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           const SizedBox(height: 20),
         ],
         _buildInlineRow(
+          'FTP Mode',
+          child: Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    _PrefsToggle(
+                      value: ftpMode,
+                      onChanged: (v) async {
+                        await _preferencesService.saveFtpModeEnabled(v);
+                        await _loadCurrentPreferences();
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Show FTP buttons and shortcuts. Turn off for caption-only sessions.',
+                  style: TextStyle(fontSize: 11, color: _t.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Divider(height: 1, thickness: 1, color: _t.divider),
+        ),
+        _buildInlineRow(
           'Serial Number Bylines',
           child: Expanded(
             child: Column(
@@ -370,9 +404,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    AppCompactCheckbox(
+                    _PrefsToggle(
                       value: serialBylines,
-                      accentColor: _t.accent,
                       onChanged: (v) async {
                         await _preferencesService.saveSerialNumberBylines(v);
                         await _loadCurrentPreferences();
@@ -383,7 +416,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                       label: 'Update Serial Number List',
                       fontSize: 11,
                       onPressed: () async {
-                        final cameraService = CameraSerialService();
+                        final cameraService = CameraSerialService.instance;
                         await cameraService.initialize();
                         if (!context.mounted) return;
                         await showDialog<void>(
@@ -417,9 +450,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    AppCompactCheckbox(
+                    _PrefsToggle(
                       value: burstOn,
-                      accentColor: _t.accent,
                       onChanged: (v) async {
                         await _preferencesService.saveBurstDetectionEnabled(v);
                         await _loadCurrentPreferences();
@@ -436,6 +468,39 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             ),
           ),
         ),
+        if (showJerseyOcr) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Divider(height: 1, thickness: 1, color: _t.divider),
+          ),
+          _buildInlineRow(
+            'Jersey OCR',
+            child: Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _PrefsToggle(
+                        value: jerseyOcr,
+                        onChanged: (v) async {
+                          await _preferencesService.saveJerseyOcrEnabled(v);
+                          await _loadCurrentPreferences();
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Scan jersey numbers and names on the current photo (macOS admin).',
+                    style: TextStyle(fontSize: 11, color: _t.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Divider(height: 1, thickness: 1, color: _t.divider),
@@ -448,9 +513,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      AppCompactCheckbox(
+                      _PrefsToggle(
                         value: resolutionEnabled,
-                        accentColor: _t.accent,
                         onChanged: (v) async {
                           if (v) {
                             await _preferencesService
@@ -771,12 +835,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        AppCompactCheckbox(
-          value: isOn,
-          accentColor: _t.accent,
-          onChanged: (v) => onChanged(v),
-        ),
-        const SizedBox(width: 6),
         Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
@@ -786,6 +844,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               style: TextStyle(fontSize: 11, color: _t.text),
             ),
           ),
+        ),
+        const SizedBox(width: 8),
+        _PrefsToggle(
+          value: isOn,
+          onChanged: onChanged,
         ),
       ],
     );
@@ -839,8 +902,10 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       context: context,
       title: 'Restore app originals?',
       message:
-          'This replaces your verb layouts and IPTC wire templates with the '
-          'latest catalog from Firebase. Hidden IPTC templates will reappear.',
+          'This replaces your verb layouts, caption styles, and IPTC wire '
+          'templates with the latest app defaults from Firebase. Your personal '
+          'settings are not updated when defaults change unless you restore '
+          'here. Hidden IPTC templates will reappear.',
       cancelLabel: 'Cancel',
       confirmLabel: 'Restore',
     );
@@ -985,5 +1050,62 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     }
 
     return withDivider;
+  }
+}
+
+/// Compact on/off switch for Preferences → Application.
+class _PrefsToggle extends StatelessWidget {
+  const _PrefsToggle({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onChanged(!value),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            value ? 'On' : 'Off',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: value ? t.accent : t.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 40,
+            height: 24,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              alignment: Alignment.center,
+              child: Switch(
+                value: value,
+                onChanged: onChanged,
+                activeTrackColor: t.accent,
+                activeThumbColor: t.inkOnAccent,
+                inactiveTrackColor: t.sunken,
+                inactiveThumbColor: t.textSecondary,
+                trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return t.accent;
+                  }
+                  return t.divider;
+                }),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

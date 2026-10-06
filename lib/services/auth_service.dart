@@ -69,6 +69,24 @@ class AuthService {
 
     _auth?.authStateChanges().listen(_onUserChanged);
     await _onUserChanged(_auth?.currentUser);
+    // Always load published app defaults (verbs, caption styles, wire IPTC).
+    // Signed-in users also get this via _onUserChanged; skip-sign-in / unsigned
+    // sessions only hit this path (and skipSignIn below).
+    if (_auth?.currentUser == null) {
+      await ensureAppDefaultsLoaded();
+    }
+  }
+
+  /// Fetches Firebase `appDefaults/current` and seeds local prefs when empty.
+  /// Safe for skip-sign-in and signed-in users (seeds are no-ops if already set).
+  Future<void> ensureAppDefaultsLoaded() async {
+    try {
+      final prefs = await PreferencesService.getInstance();
+      await prefs.ensureAppDefaultsHydrated();
+    } catch (e, st) {
+      print('[Auth] Failed to load app defaults: $e');
+      print(st);
+    }
   }
 
   Future<void> _onUserChanged(User? user) async {
@@ -77,13 +95,14 @@ class AuthService {
     try {
       final prefs = await PreferencesService.getInstance();
       await prefs.setSyncAccountId(user.uid);
+      // Warm the appDefaults cache; first-sign-in baseline + empty-gap seeding
+      // happen inside syncOnSignIn so personal cloud prefs always win over
+      // later admin default changes.
       await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
-      for (final sport in AppDefaultsFirestoreService.catalogSports) {
-        await prefs.seedVerbsFromAppDefaultsIfEmpty(sport);
-      }
-      await prefs.seedCaptionStyleLibraryFromAppDefaultsIfEmpty();
       final syncResult = await UserPreferencesFirestoreService.syncOnSignIn(prefs);
       if (syncResult.action == UserPreferencesSyncAction.downloaded) {
+        debugPrint('[Auth] ${syncResult.message}');
+      } else if (syncResult.action == UserPreferencesSyncAction.uploaded) {
         debugPrint('[Auth] ${syncResult.message}');
       } else if (syncResult.action == UserPreferencesSyncAction.failed) {
         debugPrint('[Auth] Cloud settings sync failed: ${syncResult.error}');
@@ -97,6 +116,7 @@ class AuthService {
   Future<void> skipSignIn() async {
     _signInSkipped = true;
     await _clearAuthSession();
+    await ensureAppDefaultsLoaded();
   }
 
   Future<UserCredential> signInWithGoogle() async {

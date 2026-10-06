@@ -1215,6 +1215,8 @@ PODS:
     - FlutterMacOS
   - file_picker (0.0.1):
     - FlutterMacOS
+  - file_selector_macos (0.0.1):
+    - FlutterMacOS
   - Firebase/Auth (12.15.0):
     - Firebase/CoreOnly
     - FirebaseAuth (~> 12.15.0)
@@ -1428,6 +1430,7 @@ DEPENDENCIES:
   - cloud_firestore (from `Flutter/ephemeral/.symlinks/plugins/cloud_firestore/macos`)
   - desktop_drop (from `Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos`)
   - file_picker (from `Flutter/ephemeral/.symlinks/plugins/file_picker/macos`)
+  - file_selector_macos (from `Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos`)
   - firebase_auth (from `Flutter/ephemeral/.symlinks/plugins/firebase_auth/macos`)
   - firebase_core (from `Flutter/ephemeral/.symlinks/plugins/firebase_core/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
@@ -1470,6 +1473,8 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos
   file_picker:
     :path: Flutter/ephemeral/.symlinks/plugins/file_picker/macos
+  file_selector_macos:
+    :path: Flutter/ephemeral/.symlinks/plugins/file_selector_macos/macos
   firebase_auth:
     :path: Flutter/ephemeral/.symlinks/plugins/firebase_auth/macos
   firebase_core:
@@ -1493,6 +1498,7 @@ SPEC CHECKSUMS:
   cloud_firestore: a52b7240eaf7b57210ac0faa6f49682af1eef762
   desktop_drop: 69eeff437544aa619c8db7f4481b3a65f7696898
   file_picker: e716a70a9fe5fd9e09ebc922d7541464289443af
+  file_selector_macos: 3e56eaea051180007b900eacb006686fd54da150
   Firebase: a8539b633d474fbeb654c7043f9c1649e274045b
   firebase_auth: e64487a8f01d57adb213fb3b4ab84efdc5e3ae67
   firebase_core: f337dc516a0229f7b8eb22c44fe165ad86cf4333

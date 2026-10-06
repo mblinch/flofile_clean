@@ -136,7 +136,7 @@ class CaptionBuilderScreen extends StatefulWidget {
 class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   // API manager
   final ApiManager _apiManager = ApiManager();
-  final CameraSerialService _cameraService = CameraSerialService();
+  final CameraSerialService _cameraService = CameraSerialService.instance;
 
   // Image state management
   List<String> imagePaths = [];

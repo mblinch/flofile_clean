@@ -168,10 +168,9 @@ class _StartupDialogState extends State<StartupDialog> {
       setState(() => _useOfficialLeagueApis = useOfficial);
     }
     // Fetch fresh app defaults from Firestore (no auth needed — public reads).
-    // Falls back to disk cache if offline. This ensures caption style defaults
-    // and verb seeds reach users who have never signed in.
-    await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
-    await _preferencesService.seedCaptionStyleLibraryFromAppDefaultsIfEmpty();
+    // Falls back to disk cache if offline. Seeds verbs + caption styles when
+    // local prefs are empty (same path as AuthService skip / sign-in).
+    await _preferencesService.ensureAppDefaultsHydrated();
     await _preferencesService.migrateGettyInternationalLibraryEntry();
     await _preferencesService.cementGettyFactoryDefaultsIfNeeded();
     await _loadIptcCatalog();

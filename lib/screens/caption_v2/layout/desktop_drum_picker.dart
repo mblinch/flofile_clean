@@ -99,9 +99,8 @@ class _DrumPickerState extends State<DrumPicker> {
         'offense': 0,
         'defense': 1,
         'goalie': 2,
-        'reactions': 3,
-        'nongameaction': 4,
-        'nongame': 4,
+        'nongameaction': 3,
+        'nongame': 3,
       };
     } else if (sport == 'soccer') {
       order = const {
@@ -1099,12 +1098,20 @@ class _DrumPickerState extends State<DrumPicker> {
           value: 'pin',
           child: Text(pinned ? 'Unpin Player' : 'Pin Player'),
         ),
+        const PopupMenuItem(value: 'google', child: Text('Google')),
         const PopupMenuItem(value: 'edit', child: Text('Edit player…')),
       ],
     );
     if (action == null || !context.mounted) return;
     if (action == 'pin') {
       controller.togglePlayerPin(player, isHome: isHome);
+      return;
+    }
+    if (action == 'google') {
+      await openPlayerGoogleSearch(
+        fullName: player.fullName,
+        sportId: controller.sport,
+      );
       return;
     }
     if (action != 'edit') return;
@@ -1185,7 +1192,6 @@ class _DrumPickerState extends State<DrumPicker> {
             onToggleFavorite: _toggleVerbFavorite,
           ),
         ),
-        Divider(height: 1, color: tokens.divider),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
           child: _DrumCustomVerbField(
@@ -1561,6 +1567,17 @@ class _VerbAccordionSection extends StatelessWidget {
               height: headerHeight,
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
+                color: open && !isFavorites
+                    ? tokens.selected.withValues(alpha: 0.55)
+                    : null,
+                borderRadius: open
+                    ? BorderRadius.circular(FfTokens.radiusRow)
+                    : null,
+                boxShadow: open && !isFavorites
+                    ? FfTokens.selectionGlow(tokens.accent)
+                    : isFavorites && open
+                        ? FfTokens.selectionGlow(FfTokens.favorites)
+                        : null,
                 border: Border(bottom: BorderSide(color: divider)),
               ),
               child: Row(
@@ -2204,13 +2221,17 @@ class _VerbAccordionRow extends StatelessWidget {
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           child: Container(
             height: _VerbAccordion.rowHeight,
+            clipBehavior: Clip.none,
             padding: EdgeInsets.only(left: leadingPadding - 6, right: 4),
             decoration: BoxDecoration(
               color: fill,
               borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+              boxShadow: selected
+                  ? FfTokens.selectionGlow(tokens.accent)
+                  : null,
               // Same selected outline as player rows: 2px accent left bar.
               border: selected
                   ? Border(

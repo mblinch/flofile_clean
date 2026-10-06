@@ -89,21 +89,41 @@ class EffectiveVerbCatalog {
     final factory = SportVerbCategories.copyForSport(sport);
     final records = <String, Map<String, dynamic>>{};
     final factoryCategory = <String, String>{};
+    // Hockey no longer ships a Reactions category (baseball leftover).
+    // Remap saved prefs that still point at Reactions → Non Game-Action.
+    final normalizedSport = sport.trim().toLowerCase();
+    String remapCategory(String category) {
+      if (normalizedSport == 'hockey' &&
+          category.trim().toLowerCase() == 'reactions') {
+        return 'Non Game-Action';
+      }
+      return category;
+    }
+
+    final deletedLower = {
+      for (final value in deletedVerbs) value.trim().toLowerCase(),
+    };
+    bool isDeleted(String key) {
+      final trimmed = key.trim();
+      if (trimmed.isEmpty) return false;
+      return deletedVerbs.contains(trimmed) ||
+          deletedLower.contains(trimmed.toLowerCase());
+    }
 
     if (catalogComplete) {
       for (final entry in overrides.entries) {
-        if (deletedVerbs.contains(entry.key)) continue;
-        final category = (entry.value['category'] ??
+        if (isDeleted(entry.key)) continue;
+        final category = remapCategory((entry.value['category'] ??
                 factoryCategory[entry.key] ??
                 (categoryOrder.isNotEmpty ? categoryOrder.first : 'Other'))
-            .toString();
+            .toString());
         factoryCategory[entry.key] = category;
         records[entry.key] = {
           'label': entry.key,
-          'category': category,
           if (customWordings[entry.key] != null)
             'verbPhrase': customWordings[entry.key],
           ...entry.value,
+          'category': category,
           'isCustom': false,
         };
       }
@@ -112,9 +132,7 @@ class EffectiveVerbCatalog {
       for (final entry in factory.entries) {
         for (final raw in entry.value) {
           final key = raw.trim();
-          if (key.isEmpty ||
-              records.containsKey(key) ||
-              deletedVerbs.contains(key)) {
+          if (key.isEmpty || records.containsKey(key) || isDeleted(key)) {
             continue;
           }
           final wanted = favorites.any(
@@ -134,7 +152,7 @@ class EffectiveVerbCatalog {
       for (final entry in factory.entries) {
         for (final raw in entry.value) {
           final key = raw.trim();
-          if (key.isEmpty || deletedVerbs.contains(key)) continue;
+          if (key.isEmpty || isDeleted(key)) continue;
           factoryCategory[key] = entry.key;
           records[key] = <String, dynamic>{
             'label': key,
@@ -146,24 +164,31 @@ class EffectiveVerbCatalog {
       }
 
       for (final entry in overrides.entries) {
-        if (!records.containsKey(entry.key) ||
-            deletedVerbs.contains(entry.key)) {
+        if (!records.containsKey(entry.key) || isDeleted(entry.key)) {
           continue;
         }
-        records[entry.key] = {
+        final merged = {
           ...records[entry.key]!,
           ...entry.value,
           'isCustom': false,
         };
+        if (merged['category'] != null) {
+          merged['category'] = remapCategory(merged['category'].toString());
+        }
+        records[entry.key] = merged;
       }
     }
 
     for (final raw in customVerbs) {
       final label = (raw['label'] ?? raw['verbPhrase'] ?? '').toString().trim();
-      if (label.isEmpty || deletedVerbs.contains(label)) continue;
+      if (label.isEmpty || isDeleted(label)) continue;
+      final category = raw['category'] == null
+          ? null
+          : remapCategory(raw['category'].toString());
       records[label] = {
         ...raw,
         'label': label,
+        if (category != null) 'category': category,
         'isCustom': true,
       };
     }
@@ -198,7 +223,7 @@ class EffectiveVerbCatalog {
     }
 
     for (final category in categoryOrder) {
-      addCategory(category);
+      addCategory(remapCategory(category));
     }
     if (!catalogComplete) {
       for (final category in factory.keys) {
@@ -206,14 +231,15 @@ class EffectiveVerbCatalog {
       }
     }
     for (final record in records.values) {
-      addCategory((record['category'] ?? '').toString());
+      addCategory(remapCategory((record['category'] ?? '').toString()));
     }
 
     final categoryKeys = <String, List<String>>{
       for (final category in orderedCategories) category: <String>[],
     };
     for (final entry in verbOrder.entries) {
-      if (!categoryKeys.containsKey(entry.key)) continue;
+      final orderCategory = remapCategory(entry.key);
+      if (!categoryKeys.containsKey(orderCategory)) continue;
       for (final value in entry.value) {
         final trimmed = value.trim();
         if (trimmed.isEmpty) continue;
@@ -226,23 +252,23 @@ class EffectiveVerbCatalog {
         // Phrase aliases ("makes a save") must not pull a verb into a
         // different category than the one stored on the verb itself.
         if (resolved != null && resolved != trimmed) {
-          final home = (records[key]!['category'] ??
+          final home = remapCategory((records[key]!['category'] ??
                   factoryCategory[key] ??
                   '')
-              .toString();
-          if (home.isNotEmpty && home != entry.key) continue;
+              .toString());
+          if (home.isNotEmpty && home != orderCategory) continue;
         }
-        categoryKeys[entry.key]!.add(key);
+        categoryKeys[orderCategory]!.add(key);
       }
     }
     for (final entry in records.entries) {
       if (categoryKeys.values.any((keys) => keys.contains(entry.key))) continue;
       final fallbackCategory =
           orderedCategories.isEmpty ? 'Other' : orderedCategories.first;
-      final category = (entry.value['category'] ??
+      final category = remapCategory((entry.value['category'] ??
               factoryCategory[entry.key] ??
               fallbackCategory)
-          .toString();
+          .toString());
       categoryKeys.putIfAbsent(category, () => <String>[]).add(entry.key);
       addCategory(category);
     }
@@ -303,10 +329,10 @@ class EffectiveVerbCatalog {
       byKey[entry.key] = EffectiveVerb(
         key: entry.key,
         label: label.isEmpty ? entry.key : label,
-        category: (raw['category'] ??
+        category: remapCategory((raw['category'] ??
                 factoryCategory[entry.key] ??
                 (orderedCategories.isEmpty ? 'Other' : orderedCategories.first))
-            .toString(),
+            .toString()),
         singularPhrase: effectiveSingular,
         pluralPhrase: resolvedPlural,
         ingPhrase: hasIng
@@ -342,10 +368,13 @@ class EffectiveVerbCatalog {
       ],
     };
     for (final category in orderedCategories) {
-      effective[category] = [
+      final verbs = [
         for (final key in categoryKeys[category] ?? const <String>[])
           if (byKey.containsKey(key)) byKey[key]!,
       ];
+      // Drop empty leftover categories (e.g. old hockey "Reactions" prefs).
+      if (verbs.isEmpty) continue;
+      effective[category] = verbs;
     }
     return EffectiveVerbCatalog(
       sport: sport,
@@ -426,7 +455,9 @@ class EffectiveVerbRepository {
           await AppDefaultsFirestoreService.getCachedSportVerbSettings(sport);
       if (cached != null && VerbDefaultsBundle.isComplete(cached)) {
         await preferences.importPreferences({
-          'verbSettingsBySport': {sport: cached},
+          'verbSettingsBySport': {
+            sport: VerbDefaultsBundle.withoutFavoriteVerbs(cached),
+          },
         });
         return load(sport);
       }

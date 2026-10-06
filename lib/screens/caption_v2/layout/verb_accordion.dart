@@ -670,7 +670,16 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
           decoration: BoxDecoration(
             color: gold
                 ? FfTokens.favoritesFill
-                : (_hovered ? t.hover : Colors.transparent),
+                : open
+                    ? t.selected.withValues(alpha: 0.55)
+                    : (_hovered ? t.hover : Colors.transparent),
+            borderRadius:
+                open ? BorderRadius.circular(FfTokens.radiusRow) : null,
+            boxShadow: open
+                ? FfTokens.selectionGlow(
+                    gold ? FfTokens.favorites : t.accent,
+                  )
+                : null,
             border: Border(
               bottom: BorderSide(
                 color: gold ? FfTokens.favoritesBorder : t.divider,
@@ -914,6 +923,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
           cursor: SystemMouseCursors.click,
           child: Material(
             color: Colors.transparent,
+            clipBehavior: Clip.none,
             child: CmdClick(
               useInkWell: true,
               onTap: () {
@@ -925,12 +935,17 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                 controller.toggleVerbPin(verb.key);
               },
               onSecondaryTapDown: (details) => _contextMenu(context, details),
-              child: Container(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1),
+                child: Container(
                 height: widget.rowHeight,
                 padding: const EdgeInsets.only(left: 12, right: 4),
+                clipBehavior: Clip.none,
                 decoration: BoxDecoration(
                   color: armed ? tokens.selected : null,
                   borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+                  boxShadow:
+                      armed ? FfTokens.selectionGlow(tokens.accent) : null,
                   // Match player-row selected outline.
                   border: armed
                       ? Border(
@@ -996,6 +1011,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                       ),
                   ],
                 ),
+              ),
               ),
             ),
           ),

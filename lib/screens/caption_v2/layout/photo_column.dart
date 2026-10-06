@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,32 @@ import '../widgets/transmit_progress_overlay.dart';
 import 'caption_v2_photo_actions.dart';
 import 'caption_v2_thumbnail_overview.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+
+/// Chip label: "#14 Oliver Kapanen" — number and name, nothing else.
+String _ocrMatchLabel(JerseyOcrSuggestion match) {
+  final jersey = match.jersey.trim();
+  final name = match.player.fullName.trim();
+  return jersey.isEmpty ? name : '#$jersey $name';
+}
+
+/// Target detail under the box on the photo: jersey tone + what Vision read.
+/// e.g. "Dark Jersey · read “34”".
+String _ocrTargetDetail(JerseyOcrSuggestion match) {
+  final parts = <String>[];
+  switch (match.jerseyTone) {
+    case 'dark':
+      parts.add('Dark Jersey');
+    case 'light':
+      parts.add('Light Jersey');
+  }
+  final ocr = match.matchedText.trim();
+  if (ocr.isNotEmpty) parts.add('read “$ocr”');
+  return parts.join(' · ');
+}
+
+/// Teal target colours — the photo box and its label (not the firebar orange).
+const _ocrTargetTeal = Color(0xFF2BB5A8);
+const _ocrTargetTealHot = Color(0xFF5FE3D6);
 
 enum _BrowseScope { all, toCaption, captioned, toFtp, ftp }
 
@@ -85,6 +112,9 @@ String _formatShutter(String raw) {
 }
 
 class _PhotoColumnState extends State<PhotoColumn> {
+  final ValueNotifier<JerseyOcrSuggestion?> _ocrHover =
+      ValueNotifier<JerseyOcrSuggestion?>(null);
+
   static const double _handleHeight = 14;
   /// Keep a usable large preview — never collapse it away.
   static const double _minPreviewFraction = 0.28;
@@ -96,6 +126,12 @@ class _PhotoColumnState extends State<PhotoColumn> {
   void initState() {
     super.initState();
     widget.controller.ensureLiveFolderRefresh();
+  }
+
+  @override
+  void dispose() {
+    _ocrHover.dispose();
+    super.dispose();
   }
 
   @override
@@ -133,6 +169,7 @@ class _PhotoColumnState extends State<PhotoColumn> {
                 controller: widget.controller,
                 path: path,
                 tokens: t,
+                ocrHover: _ocrHover,
                 onSavePrevious: widget.onSavePrevious,
                 onSaveNext: widget.onSaveNext,
               ),
@@ -290,6 +327,7 @@ class _PhotoCard extends StatelessWidget {
     required this.controller,
     required this.path,
     required this.tokens,
+    required this.ocrHover,
     required this.onSavePrevious,
     required this.onSaveNext,
   });
@@ -300,6 +338,7 @@ class _PhotoCard extends StatelessWidget {
   final CaptionV2Controller controller;
   final String? path;
   final FfTokens tokens;
+  final ValueNotifier<JerseyOcrSuggestion?> ocrHover;
   final VoidCallback onSavePrevious;
   final VoidCallback onSaveNext;
 
@@ -383,6 +422,7 @@ class _PhotoCard extends StatelessWidget {
                             version: controller.imageContentStamp(path!),
                             tokens: tokens,
                             controller: controller,
+                            ocrHover: ocrHover,
                             onOpenZoom: () =>
                                 showCaptionV2Zoom(context, path!),
                             onSecondaryTapDown: (details) =>
@@ -398,11 +438,19 @@ class _PhotoCard extends StatelessWidget {
                   Positioned(
                     top: 10,
                     left: 10,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (controller.jerseyOcrEnabled) ...[
+                    child: _PhotoPreviewStatusIcons(
+                      state: controller.frameStateFor(path!),
+                      tokens: tokens,
+                    ),
+                  ),
+                  if (controller.jerseyOcrEnabled)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           _PhotoOcrScanButton(
                             controller: controller,
                             tokens: tokens,
@@ -413,20 +461,12 @@ class _PhotoCard extends StatelessWidget {
                             _PhotoOcrSuggestionChips(
                               controller: controller,
                               tokens: tokens,
+                              ocrHover: ocrHover,
                             ),
                           ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: _PhotoPreviewStatusIcons(
-                      state: controller.frameStateFor(path!),
-                      tokens: tokens,
-                    ),
-                  ),
                   Positioned(
                     right: 12,
                     bottom: 12,
@@ -518,6 +558,7 @@ class _PhotoLoupePreview extends StatefulWidget {
     required this.version,
     required this.tokens,
     required this.controller,
+    required this.ocrHover,
     required this.onOpenZoom,
     required this.onSecondaryTapDown,
   });
@@ -526,6 +567,7 @@ class _PhotoLoupePreview extends StatefulWidget {
   final int version;
   final FfTokens tokens;
   final CaptionV2Controller controller;
+  final ValueNotifier<JerseyOcrSuggestion?> ocrHover;
   final VoidCallback onOpenZoom;
   final GestureTapDownCallback onSecondaryTapDown;
 
@@ -549,6 +591,7 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   Timer? _holdTimer;
   Timer? _loupeOcrTimer;
   bool _pointerDown = false;
+  Offset? _lastLoupeOcrAt;
   late final AnimationController _holdAnim;
 
   @override
@@ -576,6 +619,7 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   void didUpdateWidget(covariant _PhotoLoupePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.path != widget.path || oldWidget.version != widget.version) {
+      widget.ocrHover.value = null;
       _cancelHold();
       _loadBytes();
     }
@@ -606,6 +650,7 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
     _holdTimer = null;
     _loupeOcrTimer?.cancel();
     _loupeOcrTimer = null;
+    _lastLoupeOcrAt = null;
     _pointerDown = false;
     if (_holdAnim.value != 0) {
       _holdAnim.value = 0;
@@ -613,19 +658,22 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   }
 
   /// Vision ROI under the loupe (normalized, origin bottom-left).
+  ///
+  /// Tight on purpose so the native crop upscales the number hard.
   JerseyOcrRegion? _loupeRegion(Offset sampleAt, Rect imageRect) {
     if (imageRect.width <= 0 || imageRect.height <= 0) return null;
     final nx = ((sampleAt.dx - imageRect.left) / imageRect.width).clamp(0.0, 1.0);
     final nyTop =
         ((sampleAt.dy - imageRect.top) / imageRect.height).clamp(0.0, 1.0);
-    // ~28% of the frame around the loupe center — jersey number sized.
-    const half = 0.14;
-    final left = (nx - half).clamp(0.0, 1.0);
-    final top = (nyTop - half).clamp(0.0, 1.0);
-    final right = (nx + half).clamp(0.0, 1.0);
-    final bottom = (nyTop + half).clamp(0.0, 1.0);
-    final width = (right - left).clamp(0.04, 1.0);
-    final height = (bottom - top).clamp(0.04, 1.0);
+    // ~18% of the frame — number + a little jersey fabric, not the boards.
+    const halfW = 0.09;
+    const halfH = 0.11;
+    final left = (nx - halfW).clamp(0.0, 1.0);
+    final top = (nyTop - halfH).clamp(0.0, 1.0);
+    final right = (nx + halfW).clamp(0.0, 1.0);
+    final bottom = (nyTop + halfH).clamp(0.0, 1.0);
+    final width = (right - left).clamp(0.05, 1.0);
+    final height = (bottom - top).clamp(0.05, 1.0);
     // Convert top-left normalized → Vision bottom-left origin.
     final visionY = (1.0 - top - height).clamp(0.0, 1.0);
     return JerseyOcrRegion(
@@ -639,7 +687,8 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   void _scheduleLoupeOcr() {
     if (!widget.controller.jerseyOcrEnabled) return;
     _loupeOcrTimer?.cancel();
-    _loupeOcrTimer = Timer(const Duration(milliseconds: 220), () {
+    // Settle briefly so tiny pointer jitter doesn't cancel the native scan.
+    _loupeOcrTimer = Timer(const Duration(milliseconds: 160), () {
       if (!mounted || !_pointerDown || _holdAnim.value <= 0) return;
       if (!widget.controller.jerseyOcrEnabled) return;
       final cursor = _cursor;
@@ -649,8 +698,12 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
       final imageRect = _containRect(_viewport, imageSize);
       if (imageRect.isEmpty) return;
       final sampleAt = _clampToRect(cursor, imageRect);
+      final last = _lastLoupeOcrAt;
+      // Skip re-scan when the cursor barely moved (keeps in-flight OCR alive).
+      if (last != null && (sampleAt - last).distance < 10) return;
       final region = _loupeRegion(sampleAt, imageRect);
       if (region == null) return;
+      _lastLoupeOcrAt = sampleAt;
       unawaited(widget.controller.runOcrLoupeScan(region));
     });
   }
@@ -785,6 +838,13 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                       fit: BoxFit.contain,
                       filterQuality: FilterQuality.high,
                       gaplessPlayback: true,
+                    ),
+                  if (!imageRect.isEmpty)
+                    _OcrNumberMarks(
+                      imageRect: imageRect,
+                      matches: widget.controller.jerseySuggestions,
+                      hover: widget.ocrHover,
+                      enabled: widget.controller.jerseyOcrEnabled,
                     ),
                   if (showLoupe && sampleAt != null) ...[
                     _buildLoupe(
@@ -946,14 +1006,158 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   }
 }
 
+class _OcrNumberMarks extends StatelessWidget {
+  const _OcrNumberMarks({
+    required this.imageRect,
+    required this.matches,
+    required this.hover,
+    required this.enabled,
+  });
+
+  final Rect imageRect;
+  final List<JerseyOcrSuggestion> matches;
+  final ValueListenable<JerseyOcrSuggestion?> hover;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final marks = _playerMarks(matches);
+    if (!enabled || imageRect.isEmpty || marks.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return ValueListenableBuilder<JerseyOcrSuggestion?>(
+      valueListenable: hover,
+      builder: (context, hovered, _) {
+        return IgnorePointer(
+          child: Stack(
+            children: [
+              for (final match in marks) ..._mark(match, hovered),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// One box per player match. Same spot keeps the stronger match.
+  /// One mark per box. [matches] is already ranked (confirmed name+number
+  /// first), so the first player seen at a spot is the one we label.
+  List<JerseyOcrSuggestion> _playerMarks(List<JerseyOcrSuggestion> matches) {
+    final best = <String, JerseyOcrSuggestion>{};
+    for (final match in matches) {
+      final box = match.box;
+      if (box == null || box.width <= 0.004 || box.height <= 0.004) continue;
+      final key = '${(box.x * 40).round()}|${(box.y * 40).round()}|'
+          '${(box.width * 40).round()}|${(box.height * 40).round()}';
+      best.putIfAbsent(key, () => match);
+    }
+    return best.values.toList();
+  }
+
+  bool _isHovered(JerseyOcrSuggestion match, JerseyOcrSuggestion? hovered) {
+    if (hovered == null) return false;
+    return identical(match, hovered) ||
+        (match.player == hovered.player &&
+            match.isHome == hovered.isHome &&
+            match.matchedText == hovered.matchedText);
+  }
+
+  List<Widget> _mark(JerseyOcrSuggestion match, JerseyOcrSuggestion? hovered) {
+    final box = match.box;
+    if (box == null) return const [];
+    final rect = _photoRect(box);
+    if (rect.width < 2 || rect.height < 2) return const [];
+    final emphasized = _isHovered(match, hovered);
+    final color = emphasized ? _ocrTargetTealHot : _ocrTargetTeal;
+    final label = _ocrMatchLabel(match);
+    final detail = _ocrTargetDetail(match);
+    const labelStyle = TextStyle(
+      color: Color(0xFF07201E),
+      fontSize: 10,
+      fontWeight: FontWeight.w700,
+      height: 1.1,
+    );
+    return [
+      Positioned(
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: emphasized ? 0.28 : 0.16),
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: color, width: emphasized ? 2.5 : 2),
+          ),
+        ),
+      ),
+      // Name + number above the box.
+      Positioned(
+        left: rect.left,
+        top: (rect.top - 16).clamp(0.0, imageRect.bottom),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: const BorderRadius.all(Radius.circular(3)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            child: Text(label, style: labelStyle),
+          ),
+        ),
+      ),
+      // Jersey tone + raw read below the box.
+      if (detail.isNotEmpty)
+        Positioned(
+          left: rect.left,
+          top: (rect.bottom + 2).clamp(0.0, imageRect.bottom - 14),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.92),
+              borderRadius: const BorderRadius.all(Radius.circular(3)),
+            ),
+            child: Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              child: Text(
+                detail,
+                style: labelStyle.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  /// Vision box (origin bottom-left) → photo pixels (origin top-left).
+  Rect _photoRect(JerseyOcrRegion box) {
+    final raw = Rect.fromLTWH(
+      imageRect.left + box.x * imageRect.width,
+      imageRect.top + (1 - box.y - box.height) * imageRect.height,
+      box.width * imageRect.width,
+      box.height * imageRect.height,
+    );
+    final padded = raw.inflate(4);
+    return Rect.fromLTRB(
+      padded.left.clamp(imageRect.left, imageRect.right),
+      padded.top.clamp(imageRect.top, imageRect.bottom),
+      padded.right.clamp(imageRect.left, imageRect.right),
+      padded.bottom.clamp(imageRect.top, imageRect.bottom),
+    );
+  }
+}
+
 class _PhotoOcrSuggestionChips extends StatelessWidget {
   const _PhotoOcrSuggestionChips({
     required this.controller,
     required this.tokens,
+    required this.ocrHover,
   });
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
+  final ValueNotifier<JerseyOcrSuggestion?> ocrHover;
 
   @override
   Widget build(BuildContext context) {
@@ -994,26 +1198,116 @@ class _PhotoOcrSuggestionChips extends StatelessWidget {
     }
     if (matches.isEmpty) return const SizedBox.shrink();
 
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 220),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          for (final match in matches.take(6))
-            _OcrMatchChip(
-              match: match,
-              tokens: tokens,
-              selected: controller.isPlayerSelected(
-                match.player,
-                isHome: match.isHome,
-              ),
-              onTap: () => controller.selectPlayer(
-                match.player,
-                isHome: match.isHome,
-              ),
+    return ValueListenableBuilder<JerseyOcrSuggestion?>(
+      valueListenable: ocrHover,
+      builder: (context, hovered, _) {
+        return ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 220),
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (!controller.singleTeamMode)
+                _DarkJerseyChip(controller: controller, tokens: tokens),
+              for (final match in matches.take(6))
+                _OcrMatchChip(
+                  match: match,
+                  tokens: tokens,
+                  selected: controller.isPlayerSelected(
+                    match.player,
+                    isHome: match.isHome,
+                  ),
+                  hovered: identical(hovered, match),
+                  onHover: (value) => ocrHover.value = value,
+                  onTap: () =>
+                      controller.selectPlayerFromTextRecognition(match),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// "Dark Jersey: Leafs" — click to cycle which bench wears dark tonight
+/// (Home → Away → not sure). Re-ranks the OCR suggestions immediately.
+class _DarkJerseyChip extends StatelessWidget {
+  const _DarkJerseyChip({required this.controller, required this.tokens});
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = controller.homeWearsDark;
+    String teamName(bool home) {
+      final name = (home ? controller.homeTeam : controller.awayTeam).trim();
+      return name.isEmpty ? (home ? 'Home' : 'Away') : name;
+    }
+
+    final String who;
+    final String tip;
+    if (value == null) {
+      who = 'not set';
+      tip = 'Which team is in the Dark Jersey tonight? Click to set.\n'
+          'Helps text recognition tell home from away.';
+    } else {
+      who = teamName(value);
+      tip = 'Dark Jersey: ${teamName(value)}\n'
+          'Light Jersey: ${teamName(!value)}\n'
+          'Click to change.';
+    }
+    return Tooltip(
+      waitDuration: const Duration(milliseconds: 350),
+      message: tip,
+      child: Material(
+        color: FfTokens.viewerChrome,
+        borderRadius: BorderRadius.circular(7),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(7),
+          onTap: () {
+            // Home → Away → not sure → Home …
+            final next = value == true ? false : (value == false ? null : true);
+            controller.setHomeWearsDark(next);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: tokens.divider),
             ),
-        ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFF14181C),
+                    border: Border.all(color: tokens.textTertiary),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 150),
+                  child: Text(
+                    'Dark Jersey: $who',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: tokens.metaStyle.copyWith(
+                      fontSize: 11,
+                      color: value == null
+                          ? tokens.textTertiary
+                          : tokens.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1024,31 +1318,42 @@ class _OcrMatchChip extends StatelessWidget {
     required this.match,
     required this.tokens,
     required this.selected,
+    required this.hovered,
+    required this.onHover,
     required this.onTap,
   });
 
   final JerseyOcrSuggestion match;
   final FfTokens tokens;
   final bool selected;
+  final bool hovered;
+  final ValueChanged<JerseyOcrSuggestion?> onHover;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final jersey = match.jersey;
-    final label = [
-      if (jersey.isNotEmpty) '#$jersey',
-      match.player.fullName,
-    ].join(' ');
-    final side = match.isHome ? 'H' : 'A';
-    final kind = match.matchKind == JerseyOcrMatchKind.jersey ? '#' : 'Aa';
-    return Tooltip(
+    final label = _ocrMatchLabel(match);
+    return MouseRegion(
+      onEnter: (_) => onHover(match),
+      onExit: (_) => onHover(null),
+      child: Tooltip(
       message:
           '${match.isHome ? 'Home' : 'Away'} · matched “${match.matchedText}” '
           '(${match.matchKind == JerseyOcrMatchKind.jersey ? 'jersey' : 'name'})',
       child: Material(
-        color: selected
-            ? tokens.accent.withValues(alpha: 0.22)
-            : FfTokens.viewerChrome,
+        // Opaque fills: these chips sit over the photo, so any alpha lets the
+        // image bleed through the text.
+        color: hovered
+            ? Color.alphaBlend(
+                _ocrTargetTeal.withValues(alpha: 0.32),
+                FfTokens.viewerChrome,
+              )
+            : selected
+                ? Color.alphaBlend(
+                    tokens.accent.withValues(alpha: 0.45),
+                    FfTokens.viewerChrome,
+                  )
+                : FfTokens.viewerChrome,
         borderRadius: BorderRadius.circular(7),
         child: InkWell(
           onTap: onTap,
@@ -1058,22 +1363,16 @@ class _OcrMatchChip extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(7),
               border: Border.all(
-                color: selected
-                    ? tokens.accent.withValues(alpha: 0.55)
-                    : tokens.divider,
+                color: hovered
+                    ? _ocrTargetTealHot
+                    : selected
+                        ? tokens.accent.withValues(alpha: 0.55)
+                        : tokens.divider,
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '$side · $kind',
-                  style: tokens.metaStyle.copyWith(
-                    fontSize: 10,
-                    color: tokens.textSecondary,
-                  ),
-                ),
-                const SizedBox(width: 6),
                 Flexible(
                   child: Text(
                     label,
@@ -1090,6 +1389,7 @@ class _OcrMatchChip extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -1283,11 +1583,7 @@ Future<void> _showOcrScanDialog({
                         final kind = match.matchKind == JerseyOcrMatchKind.jersey
                             ? 'jersey'
                             : 'name';
-                        final jersey = match.jersey;
-                        final label = [
-                          if (jersey.isNotEmpty) '#$jersey',
-                          match.player.fullName,
-                        ].join(' ');
+                        final label = _ocrMatchLabel(match);
                         return ListTile(
                           dense: true,
                           contentPadding: EdgeInsets.zero,
@@ -1314,10 +1610,7 @@ Future<void> _showOcrScanDialog({
                             ),
                           ),
                           onTap: () {
-                            controller.selectPlayer(
-                              match.player,
-                              isHome: match.isHome,
-                            );
+                            controller.selectPlayerFromTextRecognition(match);
                             Navigator.of(ctx).pop();
                           },
                         );
@@ -1846,7 +2139,8 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
         decoration: BoxDecoration(
           color: tokens.surface,
           borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-          border: Border.all(color: tokens.divider),
+          border: Border.all(color: tokens.accent.withValues(alpha: 0.85)),
+          boxShadow: FfTokens.accentButtonGlow(tokens.accent),
         ),
         child: FfGlow(
           glowW: 260,
@@ -1873,12 +2167,14 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
           color: tokens.surface,
           borderRadius: BorderRadius.circular(FfTokens.radiusCard),
           border: Border.all(
-            color: widget.focused ? tokens.accent : tokens.divider,
+            color: tokens.accent.withValues(alpha: widget.focused ? 1 : 0.85),
             width: 1,
           ),
+          boxShadow: FfTokens.accentButtonGlow(tokens.accent),
         ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(FfTokens.radiusCard),
+          child: Column(
           children: [
             _ThumbnailToolbar(
               tokens: tokens,
@@ -1964,7 +2260,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                       controller.sentImages.contains(path);
                                   final borderColor = selected
                                       ? tokens.accent
-                                      : tokens.divider;
+                                      : Colors.white;
                                   return GestureDetector(
                                     key: ValueKey(path),
                                     onTap: () => _selectThumbnail(paths, i),
@@ -1986,11 +2282,26 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                               BorderRadius.circular(7),
                                           border: Border.all(
                                             color: borderColor,
-                                            width: 1,
+                                            width: selected ? 0.8 : 0.5,
                                           ),
+                                          boxShadow: selected
+                                              ? FfTokens.selectionGlow(
+                                                  tokens.accent,
+                                                )
+                                              : [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withValues(
+                                                            alpha: 0.22),
+                                                    blurRadius: 8,
+                                                    spreadRadius: 0,
+                                                  ),
+                                                ],
                                         ),
-                                        clipBehavior: Clip.antiAlias,
-                                        child: Column(
+                                        child: ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(7),
+                                          child: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.stretch,
                                           children: [
@@ -2054,6 +2365,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                             ),
                                             _captureTimeLabel(path),
                                           ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -2097,6 +2409,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
               onScopeChanged: _setScope,
             ),
           ],
+          ),
         ),
       ),
     );
@@ -3052,7 +3365,7 @@ class MobileFrameThumb extends StatelessWidget {
             decoration: BoxDecoration(
               color: t.sunken,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: t.divider),
+              border: Border.all(color: Colors.white, width: 0.5),
             ),
             clipBehavior: Clip.antiAlias,
             child: path == null

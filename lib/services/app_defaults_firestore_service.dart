@@ -488,7 +488,9 @@ class AppDefaultsFirestoreService {
   ) async {
     await _assertCanPublish();
     final normalized = sport.toLowerCase().trim();
-    final complete = VerbDefaultsBundle.ensureComplete(sportData, normalized);
+    final complete = VerbDefaultsBundle.withoutFavoriteVerbs(
+      VerbDefaultsBundle.ensureComplete(sportData, normalized),
+    );
     await _doc.set(
       {
         'schemaVersion': currentSchemaVersion,
@@ -511,7 +513,9 @@ class AppDefaultsFirestoreService {
     final base = cached != null && cached.isNotEmpty
         ? Map<String, dynamic>.from(cached)
         : VerbDefaultsBundle.buildFactory(normalized);
-    final healed = VerbDefaultsBundle.ensureComplete(base, normalized);
+    final healed = VerbDefaultsBundle.withoutFavoriteVerbs(
+      VerbDefaultsBundle.ensureComplete(base, normalized),
+    );
     await publishVerbsForSport(normalized, healed);
     return healed;
   }
@@ -524,8 +528,9 @@ class AppDefaultsFirestoreService {
     final completeBySport = <String, Map<String, dynamic>>{};
     bySport.forEach((sport, data) {
       final normalized = sport.toLowerCase().trim();
-      completeBySport[normalized] =
-          VerbDefaultsBundle.ensureComplete(data, normalized);
+      completeBySport[normalized] = VerbDefaultsBundle.withoutFavoriteVerbs(
+        VerbDefaultsBundle.ensureComplete(data, normalized),
+      );
     });
     for (final sport in catalogSports) {
       completeBySport.putIfAbsent(

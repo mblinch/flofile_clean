@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../caption_style/caption_formula_renderer.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/app_defaults_firestore_service.dart';
@@ -14,6 +15,7 @@ import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
 import '../../../widgets/startup_iptc_template_panel.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Result summary shown on the V2 startup form after closing the dialog.
 class CaptionV2IptcSummary {
@@ -74,6 +76,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   bool _loading = true;
   bool _loadingFromFiles = false;
   bool _loadingExternal = false;
+  CaptionTemplate _captionTemplate = CaptionTemplate.getty();
 
   @override
   void initState() {
@@ -83,12 +86,15 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
 
   Future<void> _bootstrap() async {
     _prefs = await PreferencesService.getInstance();
+    // Ensure appDefaults cache is warm (public read) before listing templates.
+    await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
     final mode = await _prefs.getIptcApplyMode();
     final hidden = await _prefs.getHiddenIptcTemplateIds();
     final visible = await AppDefaultsFirestoreService.getVisibleIptcTemplates(
       hiddenIds: hidden,
     );
     final selectedId = await _prefs.getSelectedIptcTemplateId();
+    final captionTemplate = await _prefs.getCaptionTemplate();
     await _loadWireLabels();
 
     String id = selectedId ?? 'getty';
@@ -109,10 +115,17 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       _visibleTemplates = visible;
       _selectedTemplateId = id;
       _wire = wire;
+      _captionTemplate = captionTemplate;
       _loading = false;
     });
     await _loadPresetForWire(wire, forceReplace: true);
   }
+
+  List<String> get _missingCaptionIptc =>
+      CaptionFormulaRenderer.missingCaptionIptcLabels(
+        template: _captionTemplate,
+        game: IptcTemplateApplyService.gameInfoFromPanelValues(_values),
+      );
 
   Future<void> _loadWireLabels() async {
     final getty = await _prefs.getCaptionWireLabel(WireStyle.getty);
@@ -455,6 +468,34 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                 ],
               ),
             ),
+            if (!_loading && _missingCaptionIptc.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                color: const Color(0x14F07167),
+                child: Row(
+                  children: [
+                    const PhosphorIcon(
+                      PhosphorIconsRegular.warning,
+                      size: 14,
+                      color: FfTokens.danger,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Missing for caption: ${_missingCaptionIptc.join(', ')}',
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                          color: FfTokens.danger,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Expanded(
               child: _loading
                   ? const Center(

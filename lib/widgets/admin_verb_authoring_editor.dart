@@ -142,7 +142,11 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   }
 
   void _markDraftChange() {
-    _pendingChanges += 1;
+    if (!mounted) {
+      _pendingChanges += 1;
+      return;
+    }
+    setState(() => _pendingChanges += 1);
   }
 
   void _clearUndo() {
@@ -604,6 +608,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       );
       overrides[updated.key] = record;
       bundle['verbOverrides'] = overrides;
+      _pinFactoryCategoryOverride(bundle, updated.key, next);
     }
 
     final order = Map<String, dynamic>.from(
@@ -784,34 +789,64 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       );
       overrides[updated.key] = record;
       bundle['verbOverrides'] = overrides;
+      _pinFactoryCategoryOverride(bundle, updated.key, updated.category);
     }
+  }
+
+  /// Persist intentional factory-verb category moves across ensureComplete.
+  void _pinFactoryCategoryOverride(
+    Map<String, dynamic> bundle,
+    String verbKey,
+    String category,
+  ) {
+    final pins = Map<String, dynamic>.from(
+      (bundle['categoryOverrides'] as Map?) ?? const {},
+    );
+    final factoryCat =
+        SportVerbCategories.categoryForVerb(verbKey, sport: widget.sport) ?? '';
+    if (factoryCat.isNotEmpty && category.trim() == factoryCat) {
+      pins.remove(verbKey);
+    } else if (category.trim().isNotEmpty) {
+      pins[verbKey] = category.trim();
+    }
+    bundle['categoryOverrides'] = pins;
   }
 
   void _removeVerbFromBundle(Map<String, dynamic> bundle, _VerbDraft verb) {
     if (_pendingDraft?.key == verb.key) _pendingDraft = null;
+    // Tombstone every delete so Firebase/app-default catalogs cannot resurrect
+    // the verb on the next merge (custom or default).
+    final deleted = ((bundle['deletedVerbs'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .toSet()
+      ..add(verb.key);
+    bundle['deletedVerbs'] = deleted.toList();
     if (verb.isCustom) {
       final customs = ((bundle['customVerbs'] as List?) ?? const [])
           .whereType<Map>()
           .map(Map<String, dynamic>.from)
-          .where(
-            (item) => (item['key'] ?? item['label']).toString() != verb.key,
-          )
+          .where((item) {
+            final key = (item['key'] ?? item['label']).toString();
+            return key != verb.key &&
+                key.toLowerCase() != verb.key.toLowerCase();
+          })
           .toList();
       bundle['customVerbs'] = customs;
       final overrides = Map<String, dynamic>.from(
         (bundle['verbOverrides'] as Map?) ?? const {},
-      )..remove(verb.key);
+      )..removeWhere(
+          (key, _) =>
+              key == verb.key || key.toLowerCase() == verb.key.toLowerCase(),
+        );
       bundle['verbOverrides'] = overrides;
     } else {
-      final deleted = ((bundle['deletedVerbs'] as List?) ?? const [])
-          .map((value) => value.toString())
-          .toSet()
-        ..add(verb.key);
-      bundle['deletedVerbs'] = deleted.toList();
       if (!widget.personalMode) {
         final overrides = Map<String, dynamic>.from(
           (bundle['verbOverrides'] as Map?) ?? const {},
-        )..remove(verb.key);
+        )..removeWhere(
+            (key, _) =>
+                key == verb.key || key.toLowerCase() == verb.key.toLowerCase(),
+          );
         bundle['verbOverrides'] = overrides;
       }
     }

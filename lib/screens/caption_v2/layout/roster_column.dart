@@ -217,12 +217,20 @@ class _RosterColumnState extends State<RosterColumn> {
           value: 'pin',
           child: Text(pinned ? 'Unpin Player' : 'Pin Player'),
         ),
+        const PopupMenuItem(value: 'google', child: Text('Google')),
         const PopupMenuItem(value: 'edit', child: Text('Edit player…')),
       ],
     );
     if (action == null || !mounted) return;
     if (action == 'pin') {
       c.togglePlayerPin(player, isHome: widget.isHome);
+      return;
+    }
+    if (action == 'google') {
+      await openPlayerGoogleSearch(
+        fullName: player.fullName,
+        sportId: c.sport,
+      );
       return;
     }
     if (action != 'edit') return;
@@ -465,6 +473,9 @@ class _RosterColumnState extends State<RosterColumn> {
                                 .take(selectedRowIndex + 1)
                                 .where((row) => row.isHome == widget.isHome)
                                 .length;
+                        final isPrimarySelected = !firebarActive &&
+                            selectedRowIndex == 0 &&
+                            c.selectedPlayers.isNotEmpty;
                         return PlayerRow(
                           jersey: pl.jerseyNumber ?? '—',
                           name: c.playerListName(pl),
@@ -481,6 +492,7 @@ class _RosterColumnState extends State<RosterColumn> {
                                     '',
                                   )
                               : q,
+                          primarySelected: isPrimarySelected,
                           selectionRole: !firebarActive && selected
                               ? (isOpponent
                                   ? 'OPP $roleIndex'

@@ -48,6 +48,64 @@ class CaptionFormulaRenderer {
   /// Private-use placeholder; must not appear in real segment output.
   static const String _kCustomNarrativePreviewPlaceholder = '\uE000';
 
+  /// IPTC panel labels needed by [template] that are empty on [game].
+  ///
+  /// Used for startup / session warnings when location, venue, or byline
+  /// would fall back to placeholders ("—", "Venue", "Photographer").
+  ///
+  /// [includeCreator] is false on startup (Creator often comes from serial
+  /// bylines per frame) and true in-session / IPTC dialog.
+  static List<String> missingCaptionIptcLabels({
+    required CaptionTemplate template,
+    required GameInfo game,
+    bool includeCreator = true,
+  }) {
+    final order = template.segmentOrder;
+    final missing = <String>[];
+
+    if (order.contains(CaptionSegment.location)) {
+      final locOpts = locationLineOptionsForOccurrence(template, 0);
+      final gettyWire = template.wireStyle == WireStyle.getty ||
+          template.wireStyle == WireStyle.gettyInternational;
+      final line = formatLocationLine(
+        game,
+        locOpts,
+        apStyleCaption: template.wireStyle == WireStyle.ap ||
+            template.wireStyle == WireStyle.cp,
+        forceAutoAdaptUsIntl: gettyWire,
+      ).trim();
+      if (line.isEmpty || line == '—') {
+        if (game.city.trim().isEmpty) {
+          missing.add('City');
+        }
+        final us = isUnitedStatesGame(game);
+        final hasCountry = game.resolvedCountryName.isNotEmpty ||
+            game.resolvedCountryCode.isNotEmpty;
+        if (us || !hasCountry) {
+          if (game.resolvedRegionName.isEmpty &&
+              game.resolvedRegionShort.isEmpty) {
+            missing.add('Province/State');
+          }
+        }
+        if (!us && !hasCountry) {
+          missing.add('Country');
+        }
+      }
+    }
+
+    if (order.contains(CaptionSegment.venue) && game.venue.trim().isEmpty) {
+      missing.add('Stadium');
+    }
+
+    if (includeCreator &&
+        order.contains(CaptionSegment.credit) &&
+        game.photographerName.trim().isEmpty) {
+      missing.add('Creator');
+    }
+
+    return missing;
+  }
+
   static String formatDate(
     DateTime? d,
     String pattern, {

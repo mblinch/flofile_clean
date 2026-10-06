@@ -4,12 +4,18 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
+import 'app_defaults_firestore_service.dart';
 import 'preferences_service.dart';
 
 /// Syncs per-user preferences (captions, verbs, FTP, etc.) to Firestore so
 /// settings follow the account across machines.
 ///
 /// Document: `users/{uid}/preferences/current`
+///
+/// App-wide defaults live separately in [AppDefaultsFirestoreService] /
+/// `appDefaults/current`. Changing those does **not** overwrite an existing
+/// user's personal prefs — only first-account setup and explicit
+/// "Restore app originals" pull them in.
 class UserPreferencesFirestoreService {
   UserPreferencesFirestoreService._();
 
@@ -31,6 +37,9 @@ class UserPreferencesFirestoreService {
   static String? get _signedInUid => FirebaseAuth.instance.currentUser?.uid;
 
   /// Pull cloud prefs on sign-in / cold start; push local when newer.
+  ///
+  /// Very first sign-in (no cloud doc yet): load published app defaults as the
+  /// account baseline (unless the user already customized locally), then upload.
   static Future<UserPreferencesSyncResult> syncOnSignIn(
     PreferencesService prefs,
   ) async {
@@ -49,25 +58,37 @@ class UserPreferencesFirestoreService {
       final localUpdatedAt = await prefs.getUserPreferencesUpdatedAtMs();
 
       if (!snap.exists) {
+        await prefs.applyPublishedAppDefaultsForFirstSignIn();
         await _uploadNow(prefs, uid);
-        return UserPreferencesSyncResult.uploaded('Initial cloud backup created');
+        return UserPreferencesSyncResult.uploaded(
+          'Initial cloud backup created with app defaults',
+        );
       }
 
       final data = snap.data();
       if (data == null) {
+        await prefs.applyPublishedAppDefaultsForFirstSignIn();
         await _uploadNow(prefs, uid);
-        return UserPreferencesSyncResult.uploaded('Initial cloud backup created');
+        return UserPreferencesSyncResult.uploaded(
+          'Initial cloud backup created with app defaults',
+        );
       }
 
       final cloudUpdatedAt = _readUpdatedAtMs(data);
       final cloudPrefs = _readPreferencesMap(data);
       if (cloudPrefs == null) {
+        await prefs.applyPublishedAppDefaultsForFirstSignIn();
         await _uploadNow(prefs, uid);
-        return UserPreferencesSyncResult.uploaded('Initial cloud backup created');
+        return UserPreferencesSyncResult.uploaded(
+          'Initial cloud backup created with app defaults',
+        );
       }
 
       if (cloudUpdatedAt > localUpdatedAt) {
         await prefs.applyCloudPreferences(cloudPrefs, cloudUpdatedAt);
+        // Fill any new empty gaps (e.g. newly published sport) without
+        // overwriting the user's restored personal defaults.
+        await prefs.seedAllFromAppDefaultsIfEmpty();
         return UserPreferencesSyncResult.downloaded(
           'Settings restored from your account',
         );
@@ -78,6 +99,7 @@ class UserPreferencesFirestoreService {
           'Local settings backed up to your account',
         );
       }
+      await prefs.seedAllFromAppDefaultsIfEmpty();
       return UserPreferencesSyncResult.unchanged();
     } catch (e, st) {
       print('UserPreferencesFirestoreService.syncOnSignIn failed: $e');

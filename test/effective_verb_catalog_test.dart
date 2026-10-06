@@ -82,8 +82,7 @@ void main() {
     );
   });
 
-  test('hockey keeps goalie plays and post-game reactions in their categories',
-      () {
+  test('hockey keeps goalie plays and post-game verbs without Reactions', () {
     final catalog = EffectiveVerbCatalog.merge(
       sport: 'hockey',
       categoryOrder: const [
@@ -91,6 +90,7 @@ void main() {
         'Defense',
         'Non Game-Action',
         'Goalie',
+        'Reactions',
       ],
       verbOrder: const {
         'Offense': [
@@ -99,9 +99,14 @@ void main() {
           'guards the net',
           'celebrates after the win',
         ],
-        'Non Game-Action': ['Looks On'],
+        'Non Game-Action': [
+          'Looks On',
+          'Post Game Win',
+          'Post Game Loss',
+          'Dejection',
+        ],
         'Goalie': ['Saves', 'Handles the Puck'],
-        'Reactions': ['Post Game Win', 'Post Game Loss', 'Dejection'],
+        'Reactions': ['Celebrates'],
       },
       favorites: const {},
       customVerbs: const [],
@@ -125,10 +130,17 @@ void main() {
       catalog.verbsByCategory['Goalie']!.map((verb) => verb.key),
       containsAll(['Saves', 'Handles the Puck', 'Stands in Net', 'Guards the Net']),
     );
+    expect(catalog.verbsByCategory.containsKey('Reactions'), isFalse);
     expect(
-      catalog.verbsByCategory['Reactions']!.map((verb) => verb.key),
-      containsAll(['Post Game Win', 'Post Game Loss', 'Dejection']),
+      catalog.verbsByCategory['Non Game-Action']!.map((verb) => verb.key),
+      containsAll([
+        'Post Game Win',
+        'Post Game Loss',
+        'Dejection',
+        'Celebrates a Goal',
+      ]),
     );
+    expect(catalog.byKey.containsKey('Celebrates'), isFalse);
     expect(
       catalog.verbsByCategory['Offense']!.map((verb) => verb.key),
       isNot(contains('Saves')),

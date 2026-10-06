@@ -201,20 +201,17 @@ class SportVerbCategories {
     'Non Game-Action': [
       'Arrivals',
       'Bench',
+      'Celebrates a Goal',
       'Comes Off the Ice',
+      'Dejection',
       'Looks On',
       'National Anthem',
+      'Post Game Loss',
+      'Post Game Win',
       'Stretching',
       'Takes the Ice',
       'Walks to the Ice',
       'Warm Ups',
-    ],
-    'Reactions': [
-      'Celebrates',
-      'Celebrates a Goal',
-      'Dejection',
-      'Post Game Loss',
-      'Post Game Win',
     ],
   };
 
@@ -261,5 +258,17 @@ class SportVerbCategories {
 
   static Map<String, List<String>> copyForSport(String sport) {
     return forSport(sport).map((k, v) => MapEntry(k, List<String>.from(v)));
+  }
+
+  /// Factory category for [verbKey], or null if it is not a built-in verb.
+  static String? categoryForVerb(String verbKey, {required String sport}) {
+    final needle = verbKey.trim().toLowerCase();
+    if (needle.isEmpty) return null;
+    for (final entry in forSport(sport).entries) {
+      for (final label in entry.value) {
+        if (label.trim().toLowerCase() == needle) return entry.key;
+      }
+    }
+    return null;
   }
 }

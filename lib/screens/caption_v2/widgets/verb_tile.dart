@@ -145,11 +145,13 @@ class _VerbTileState extends State<VerbTile> {
           onCmdTap: widget.onPinTap,
           onSecondaryTapDown: widget.onSecondaryTapDown,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            // Room for the selection glow so parent clips don't shear it off.
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
               curve: Curves.easeOut,
               height: tileHeight,
+              clipBehavior: Clip.none,
               padding: EdgeInsets.symmetric(
                 horizontal: veryCompact ? 4 : 6,
                 vertical: veryCompact ? 1 : 2,
@@ -157,6 +159,9 @@ class _VerbTileState extends State<VerbTile> {
               decoration: BoxDecoration(
                 color: fill,
                 borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+                boxShadow: widget.selected && !widget.firebarSelected
+                    ? FfTokens.selectionGlow(t.accent)
+                    : null,
                 border: widget.firebarSelected
                     ? Border.all(
                         color: FfTokens.firebar.withValues(alpha: 0.42),

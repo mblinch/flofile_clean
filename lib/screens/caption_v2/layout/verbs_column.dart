@@ -203,7 +203,6 @@ class _VerbsColumnState extends State<VerbsColumn> {
                         ),
                       ),
                     ),
-                    Divider(height: 1, color: t.divider),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
                       child: _CustomVerbField(

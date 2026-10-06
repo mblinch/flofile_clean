@@ -171,8 +171,8 @@ class _CaptionV2ThumbnailOverviewState
                             borderRadius:
                                 BorderRadius.circular(FfTokens.radiusTile),
                             border: Border.all(
-                              color: selected ? tokens.accent : tokens.divider,
-                              width: selected ? FfTokens.focusOutlineWidth : 1,
+                              color: selected ? tokens.accent : Colors.white,
+                              width: selected ? 0.8 : 0.5,
                             ),
                           ),
                           child: Column(

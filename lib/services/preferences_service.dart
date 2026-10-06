@@ -9,6 +9,7 @@ import '../caption_style/sport_verb_categories.dart';
 import '../caption_style/verb_defaults_bundle.dart';
 import '../caption_style/verb_sort_mode.dart';
 import 'app_defaults_firestore_service.dart';
+import 'camera_serial_service.dart';
 import 'iptc_template_apply_service.dart';
 import 'user_preferences_firestore_service.dart';
 
@@ -20,6 +21,9 @@ class PreferencesService {
   static const String _keyFavoriteVerbs = 'favorite_verbs';
   static const String _keyFavoriteVerbsBaseball =
       'favorite_verbs_baseball'; // Sport-specific favorites
+  /// One-time clear of favorites that were seeded from app defaults.
+  static const String _keyClearedDefaultFavoriteVerbs =
+      'cleared_default_favorite_verbs_v1';
   static const String _keyCurrentSport = 'current_sport'; // Track current sport
   static const String _keyFavoriteTeams = 'favorite_teams';
   static const String _keyFavoriteTeamsBaseball =
@@ -82,7 +86,7 @@ class PreferencesService {
   /// Admin-only: when true, use league APIs + `sports/...` Firebase.
   /// When false (default), everyone — including admin — uses `sports_tank01/...`.
   static const String _keyUseOfficialLeagueApis = 'use_official_league_apis';
-  /// Admin-only: when true, jersey/name OCR may run in caption V2 (macOS).
+  /// When true, jersey/name OCR may run in caption V2 (macOS).
   /// Default off — even admins must opt in.
   static const String _keyJerseyOcrEnabled = 'jersey_ocr_enabled';
   /// When false, caption V2 hides FTP buttons/shortcuts for the session.
@@ -158,6 +162,11 @@ class PreferencesService {
       'user_preferences_updated_at_ms';
   static const String _keyUserPreferencesCloudUpdatedAtMs =
       'user_preferences_cloud_updated_at_ms';
+  /// Set when the user personally edits verbs / caption styles / wire baselines.
+  /// Seeded app defaults do not set this — so first sign-in can still replace
+  /// untouched local seeds with published Firebase defaults.
+  static const String _keyUserTypedAppDefaultAdjustments =
+      'user_typed_app_default_adjustments';
 
   static PreferencesService? _instance;
   static SharedPreferences? _prefs;
@@ -169,10 +178,17 @@ class PreferencesService {
   /// Bumped when FTP profiles or the current profile are saved.
   final ValueNotifier<int> ftpProfilesRevision = ValueNotifier<int>(0);
 
-  /// Bumped when jersey OCR admin preference is saved.
+  /// Bumped when the jersey OCR preference is saved.
   final ValueNotifier<int> jerseyOcrRevision = ValueNotifier<int>(0);
 
   bool _suppressCloudSync = false;
+  int _suppressUserTypedMarkDepth = 0;
+  bool get _suppressUserTypedMark => _suppressUserTypedMarkDepth > 0;
+
+  void _beginSuppressUserTypedMark() => _suppressUserTypedMarkDepth++;
+  void _endSuppressUserTypedMark() {
+    if (_suppressUserTypedMarkDepth > 0) _suppressUserTypedMarkDepth--;
+  }
 
   PreferencesService._();
 
@@ -180,7 +196,18 @@ class PreferencesService {
     _instance ??= PreferencesService._();
     _prefs ??= await SharedPreferences.getInstance();
     await _instance!._applyFirstLaunchDefaults();
+    await _instance!._clearSeededDefaultFavoriteVerbsOnce();
+    // Camera serials live in their own service but sync with this cloud bundle.
+    CameraSerialService.onChangedForCloudSync ??= () async {
+      await _instance!.noteCameraSerialsChanged();
+    };
+    await CameraSerialService.instance.initialize();
     return _instance!;
+  }
+
+  /// Called when camera serial mappings change so they upload with user prefs.
+  Future<void> noteCameraSerialsChanged() async {
+    _afterLocalPreferencesChanged();
   }
 
   /// On first launch, explicitly save keyword-related prefs as off.
@@ -202,6 +229,28 @@ class PreferencesService {
     }
     if (!prefs.containsKey(_keyBurstDetectionEnabled)) {
       await prefs.setBool(_keyBurstDetectionEnabled, false);
+    }
+  }
+
+  /// Favorites are personal. Clear any verbs that were previously seeded from
+  /// app defaults / sport defaults so each user starts empty and picks their own.
+  Future<void> _clearSeededDefaultFavoriteVerbsOnce() async {
+    final prefs = await _getPrefs();
+    if (prefs.getBool(_keyClearedDefaultFavoriteVerbs) == true) return;
+    _beginSuppressUserTypedMark();
+    try {
+      for (final sport in AppDefaultsFirestoreService.catalogSports) {
+        await saveFavoriteVerbs(<String>{}, sport: sport);
+        final sportDefault = await getSportDefault(sport);
+        if (sportDefault != null && sportDefault.containsKey('favoriteVerbs')) {
+          final cleaned = Map<String, dynamic>.from(sportDefault)
+            ..['favoriteVerbs'] = <String>[];
+          await setSportDefault(sport, cleaned);
+        }
+      }
+      await prefs.setBool(_keyClearedDefaultFavoriteVerbs, true);
+    } finally {
+      _endSuppressUserTypedMark();
     }
   }
 
@@ -248,7 +297,7 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
-  /// Admin-only opt-in for on-device jersey / name OCR. Default: off.
+  /// Opt-in for on-device jersey / name OCR. Default: off.
   Future<bool> getJerseyOcrEnabled() async {
     final prefs = await _getPrefs();
     return prefs.getBool(_keyJerseyOcrEnabled) ?? false;
@@ -449,7 +498,6 @@ class PreferencesService {
           'Defense',
           'Goalie',
           'Non Game-Action',
-          'Reactions',
           'Favorites',
         ];
         break;
@@ -499,6 +547,7 @@ class PreferencesService {
         ' (key=' +
         key +
         ')');
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -556,6 +605,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     if (map.isEmpty) {
       await prefs.remove(_keyGameIdentifierByWireAndSportJson);
+      _markUserTypedAppDefaultAdjustments();
       _afterLocalPreferencesChanged();
       return;
     }
@@ -563,6 +613,7 @@ class PreferencesService {
       _keyGameIdentifierByWireAndSportJson,
       json.encode(map),
     );
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -687,10 +738,12 @@ class PreferencesService {
     final key = _getVerbOrderKey(sport);
     if (order.isEmpty) {
       await prefs.remove(key);
+      _markUserTypedAppDefaultAdjustments();
       _afterLocalPreferencesChanged();
       return;
     }
     await prefs.setString(key, json.encode(order));
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -721,7 +774,10 @@ class PreferencesService {
 
   Future<void> setSportDefault(String sport, Map<String, dynamic> data) async {
     final prefs = await _getPrefs();
-    await prefs.setString(_getSportDefaultKey(sport), json.encode(data));
+    await prefs.setString(
+      _getSportDefaultKey(sport),
+      json.encode(VerbDefaultsBundle.withoutFavoriteVerbs(data)),
+    );
   }
 
   Future<void> clearSportDefault(String sport) async {
@@ -739,7 +795,7 @@ class PreferencesService {
     }
   }
 
-  // Favorite Verbs Preferences (sport-specific)
+  // Favorite Verbs Preferences (sport-specific, user-chosen only — no defaults)
   Future<Set<String>> getFavoriteVerbs({String sport = 'baseball'}) async {
     final prefs = await _getPrefs();
     final key = _getSportSpecificKey(sport);
@@ -747,17 +803,10 @@ class PreferencesService {
     if (verbsJson != null) {
       try {
         final List<dynamic> verbsList = json.decode(verbsJson);
-        final verbs = verbsList.cast<String>().toSet();
-        return verbs;
+        return verbsList.cast<String>().toSet();
       } catch (e) {
         print('Error parsing favorite verbs for $sport: $e');
       }
-    }
-    final sportDefault = await getSportDefault(sport);
-    if (sportDefault != null && sportDefault['favoriteVerbs'] != null) {
-      try {
-        return Set<String>.from(sportDefault['favoriteVerbs'] as List<dynamic>);
-      } catch (_) {}
     }
     return <String>{};
   }
@@ -921,6 +970,7 @@ class PreferencesService {
     final existing = await getCustomVerbWordings(sport: sport);
     existing[verb] = wording;
     await prefs.setString(key, json.encode(existing));
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -935,6 +985,7 @@ class PreferencesService {
     } else {
       await prefs.setString(key, json.encode(existing));
     }
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -947,6 +998,7 @@ class PreferencesService {
   Future<void> saveSerialNumberBylines(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keySerialNumberBylines, enabled);
+    _afterLocalPreferencesChanged();
   }
 
   Future<bool> getApplyVerbKeywords() async {
@@ -978,6 +1030,7 @@ class PreferencesService {
   Future<void> saveResolutionWarningThreshold(int threshold) async {
     final prefs = await _getPrefs();
     await prefs.setInt(_keyResolutionWarningThreshold, threshold);
+    _afterLocalPreferencesChanged();
   }
 
   // Photoshop Path Preference
@@ -993,6 +1046,7 @@ class PreferencesService {
     } else {
       await prefs.remove(_keyPhotoshopPath);
     }
+    _afterLocalPreferencesChanged();
   }
 
   // Current Layout Preference
@@ -1023,6 +1077,13 @@ class PreferencesService {
     return '${_keyCustomVerbs}_${sport.toLowerCase()}';
   }
 
+  /// True when this device has saved a customVerbs list for [sport]
+  /// (including an intentional empty list after deleting the last custom).
+  Future<bool> hasLocalCustomVerbs({String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    return prefs.containsKey(_getCustomVerbsKey(sport));
+  }
+
   Future<List<Map<String, dynamic>>> getCustomVerbs({String sport = 'hockey'}) async {
     final prefs = await _getPrefs();
     final key = _getCustomVerbsKey(sport);
@@ -1050,6 +1111,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final key = _getCustomVerbsKey(sport);
     await prefs.setString(key, json.encode(verbs));
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -1122,6 +1184,7 @@ class PreferencesService {
     } else {
       await prefs.setString(key, json.encode(overrides));
     }
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -1488,6 +1551,7 @@ class PreferencesService {
     } else {
       await prefs.setString(key, json.encode(deletedVerbs.toList()));
     }
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -1508,7 +1572,8 @@ class PreferencesService {
     final data = {
       'categoryOrder': await getCategoryOrder(sport: sport),
       'verbOrder': await getVerbOrder(sport: sport),
-      'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
+      // Favorites stay personal — never part of sport defaults.
+      'favoriteVerbs': <String>[],
       'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
       'customVerbWordings': await getCustomVerbWordings(sport: sport),
       'verbOverrides': await getVerbOverrides(sport: sport),
@@ -1705,6 +1770,11 @@ class PreferencesService {
       'showKeywordsField': await getShowKeywordsField(),
       'showPersonalityField': await getShowPersonalityField(),
       'burstDetectionEnabled': await getBurstDetectionEnabled(),
+      'serialNumberBylines': await getSerialNumberBylines(),
+      'ftpModeEnabled': await getFtpModeEnabled(),
+      'jerseyOcrEnabled': await getJerseyOcrEnabled(),
+      'resolutionWarningThreshold': await getResolutionWarningThreshold(),
+      'photoshopPath': await getPhotoshopPath(),
       'captionLayoutOrder': await getCaptionLayoutOrder(),
       'captionLayoutFlavor': await getCaptionLayoutFlavor(),
       'captionTemplate': (await getCaptionTemplateRaw()).toJson(),
@@ -1734,6 +1804,7 @@ class PreferencesService {
       'captionCreditSampleAgency': await getCaptionCreditSampleAgency(),
       'captionWireLabels': await _exportCaptionWireLabels(),
       'favoriteCaptionStyleBySport': await _exportFavoriteCaptionStyleBySport(),
+      'cameraSerialMappings': CameraSerialService.instance.exportMappings(),
     };
   }
 
@@ -1742,6 +1813,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final bundle = await exportAllPreferences();
     await prefs.setString(_keySavedDefaultPreferences, json.encode(bundle));
+    _markUserTypedAppDefaultAdjustments();
   }
 
   /// Returns the saved default bundle, or null if none.
@@ -1758,6 +1830,16 @@ class PreferencesService {
 
   /// Imports preferences from JSON (export format). Supports full verbSettingsBySport and legacy flat keys.
   Future<void> importPreferences(Map<String, dynamic> preferences) async {
+    // Imports (seeds, cloud restore, catalog apply) are not interactive typing.
+    _beginSuppressUserTypedMark();
+    try {
+      await _importPreferencesInner(preferences);
+    } finally {
+      _endSuppressUserTypedMark();
+    }
+  }
+
+  Future<void> _importPreferencesInner(Map<String, dynamic> preferences) async {
     if (preferences.containsKey('verbSettingsBySport')) {
       final bySport = preferences['verbSettingsBySport'] as Map<String, dynamic>;
       for (final entry in bySport.entries) {
@@ -1877,6 +1959,12 @@ class PreferencesService {
     if (preferences.containsKey('favoriteTeams')) {
       await saveFavoriteTeams(Set<String>.from(preferences['favoriteTeams']));
     }
+    if (preferences.containsKey('cameraSerialMappings')) {
+      await CameraSerialService.instance.importMappings(
+        preferences['cameraSerialMappings'],
+        syncCloud: false,
+      );
+    }
     if (preferences.containsKey('ftpProfiles')) {
       final profiles = Map<String, Map<String, dynamic>>.from(
           (preferences['ftpProfiles'] as Map<String, dynamic>).map(
@@ -1911,6 +1999,26 @@ class PreferencesService {
     if (preferences.containsKey('burstDetectionEnabled')) {
       await saveBurstDetectionEnabled(
           preferences['burstDetectionEnabled'] as bool);
+    }
+    if (preferences.containsKey('serialNumberBylines')) {
+      await saveSerialNumberBylines(
+          preferences['serialNumberBylines'] as bool);
+    }
+    if (preferences.containsKey('ftpModeEnabled')) {
+      await saveFtpModeEnabled(preferences['ftpModeEnabled'] as bool);
+    }
+    if (preferences.containsKey('jerseyOcrEnabled')) {
+      await saveJerseyOcrEnabled(preferences['jerseyOcrEnabled'] as bool);
+    }
+    if (preferences.containsKey('resolutionWarningThreshold')) {
+      final raw = preferences['resolutionWarningThreshold'];
+      final threshold = raw is int
+          ? raw
+          : int.tryParse(raw?.toString() ?? '') ?? 3000;
+      await saveResolutionWarningThreshold(threshold);
+    }
+    if (preferences.containsKey('photoshopPath')) {
+      await savePhotoshopPath(preferences['photoshopPath'] as String?);
     }
     if (preferences.containsKey('captionLayoutOrder')) {
       await saveCaptionLayoutOrder(
@@ -2157,6 +2265,7 @@ class PreferencesService {
     final prefs = await _getPrefs();
     final normalized = template.copyWith(wireStyle: wire);
     await prefs.setString(key, normalized.encode());
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -2165,6 +2274,7 @@ class PreferencesService {
     if (key == null) return;
     final prefs = await _getPrefs();
     await prefs.remove(key);
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -2304,6 +2414,7 @@ class PreferencesService {
         'Could not write caption style library (preferences storage rejected the write).',
       );
     }
+    _markUserTypedAppDefaultAdjustments();
     _afterLocalPreferencesChanged();
   }
 
@@ -2750,7 +2861,10 @@ class PreferencesService {
     }
 
     await AppDefaultsFirestoreService.publishVerbsForSport(normalized, bundle);
-    await setSportDefault(normalized, bundle);
+    await setSportDefault(
+      normalized,
+      VerbDefaultsBundle.withoutFavoriteVerbs(bundle),
+    );
   }
 
   /// Per-sport verb bundle for admin publish (matches export format).
@@ -2760,6 +2874,7 @@ class PreferencesService {
       out[sport] = {
         'categoryOrder': await getCategoryOrder(sport: sport),
         'verbOrder': await getVerbOrder(sport: sport),
+        // Personal — export for backup/sync only; publish paths strip these.
         'favoriteVerbs': (await getFavoriteVerbs(sport: sport)).toList(),
         'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
         'customVerbWordings': await getCustomVerbWordings(sport: sport),
@@ -2782,7 +2897,11 @@ class PreferencesService {
     final slice =
         await AppDefaultsFirestoreService.getCachedSportVerbSettings(sport);
     if (slice == null || slice.isEmpty) return;
-    await importPreferences({'verbSettingsBySport': {sport: slice}});
+    await importPreferences({
+      'verbSettingsBySport': {
+        sport: VerbDefaultsBundle.withoutFavoriteVerbs(slice),
+      },
+    });
   }
 
   /// Seeds the local caption style library from app defaults when the user has
@@ -2800,20 +2919,230 @@ class PreferencesService {
       } catch (_) {}
     }
     if (entries.isEmpty) return;
-    await _saveCaptionStyleLibrary(entries);
+    _beginSuppressUserTypedMark();
+    try {
+      await _saveCaptionStyleLibrary(entries);
+    } finally {
+      _endSuppressUserTypedMark();
+    }
   }
 
-  /// Fetches latest app originals from Firebase and applies verbs + caption structures.
-  Future<void> restoreAppOriginals() async {
+  /// Seeds caption wire layout defaults from the published catalog when the
+  /// user has never saved any wire baseline.
+  Future<void> seedCaptionWireDefaultsFromAppDefaultsIfEmpty() async {
+    final prefs = await _getPrefs();
+    final anySaved = AppDefaultsFirestoreService.captionWireStyles.any((wire) {
+      final key = _captionTemplateWireDefaultKey(wire);
+      return key != null && prefs.containsKey(key);
+    });
+    if (anySaved) return;
+    final catalog = AppDefaultsFirestoreService.getCachedCatalog();
+    final defaults = catalog?.captionTemplateWireDefaults ?? const {};
+    if (defaults.isEmpty) return;
+    await importPreferences({'captionTemplateWireDefaults': defaults});
+  }
+
+  /// Seeds per-wire/per-sport game identifier phrases when none are saved.
+  Future<void> seedGameIdentifiersFromAppDefaultsIfEmpty() async {
+    final local = await getGameIdentifierByWireAndSport();
+    if (local.isNotEmpty) return;
+    final catalog = AppDefaultsFirestoreService.getCachedCatalog();
+    final fromCatalog = catalog?.gameIdentifierByWireAndSport ?? const {};
+    _beginSuppressUserTypedMark();
+    try {
+      if (fromCatalog.isNotEmpty) {
+        await saveGameIdentifierByWireAndSport(fromCatalog);
+        return;
+      }
+      if ((catalog?.captionTemplateWireDefaults ?? const {}).isNotEmpty) {
+        await saveGameIdentifierByWireAndSport(
+          AppDefaultsFirestoreService.seededGameIdentifierByWireAndSport(),
+        );
+      }
+    } finally {
+      _endSuppressUserTypedMark();
+    }
+  }
+
+  /// Seeds all published app defaults into empty local prefs (verbs, caption
+  /// styles, wire layouts, game identifiers). Never overwrites existing data.
+  Future<void> seedAllFromAppDefaultsIfEmpty() async {
+    _beginSuppressUserTypedMark();
+    try {
+      for (final sport in AppDefaultsFirestoreService.catalogSports) {
+        await seedVerbsFromAppDefaultsIfEmpty(sport);
+      }
+      await seedCaptionStyleLibraryFromAppDefaultsIfEmpty();
+      await seedCaptionWireDefaultsFromAppDefaultsIfEmpty();
+      await seedGameIdentifiersFromAppDefaultsIfEmpty();
+    } finally {
+      _endSuppressUserTypedMark();
+    }
+  }
+
+  /// Fetch Firebase `appDefaults/current` (public read — no sign-in required)
+  /// and seed empty local prefs. Safe for skip-sign-in and signed-in users.
+  ///
+  /// Does not sync cloud user prefs. IPTC templates remain in the appDefaults
+  /// cache for readers ([AppDefaultsFirestoreService.getVisibleIptcTemplates]).
+  ///
+  /// Seeded keys alone do not block later first-sign-in apply — only
+  /// [hasUserTypedAppDefaultAdjustments] (real edits) keeps local values.
+  Future<void> ensureAppDefaultsHydrated({bool forceNetwork = false}) async {
+    await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(
+      forceNetwork: forceNetwork,
+    );
+    await seedAllFromAppDefaultsIfEmpty();
+  }
+
+  void _markUserTypedAppDefaultAdjustments() {
+    if (_suppressUserTypedMark) return;
+    unawaited(() async {
+      try {
+        final prefs = await _getPrefs();
+        await prefs.setBool(_keyUserTypedAppDefaultAdjustments, true);
+      } catch (_) {}
+    }());
+  }
+
+  /// True only when the user personally edited verbs / caption styles / wires
+  /// (or legacy signs of that). Auto-seeded defaults do not count.
+  Future<bool> hasUserTypedAppDefaultAdjustments() async {
+    final prefs = await _getPrefs();
+    if (prefs.getBool(_keyUserTypedAppDefaultAdjustments) == true) {
+      return true;
+    }
+
+    // Legacy installs (before the flag): only clear personal edits count.
+    for (final sport in AppDefaultsFirestoreService.catalogSports) {
+      if (_rawJsonListNonEmpty(prefs.getString(_getCustomVerbsKey(sport)))) {
+        return true;
+      }
+      if (_rawJsonListNonEmpty(prefs.getString(_getDeletedVerbsKey(sport)))) {
+        return true;
+      }
+      final catalogSlice =
+          AppDefaultsFirestoreService.getCachedCatalog()?.sportVerbSettings(sport);
+      if (_rawStringMapDiffersFromCatalog(
+        prefs.getString(_getCustomVerbWordingsKey(sport)),
+        catalogSlice?['customVerbWordings'],
+      )) {
+        return true;
+      }
+      if (_rawOverrideMapDiffersFromCatalog(
+        prefs.getString(_getVerbOverridesKey(sport)),
+        catalogSlice?['verbOverrides'],
+      )) {
+        return true;
+      }
+    }
+
+    final savedDefault = await getSavedDefaultPreferences();
+    return savedDefault != null && savedDefault.isNotEmpty;
+  }
+
+  static bool _rawJsonListNonEmpty(String? raw) {
+    if (raw == null || raw.isEmpty || raw == '[]') return false;
+    try {
+      final decoded = json.decode(raw);
+      return decoded is List && decoded.isNotEmpty;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static bool _rawStringMapDiffersFromCatalog(String? raw, dynamic catalogRaw) {
+    if (raw == null || raw.isEmpty || raw == '{}') return false;
+    Map<String, String> local;
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! Map) return true;
+      local = decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
+    } catch (_) {
+      return true;
+    }
+    if (local.isEmpty) return false;
+    final catalog = <String, String>{};
+    if (catalogRaw is Map) {
+      catalogRaw.forEach((k, v) {
+        catalog[k.toString()] = v.toString();
+      });
+    }
+    if (local.length != catalog.length) return true;
+    for (final entry in local.entries) {
+      if (catalog[entry.key] != entry.value) return true;
+    }
+    return false;
+  }
+
+  static bool _rawOverrideMapDiffersFromCatalog(String? raw, dynamic catalogRaw) {
+    if (raw == null || raw.isEmpty || raw == '{}') return false;
+    Map<String, dynamic> local;
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! Map) return true;
+      local = Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      return true;
+    }
+    if (local.isEmpty) return false;
+    final catalog = <String, dynamic>{};
+    if (catalogRaw is Map) {
+      catalogRaw.forEach((k, v) {
+        catalog[k.toString()] = v;
+      });
+    }
+    if (local.length != catalog.length) return true;
+    for (final entry in local.entries) {
+      final catalogValue = catalog[entry.key];
+      if (catalogValue == null) return true;
+      try {
+        if (json.encode(entry.value) != json.encode(catalogValue)) return true;
+      } catch (_) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// First cloud account setup: always load published app defaults unless the
+  /// user already typed personal adjustments. Seeded-but-untouched local prefs
+  /// are replaced. Later admin edits never overwrite existing accounts
+  /// automatically (use [restoreAppOriginals]).
+  Future<void> applyPublishedAppDefaultsForFirstSignIn() async {
     await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(
       forceNetwork: true,
     );
+    if (await hasUserTypedAppDefaultAdjustments()) {
+      await seedAllFromAppDefaultsIfEmpty();
+      return;
+    }
     final catalog = AppDefaultsFirestoreService.getCachedCatalog();
     if (catalog == null) {
-      throw StateError(
-        'Could not load app originals. Sign in and check your connection.',
-      );
+      await seedAllFromAppDefaultsIfEmpty();
+      return;
     }
+    _beginSuppressUserTypedMark();
+    try {
+      await _applyCatalogBaseline(catalog);
+      final rawMaps = catalog.captionStyleLibrary;
+      if (rawMaps.isNotEmpty) {
+        final entries = <CaptionStyleLibraryEntry>[];
+        for (final map in rawMaps) {
+          try {
+            entries.add(CaptionStyleLibraryEntry.fromJson(map));
+          } catch (_) {}
+        }
+        if (entries.isNotEmpty) {
+          await _saveCaptionStyleLibrary(entries);
+        }
+      }
+    } finally {
+      _endSuppressUserTypedMark();
+    }
+  }
+
+  Future<void> _applyCatalogBaseline(AppDefaultsCatalog catalog) async {
     if (catalog.verbSettingsBySport.isNotEmpty) {
       await importPreferences({
         'verbSettingsBySport': catalog.verbSettingsBySport,
@@ -2832,6 +3161,41 @@ class PreferencesService {
       await saveGameIdentifierByWireAndSport(
         AppDefaultsFirestoreService.seededGameIdentifierByWireAndSport(),
       );
+    }
+  }
+
+  /// Fetches latest app originals from Firebase and applies verbs + caption structures.
+  /// Explicit user action — this is how existing users pick up admin default changes.
+  Future<void> restoreAppOriginals() async {
+    await AppDefaultsFirestoreService.fetchAndCacheAppDefaults(
+      forceNetwork: true,
+    );
+    final catalog = AppDefaultsFirestoreService.getCachedCatalog();
+    if (catalog == null) {
+      throw StateError(
+        'Could not load app originals. Sign in and check your connection.',
+      );
+    }
+    _beginSuppressUserTypedMark();
+    try {
+      await _applyCatalogBaseline(catalog);
+      // Force caption style library back to the published catalog.
+      final rawMaps = catalog.captionStyleLibrary;
+      if (rawMaps.isNotEmpty) {
+        final entries = <CaptionStyleLibraryEntry>[];
+        for (final map in rawMaps) {
+          try {
+            entries.add(CaptionStyleLibraryEntry.fromJson(map));
+          } catch (_) {}
+        }
+        if (entries.isNotEmpty) {
+          await _saveCaptionStyleLibrary(entries);
+        }
+      }
+      final prefs = await _getPrefs();
+      await prefs.setBool(_keyUserTypedAppDefaultAdjustments, false);
+    } finally {
+      _endSuppressUserTypedMark();
     }
   }
 

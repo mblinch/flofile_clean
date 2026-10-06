@@ -27,6 +27,7 @@ import '../../../services/mlb_api_service.dart';
 import '../../../services/mlb_inning_feature_gate.dart';
 import '../../../services/mlb_inning_from_timestamp_service.dart';
 import '../../../services/preferences_service.dart';
+import '../../../services/camera_serial_service.dart';
 import '../../../services/admin_service.dart';
 import '../../../config/tank01_config.dart';
 import '../../../utils/exiftool_helper.dart';
@@ -78,11 +79,62 @@ class SearchHit {
   final String? shortcutLabel;
 }
 
+/// How a player was added to the caption selection.
+enum PlayerInputSource {
+  /// Clicked in roster / drum / jersey keypad / search.
+  user,
+
+  /// Chosen from on-photo text recognition (OCR).
+  textRecognition,
+
+  /// Typed as a custom name.
+  typed,
+}
+
 class RosterHit {
-  const RosterHit({required this.player, required this.isHome});
+  const RosterHit({
+    required this.player,
+    required this.isHome,
+    this.source = PlayerInputSource.user,
+    this.recognitionDetail,
+  });
+
   final Player player;
   final bool isHome;
+  final PlayerInputSource source;
+
+  /// Extra OCR detail for tips, e.g. `Jersey #44` or `Name "Matthews"`.
+  final String? recognitionDetail;
+
+  RosterHit copyWith({
+    Player? player,
+    bool? isHome,
+    PlayerInputSource? source,
+    String? recognitionDetail,
+    bool clearRecognitionDetail = false,
+  }) =>
+      RosterHit(
+        player: player ?? this.player,
+        isHome: isHome ?? this.isHome,
+        source: source ?? this.source,
+        recognitionDetail: clearRecognitionDetail
+            ? null
+            : (recognitionDetail ?? this.recognitionDetail),
+      );
 }
+
+/// A caption substring with a hover tip explaining where it came from.
+class CaptionProvenanceSpan {
+  const CaptionProvenanceSpan({
+    required this.phrase,
+    required this.tip,
+  });
+
+  final String phrase;
+  final String tip;
+}
+
+enum _BylineProvenance { none, iptc, serial, serialAssigned }
 
 /// How an OCR token matched a roster player.
 enum JerseyOcrMatchKind { jersey, name }
@@ -95,6 +147,10 @@ class JerseyOcrSuggestion {
     required this.confidence,
     required this.matchedText,
     required this.matchKind,
+    this.box,
+    this.jerseyTone,
+    this.region,
+    this.confirmed = false,
   });
 
   final Player player;
@@ -105,7 +161,48 @@ class JerseyOcrSuggestion {
   final String matchedText;
   final JerseyOcrMatchKind matchKind;
 
+  /// Vision-normalized box of [matchedText] (origin bottom-left).
+  final JerseyOcrRegion? box;
+
+  /// Fabric tone under the read (`dark` / `light`), when Vision sampled it.
+  final String? jerseyTone;
+
+  /// `torso` / `sleeve` / `helmet` / `body` / `loupe`.
+  final String? region;
+
+  /// Both the number and the name were read and agree on this player.
+  final bool confirmed;
+
   String get jersey => (player.jerseyNumber ?? '').trim();
+
+  JerseyOcrSuggestion copyWith({double? confidence, bool? confirmed}) =>
+      JerseyOcrSuggestion(
+        player: player,
+        isHome: isHome,
+        confidence: confidence ?? this.confidence,
+        matchedText: matchedText,
+        matchKind: matchKind,
+        box: box,
+        jerseyTone: jerseyTone,
+        region: region,
+        confirmed: confirmed ?? this.confirmed,
+      );
+}
+
+/// A roster pick the user confirmed on a recent frame — players on the ice
+/// together in one shift tend to be in the next frame too.
+class _RecentPick {
+  const _RecentPick({
+    required this.playerKey,
+    required this.isHome,
+    required this.capturedAt,
+    required this.frameIndex,
+  });
+
+  final String playerKey;
+  final bool isHome;
+  final DateTime? capturedAt;
+  final int frameIndex;
 }
 
 /// Result of a manual OCR test scan on the current frame.
@@ -328,6 +425,15 @@ class CaptionV2Controller extends ChangeNotifier {
   final Set<String> _baseKeywordKeys = {};
   int _iptcLoadGen = 0;
 
+  /// How [photographerName] was resolved for the current frame (hover tips).
+  _BylineProvenance _photographerProvenance = _BylineProvenance.none;
+  String? _photographerSerialUsed;
+
+  /// When serial bylines is on and this frame has no mapped photographer,
+  /// set to the EXIF serial (or '' if the file has none) so the UI can prompt.
+  String? pendingSerialBylinesPrompt;
+  final Set<String> _serialBylinesPromptDismissed = {};
+
   /// Active caption style from prefs (Getty / Imagn / AP / …).
   CaptionTemplate captionTemplate = CaptionTemplate.getty();
   CaptionStyleCatalog? _captionStyleCatalog;
@@ -405,7 +511,8 @@ class CaptionV2Controller extends ChangeNotifier {
   final Set<String> captionedImages = {};
   final Set<String> sentImages = {};
   final Set<String> selectedImagePaths = {};
-  bool burstDetectionEnabled = true;
+  bool burstDetectionEnabled = false;
+  bool serialBylinesEnabled = false;
   bool loadingImages = false;
   bool refreshingFolder = false;
   bool _folderScanInFlight = false;
@@ -425,16 +532,64 @@ class CaptionV2Controller extends ChangeNotifier {
   /// OCR roster matches for [currentPath].
   List<JerseyOcrSuggestion> jerseySuggestions = const [];
 
+  /// Which bench wears the dark jersey. Null → use the sport default
+  /// (hockey: home dark; basketball/baseball: home light) until picks teach us.
+  bool? homeWearsDarkOverride;
+
+  /// +1 per pick that says "home is dark", −1 per pick that says "home is light".
+  int _homeDarkVotes = 0;
+
+  /// Recent confirmed picks (newest last) for shift continuity across frames.
+  final List<_RecentPick> _recentPicks = [];
+
+  /// True when the user answered the jersey-colour question at startup
+  /// (even with "not sure") — then the sport default is not assumed.
+  bool _homeWearsDarkAnswered = false;
+
+  bool? get homeWearsDark {
+    if (homeWearsDarkOverride != null) return homeWearsDarkOverride;
+    if (_homeDarkVotes >= 2) return true;
+    if (_homeDarkVotes <= -2) return false;
+    if (_homeWearsDarkAnswered) return null;
+    switch (sport.trim().toLowerCase()) {
+      case 'hockey':
+        return true;
+      case 'basketball':
+      case 'wnba':
+      case 'baseball':
+        return false;
+      default:
+        return null;
+    }
+  }
+
+  /// Flip which bench wears dark (retro / third jerseys). Null clears to default.
+  void setHomeWearsDark(bool? value) {
+    homeWearsDarkOverride = value;
+    _homeWearsDarkAnswered = true;
+    _homeDarkVotes = 0;
+    jerseySuggestions = _matchJerseyOcrHits(jerseyOcrHits);
+    notifyListeners();
+  }
+
   /// Raw OCR tokens from the last scan (numbers + names).
   List<JerseyOcrHit> jerseyOcrHits = const [];
   bool jerseyOcrBusy = false;
+  /// Frame-scan generation; bumped on frame change / full rescan.
   int _jerseyOcrToken = 0;
+  /// Loupe-scan generation; a newer loupe position cancels the older one
+  /// without touching the frame scan.
+  int _loupeOcrToken = 0;
+  int _jerseyOcrInflight = 0;
   Timer? _jerseyOcrTimer;
   final Map<String, List<JerseyOcrHit>> _jerseyOcrCache = {};
 
-  /// Admin + preference gate for jersey OCR (UI + auto/loupe scans).
-  /// Default off until an admin enables it in Admin → Jersey OCR.
+  /// Preference gate for jersey OCR (UI + auto/loupe scans).
+  /// Default off until the user enables it via the header OCR toggle.
   bool jerseyOcrEnabled = false;
+
+  /// Raw preference value for the header toggle (ignores admin/platform gate).
+  bool jerseyOcrPreferenceEnabled = false;
 
   static const _sessionImageExtensions = {
     '.jpg',
@@ -682,6 +837,173 @@ class CaptionV2Controller extends ChangeNotifier {
       add(verbDefinition(verb)?.label ?? verb);
     }
     return found;
+  }
+
+  /// Phrases in [displayedCaption] with hover tips explaining where they came from.
+  List<CaptionProvenanceSpan> get captionProvenanceSpans {
+    final caption = displayedCaption;
+    if (caption.trim().isEmpty) return const [];
+
+    final spans = <CaptionProvenanceSpan>[];
+    final seen = <String>{};
+
+    bool phraseFits(String captionText, String phrase) {
+      var from = 0;
+      while (from < captionText.length) {
+        final index = captionText.indexOf(phrase, from);
+        if (index < 0) return false;
+        // Short tokens (state codes, etc.) need word edges so "ON" ≠ "Toronto".
+        if (phrase.length > 3) return true;
+        final beforeOk = index == 0 ||
+            !RegExp(r'[A-Za-z0-9]').hasMatch(captionText[index - 1]);
+        final after = index + phrase.length;
+        final afterOk = after >= captionText.length ||
+            !RegExp(r'[A-Za-z0-9]').hasMatch(captionText[after]);
+        if (beforeOk && afterOk) return true;
+        from = index + phrase.length;
+      }
+      return false;
+    }
+
+    void add(String raw, String tip) {
+      final base = raw.trim();
+      if (base.isEmpty) return;
+      for (final phrase in <String>[base, base.toUpperCase()]) {
+        if (phrase.isEmpty || seen.contains(phrase)) continue;
+        if (!phraseFits(caption, phrase)) continue;
+        seen.add(phrase);
+        spans.add(CaptionProvenanceSpan(phrase: phrase, tip: tip));
+        return;
+      }
+    }
+
+    final photographer = photographerName.trim();
+    if (photographer.isNotEmpty) {
+      add(photographer, _photographerProvenanceTip);
+    }
+
+    final agency = agencyName.trim();
+    if (agency.isNotEmpty) {
+      final fromIptc = (currentIptcMeta['IPTC:Credit'] ??
+              currentIptcMeta['Credit'] ??
+              '')
+          .trim()
+          .isNotEmpty;
+      add(
+        agency,
+        fromIptc ? 'Photo IPTC · Credit' : 'Caption style · Agency',
+      );
+    }
+
+    final game = currentGameInfoForCaption();
+    if (game.city.trim().isNotEmpty) {
+      add(
+        game.city,
+        city.trim().isNotEmpty ? 'Session · City' : 'Photo IPTC · City',
+      );
+    }
+    if (game.region.trim().isNotEmpty) {
+      add(
+        game.region,
+        region.trim().isNotEmpty
+            ? 'Session · Province/State'
+            : 'Photo IPTC · Province/State',
+      );
+      final short = game.resolvedRegionShort.trim();
+      if (short.isNotEmpty && short != game.region.trim()) {
+        add(
+          short,
+          region.trim().isNotEmpty
+              ? 'Session · Province/State'
+              : 'Photo IPTC · Province/State',
+        );
+      }
+    }
+    if (game.venue.trim().isNotEmpty) {
+      add(
+        game.venue,
+        venue.trim().isNotEmpty ? 'Session · Stadium' : 'Photo IPTC · Stadium',
+      );
+    }
+
+    final path = currentPath;
+    final hasExifDate = path != null && captureByPath[path] != null;
+    final dateLine = CaptionFormulaRenderer.formatTemplateDateLine(
+      game,
+      captionTemplate,
+      uppercaseAll: captionTemplate.wireStyle == WireStyle.getty ||
+          captionTemplate.wireStyle == WireStyle.gettyInternational,
+    ).trim();
+    if (dateLine.isNotEmpty && dateLine != '—') {
+      add(
+        dateLine,
+        hasExifDate ? 'Photo EXIF · Date' : 'Session · Date',
+      );
+    }
+
+    for (final row in selectedPlayers) {
+      var name = row.player.fullName.trim();
+      if (name.isEmpty) continue;
+      if (captionTemplate.removeDiacritics) {
+        name = CaptionTextNormalize.stripDiacritics(name);
+      }
+      add(name, _playerProvenanceTip(row));
+    }
+
+    if (customVerbPhrase.trim().isNotEmpty) {
+      add(customVerbPhrase, 'Verb · Custom text');
+    } else {
+      final verb = selectedVerb;
+      if (verb != null) {
+        final def = verbDefinition(verb);
+        add(def?.singularPhrase ?? '', 'Verb · Selected');
+        add(def?.label ?? verb, 'Verb · Selected');
+      }
+    }
+
+    if (homeTeam.trim().isNotEmpty) {
+      add(homeTeam, 'Session · Home team');
+    }
+    if (awayTeam.trim().isNotEmpty) {
+      add(awayTeam, 'Session · Away team');
+    }
+
+    return spans;
+  }
+
+  String _playerProvenanceTip(RosterHit row) {
+    final side = row.isHome ? 'Home' : 'Away';
+    final team = (row.isHome ? homeTeam : awayTeam).trim();
+    final teamBit = team.isEmpty ? side : '$side ($team)';
+    switch (row.source) {
+      case PlayerInputSource.textRecognition:
+        final detail = row.recognitionDetail?.trim() ?? '';
+        return detail.isEmpty
+            ? 'Text recognition · $teamBit'
+            : 'Text recognition · $detail';
+      case PlayerInputSource.typed:
+        return 'User input · Typed name';
+      case PlayerInputSource.user:
+        return 'User input · $teamBit';
+    }
+  }
+
+  String get _photographerProvenanceTip {
+    final serial = _photographerSerialUsed?.trim() ?? '';
+    switch (_photographerProvenance) {
+      case _BylineProvenance.serial:
+        return serial.isEmpty
+            ? 'Serial bylines · Filled from camera serial'
+            : 'Serial bylines · Filled from camera $serial';
+      case _BylineProvenance.serialAssigned:
+        return serial.isEmpty
+            ? 'Serial bylines · Assigned for this camera'
+            : 'Serial bylines · Assigned for camera $serial';
+      case _BylineProvenance.iptc:
+        return 'Photo IPTC · Creator';
+      case _BylineProvenance.none:
+        return 'Session · Photographer';
+    }
   }
 
   String get _normalizedFirebarQuery =>
@@ -1341,42 +1663,8 @@ class CaptionV2Controller extends ChangeNotifier {
     return ' against the $opp $timingCaptionClause$venueBit.';
   }
 
-  /// Player + action body that feeds [CaptionFormulaRenderer] (no location/credit).
-  ///
-  /// Builds as soon as a player is selected (even before a verb), so the
-  /// configured caption style can still wrap date / venue / byline around a
-  /// partial body — matching V1.
-  String buildCaptionBody() {
-    if (selectedPlayer == null) return '';
-    final lead = _playerLead(captionTemplate);
-    if (!hasVerbSelection) {
-      return '$lead ${_incompleteContextPhrase()}'
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
-    }
-    final action = customVerbPhrase.trim().isNotEmpty
-        ? _customActionPhrase()
-        : _actionPhrase();
-    return '$lead $action'.replaceAll(RegExp(r'\s+'), ' ').trim();
-  }
-
-  /// Full caption using the user's saved caption style (Getty / Imagn / …).
-  String buildCaptionSentence() {
-    final manual = manualCaptionOverride;
-    if (manual != null) return manual;
-    final body = buildCaptionBody();
-    if (body.isEmpty) {
-      // No players yet — keep a light chip-friendly preview only.
-      final parts = <String>[
-        captionLeading.trim(),
-        if (hasVerbSelection) verbChipLabel,
-        if (rbi > 0) rbiChipLabel,
-        if (baseChipLabel.isNotEmpty) baseChipLabel,
-        captionTrailing.trim(),
-      ];
-      return parts.join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
-    }
-
+  /// Location / venue / byline resolved the same way as [buildCaptionSentence].
+  GameInfo currentGameInfoForCaption() {
     final path = currentPath;
     final capture = path == null ? null : captureByPath[path];
     final gameDate = capture ??
@@ -1427,7 +1715,7 @@ class CaptionV2Controller extends ChangeNotifier {
             ]) ??
             '');
 
-    final game = GameInfo(
+    return GameInfo(
       gameDate: gameDate,
       city: gameCity,
       region: gameRegion,
@@ -1438,6 +1726,52 @@ class CaptionV2Controller extends ChangeNotifier {
       agencyName: agencyName,
       iptcMetadata: currentIptcMeta,
     );
+  }
+
+  /// IPTC fields the active caption style needs that are still empty.
+  List<String> get missingCaptionIptcLabels =>
+      CaptionFormulaRenderer.missingCaptionIptcLabels(
+        template: captionTemplate,
+        game: currentGameInfoForCaption(),
+      );
+
+  /// Player + action body that feeds [CaptionFormulaRenderer] (no location/credit).
+  ///
+  /// Builds as soon as a player is selected (even before a verb), so the
+  /// configured caption style can still wrap date / venue / byline around a
+  /// partial body — matching V1.
+  String buildCaptionBody() {
+    if (selectedPlayer == null) return '';
+    final lead = _playerLead(captionTemplate);
+    if (!hasVerbSelection) {
+      return '$lead ${_incompleteContextPhrase()}'
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+    }
+    final action = customVerbPhrase.trim().isNotEmpty
+        ? _customActionPhrase()
+        : _actionPhrase();
+    return '$lead $action'.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  /// Full caption using the user's saved caption style (Getty / Imagn / …).
+  String buildCaptionSentence() {
+    final manual = manualCaptionOverride;
+    if (manual != null) return manual;
+    final body = buildCaptionBody();
+    if (body.isEmpty) {
+      // No players yet — keep a light chip-friendly preview only.
+      final parts = <String>[
+        captionLeading.trim(),
+        if (hasVerbSelection) verbChipLabel,
+        if (rbi > 0) rbiChipLabel,
+        if (baseChipLabel.isNotEmpty) baseChipLabel,
+        captionTrailing.trim(),
+      ];
+      return parts.join(' ').replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
+
+    final game = currentGameInfoForCaption();
 
     CreditSampleAgency agency;
     switch (captionTemplate.wireStyle) {
@@ -1807,15 +2141,13 @@ class CaptionV2Controller extends ChangeNotifier {
     await _prefs!.saveVerbSortMode(VerbSortMode.alphabetical);
     _verbUsageCounts = await _prefs!.getVerbUsageCountsForSport(sport);
     await _loadVerbCatalog();
-    // V2 always auto-detects bursts from capture times; no session toggle.
-    burstDetectionEnabled = true;
     captionTemplate = await _prefs!.getCaptionTemplate();
     mlbTimestampEnabled = await _prefs!.getMlbInningFromClockEnabled();
     showKeywordsField = await _prefs!.getShowKeywordsField();
     showPersonalityField = await _prefs!.getShowPersonalityField();
     applyVerbKeywords = await _prefs!.getApplyVerbKeywords();
     applyPlayerNamesToKeywords = await _prefs!.getApplyPlayerNamesToKeywords();
-    ftpModeEnabled = await _prefs!.getFtpModeEnabled();
+    await reloadApplicationModes();
     await _refreshJerseyOcrEnabled();
     _prefs!.captionFieldVisibilityRevision.addListener(
       _onCaptionFieldVisibilityChanged,
@@ -1926,6 +2258,31 @@ class CaptionV2Controller extends ChangeNotifier {
     await _prefs?.saveFtpModeEnabled(enabled);
   }
 
+  Future<void> setSerialBylinesEnabled(bool enabled) async {
+    if (enabled == serialBylinesEnabled) return;
+    serialBylinesEnabled = enabled;
+    notifyListeners();
+    await _prefs?.saveSerialNumberBylines(enabled);
+  }
+
+  Future<void> setBurstDetectionEnabled(bool enabled) async {
+    if (enabled == burstDetectionEnabled) return;
+    burstDetectionEnabled = enabled;
+    notifyListeners();
+    await _prefs?.saveBurstDetectionEnabled(enabled);
+  }
+
+  /// Re-read Application mode toggles (FTP / serial / burst / OCR) from prefs.
+  Future<void> reloadApplicationModes() async {
+    final prefs = _prefs ?? await PreferencesService.getInstance();
+    _prefs = prefs;
+    ftpModeEnabled = await prefs.getFtpModeEnabled();
+    serialBylinesEnabled = await prefs.getSerialNumberBylines();
+    burstDetectionEnabled = await prefs.getBurstDetectionEnabled();
+    await _refreshJerseyOcrEnabled();
+    notifyListeners();
+  }
+
   /// Apply startup choices, then load rosters via API and images from folder.
   /// Burst grouping is always detected from capture times in the loaded folder.
   Future<void> applyStartup({
@@ -1941,6 +2298,8 @@ class CaptionV2Controller extends ChangeNotifier {
     String region = '',
     String country = '',
     String countryCode = '',
+    bool? homeWearsDark,
+    bool homeWearsDarkAnswered = false,
   }) async {
     sessionGeneration++;
     this.sport = sport;
@@ -1952,7 +2311,6 @@ class CaptionV2Controller extends ChangeNotifier {
     this.region = region;
     this.country = country;
     this.countryCode = countryCode;
-    burstDetectionEnabled = true;
     pinnedVerb = null;
     pinnedPlayer = null;
     customVerbPhrase = '';
@@ -1974,6 +2332,10 @@ class CaptionV2Controller extends ChangeNotifier {
     timingHalf = null;
     preGame = false;
     postGame = false;
+    _recentPicks.clear();
+    _homeDarkVotes = 0;
+    homeWearsDarkOverride = homeWearsDark;
+    _homeWearsDarkAnswered = homeWearsDarkAnswered;
     sessionLoading = true;
     sessionLoadingLabel = 'Loading rosters…';
     sessionReady = false;
@@ -1981,7 +2343,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
     _api.setSport(sport);
     await _prefs?.saveCurrentSport(sport);
-    ftpModeEnabled = await _prefs?.getFtpModeEnabled() ?? true;
+    await reloadApplicationModes();
     await _loadVerbCatalog();
     await _loadCaptionStyleCatalog();
 
@@ -2044,7 +2406,7 @@ class CaptionV2Controller extends ChangeNotifier {
     for (final row in selectedPlayers) {
       final match = _findRosterPlayer(row.player, isHome: row.isHome);
       if (match != null) {
-        kept.add(RosterHit(player: match, isHome: row.isHome));
+        kept.add(row.copyWith(player: match));
       }
     }
     selectedPlayers
@@ -2071,7 +2433,7 @@ class CaptionV2Controller extends ChangeNotifier {
     if (pinned == null) return null;
     final match = _findRosterPlayer(pinned.player, isHome: pinned.isHome);
     if (match == null) return null;
-    return RosterHit(player: match, isHome: pinned.isHome);
+    return pinned.copyWith(player: match);
   }
 
   void resetToStartup() {
@@ -2972,7 +3334,12 @@ class CaptionV2Controller extends ChangeNotifier {
   // Selection
   // ---------------------------------------------------------------------------
 
-  void selectPlayer(Player player, {required bool isHome}) {
+  void selectPlayer(
+    Player player, {
+    required bool isHome,
+    PlayerInputSource source = PlayerInputSource.user,
+    String? recognitionDetail,
+  }) {
     captionSelectionStarted = true;
     final existingIndex = selectedPlayers.indexWhere(
       (row) => row.isHome == isHome && _samePlayer(row.player, player),
@@ -2980,12 +3347,131 @@ class CaptionV2Controller extends ChangeNotifier {
     if (existingIndex >= 0) {
       selectedPlayers.removeAt(existingIndex);
     } else {
-      selectedPlayers.add(RosterHit(player: player, isHome: isHome));
+      selectedPlayers.add(RosterHit(
+        player: player,
+        isHome: isHome,
+        source: source,
+        recognitionDetail: recognitionDetail,
+      ));
+      _rememberRecentPick(player, isHome: isHome);
+      _learnJerseyToneFromPick(player, isHome: isHome);
     }
     manualCaptionOverride = null;
     _syncPrimaryPlayer();
     _syncKeywords();
     notifyListeners();
+  }
+
+  static String _ocrPlayerKey(Player player, {required bool isHome}) =>
+      '${isHome ? 'h' : 'a'}|${player.playerId ?? player.fullName}|'
+      '${player.jerseyNumber ?? ''}';
+
+  void _rememberRecentPick(Player player, {required bool isHome}) {
+    final path = currentPath;
+    if (path == null) return;
+    final key = _ocrPlayerKey(player, isHome: isHome);
+    _recentPicks.removeWhere((p) => p.playerKey == key);
+    _recentPicks.add(_RecentPick(
+      playerKey: key,
+      isHome: isHome,
+      capturedAt: captureByPath[path],
+      frameIndex: currentIndex,
+    ));
+    while (_recentPicks.length > 40) {
+      _recentPicks.removeAt(0);
+    }
+  }
+
+  /// A pick that agrees with an OCR jersey read tells us which bench is dark.
+  void _learnJerseyToneFromPick(Player player, {required bool isHome}) {
+    if (homeWearsDarkOverride != null) return;
+    final key = _ocrPlayerKey(player, isHome: isHome);
+    final jersey = _normalizeJerseyKey(player.jerseyNumber);
+    String? tone;
+    for (final s in jerseySuggestions) {
+      if (s.jerseyTone == null) continue;
+      if (_ocrPlayerKey(s.player, isHome: s.isHome) == key) {
+        tone = s.jerseyTone;
+        break;
+      }
+      // Same number read on the other bench — the user corrected the side,
+      // so the tone belongs to the picked side.
+      if (jersey != null &&
+          s.matchKind == JerseyOcrMatchKind.jersey &&
+          _normalizeJerseyKey(s.jersey) == jersey) {
+        tone = s.jerseyTone;
+      }
+    }
+    if (tone == null) return;
+    final saysHomeDark = (tone == 'dark') == isHome;
+    _homeDarkVotes = (_homeDarkVotes + (saysHomeDark ? 1 : -1)).clamp(-6, 6);
+  }
+
+  /// Shift continuity: how strongly recent frames vouch for [playerKey].
+  double _recentPickBoost(String playerKey) {
+    final path = currentPath;
+    if (path == null || _recentPicks.isEmpty) return 0;
+    final now = captureByPath[path];
+    var best = 0.0;
+    for (final pick in _recentPicks) {
+      if (pick.playerKey != playerKey) continue;
+      double boost;
+      if (now != null && pick.capturedAt != null) {
+        final gap = now.difference(pick.capturedAt!).inMilliseconds.abs();
+        if (gap <= 6000) {
+          boost = 0.12;
+        } else if (gap <= 25000) {
+          boost = 0.07;
+        } else if (gap <= 90000) {
+          boost = 0.03;
+        } else {
+          boost = 0;
+        }
+      } else {
+        final frames = (pick.frameIndex - currentIndex).abs();
+        boost = frames <= 2 ? 0.10 : (frames <= 6 ? 0.05 : 0);
+      }
+      if (boost > best) best = boost;
+    }
+    return best;
+  }
+
+  /// Which bench the user has been working lately (−1 away … +1 home).
+  double _recentSideLean() {
+    final path = currentPath;
+    if (path == null || _recentPicks.isEmpty) return 0;
+    final now = captureByPath[path];
+    var home = 0, away = 0;
+    for (final pick in _recentPicks.reversed.take(8)) {
+      if (now != null && pick.capturedAt != null) {
+        if (now.difference(pick.capturedAt!).inMilliseconds.abs() > 180000) {
+          continue;
+        }
+      } else if ((pick.frameIndex - currentIndex).abs() > 12) {
+        continue;
+      }
+      if (pick.isHome) {
+        home++;
+      } else {
+        away++;
+      }
+    }
+    final total = home + away;
+    if (total == 0) return 0;
+    return (home - away) / total;
+  }
+
+  /// Select from an OCR / text-recognition suggestion.
+  void selectPlayerFromTextRecognition(JerseyOcrSuggestion match) {
+    final detail = match.matchKind == JerseyOcrMatchKind.jersey
+        ? 'Jersey #${match.matchedText.trim()}'
+        : 'Name “${match.matchedText.trim()}”';
+    selectPlayer(
+      match.player,
+      isHome: match.isHome,
+      source: PlayerInputSource.textRecognition,
+      recognitionDetail: detail,
+    );
   }
 
   bool get canUseLastCustomPlayer => lastCustomPlayerName.trim().isNotEmpty;
@@ -3040,7 +3526,11 @@ class CaptionV2Controller extends ChangeNotifier {
     if (existing != null) {
       rememberLastCustomPlayer(fullName: name, jerseyNumber: jerseyKey);
       if (!isPlayerSelected(existing, isHome: isHome)) {
-        selectPlayer(existing, isHome: isHome);
+        selectPlayer(
+          existing,
+          isHome: isHome,
+          source: PlayerInputSource.typed,
+        );
       } else {
         notifyListeners();
       }
@@ -3071,7 +3561,11 @@ class CaptionV2Controller extends ChangeNotifier {
       (row) => row.isHome == isHome && _samePlayer(row.player, player),
     );
     if (!already) {
-      selectPlayer(player, isHome: isHome);
+      selectPlayer(
+        player,
+        isHome: isHome,
+        source: PlayerInputSource.typed,
+      );
     } else {
       notifyListeners();
     }
@@ -3176,13 +3670,13 @@ class CaptionV2Controller extends ChangeNotifier {
     for (var i = 0; i < selectedPlayers.length; i++) {
       final row = selectedPlayers[i];
       if (row.isHome == isHome && _samePlayer(row.player, original)) {
-        selectedPlayers[i] = RosterHit(player: updated, isHome: isHome);
+        selectedPlayers[i] = row.copyWith(player: updated);
       }
     }
     if (pinnedPlayer != null &&
         pinnedPlayer!.isHome == isHome &&
         _samePlayer(pinnedPlayer!.player, original)) {
-      pinnedPlayer = RosterHit(player: updated, isHome: isHome);
+      pinnedPlayer = pinnedPlayer!.copyWith(player: updated);
     }
     _syncPrimaryPlayer();
     manualCaptionOverride = null;
@@ -3369,7 +3863,10 @@ class CaptionV2Controller extends ChangeNotifier {
     final path = currentPath;
     if (path != null) {
       final fromFile = await photographerNameForPath(path);
-      if (fromFile.isNotEmpty) photographerName = fromFile;
+      if (fromFile.isNotEmpty) {
+        photographerName = fromFile;
+        _photographerProvenance = _BylineProvenance.iptc;
+      }
     }
     manualCaptionOverride =
         CaptionTransferPayload.captionForDestinationPhotographer(
@@ -3723,18 +4220,27 @@ class CaptionV2Controller extends ChangeNotifier {
     final prefs = _prefs;
     final definition = verbDefinition(verb);
     if (prefs == null || definition == null) return;
+    // Always tombstone so app-default / Firebase catalogs cannot resurrect it.
+    await prefs.addDeletedVerb(verb, sport: sport);
+    await prefs.removeVerbOverride(verb, sport: sport);
     if (definition.isCustom) {
       final customs = await prefs.getCustomVerbs(sport: sport)
-        ..removeWhere((item) =>
-            item['label']?.toString() == verb ||
-            item['verbPhrase']?.toString() == verb);
+        ..removeWhere((item) {
+          final key = (item['key'] ?? item['label'] ?? '').toString();
+          final label = item['label']?.toString() ?? '';
+          final phrase = item['verbPhrase']?.toString() ?? '';
+          final lower = verb.toLowerCase();
+          return key == verb ||
+              label == verb ||
+              phrase == verb ||
+              key.toLowerCase() == lower ||
+              label.toLowerCase() == lower;
+        });
       await prefs.saveCustomVerbs(customs, sport: sport);
-    } else {
-      await prefs.addDeletedVerb(verb, sport: sport);
-      await prefs.removeVerbOverride(verb, sport: sport);
     }
     final favorites = await prefs.getFavoriteVerbs(sport: sport)
-      ..remove(verb);
+      ..remove(verb)
+      ..removeWhere((value) => value.toLowerCase() == verb.toLowerCase());
     await prefs.saveFavoriteVerbs(favorites, sport: sport);
     await _loadVerbCatalog();
     notifyListeners();
@@ -5208,17 +5714,20 @@ class CaptionV2Controller extends ChangeNotifier {
     unawaited(_refreshJerseyOcrEnabled());
   }
 
-  /// Reloads admin + preference gate. OCR stays off for non-admins / default.
+  /// Reloads the preference gate. OCR is off by default; macOS only.
   Future<void> _refreshJerseyOcrEnabled() async {
-    final admin = await AdminService.isCurrentUserAdmin();
     final prefOn = await _prefs?.getJerseyOcrEnabled() ?? false;
-    final next = admin && prefOn && JerseyOcrChannel.supported;
+    final next = prefOn && JerseyOcrChannel.supported;
+    final prefChanged = prefOn != jerseyOcrPreferenceEnabled;
+    jerseyOcrPreferenceEnabled = prefOn;
     if (next == jerseyOcrEnabled) {
       if (!next &&
           (jerseySuggestions.isNotEmpty ||
               jerseyOcrHits.isNotEmpty ||
               jerseyOcrBusy)) {
         _clearJerseyOcrState();
+        notifyListeners();
+      } else if (prefChanged) {
         notifyListeners();
       }
       return;
@@ -5231,6 +5740,15 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     notifyListeners();
     _scheduleJerseyOcr();
+  }
+
+  /// Header toggle; effective OCR also needs macOS.
+  Future<void> setJerseyOcrPreferenceEnabled(bool enabled) async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    jerseyOcrPreferenceEnabled = enabled;
+    notifyListeners();
+    await prefs.saveJerseyOcrEnabled(enabled);
   }
 
   /// Debounced auto-scan of the current frame for jersey numbers + names.
@@ -5264,7 +5782,7 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Manual / auto OCR on the current frame (numbers + names). macOS only.
   ///
   /// When [regionOfInterest] is set (loupe), Vision scans only that crop.
-  /// Requires admin + Jersey OCR preference enabled.
+  /// Requires the Jersey OCR preference enabled.
   Future<OcrScanResult> runOcrTestScan({
     bool force = true,
     JerseyOcrRegion? regionOfInterest,
@@ -5282,7 +5800,13 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     final path = currentPath;
-    final token = ++_jerseyOcrToken;
+    final isLoupe = regionOfInterest != null;
+    // A loupe pass rides alongside the frame scan: it only cancels an older
+    // loupe pass, never the frame scan (and a frame change cancels both).
+    final token = isLoupe ? _jerseyOcrToken : ++_jerseyOcrToken;
+    final loupeToken = isLoupe ? ++_loupeOcrToken : _loupeOcrToken;
+    bool stale() =>
+        token != _jerseyOcrToken || (isLoupe && loupeToken != _loupeOcrToken);
     if (path == null) {
       jerseySuggestions = const [];
       jerseyOcrHits = const [];
@@ -5299,7 +5823,7 @@ class CaptionV2Controller extends ChangeNotifier {
     try {
       mtimeMs = (await File(path).lastModified()).millisecondsSinceEpoch;
     } catch (_) {}
-    if (token != _jerseyOcrToken) {
+    if (stale()) {
       return OcrScanResult(
         supported: true,
         hits: jerseyOcrHits,
@@ -5314,21 +5838,32 @@ class CaptionV2Controller extends ChangeNotifier {
             '${regionOfInterest.y.toStringAsFixed(3)},'
             '${regionOfInterest.width.toStringAsFixed(3)},'
             '${regionOfInterest.height.toStringAsFixed(3)}';
+    final sportKey = sport.trim().toLowerCase();
     final cacheKey =
-        '$path|$mtimeMs|$roiKey|${customWords.length}|${customWords.hashCode}';
+        '$path|$mtimeMs|$roiKey|$sportKey|${customWords.length}|${customWords.hashCode}';
     late final List<JerseyOcrHit> hits;
     final cached = force ? null : _jerseyOcrCache[cacheKey];
     if (cached != null) {
       hits = cached;
     } else {
+      _jerseyOcrInflight++;
       jerseyOcrBusy = true;
       notifyListeners();
-      hits = await JerseyOcrChannel.recognize(
-        path: path,
-        customWords: customWords,
-        regionOfInterest: regionOfInterest,
-      );
-      if (token != _jerseyOcrToken) {
+      try {
+        hits = await JerseyOcrChannel.recognize(
+          path: path,
+          customWords: customWords,
+          regionOfInterest: regionOfInterest,
+          sport: sportKey,
+        );
+      } finally {
+        if (_jerseyOcrInflight > 0) _jerseyOcrInflight--;
+      }
+      if (stale()) {
+        if (_jerseyOcrInflight == 0 && jerseyOcrBusy) {
+          jerseyOcrBusy = false;
+          notifyListeners();
+        }
         return OcrScanResult(
           supported: true,
           hits: jerseyOcrHits,
@@ -5341,17 +5876,46 @@ class CaptionV2Controller extends ChangeNotifier {
       }
     }
 
-    final suggestions = _matchJerseyOcrHits(hits);
-    if (token != _jerseyOcrToken) {
+    // Frame and loupe reads live in one list so neither wipes the other.
+    //  • Frame scan: replaces earlier frame reads, keeps loupe reads.
+    //  • Loupe scan: adds to the frame reads; only an older loupe read of
+    //    the same spot is superseded (the fresh focused pass is better).
+    final List<JerseyOcrHit> combined;
+    if (!isLoupe) {
+      combined = [
+        for (final prior in jerseyOcrHits)
+          if (prior.region == 'loupe') prior,
+        ...hits,
+      ];
+    } else {
+      final kept = <JerseyOcrHit>[
+        for (final prior in jerseyOcrHits)
+          if (!(prior.region == 'loupe' &&
+              _hitCenterInside(prior, regionOfInterest, pad: 1.6)))
+            prior,
+      ];
+      // Bound accumulation from a long hover session: drop oldest loupe reads.
+      var loupeCount = kept.where((h) => h.region == 'loupe').length;
+      if (loupeCount > 160) {
+        kept.removeWhere((h) {
+          if (loupeCount <= 160 || h.region != 'loupe') return false;
+          loupeCount--;
+          return true;
+        });
+      }
+      combined = [...kept, ...hits];
+    }
+    final suggestions = _matchJerseyOcrHits(combined);
+    if (stale()) {
       return OcrScanResult(
         supported: true,
         hits: jerseyOcrHits,
         matches: jerseySuggestions,
       );
     }
-    jerseyOcrHits = hits;
+    jerseyOcrHits = combined;
     jerseySuggestions = suggestions;
-    jerseyOcrBusy = false;
+    jerseyOcrBusy = _jerseyOcrInflight > 0;
     notifyListeners();
     return OcrScanResult(
       supported: true,
@@ -5361,47 +5925,61 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   /// OCR the loupe region (Vision-normalized ROI, origin bottom-left).
+  /// Always a fresh Vision pass on that crop (no cache, no person gating).
   Future<OcrScanResult> runOcrLoupeScan(JerseyOcrRegion region) =>
       runOcrTestScan(force: true, regionOfInterest: region);
+
+  /// True when [hit]'s centre lies within [roi] grown by [pad] about its centre.
+  static bool _hitCenterInside(
+    JerseyOcrHit hit,
+    JerseyOcrRegion roi, {
+    double pad = 1.0,
+  }) {
+    final cx = hit.x + hit.width * 0.5;
+    final cy = hit.y + hit.height * 0.5;
+    final w = roi.width * pad;
+    final h = roi.height * pad;
+    final left = roi.x + roi.width * 0.5 - w * 0.5;
+    final bottom = roi.y + roi.height * 0.5 - h * 0.5;
+    return cx >= left && cx <= left + w && cy >= bottom && cy <= bottom + h;
+  }
 
   /// Roster last names + jersey numbers for Vision `customWords` bias.
   ///
   /// Vision caps at ~200 words and only applies them when language correction
-  /// is on — prioritize jersey digits, then last names, then first names.
+  /// is on. Last names go first (jerseys are ALL CAPS surnames). First names
+  /// are left out so they don't crowd the lexicon or false-match.
   List<String> _ocrCustomWords() {
-    final jerseys = <String>{};
     final lasts = <String>{};
-    final firsts = <String>{};
+    final jerseys = <String>{};
     void addRoster(List<Player> roster) {
       for (final player in roster) {
-        final jersey = (player.jerseyNumber ?? '').trim();
-        if (RegExp(r'^\d{1,2}$').hasMatch(jersey)) {
-          jerseys.add(jersey);
-          jerseys.add('#$jersey');
-        }
         final last = playerLastName(player).trim();
         if (last.length >= 2) {
           lasts.add(last);
-          lasts.add(last.toUpperCase());
-          // Hyphen / space variants ("O'Neill", "Van Meter").
+          final upper = last.toUpperCase();
+          if (upper != last) lasts.add(upper);
+          // Hyphen / space / apostrophe variants ("O'Neill", "Van Meter").
           final compact = last.replaceAll(RegExp(r"[^A-Za-z]"), '');
-          if (compact.length >= 3 && compact != last) {
+          if (compact.length >= 3 &&
+              compact.toLowerCase() != last.toLowerCase()) {
             lasts.add(compact);
             lasts.add(compact.toUpperCase());
           }
         }
-        final first = player.firstName.trim();
-        if (first.length >= 3) firsts.add(first);
+        final jersey = (player.jerseyNumber ?? '').trim();
+        if (RegExp(r'^\d{1,2}$').hasMatch(jersey)) {
+          jerseys.add(jersey);
+        }
       }
     }
 
     addRoster(homeRoster);
     addRoster(awayRoster);
 
-    final jerseyList = jerseys.toList()..sort();
     final lastList = lasts.toList()..sort();
-    final firstList = firsts.toList()..sort();
-    final out = <String>[...jerseyList, ...lastList, ...firstList];
+    final jerseyList = jerseys.toList()..sort();
+    final out = <String>[...lastList, ...jerseyList];
     if (out.length <= 200) return out;
     return out.sublist(0, 200);
   }
@@ -5413,6 +5991,8 @@ class CaptionV2Controller extends ChangeNotifier {
     // Players that got both a jersey and a nearby name hit — boost later.
     final jerseyHitPlayers = <String>{};
     final nameHitPlayers = <String>{};
+    final jerseyHitsByPlayer = <String, List<JerseyOcrHit>>{};
+    final nameHitsByPlayer = <String, List<JerseyOcrHit>>{};
 
     double hitSpatialBoost(JerseyOcrHit hit) {
       final cx = hit.x + hit.width * 0.5;
@@ -5421,7 +6001,26 @@ class CaptionV2Controller extends ChangeNotifier {
       final centerFactor = (1.0 - (centerDist * 2.2)).clamp(0.0, 1.0);
       final area = (hit.width * hit.height).clamp(0.0, 0.25);
       final sizeFactor = (area / 0.02).clamp(0.0, 1.0);
-      return centerFactor * 0.10 + sizeFactor * 0.08;
+      var boost = centerFactor * 0.10 + sizeFactor * 0.08;
+      // Hockey: small digits high in frame are often helmet stickers.
+      if (sport.trim().toLowerCase() == 'hockey') {
+        final digits = hit.text.replaceFirst(RegExp(r'^#+'), '').trim();
+        final isJersey = RegExp(r'^\d{1,2}$').hasMatch(digits);
+        if (isJersey && cy >= 0.55 && area <= 0.045) {
+          boost += 0.12;
+        }
+      }
+      return boost;
+    }
+
+    final homeDark = homeWearsDark;
+    final sideLean = _recentSideLean();
+
+    /// Jersey fabric tone vs. which bench wears dark: +/− for side agreement.
+    double toneBoost(JerseyOcrHit hit, {required bool isHome}) {
+      if (homeDark == null || hit.jerseyTone == null) return 0;
+      final hitSaysHome = hit.isDarkJersey == homeDark;
+      return hitSaysHome == isHome ? 0.14 : -0.14;
     }
 
     void consider({
@@ -5432,13 +6031,13 @@ class CaptionV2Controller extends ChangeNotifier {
       required int nameScore,
       double confidenceBoost = 0,
     }) {
-      final playerKey =
-          '${isHome ? 'h' : 'a'}|${player.playerId ?? player.fullName}|'
-          '${player.jerseyNumber ?? ''}';
+      final playerKey = _ocrPlayerKey(player, isHome: isHome);
       if (kind == JerseyOcrMatchKind.jersey) {
         jerseyHitPlayers.add(playerKey);
+        (jerseyHitsByPlayer[playerKey] ??= []).add(hit);
       } else {
         nameHitPlayers.add(playerKey);
+        (nameHitsByPlayer[playerKey] ??= []).add(hit);
       }
       final existing = bestByPlayerKey[playerKey];
       // Prefer jersey matches, then tighter name scores, then confidence.
@@ -5447,11 +6046,17 @@ class CaptionV2Controller extends ChangeNotifier {
           ? 999
           : (existing.matchKind == JerseyOcrMatchKind.jersey
               ? 0
-              : 10 + _playerMatchScore(
+              : 10 + _ocrPlayerNameScore(
                   existing.player,
                   _normalizeFirebarText(existing.matchedText),
                 ));
-      final conf = (hit.confidence + confidenceBoost + hitSpatialBoost(hit))
+      final conf = (hit.confidence +
+              confidenceBoost +
+              hitSpatialBoost(hit) +
+              toneBoost(hit, isHome: isHome) +
+              _recentPickBoost(playerKey) +
+              // Sticky bench: small nudge toward the side being worked.
+              (isHome ? sideLean : -sideLean) * 0.05)
           .clamp(0.0, 1.0);
       if (existing != null && existingRank < rank) return;
       if (existing != null &&
@@ -5465,6 +6070,14 @@ class CaptionV2Controller extends ChangeNotifier {
         confidence: conf,
         matchedText: hit.text,
         matchKind: kind,
+        box: JerseyOcrRegion(
+          x: hit.x,
+          y: hit.y,
+          width: hit.width,
+          height: hit.height,
+        ),
+        jerseyTone: hit.jerseyTone,
+        region: hit.region,
       );
     }
 
@@ -5499,18 +6112,61 @@ class CaptionV2Controller extends ChangeNotifier {
       }
     }
 
+    bool boxesAreNear(List<JerseyOcrHit>? a, List<JerseyOcrHit>? b) {
+      if (a == null || b == null || a.isEmpty || b.isEmpty) return false;
+      for (final left in a) {
+        final lx = left.x + left.width * 0.5;
+        final ly = left.y + left.height * 0.5;
+        for (final right in b) {
+          final dx = lx - (right.x + right.width * 0.5);
+          final dy = ly - (right.y + right.height * 0.5);
+          if (dx * dx + dy * dy <= 0.32 * 0.32) return true;
+        }
+      }
+      return false;
+    }
+
     void matchHit(JerseyOcrHit hit) {
+      final cy = hit.y + hit.height * 0.5;
+      final area = hit.width * hit.height;
+      // Tiny text glued to the top scorebug or bottom ticker.
+      if (area < 0.015 && (cy > 0.91 || cy < 0.055)) return;
+
       for (final raw in queryTokens(hit.text)) {
         final query = _normalizeFirebarText(raw);
         if (query.isEmpty) continue;
 
-        final jerseyKey = _normalizeJerseyKey(raw);
-        final isJerseyToken = jerseyKey != null &&
+        // "B" inside "B Be" must not become jersey 8. Letter→digit fixes
+        // apply only to the whole read ("B", "8B"). A split piece counts
+        // as a number only when it is already digits ("23" in "JUDGE 23").
+        final source = hit.text.replaceFirst(RegExp(r'^#+'), '').trim();
+        final bare = raw.replaceFirst(RegExp(r'^#+'), '').trim();
+        final isFragment = bare.toLowerCase() != source.toLowerCase();
+        final String? jerseyKey;
+        if (isFragment) {
+          jerseyKey = RegExp(r'^\d{1,2}$').hasMatch(bare)
+              ? int.parse(bare).toString()
+              : null;
+        } else {
+          jerseyKey = _normalizeJerseyKey(raw);
+        }
+        // A jersey number is a compact block. A wide, short box is a board ad.
+        // Loupe/focused scans already exclude boards — accept any 1–2 digits.
+        // Frame and loupe hits now live in one list, so this is per hit.
+        final focused = hit.region == 'loupe';
+        final aspect = hit.height > 0.0001 ? hit.width / hit.height : 1.0;
+        final compactNumber =
+            focused || hit.height <= 0.004 || aspect <= 2.6;
+        final isJerseyToken = compactNumber &&
+            jerseyKey != null &&
             RegExp(r'^\d{1,2}$').hasMatch(jerseyKey);
 
         void scanRoster(List<Player> roster, {required bool isHome}) {
           for (final player in roster) {
             if (isJerseyToken) {
+              // Loupe digit reads are often wrong on helmet stickers — need
+              // a stronger Vision score before locking a jersey match.
+              if (focused && hit.confidence < 0.42) continue;
               final playerJersey = _normalizeJerseyKey(player.jerseyNumber);
               if (playerJersey != null && playerJersey == jerseyKey) {
                 consider(
@@ -5525,23 +6181,10 @@ class CaptionV2Controller extends ChangeNotifier {
             }
 
             // Skip very short name tokens (noise); allow 1–2 digit jerseys above.
-            if (query.length < 2) continue;
-            // 2-letter tokens: exact last-name match only (e.g. "Ng", "Li").
-            if (query.length < 3) {
-              final last = _normalizeFirebarText(playerLastName(player));
-              if (last != query) continue;
-              consider(
-                player: player,
-                isHome: isHome,
-                hit: hit,
-                kind: JerseyOcrMatchKind.name,
-                nameScore: 2,
-              );
-              continue;
-            }
-            final score = _playerMatchScore(player, query);
-            // Exact / strong prefix only — avoid loose "contains" false hits.
-            if (score > 7) continue;
+            if (query.length < 3) continue;
+            final score = _ocrPlayerNameScore(player, query);
+            // Only surnames that clearly resemble the OCR text.
+            if (!_ocrNameScoreOk(score, query)) continue;
             consider(
               player: player,
               isHome: isHome,
@@ -5561,37 +6204,103 @@ class CaptionV2Controller extends ChangeNotifier {
       matchHit(hit);
     }
 
-    // Boost players confirmed by both jersey + name text in the same frame.
+    // A number and a name that both point at one roster player is as good as
+    // it gets — the odds of that being a coincidence anywhere in the frame are
+    // negligible, so distance between the two reads is a bonus, not a gate.
+    bool confirmedByNameAndNumber(String key) =>
+        jerseyHitPlayers.contains(key) && nameHitPlayers.contains(key);
+
     for (final key in jerseyHitPlayers.intersection(nameHitPlayers)) {
       final existing = bestByPlayerKey[key];
       if (existing == null) continue;
-      bestByPlayerKey[key] = JerseyOcrSuggestion(
-        player: existing.player,
-        isHome: existing.isHome,
-        confidence: (existing.confidence + 0.12).clamp(0.0, 1.0),
-        matchedText: existing.matchedText,
-        matchKind: existing.matchKind,
+      final near = boxesAreNear(jerseyHitsByPlayer[key], nameHitsByPlayer[key]);
+      bestByPlayerKey[key] = existing.copyWith(
+        confidence: (existing.confidence + (near ? 0.22 : 0.14)).clamp(0.0, 1.0),
+        confirmed: true,
       );
     }
 
+    // Once someone is confirmed, the weak reads are noise: single-digit
+    // jersey fragments and partial-name guesses for *other* players go.
+    if (bestByPlayerKey.values.any((s) => s.confirmed)) {
+      bestByPlayerKey.removeWhere((key, s) {
+        if (s.confirmed) return false;
+        final text = s.matchedText.replaceFirst(RegExp(r'^#+'), '').trim();
+        if (s.matchKind == JerseyOcrMatchKind.jersey) {
+          return !RegExp(r'^\d{2}$').hasMatch(text);
+        }
+        return _ocrPlayerNameScore(s.player, _normalizeFirebarText(text)) != 2;
+      });
+    }
+
+    // Same number on both teams: keep the side whose name is also in frame.
+    // Failing that, keep the side whose jersey tone matches the bench, or
+    // the side seen on the previous frames of this shift.
+    final keysByJersey = <String, List<String>>{};
+    for (final entry in bestByPlayerKey.entries) {
+      if (entry.value.matchKind != JerseyOcrMatchKind.jersey) continue;
+      final jersey = _normalizeJerseyKey(entry.value.jersey);
+      if (jersey == null || !RegExp(r'^\d{1,2}$').hasMatch(jersey)) continue;
+      keysByJersey.putIfAbsent(jersey, () => []).add(entry.key);
+    }
+    for (final keys in keysByJersey.values) {
+      if (keys.length < 2) continue;
+      final confirmed = keys.where(confirmedByNameAndNumber).toList();
+      if (confirmed.isNotEmpty) {
+        for (final key in keys) {
+          if (!confirmed.contains(key)) bestByPlayerKey.remove(key);
+        }
+        continue;
+      }
+      // Tone: both candidates share the hit, so tone picks exactly one side.
+      if (homeDark != null) {
+        final toneAgree = keys.where((key) {
+          final s = bestByPlayerKey[key]!;
+          if (s.jerseyTone == null) return false;
+          final hitSaysHome = (s.jerseyTone == 'dark') == homeDark;
+          return hitSaysHome == s.isHome;
+        }).toList();
+        if (toneAgree.length == 1) {
+          for (final key in keys) {
+            if (key != toneAgree.first) bestByPlayerKey.remove(key);
+          }
+          continue;
+        }
+      }
+      // Shift continuity: one side was confirmed seconds ago.
+      final recent = keys.where((k) => _recentPickBoost(k) >= 0.07).toList();
+      if (recent.length == 1) {
+        for (final key in keys) {
+          if (key != recent.first) bestByPlayerKey.remove(key);
+        }
+      }
+    }
+
+    // A lone "B" that shares its box with "B Be" is the logo, not jersey 8.
+    bestByPlayerKey.removeWhere((_, suggestion) {
+      if (suggestion.matchKind != JerseyOcrMatchKind.jersey) return false;
+      final text = suggestion.matchedText.replaceFirst(RegExp(r'^#+'), '').trim();
+      if (text.length != 1 || RegExp(r'^\d$').hasMatch(text)) return false;
+      final box = suggestion.box;
+      if (box == null) return false;
+      return hits.any((hit) {
+        final other = hit.text.trim();
+        if (other.length <= text.length) return false;
+        if (!other.toLowerCase().contains(text.toLowerCase())) return false;
+        return (box.x - hit.x).abs() < 0.03 &&
+            (box.y - hit.y).abs() < 0.03 &&
+            (box.width - hit.width).abs() < 0.03 &&
+            (box.height - hit.height).abs() < 0.03;
+      });
+    });
+
+    String playerKeyOf(JerseyOcrSuggestion suggestion) =>
+        _ocrPlayerKey(suggestion.player, isHome: suggestion.isHome);
+
     final out = bestByPlayerKey.values.toList()
       ..sort((a, b) {
-        final aBoth = jerseyHitPlayers.contains(
-              '${a.isHome ? 'h' : 'a'}|${a.player.playerId ?? a.player.fullName}|'
-              '${a.player.jerseyNumber ?? ''}',
-            ) &&
-            nameHitPlayers.contains(
-              '${a.isHome ? 'h' : 'a'}|${a.player.playerId ?? a.player.fullName}|'
-              '${a.player.jerseyNumber ?? ''}',
-            );
-        final bBoth = jerseyHitPlayers.contains(
-              '${b.isHome ? 'h' : 'a'}|${b.player.playerId ?? b.player.fullName}|'
-              '${b.player.jerseyNumber ?? ''}',
-            ) &&
-            nameHitPlayers.contains(
-              '${b.isHome ? 'h' : 'a'}|${b.player.playerId ?? b.player.fullName}|'
-              '${b.player.jerseyNumber ?? ''}',
-            );
+        final aBoth = confirmedByNameAndNumber(playerKeyOf(a));
+        final bBoth = confirmedByNameAndNumber(playerKeyOf(b));
         if (aBoth != bBoth) return aBoth ? -1 : 1;
         final byKind = a.matchKind.index.compareTo(b.matchKind.index);
         if (byKind != 0) return byKind;
@@ -5602,8 +6311,98 @@ class CaptionV2Controller extends ChangeNotifier {
         if (byJersey != 0) return byJersey;
         return a.player.fullName.compareTo(b.player.fullName);
       });
-    if (out.length <= 12) return out;
-    return out.sublist(0, 12);
+
+    String digitsOf(String text) =>
+        text.replaceFirst(RegExp(r'^#+'), '').trim();
+    bool isJerseyRead(JerseyOcrSuggestion s) =>
+        s.matchKind == JerseyOcrMatchKind.jersey &&
+        RegExp(r'^\d{1,2}$').hasMatch(digitsOf(s.matchedText));
+
+    // "34" read as "3" / "4" too: a 2-digit read at the same spot owns the
+    // 1-digit fragments inside it, so #3 / #4 players don't get invented.
+    out.removeWhere((s) {
+      if (!isJerseyRead(s)) return false;
+      final frag = digitsOf(s.matchedText);
+      if (frag.length != 1) return false;
+      return out.any((o) {
+        if (identical(o, s) || !isJerseyRead(o)) return false;
+        final full = digitsOf(o.matchedText);
+        return full.length == 2 &&
+            full.contains(frag) &&
+            _ocrBoxesOverlap(o.box, s.box);
+      });
+    });
+
+    // One player per patch of fabric. A name + number read that agree on one
+    // roster player owns that box — nothing else read there can be someone
+    // else. Also a higher-ranked jersey read of a different number at the
+    // same spot wins over a lower one (Vision alternates like 34 vs 84).
+    final kept = <JerseyOcrSuggestion>[];
+    for (final s in out) {
+      final dominated = kept.any((k) {
+        if (k.isHome == s.isHome && _samePlayer(k.player, s.player)) {
+          return false;
+        }
+        // A confirmed player owns both the spot its number was read at and
+        // the spot its name was read at.
+        if (k.confirmed) {
+          final kKey = playerKeyOf(k);
+          final owned = <JerseyOcrHit>[
+            ...?jerseyHitsByPlayer[kKey],
+            ...?nameHitsByPlayer[kKey],
+          ];
+          for (final hit in owned) {
+            final hitBox = JerseyOcrRegion(
+              x: hit.x,
+              y: hit.y,
+              width: hit.width,
+              height: hit.height,
+            );
+            if (_ocrBoxesOverlap(hitBox, s.box)) return true;
+          }
+        }
+        if (!_ocrBoxesOverlap(k.box, s.box)) return false;
+        if (k.confirmed) return true;
+        // Same number on both benches, still unresolved: keep both choices.
+        if (_normalizeJerseyKey(k.jersey) == _normalizeJerseyKey(s.jersey)) {
+          return false;
+        }
+        return isJerseyRead(k) && isJerseyRead(s);
+      });
+      if (!dominated) kept.add(s);
+    }
+
+    if (kept.length <= 12) return kept;
+    return kept.sublist(0, 12);
+  }
+
+  /// True when two OCR boxes cover mostly the same spot on the frame.
+  static bool _ocrBoxesOverlap(JerseyOcrRegion? a, JerseyOcrRegion? b) {
+    if (a == null || b == null) return false;
+    final left = a.x > b.x ? a.x : b.x;
+    final bottom = a.y > b.y ? a.y : b.y;
+    final right = (a.x + a.width) < (b.x + b.width)
+        ? (a.x + a.width)
+        : (b.x + b.width);
+    final top = (a.y + a.height) < (b.y + b.height)
+        ? (a.y + a.height)
+        : (b.y + b.height);
+    if (right <= left || top <= bottom) {
+      // Not touching — still "same spot" if one center sits inside the other.
+      final acx = a.x + a.width / 2, acy = a.y + a.height / 2;
+      final bcx = b.x + b.width / 2, bcy = b.y + b.height / 2;
+      final aInB = acx >= b.x && acx <= b.x + b.width &&
+          acy >= b.y && acy <= b.y + b.height;
+      final bInA = bcx >= a.x && bcx <= a.x + a.width &&
+          bcy >= a.y && bcy <= a.y + a.height;
+      return aInB || bInA;
+    }
+    final inter = (right - left) * (top - bottom);
+    final areaA = a.width * a.height;
+    final areaB = b.width * b.height;
+    final smaller = areaA < areaB ? areaA : areaB;
+    if (smaller <= 0) return false;
+    return inter / smaller >= 0.35;
   }
 
   static String? _normalizeJerseyKey(String? raw) {
@@ -5620,30 +6419,96 @@ class CaptionV2Controller extends ChangeNotifier {
     return trimmed.toLowerCase();
   }
 
+  /// OCR name match — only when the read clearly resembles the last name.
+  ///
+  /// Lower is better. 900+ means no match. Rejects brand/noise like "Bauer".
+  static int _ocrPlayerNameScore(Player player, String query) {
+    final last = _ocrLettersOnly(playerLastName(player));
+    final q = _ocrLettersOnly(query);
+    if (last.length < 3 || q.length < 3) return 900;
+
+    // Exact / strong prefix only when the OCR token covers most of the name.
+    if (last == q) return 2;
+    if (last.startsWith(q) && q.length >= 4) return 5;
+    if (q.startsWith(last) && last.length >= 4) return 5;
+
+    // Truncation / dropped first letter — token must still be a big chunk.
+    if (last.contains(q) &&
+        q.length >= 4 &&
+        q.length * 2 >= last.length) {
+      return 8;
+    }
+    if (q.contains(last) && last.length >= 4) return 5;
+
+    // Shared prefix: "MATTH" ↔ "matthews" (not "auer" ↔ anything).
+    final shared = _ocrSharedPrefixLen(last, q);
+    if (shared >= 4 &&
+        shared * 2 >= q.length &&
+        shared * 2 >= last.length.clamp(0, shared * 3)) {
+      return 5;
+    }
+
+    return 900;
+  }
+
+  static String _ocrLettersOnly(String raw) =>
+      _normalizeFirebarText(raw).replaceAll(RegExp(r'[^a-z]'), '');
+
+  static int _ocrSharedPrefixLen(String a, String b) {
+    final n = a.length < b.length ? a.length : b.length;
+    var i = 0;
+    while (i < n && a.codeUnitAt(i) == b.codeUnitAt(i)) {
+      i++;
+    }
+    return i;
+  }
+
+  /// Exact last name or a long, high-overlap last-name partial.
+  ///
+  /// First-name-only hits are rejected — OCR nameplates are surnames.
+  static bool _ocrNameScoreOk(int score, String query) {
+    final letters = _ocrLettersOnly(query);
+    if (score == 2) return letters.length >= 3; // exact last
+    if (score == 5 || score == 8) return letters.length >= 4; // strong partial
+    return false;
+  }
+
   /// Map common OCR letter↔digit confusions for 1–2 character jersey tokens.
   static String? _ocrDigitConfusionFix(String raw) {
     final text = raw.replaceFirst(RegExp(r'^#+'), '').trim();
     if (text.isEmpty || text.length > 2) return null;
+    // "AI" and "B" are words on the boards, not jersey numbers. Only repair
+    // a letter when the token already has a digit ("4I" → "41").
+    if (!RegExp(r'\d').hasMatch(text)) return null;
     const map = {
       'O': '0',
       'o': '0',
       'Q': '0',
       'D': '0',
+      'U': '0',
       'I': '1',
       'l': '1',
       '|': '1',
       'i': '1',
       'Z': '2',
       'z': '2',
+      'E': '3',
+      'A': '4',
+      'H': '4',
       'S': '5',
       's': '5',
       'G': '6',
       'b': '6',
+      'C': '6',
       'T': '7',
+      'Y': '7',
       'B': '8',
       'g': '9',
       'q': '9',
+      'P': '9',
     };
+    const ambiguousAlone = {'A', 'H', 'E', 'Y', 'P', 'U', 'C'};
+    if (text.length == 1 && ambiguousAlone.contains(text)) return null;
     final buf = StringBuffer();
     var changed = false;
     for (final ch in text.split('')) {
@@ -5794,6 +6659,94 @@ class CaptionV2Controller extends ChangeNotifier {
         '';
   }
 
+  static String? serialNumberFromMetadata(Map<dynamic, dynamic> raw) {
+    return _stringFromMeta(raw['SerialNumber']) ??
+        _stringFromMeta(raw['BodySerialNumber']) ??
+        _stringFromMeta(raw['InternalSerialNumber']) ??
+        _stringFromMeta(raw['CameraSerialNumber']);
+  }
+
+  /// When serial bylines is enabled: map known serials to photographer, or
+  /// flag the UI to ask who took the photo (missing / unknown serial).
+  ///
+  /// If Creator is already filled but matches the serial→name map, keep the
+  /// name and mark provenance as serial so hover tips can say so.
+  Future<void> _resolveSerialBylines(
+    String path,
+    Map<dynamic, dynamic> raw,
+  ) async {
+    pendingSerialBylinesPrompt = null;
+
+    final prefs = await PreferencesService.getInstance();
+    final enabled = await prefs.getSerialNumberBylines();
+    if (!enabled) return;
+
+    final camera = CameraSerialService.instance;
+    await camera.initialize();
+
+    final serial = serialNumberFromMetadata(raw)?.trim() ?? '';
+    if (serial.isNotEmpty && !camera.isSerialNumberUnknown(serial)) {
+      final mapped = camera.getPhotographerForSerial(serial)?.trim() ?? '';
+      if (mapped.isNotEmpty) {
+        final current = photographerName.trim();
+        if (current.isEmpty) {
+          photographerName = mapped;
+          _photographerProvenance = _BylineProvenance.serial;
+          _photographerSerialUsed = serial;
+          return;
+        }
+        if (current.toLowerCase() == mapped.toLowerCase()) {
+          _photographerProvenance = _BylineProvenance.serial;
+          _photographerSerialUsed = serial;
+          return;
+        }
+      }
+    }
+
+    if (photographerName.trim().isNotEmpty) return;
+
+    final dismissKey = '$path|${serial.isEmpty ? '_' : serial}';
+    if (_serialBylinesPromptDismissed.contains(dismissKey)) return;
+    pendingSerialBylinesPrompt = serial;
+  }
+
+  void dismissSerialBylinesPrompt() {
+    final path = currentPath;
+    if (path != null) {
+      final serial = pendingSerialBylinesPrompt ?? '';
+      _serialBylinesPromptDismissed.add('$path|${serial.isEmpty ? '_' : serial}');
+    }
+    pendingSerialBylinesPrompt = null;
+    notifyListeners();
+  }
+
+  /// Apply a photographer chosen in the unknown-serial dialog for the current
+  /// frame. Mapping is already saved by the dialog when a serial exists.
+  void applySerialBylinesAssignment({
+    required String name,
+    String initials = '',
+  }) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      dismissSerialBylinesPrompt();
+      return;
+    }
+    photographerName = trimmed;
+    _photographerProvenance = _BylineProvenance.serialAssigned;
+    _photographerSerialUsed =
+        (pendingSerialBylinesPrompt ?? '').trim().isEmpty
+            ? _photographerSerialUsed
+            : pendingSerialBylinesPrompt!.trim();
+    final path = currentPath;
+    final serial = pendingSerialBylinesPrompt ?? '';
+    if (path != null) {
+      _serialBylinesPromptDismissed.add('$path|${serial.isEmpty ? '_' : serial}');
+    }
+    pendingSerialBylinesPrompt = null;
+    metadataDirty = true;
+    notifyListeners();
+  }
+
   static String? _stringFromMeta(dynamic value) {
     if (value == null) return null;
     if (value is List) {
@@ -5815,6 +6768,9 @@ class CaptionV2Controller extends ChangeNotifier {
       currentIptcMeta = {};
       photographerName = '';
       agencyName = '';
+      _photographerProvenance = _BylineProvenance.none;
+      _photographerSerialUsed = null;
+      pendingSerialBylinesPrompt = null;
       notifyListeners();
       return;
     }
@@ -5854,6 +6810,10 @@ class CaptionV2Controller extends ChangeNotifier {
         '-Photographer',
         '-IPTC:Photographer',
         '-XMP:Photographer',
+        '-SerialNumber',
+        '-BodySerialNumber',
+        '-InternalSerialNumber',
+        '-CameraSerialNumber',
         '-IPTC:Credit',
         '-Credit',
         '-IPTC:City',
@@ -5890,6 +6850,8 @@ class CaptionV2Controller extends ChangeNotifier {
         currentIptcMeta = {};
         photographerName = '';
         agencyName = '';
+        _photographerProvenance = _BylineProvenance.none;
+        _photographerSerialUsed = null;
         notifyListeners();
         return;
       }
@@ -5898,6 +6860,8 @@ class CaptionV2Controller extends ChangeNotifier {
         currentIptcMeta = {};
         photographerName = '';
         agencyName = '';
+        _photographerProvenance = _BylineProvenance.none;
+        _photographerSerialUsed = null;
         notifyListeners();
         return;
       }
@@ -5910,6 +6874,10 @@ class CaptionV2Controller extends ChangeNotifier {
       });
       currentIptcMeta = meta;
       photographerName = photographerNameFromMetadata(raw);
+      _photographerSerialUsed = serialNumberFromMetadata(raw)?.trim();
+      _photographerProvenance = photographerName.trim().isEmpty
+          ? _BylineProvenance.none
+          : _BylineProvenance.iptc;
       agencyName = _stringFromMeta(raw['IPTC:Credit']) ??
           _stringFromMeta(raw['Credit']) ??
           '';
@@ -5943,6 +6911,8 @@ class CaptionV2Controller extends ChangeNotifier {
       if (parsed != null) {
         captureByPath[path] = parsed;
       }
+      await _resolveSerialBylines(path, raw);
+      if (gen != _iptcLoadGen) return;
       notifyListeners();
       if (mlbTimestampAvailable &&
           mlbTimestampEnabled &&
@@ -5954,6 +6924,8 @@ class CaptionV2Controller extends ChangeNotifier {
       currentIptcMeta = {};
       photographerName = '';
       agencyName = '';
+      _photographerProvenance = _BylineProvenance.none;
+      _photographerSerialUsed = null;
       notifyListeners();
     }
   }

@@ -16,7 +16,9 @@ import '../../widgets/app_styled_dialogs.dart';
 import '../../widgets/caption_layout_builder_dialog.dart';
 import '../../widgets/flo_chrome_header.dart';
 import '../../widgets/oriented_file_preview.dart';
+import '../../services/camera_serial_service.dart';
 import '../../widgets/preferences_dialog.dart';
+import '../../widgets/unknown_serial_dialog.dart';
 import 'caption_v2_flag.dart';
 import 'caption_v2_shortcuts.dart';
 import 'data/caption_transfer_payload.dart';
@@ -58,6 +60,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   bool? _jerseyBufferIsHome;
   bool _burstSaveDialogOpen = false;
   VoidCallback? _confirmBurstSaveSelected;
+  bool _serialBylinesPromptOpen = false;
 
   static const double _desktopBreakpoint = 1100;
   static double get _gap => 8;
@@ -120,7 +123,39 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         });
       }
     }
+    if (_controller.pendingSerialBylinesPrompt != null &&
+        !_serialBylinesPromptOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_promptSerialBylines());
+      });
+    }
     setState(() {});
+  }
+
+  Future<void> _promptSerialBylines() async {
+    if (!mounted || _serialBylinesPromptOpen) return;
+    final pending = _controller.pendingSerialBylinesPrompt;
+    if (pending == null) return;
+    _serialBylinesPromptOpen = true;
+    try {
+      final serial = pending.trim().isEmpty ? null : pending.trim();
+      final assignment = await UnknownSerialDialog.show(
+        context,
+        cameraService: CameraSerialService.instance,
+        serialNumber: serial,
+      );
+      if (!mounted) return;
+      if (assignment != null && assignment.name.trim().isNotEmpty) {
+        _controller.applySerialBylinesAssignment(
+          name: assignment.name,
+          initials: assignment.initials,
+        );
+      } else {
+        _controller.dismissSerialBylinesPrompt();
+      }
+    } finally {
+      _serialBylinesPromptOpen = false;
+    }
   }
 
   static bool _isErrorStatus(String message) {
@@ -155,6 +190,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       homeRosterOverride: result.homeRoster,
       awayRosterOverride: result.awayRoster,
       singleTeamMode: result.singleTeamMode,
+      homeWearsDark: result.homeWearsDark,
+      homeWearsDarkAnswered: !result.singleTeamMode,
     );
     if (!mounted) return;
     await _confirmLoadedDuplicateJerseys(result);
@@ -538,7 +575,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     }
 
     final selected = _controller.orderedSelectedImagePaths;
-    if (selected.length >= 2) {
+    if (selected.length >= 2 && _controller.burstDetectionEnabled) {
       final burstGroup = _controller.burstGroupOverlapping(selected);
       final alreadySaved = selected.every(_controller.savedImages.contains);
       if (burstGroup != null && !alreadySaved) {
@@ -581,7 +618,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       return;
     }
 
-    final chain = _controller.forwardBurstChain;
+    final chain = _controller.burstDetectionEnabled
+        ? _controller.forwardBurstChain
+        : const <String>[];
     final anchorAlreadySaved =
         chain.isNotEmpty && _controller.savedImages.contains(chain.first);
     if (chain.length > 1 && !anchorAlreadySaved) {
@@ -1201,6 +1240,13 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                if (c.missingCaptionIptcLabels.isNotEmpty) ...[
+                  _MissingCaptionIptcBanner(
+                    labels: c.missingCaptionIptcLabels,
+                    tokens: t,
+                  ),
+                  const SizedBox(height: 6),
+                ],
                 _buildCaptionStrip(c),
                 const SizedBox(height: 8),
                 _buildSearchBlock(c),
@@ -1230,6 +1276,13 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             controller: c,
             onOpen: _openFrameReview,
           ),
+          if (c.missingCaptionIptcLabels.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            _MissingCaptionIptcBanner(
+              labels: c.missingCaptionIptcLabels,
+              tokens: t,
+            ),
+          ],
           const SizedBox(height: 8),
           _buildCaptionStrip(c, inningStepperOnly: true),
           const SizedBox(height: 8),
@@ -1286,6 +1339,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       trailing: '',
       fullCaption: captionText,
       highlightPhrases: c.firebarInsertedHighlights,
+      provenanceSpans: c.captionProvenanceSpans,
       captionHint: hasLiveCaption
           ? 'Caption will appear here as you add players and a verb.'
           : 'No caption embedded in image.',
@@ -1349,6 +1403,59 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       return;
     }
     await c.reloadCaptionStyle();
+  }
+}
+
+class _MissingCaptionIptcBanner extends StatelessWidget {
+  const _MissingCaptionIptcBanner({
+    required this.labels,
+    required this.tokens,
+  });
+
+  final List<String> labels;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: FfTokens.dangerBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: FfTokens.dangerBorder),
+      ),
+      child: Row(
+        children: [
+          const PhosphorIcon(
+            PhosphorIconsRegular.warning,
+            size: 14,
+            color: FfTokens.danger,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Missing IPTC for caption: ${labels.join(', ')}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: FfTokens.danger,
+              ),
+            ),
+          ),
+          Text(
+            'Edit via photo menu',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11,
+              color: tokens.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1423,8 +1530,8 @@ class _TopChrome extends StatelessWidget {
     final headerTitle = title?.trim();
 
     return Container(
-      height: 38,
-      padding: const EdgeInsets.fromLTRB(10, 5, 8, 5),
+      height: 52,
+      padding: const EdgeInsets.fromLTRB(10, 4, 8, 4),
       decoration: BoxDecoration(
         color: Colors.transparent,
         border: Border(bottom: BorderSide(color: t.divider)),
@@ -1498,11 +1605,16 @@ class _TopChrome extends StatelessWidget {
             ),
           const Spacer(),
           if (c != null) ...[
-            FtpModeToggle(
-              enabled: c.ftpModeEnabled,
+            _ModeBuffBar(
+              controller: c,
               tokens: t,
-              onChanged: c.setFtpModeEnabled,
             ),
+            const SizedBox(width: 8),
+          ],
+          if (c != null &&
+              AdminService.isCurrentUserAdminSync() &&
+              defaultTargetPlatform == TargetPlatform.macOS) ...[
+            _AdminWindowSizeDropdown(tokens: t),
             const SizedBox(width: 8),
           ],
           if (c?.rostersLoading == true) ...[
@@ -1516,11 +1628,6 @@ class _TopChrome extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          if (AdminService.isCurrentUserAdminSync() &&
-              defaultTargetPlatform == TargetPlatform.macOS) ...[
-            const SizedBox(width: 4),
-            _AdminWindowSizeDropdown(tokens: t),
-          ],
           if (AuthService.instance.isSignedIn) ...[
             const SizedBox(width: 4),
             FloHeaderSignedInAs(
@@ -1530,14 +1637,16 @@ class _TopChrome extends StatelessWidget {
           ],
           if (AdminService.isCurrentUserAdminSync()) ...[
             const SizedBox(width: 4),
-            const AdminBadgeButton(child: _TopAdminBadge()),
+            AdminBadgeButton(
+              onClosed: () async {
+                await c?.reloadVerbCatalog();
+              },
+              child: const _TopAdminBadge(),
+            ),
           ],
           const SizedBox(width: 4),
           IconButton(
-            onPressed: () => showDialog<void>(
-              context: context,
-              builder: (context) => const PreferencesDialog(),
-            ),
+            onPressed: () => _openPreferences(context, c),
             icon: PhosphorIcon(PhosphorIconsRegular.gear,
               size: 17,
               color: t.textSecondary,
@@ -1548,6 +1657,186 @@ class _TopChrome extends StatelessWidget {
             constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
           ),
         ],
+      ),
+    );
+  }
+
+  static Future<void> _openPreferences(
+    BuildContext context,
+    CaptionV2Controller? controller,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => const PreferencesDialog(),
+    );
+    await controller?.reloadApplicationModes();
+  }
+}
+
+/// Mode buff toggles — always visible; tap turns each mode on/off.
+class _ModeBuffBar extends StatelessWidget {
+  const _ModeBuffBar({
+    required this.controller,
+    required this.tokens,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final showOcr = defaultTargetPlatform == TargetPlatform.macOS;
+    final buffs = <_ModeBuffSpec>[
+      _ModeBuffSpec(
+        icon: PhosphorIconsRegular.cloudArrowUp,
+        label: 'FTP mode',
+        tooltip: controller.ftpModeEnabled
+            ? 'FTP mode on — tap to turn off'
+            : 'FTP mode off — tap to turn on',
+        enabled: controller.ftpModeEnabled,
+        onToggle: () => unawaited(
+          controller.setFtpModeEnabled(!controller.ftpModeEnabled),
+        ),
+      ),
+      _ModeBuffSpec(
+        icon: PhosphorIconsRegular.camera,
+        label: 'Serial number mode',
+        tooltip: controller.serialBylinesEnabled
+            ? 'Serial number mode on — tap to turn off'
+            : 'Serial number mode off — tap to turn on',
+        enabled: controller.serialBylinesEnabled,
+        onToggle: () => unawaited(
+          controller.setSerialBylinesEnabled(!controller.serialBylinesEnabled),
+        ),
+      ),
+      _ModeBuffSpec(
+        icon: PhosphorIconsRegular.stack,
+        label: 'Burst mode',
+        tooltip: controller.burstDetectionEnabled
+            ? 'Burst mode on — tap to turn off'
+            : 'Burst mode off — tap to turn on',
+        enabled: controller.burstDetectionEnabled,
+        onToggle: () => unawaited(
+          controller.setBurstDetectionEnabled(!controller.burstDetectionEnabled),
+        ),
+      ),
+      if (showOcr)
+        _ModeBuffSpec(
+          icon: PhosphorIconsRegular.scan,
+          label: 'Text Recognition',
+          tooltip: controller.jerseyOcrPreferenceEnabled
+              ? 'Text Recognition on — tap to turn off'
+              : 'Text Recognition off — tap to turn on',
+          enabled: controller.jerseyOcrPreferenceEnabled,
+          onToggle: () => unawaited(
+            controller.setJerseyOcrPreferenceEnabled(
+              !controller.jerseyOcrPreferenceEnabled,
+            ),
+          ),
+        ),
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < buffs.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          _ModeBuffIcon(spec: buffs[i], tokens: tokens),
+        ],
+      ],
+    );
+  }
+}
+
+class _ModeBuffSpec {
+  const _ModeBuffSpec({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.enabled,
+    required this.onToggle,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final bool enabled;
+  final VoidCallback onToggle;
+}
+
+class _ModeBuffIcon extends StatelessWidget {
+  const _ModeBuffIcon({
+    required this.spec,
+    required this.tokens,
+  });
+
+  static const double _width = 108;
+
+  final _ModeBuffSpec spec;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final on = spec.enabled;
+    final teal = tokens.accent;
+    final grey = tokens.textSecondary;
+    final color = on ? teal : grey;
+    final fill = on ? teal.withValues(alpha: 0.18) : tokens.elevated;
+    final border = on ? teal.withValues(alpha: 0.85) : tokens.divider;
+    return Tooltip(
+      message: spec.tooltip,
+      waitDuration: const Duration(milliseconds: 350),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: spec.onToggle,
+          borderRadius: BorderRadius.circular(8),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            curve: Curves.easeOut,
+            width: _width,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: border),
+              boxShadow: on
+                  ? [
+                      BoxShadow(
+                        color: teal.withValues(alpha: 0.30),
+                        blurRadius: 10,
+                        spreadRadius: 0,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PhosphorIcon(
+                  spec.icon,
+                  size: 15,
+                  color: color,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  spec.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.05,
+                    letterSpacing: 0,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

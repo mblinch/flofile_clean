@@ -238,6 +238,7 @@ class _DuplicateJerseyDialogState extends State<_DuplicateJerseyDialog> {
   late final Map<String, TextEditingController> _controllers;
   late final Map<String, Player> _playerByKey;
   final Set<String> _dontUseKeys = {};
+  bool _showError = false;
 
   @override
   void initState() {
@@ -262,6 +263,21 @@ class _DuplicateJerseyDialogState extends State<_DuplicateJerseyDialog> {
       controller.dispose();
     }
     super.dispose();
+  }
+
+  /// Jersey numbers still claimed by more than one kept player.
+  Set<String> get _conflictingJerseys {
+    final counts = <String, int>{};
+    for (final entry in _controllers.entries) {
+      if (_dontUseKeys.contains(entry.key)) continue;
+      final jersey = entry.value.text.trim();
+      if (jersey.isEmpty) continue;
+      counts[jersey] = (counts[jersey] ?? 0) + 1;
+    }
+    return {
+      for (final entry in counts.entries)
+        if (entry.value > 1) entry.key,
+    };
   }
 
   String? get _validationError {
@@ -293,7 +309,7 @@ class _DuplicateJerseyDialogState extends State<_DuplicateJerseyDialog> {
   void _submit() {
     final error = _validationError;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      setState(() => _showError = true);
       return;
     }
     Navigator.pop(
@@ -409,19 +425,53 @@ class _DuplicateJerseyDialogState extends State<_DuplicateJerseyDialog> {
                       ),
                     ),
                   ),
+                  if (_showError && _validationError != null) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0x33E85D5D),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: const Color(0xFFE85D5D).withValues(alpha: 0.55),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              PhosphorIcon(
+                                PhosphorIconsRegular.warningCircle,
+                                size: 14,
+                                color: const Color(0xFFE85D5D),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _validationError!,
+                                  style: t.metaStyle.copyWith(
+                                    fontSize: 11.5,
+                                    height: 1.3,
+                                    color: const Color(0xFFFFB4B4),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        const Spacer(),
-                        TextButton(
+                        ElevatedGreyButton(
+                          label: 'Cancel',
+                          fontSize: 11,
                           onPressed: () => Navigator.pop(context),
-                          child: Text(
-                            'Cancel',
-                            style: t.metaStyle.copyWith(
-                              color: t.text.withValues(alpha: 0.62),
-                            ),
-                          ),
                         ),
                         const SizedBox(width: 8),
                         ElevatedGreyButton(
@@ -450,14 +500,22 @@ class _DuplicateJerseyDialogState extends State<_DuplicateJerseyDialog> {
     final controller = _controllers[playerKey]!;
     final position = (player.position ?? '').trim();
     final dontUse = _dontUseKeys.contains(playerKey);
+    final jersey = controller.text.trim();
+    final hasConflict = _showError &&
+        !dontUse &&
+        jersey.isNotEmpty &&
+        _conflictingJerseys.contains(jersey);
+    final conflictColor = const Color(0xFFE85D5D);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: tokens.sunken,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: dontUse
-              ? tokens.text.withValues(alpha: 0.22)
-              : tokens.divider,
+          color: hasConflict
+              ? conflictColor.withValues(alpha: 0.7)
+              : dontUse
+                  ? tokens.text.withValues(alpha: 0.22)
+                  : tokens.divider,
         ),
       ),
       child: Padding(
@@ -505,7 +563,9 @@ class _DuplicateJerseyDialogState extends State<_DuplicateJerseyDialog> {
                   textAlign: TextAlign.center,
                   style: tokens.metaStyle.copyWith(
                     fontSize: 12,
-                    color: tokens.text.withValues(alpha: dontUse ? 0.35 : 1),
+                    color: hasConflict
+                        ? conflictColor
+                        : tokens.text.withValues(alpha: dontUse ? 0.35 : 1),
                     height: 1.25,
                   ),
                   cursorColor: tokens.accent,
@@ -515,20 +575,21 @@ class _DuplicateJerseyDialogState extends State<_DuplicateJerseyDialog> {
               ),
             ),
             const SizedBox(width: 6),
-            TextButton(
+            ElevatedGreyButton(
+              label: 'Google',
+              fontSize: 10,
+              icon: PhosphorIconsRegular.magnifyingGlass,
               onPressed: () => openPlayerGoogleSearch(
                 fullName: player.fullName,
                 sportId: widget.sportId,
               ),
-              child: Text(
-                'Google',
-                style: tokens.metaStyle.copyWith(
-                  fontSize: 11,
-                  color: tokens.text.withValues(alpha: 0.75),
-                ),
-              ),
             ),
-            TextButton(
+            const SizedBox(width: 6),
+            ElevatedGreyButton(
+              label: dontUse ? 'Keep' : "Don't use",
+              fontSize: 10,
+              isPrimary: dontUse,
+              isDanger: !dontUse,
               onPressed: () => setState(() {
                 if (dontUse) {
                   _dontUseKeys.remove(playerKey);
@@ -536,15 +597,6 @@ class _DuplicateJerseyDialogState extends State<_DuplicateJerseyDialog> {
                   _dontUseKeys.add(playerKey);
                 }
               }),
-              child: Text(
-                dontUse ? 'Keep' : "Don't use",
-                style: tokens.metaStyle.copyWith(
-                  fontSize: 11,
-                  color: dontUse
-                      ? tokens.accent
-                      : tokens.text.withValues(alpha: 0.75),
-                ),
-              ),
             ),
           ],
         ),

@@ -20,7 +20,9 @@ class FfTokens extends ThemeExtension<FfTokens> {
   static const nocturneEl = Color(0xFF181D22);
   static const nocturneSf = Color(0xFF1E242A);
   static const nocturneHv = Color(0xFF2A3035);
-  static const nocturneSunken = Color(0xFF0C0E11);
+  /// Input / control fills — lighter than [nocturneEl] so fields read on panels
+  /// instead of sinking into near-black wells.
+  static const nocturneSunken = Color(0xFF262D35);
 
   /// Picture-preview chrome (headers + photo surround).
   static const photoHeader = Color(0xFF101418);
@@ -77,6 +79,20 @@ class FfTokens extends ThemeExtension<FfTokens> {
         BoxShadow(
           color: color.withValues(alpha: 0.12),
           blurRadius: 14,
+          spreadRadius: 0,
+        ),
+      ];
+
+  /// Soft selection glow for selected verbs / open categories.
+  static List<BoxShadow> selectionGlow([Color color = nocturneAc]) => [
+        BoxShadow(
+          color: color.withValues(alpha: 0.38),
+          blurRadius: 12,
+          spreadRadius: 0.5,
+        ),
+        BoxShadow(
+          color: color.withValues(alpha: 0.20),
+          blurRadius: 22,
           spreadRadius: 0,
         ),
       ];

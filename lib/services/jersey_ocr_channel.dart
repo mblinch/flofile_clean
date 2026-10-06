@@ -10,6 +10,9 @@ class JerseyOcrHit {
     this.y = 0,
     this.width = 0,
     this.height = 0,
+    this.jerseyTone,
+    this.region,
+    this.onPerson = false,
   });
 
   final String text;
@@ -21,9 +24,25 @@ class JerseyOcrHit {
   final double width;
   final double height;
 
+  /// Fabric luminance under the read: `dark`, `light`, or null when unknown.
+  /// Used to tell home from away when both rosters share a number.
+  final String? jerseyTone;
+
+  /// Where on the player this came from: `torso`, `sleeve`, `helmet`,
+  /// `body`, `loupe`, or null for frame-level passes.
+  final String? region;
+
+  /// True when the read came from a detected person crop (not boards/crowd).
+  final bool onPerson;
+
+  bool get isDarkJersey => jerseyTone == 'dark';
+  bool get isLightJersey => jerseyTone == 'light';
+
   factory JerseyOcrHit.fromMap(Map<dynamic, dynamic> map) {
     final box = map['boundingBox'];
     final boxMap = box is Map ? box : const <dynamic, dynamic>{};
+    final tone = (map['jerseyTone'] as String? ?? '').trim().toLowerCase();
+    final region = (map['region'] as String? ?? '').trim().toLowerCase();
     return JerseyOcrHit(
       text: (map['text'] as String? ?? '').trim(),
       confidence: (map['confidence'] as num?)?.toDouble() ?? 0,
@@ -31,6 +50,9 @@ class JerseyOcrHit {
       y: (boxMap['y'] as num?)?.toDouble() ?? 0,
       width: (boxMap['width'] as num?)?.toDouble() ?? 0,
       height: (boxMap['height'] as num?)?.toDouble() ?? 0,
+      jerseyTone: tone == 'dark' || tone == 'light' ? tone : null,
+      region: region.isEmpty ? null : region,
+      onPerson: map['onPerson'] == true,
     );
   }
 }
@@ -75,11 +97,13 @@ class JerseyOcrChannel {
   ///
   /// [customWords] biases Vision toward roster last names / jersey numbers.
   /// [regionOfInterest] limits the scan (loupe / subject crop).
+  /// [sport] tunes ROI bias (e.g. hockey scans helmet stickers).
   static Future<List<JerseyOcrHit>> recognize({
     required String path,
     int maxPixelDimension = defaultMaxPixelDimension,
     List<String> customWords = const [],
     JerseyOcrRegion? regionOfInterest,
+    String sport = '',
   }) async {
     if (!supported || path.isEmpty) return const [];
     try {
@@ -89,6 +113,7 @@ class JerseyOcrChannel {
         if (customWords.isNotEmpty) 'customWords': customWords,
         if (regionOfInterest != null)
           'regionOfInterest': regionOfInterest.toMap(),
+        if (sport.trim().isNotEmpty) 'sport': sport.trim().toLowerCase(),
       });
       if (raw == null || raw.isEmpty) return const [];
       return [

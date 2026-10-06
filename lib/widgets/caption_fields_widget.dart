@@ -16926,19 +16926,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
     };
   }
 
-  Future<void> _showUnknownSerialDialog(String serialNumber) async {
-    await showDialog(
-      context: context,
-      builder: (context) => UnknownSerialDialog(
-        serialNumber: serialNumber,
-        cameraService: widget.cameraService!,
-        onPhotographerAssigned: (photographerName) {
-          print(
-              'DEBUG: Serial number $serialNumber assigned to $photographerName');
-          // Update caption after assignment
-          _updateCaption();
-        },
-      ),
+  Future<UnknownSerialAssignment?> _showUnknownSerialDialog(
+    String? serialNumber,
+  ) {
+    return UnknownSerialDialog.show(
+      context,
+      cameraService: widget.cameraService!,
+      serialNumber: serialNumber,
     );
   }
 
@@ -17312,26 +17306,30 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
             await preferencesService.getSerialNumberBylines();
 
         if (serialNumberBylinesEnabled) {
-          final serialNumber = widget.metadata!['SerialNumber']?.toString();
-          if (serialNumber != null && serialNumber.isNotEmpty) {
-            if (widget.cameraService!.isSerialNumberUnknown(serialNumber)) {
-              // Show dialog for unknown serial number
-              await _showUnknownSerialDialog(serialNumber);
-              // Try to detect again after potential assignment
+          final serialNumber = widget.metadata!['SerialNumber']?.toString() ??
+              widget.metadata!['BodySerialNumber']?.toString() ??
+              widget.metadata!['InternalSerialNumber']?.toString();
+          final hasSerial =
+              serialNumber != null && serialNumber.trim().isNotEmpty;
+          if (hasSerial &&
+              !widget.cameraService!.isSerialNumberUnknown(serialNumber)) {
+            final detectedPhotographer = widget.cameraService!
+                .detectPhotographerFromExif(widget.metadata!);
+            if (detectedPhotographer != null) {
+              photoBy = detectedPhotographer;
+            }
+          } else {
+            // Missing serial, or serial not in the camera list — ask who it is.
+            final assignment = await _showUnknownSerialDialog(
+              hasSerial ? serialNumber.trim() : null,
+            );
+            if (assignment != null && assignment.name.isNotEmpty) {
+              photoBy = assignment.name;
+            } else if (hasSerial) {
               final detectedPhotographer = widget.cameraService!
                   .detectPhotographerFromExif(widget.metadata!);
               if (detectedPhotographer != null) {
                 photoBy = detectedPhotographer;
-                print(
-                    'DEBUG: Auto-detected photographer from camera serial after assignment: $photoBy');
-              }
-            } else {
-              final detectedPhotographer = widget.cameraService!
-                  .detectPhotographerFromExif(widget.metadata!);
-              if (detectedPhotographer != null) {
-                photoBy = detectedPhotographer;
-                print(
-                    'DEBUG: Auto-detected photographer from camera serial: $photoBy');
               }
             }
           }
