@@ -561,12 +561,15 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
                         : const PhosphorIcon(PhosphorIconsRegular.floppyDisk, size: 17),
                     label: const Text('Save IPTC'),
                     style: FilledButton.styleFrom(
-                      backgroundColor: FfTokens.gold,
-                      foregroundColor: FfTokens.inkOnGold,
+                      backgroundColor: const Color(0xFF15242E),
+                      foregroundColor: Colors.white,
                       disabledBackgroundColor:
-                          FfTokens.gold.withValues(alpha: 0.4),
+                          const Color(0xFF15242E).withValues(alpha: 0.45),
                       disabledForegroundColor:
-                          FfTokens.inkOnGold.withValues(alpha: 0.4),
+                          Colors.white.withValues(alpha: 0.4),
+                      side: BorderSide(
+                        color: FfTokens.nocturneAc.withValues(alpha: 0.95),
+                      ),
                     ),
                   ),
                 ],

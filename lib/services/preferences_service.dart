@@ -50,9 +50,13 @@ class PreferencesService {
   static const String _keyCaptionEntryMode = 'caption_entry_mode';
   static const String _keyCustomVerbs = 'custom_verbs';
   static const String _keyVerbOverrides = 'verb_overrides'; // For editing built-in verbs
+  /// Factory verbs the user moved to another category. Plain override
+  /// `category` is healed back to the factory category on load.
+  static const String _keyVerbCategoryOverrides = 'verb_category_overrides';
   /// Per-verb reset baselines (phrases / flags / subOptions), like caption wire defaults.
   static const String _keyVerbWordingDefaults = 'verb_wording_defaults';
   static const String _keyDeletedVerbs = 'deleted_verbs'; // For tracking deleted built-in verbs
+  static const String _keyHiddenCategories = 'hidden_categories';
   /// Caption V2 verb list ordering: alphabetical | mostUsed | custom.
   static const String _keyVerbSortMode = 'verb_sort_mode';
   /// Per-sport map of verb key → usage count (synced via user Firebase prefs).
@@ -1206,6 +1210,46 @@ class PreferencesService {
     await saveVerbOverrides(overrides, sport: sport);
   }
 
+  String _getVerbCategoryOverridesKey(String sport) =>
+      '${_keyVerbCategoryOverrides}_${sport.toLowerCase()}';
+
+  Future<Map<String, String>> getVerbCategoryOverrides({
+    String sport = 'hockey',
+  }) async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_getVerbCategoryOverridesKey(sport));
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! Map) return {};
+      final out = <String, String>{};
+      decoded.forEach((key, value) {
+        final category = value?.toString().trim() ?? '';
+        if (category.isEmpty) return;
+        out[key.toString()] = category;
+      });
+      return out;
+    } catch (e) {
+      print('Error parsing verb category overrides for $sport: $e');
+      return {};
+    }
+  }
+
+  Future<void> saveVerbCategoryOverrides(
+    Map<String, String> overrides, {
+    String sport = 'hockey',
+  }) async {
+    final prefs = await _getPrefs();
+    final key = _getVerbCategoryOverridesKey(sport);
+    if (overrides.isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, json.encode(overrides));
+    }
+    _markUserTypedAppDefaultAdjustments();
+    _afterLocalPreferencesChanged();
+  }
+
   // Verb wording defaults (reset baselines for Edit Verb — mirror of caption wire defaults)
   String _getVerbWordingDefaultsKey(String sport) {
     return '${_keyVerbWordingDefaults}_${sport.toLowerCase()}';
@@ -1549,6 +1593,38 @@ class PreferencesService {
     return <String>{};
   }
 
+  String _getHiddenCategoriesKey(String sport) =>
+      '${_keyHiddenCategories}_${sport.toLowerCase()}';
+
+  Future<Set<String>> getHiddenCategories({String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    final jsonString = prefs.getString(_getHiddenCategoriesKey(sport));
+    if (jsonString == null || jsonString.isEmpty) return <String>{};
+    try {
+      final decoded = json.decode(jsonString);
+      if (decoded is! List) return <String>{};
+      return decoded.map((value) => value.toString()).toSet();
+    } catch (e) {
+      print('Error parsing hidden categories for $sport: $e');
+      return <String>{};
+    }
+  }
+
+  Future<void> saveHiddenCategories(
+    Set<String> categories, {
+    String sport = 'hockey',
+  }) async {
+    final prefs = await _getPrefs();
+    final key = _getHiddenCategoriesKey(sport);
+    if (categories.isEmpty) {
+      await prefs.remove(key);
+    } else {
+      await prefs.setString(key, json.encode(categories.toList()));
+    }
+    _markUserTypedAppDefaultAdjustments();
+    _afterLocalPreferencesChanged();
+  }
+
   Future<void> saveDeletedVerbs(Set<String> deletedVerbs, {String sport = 'hockey'}) async {
     final prefs = await _getPrefs();
     final key = _getDeletedVerbsKey(sport);
@@ -1583,6 +1659,7 @@ class PreferencesService {
       'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
       'customVerbWordings': await getCustomVerbWordings(sport: sport),
       'verbOverrides': await getVerbOverrides(sport: sport),
+      'categoryOverrides': await getVerbCategoryOverrides(sport: sport),
       'verbWordingDefaults': await getVerbWordingDefaults(sport: sport),
       'customVerbs': await getCustomVerbs(sport: sport),
       'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
@@ -1738,6 +1815,7 @@ class PreferencesService {
         'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
         'customVerbWordings': await getCustomVerbWordings(sport: sport),
         'verbOverrides': await getVerbOverrides(sport: sport),
+        'categoryOverrides': await getVerbCategoryOverrides(sport: sport),
         'verbWordingDefaults': await getVerbWordingDefaults(sport: sport),
         'customVerbs': await getCustomVerbs(sport: sport),
         'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),
@@ -1879,6 +1957,18 @@ class PreferencesService {
             },
             sport: sport,
           );
+        }
+        if (data.containsKey('categoryOverrides')) {
+          final raw = data['categoryOverrides'];
+          final pins = <String, String>{};
+          if (raw is Map) {
+            raw.forEach((key, value) {
+              final category = value?.toString().trim() ?? '';
+              if (category.isEmpty) return;
+              pins[key.toString()] = category;
+            });
+          }
+          await saveVerbCategoryOverrides(pins, sport: sport);
         }
         if (data.containsKey('verbWordingDefaults')) {
           final existing = await getVerbWordingDefaults(sport: sport);
@@ -2885,6 +2975,7 @@ class PreferencesService {
         'favoriteTeams': (await getFavoriteTeams(sport: sport)).toList(),
         'customVerbWordings': await getCustomVerbWordings(sport: sport),
         'verbOverrides': await getVerbOverrides(sport: sport),
+        'categoryOverrides': await getVerbCategoryOverrides(sport: sport),
         'verbWordingDefaults': await getVerbWordingDefaults(sport: sport),
         'customVerbs': await getCustomVerbs(sport: sport),
         'deletedVerbs': (await getDeletedVerbs(sport: sport)).toList(),

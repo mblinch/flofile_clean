@@ -21,9 +21,14 @@ Future<void> showCaptionV2VerbEditor(
       openVerbs: true,
       initialVerbKey: initialVerb,
       createVerbOnOpen: createOnOpen,
-      onVerbCatalogChanged: (sport) async {
+      onVerbCatalogChanged: (sport, bundle) {
         if (sport == controller.sport) {
-          await controller.reloadVerbCatalog();
+          controller.showVerbBundle(bundle);
+        }
+      },
+      onVerbCatalogPersisted: (sport) async {
+        if (sport == controller.sport) {
+          await controller.commitVerbBundleFromDisk();
         }
       },
     ),

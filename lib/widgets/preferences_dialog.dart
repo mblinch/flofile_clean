@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dropdown_flutter/custom_dropdown.dart';
 
+import '../services/admin_service.dart';
 import '../services/auth_service.dart';
 import '../services/camera_serial_service.dart';
 import '../services/preferences_service.dart';
@@ -30,8 +31,12 @@ class PreferencesDialog extends StatefulWidget {
   /// When true with [openVerbs], start creating a new verb.
   final bool createVerbOnOpen;
 
-  /// Fired after personal verb catalog saves (e.g. reload live caption session).
-  final Future<void> Function(String sport)? onVerbCatalogChanged;
+  /// Fired as soon as the verb editor bundle changes.
+  final void Function(String sport, Map<String, dynamic> bundle)?
+      onVerbCatalogChanged;
+
+  /// Fired after the latest verb bundle is on disk.
+  final Future<void> Function(String sport)? onVerbCatalogPersisted;
 
   const PreferencesDialog({
     super.key,
@@ -40,6 +45,7 @@ class PreferencesDialog extends StatefulWidget {
     this.initialVerbKey,
     this.createVerbOnOpen = false,
     this.onVerbCatalogChanged,
+    this.onVerbCatalogPersisted,
   });
 
   @override
@@ -62,7 +68,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   String _sportForDefault = 'baseball';
   Map<String, dynamic>? _currentPreferences;
   bool _isLoading = true;
-  bool _appDefaultsBusy = false;
+  bool _isAdmin = false;
   late _PrefsCategory _selectedCategory;
 
   FfTokens get _t => Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -107,9 +113,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     });
 
     _currentPreferences = await _preferencesService.exportAllPreferences();
+    final isAdmin = await AdminService.isCurrentUserAdmin();
 
     setState(() {
       _isLoading = false;
+      _isAdmin = isAdmin;
       _photoshopPathController.text =
           _currentPreferences?['photoshopPath']?.toString() ?? '';
       final res =
@@ -491,7 +499,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           padding: const EdgeInsets.symmetric(vertical: 16),
           child: Divider(height: 1, thickness: 1, color: _t.divider),
         ),
-        _buildInlineRow('Resolution (pixels)',
+        _buildInlineRow('Resolution warning',
             child: Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -600,13 +608,15 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 ],
               ),
             )),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: _t.divider),
-        ),
-        _buildInlineRow(
-          'MLB inning (EXIF timezone)',
-          child: Expanded(
+        if (_isAdmin) ...[
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            child: Divider(height: 1, thickness: 1, color: _t.divider),
+          ),
+          _buildInlineRow(
+            'MLB inning (EXIF timezone)',
+            adminOnly: true,
+            child: Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -635,7 +645,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               ],
             ),
           ),
-        ),
+          ),
+        ],
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 6),
           child: Divider(height: 1, thickness: 1, color: _t.divider),
@@ -777,39 +788,6 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 ],
               ),
             )),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: _t.divider),
-        ),
-        Text(
-          'App originals',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: _t.text,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Restore verb layouts and caption structures from the cloud catalog '
-          'published by FloFile admins. Your FTP and caption library are not changed.',
-          style: TextStyle(fontSize: 11, color: _t.textSecondary),
-        ),
-        if (AuthService.instance.isSignedIn) ...[
-          const SizedBox(height: 8),
-          Text(
-            'While signed in, your personal settings (captions, verbs, FTP) '
-            'sync to your account automatically.',
-            style: TextStyle(fontSize: 11, color: _t.textSecondary),
-          ),
-        ],
-        const SizedBox(height: 10),
-        ElevatedGreyButton(
-          label: _appDefaultsBusy ? 'Restoring…' : 'Restore app originals',
-          fontSize: 11,
-          icon: PhosphorIconsRegular.cloudArrowDown,
-          onPressed: _appDefaultsBusy ? null : _restoreAppOriginals,
-        ),
       ],
     );
   }
@@ -841,7 +819,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     );
   }
 
-  Widget _buildInlineRow(String label, {required Widget child}) {
+  Widget _buildInlineRow(
+    String label, {
+    required Widget child,
+    bool adminOnly = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(top: 10, bottom: 10),
       child: Row(
@@ -851,13 +833,40 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             width: 160,
             child: Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: _t.text,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: _t.text,
+                    ),
+                  ),
+                  if (adminOnly) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: FfTokens.gold,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: const Text(
+                        'Admin only',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: FfTokens.inkOnGold,
+                          height: 1.1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
@@ -881,44 +890,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       initialVerbKey: widget.initialVerbKey,
       createOnOpen: widget.createVerbOnOpen,
       onCatalogChanged: widget.onVerbCatalogChanged,
+      onCatalogPersisted: widget.onVerbCatalogPersisted,
     );
-  }
-
-  Future<void> _restoreAppOriginals() async {
-    final ok = await showAppConfirmDialog(
-      context: context,
-      title: 'Restore app originals?',
-      message:
-          'This replaces your verb layouts, caption styles, and IPTC wire '
-          'templates with the latest app defaults from Firebase. Your personal '
-          'settings are not updated when defaults change unless you restore '
-          'here. Hidden IPTC templates will reappear.',
-      cancelLabel: 'Cancel',
-      confirmLabel: 'Restore',
-    );
-    if (ok != true || !mounted) return;
-    setState(() => _appDefaultsBusy = true);
-    try {
-      await _preferencesService.restoreAppOriginals();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('App originals restored from Firebase.'),
-          backgroundColor: Color(0xFF4A7A96),
-        ),
-      );
-      await _loadCurrentPreferences();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Restore failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _appDefaultsBusy = false);
-    }
   }
 
   Widget _buildAccountSection() {
@@ -1102,9 +1075,9 @@ class _PrefsToggle extends StatelessWidget {
               value: value,
               onChanged: onChanged,
               activeTrackColor: t.accent,
-              activeThumbColor: t.inkOnAccent,
+              activeThumbColor: Colors.white,
               inactiveTrackColor: t.sunken,
-              inactiveThumbColor: t.textSecondary,
+              inactiveThumbColor: Colors.white,
               trackOutlineColor: WidgetStateProperty.resolveWith((states) {
                 if (states.contains(WidgetState.selected)) {
                   return t.accent;

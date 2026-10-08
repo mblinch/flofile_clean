@@ -647,15 +647,19 @@ class _VerbListItem extends StatelessWidget {
                   : 'Add to Favorites',
             )),
         const PopupMenuItem(value: 'edit', child: Text('Edit verb…')),
-        if (index > 0) const PopupMenuItem(value: 'up', child: Text('Move up')),
-        if (index <
-            (controller.verbDefinitionsByCategory[controller.verbCategory]
-                        ?.length ??
-                    0) -
-                1)
+        if (controller.verbCategory != 'All' && index > 0)
+          const PopupMenuItem(value: 'up', child: Text('Move up')),
+        if (controller.verbCategory != 'All' &&
+            index <
+                (controller.verbDefinitionsByCategory[controller.verbCategory]
+                            ?.length ??
+                        0) -
+                    1)
           const PopupMenuItem(value: 'down', child: Text('Move down')),
         for (final category in controller.verbCategories)
-          if (category != 'Favorites' && category != verb.category)
+          if (category != 'Favorites' &&
+              category != 'All' &&
+              category != verb.category)
             PopupMenuItem(
               value: 'move:$category',
               child: Text('Move to ${_displayCategoryLabel(category)}'),

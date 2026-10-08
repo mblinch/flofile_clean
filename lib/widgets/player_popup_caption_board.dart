@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'app_compact_checkbox.dart';
+import 'ff_dropdown.dart';
 import 'app_styled_dialogs.dart';
 import '../flo_layout_constants.dart';
 import '../utils/default_verb_keywords.dart';
@@ -2865,8 +2866,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        DropdownButtonFormField<String>(
+                        FfDropdownButton<String>(
                           value: selectedCategory,
+                          isExpanded: true,
+                          style: kAppDialogFieldTextStyle,
                           items: _verbCategories.keys
                               .map((cat) => DropdownMenuItem(
                                     value: cat,
@@ -2878,8 +2881,6 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                               setDialogState(() => selectedCategory = value);
                             }
                           },
-                          decoration: appDialogFieldDecoration(),
-                          style: kAppDialogFieldTextStyle,
                         ),
                         const SizedBox(height: 4),
                         Row(
@@ -3480,10 +3481,10 @@ class _PlayerPopupCaptionBoardState extends State<PlayerPopupCaptionBoard> {
                         borderRadius: BorderRadius.circular(4),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
-                      child: DropdownButton<String>(
+                      child: FfDropdownButton<String>(
                         value: _sortBy,
-                        isDense: true,
-                        underline: const SizedBox(),
+                        isExpanded: true,
+                        padding: EdgeInsets.zero,
                         icon: PhosphorIcon(PhosphorIconsRegular.caretDown,
                             size: 13, color: Colors.grey.shade700),
                         style: TextStyle(

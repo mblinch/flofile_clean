@@ -160,6 +160,7 @@ class _AdminScreenState extends State<AdminScreen> {
       _captionSport = sport;
       _compareSport = sport;
       _applyGameIdToCaptionDraft(_captionWire, _captionSport);
+      _captionDirty = false;
       _captionBuilderRevision++;
       if (_compareTeamNames.isEmpty) {
         unawaited(_loadTeamsForCompare());
@@ -635,9 +636,17 @@ class _AdminScreenState extends State<AdminScreen> {
     );
   }
 
+  bool _captionDirty = false;
+  Future<void> Function()? _setAllCaptionDefaults;
+
   void _onCaptionDraftChanged(WireStyle wire, CaptionTemplate template) {
     _captionDrafts[wire] = template.copyWith(wireStyle: wire);
     _stashGameIdFromTemplate(wire, template);
+    if (!_captionDirty && mounted) {
+      setState(() => _captionDirty = true);
+    } else {
+      _captionDirty = true;
+    }
   }
 
   Future<void> _onCaptionSportChanged(String sport) async {
@@ -653,6 +662,37 @@ class _AdminScreenState extends State<AdminScreen> {
   void _onCaptionWireChanged(WireStyle wire) {
     if (wire == _captionWire) return;
     setState(() => _captionWire = wire);
+  }
+
+  void _seedCaptionDraftsFromCatalog() {
+    final catalog = _catalog;
+    _captionDrafts.clear();
+    _gameIdDrafts.clear();
+    for (final w in AppDefaultsFirestoreService.captionWireStyles) {
+      final fromCatalog = catalog?.captionWireDefault(w);
+      _captionDrafts[w] = (fromCatalog ??
+              AppDefaultsFirestoreService.factoryCaptionForWire(w))
+          .copyWith(wireStyle: w);
+      final bySport = <String, String>{};
+      for (final sport in _sports) {
+        final fromMap = catalog?.gameIdentifierText(w, sport);
+        bySport[sport] = fromMap ?? defaultGameIdentifierText(sport);
+      }
+      _gameIdDrafts[w] = bySport;
+    }
+    _applyGameIdToCaptionDraft(_captionWire, _captionSport);
+  }
+
+  void _discardCaptionDrafts() {
+    setState(() {
+      _seedCaptionDraftsFromCatalog();
+      _captionDirty = false;
+      _captionBuilderRevision++;
+    });
+  }
+
+  Future<void> _setCaptionStructuresAsDefaults() async {
+    await _publishCaptions(allWires: true, saveLocalDefaults: true);
   }
 
   Map<String, Map<String, String>> _gameIdDraftsForFirestore() {
@@ -878,7 +918,10 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _publishCaptions({bool allWires = false}) async {
+  Future<void> _publishCaptions({
+    bool allWires = false,
+    bool saveLocalDefaults = false,
+  }) async {
     final ok = await _confirmAdminPublish(
       title: allWires
           ? 'Publish all caption structures?'
@@ -890,6 +933,9 @@ class _AdminScreenState extends State<AdminScreen> {
     if (!ok) return;
     setState(() => _busy = true);
     try {
+      if (saveLocalDefaults) {
+        await _setAllCaptionDefaults?.call();
+      }
       await _flushCaptionBuilderDrafts();
       final wires = allWires
           ? AppDefaultsFirestoreService.captionWireStyles
@@ -927,6 +973,7 @@ class _AdminScreenState extends State<AdminScreen> {
         );
       }
       if (!mounted) return;
+      setState(() => _captionDirty = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -1588,26 +1635,6 @@ class _AdminScreenState extends State<AdminScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _captionSportDropdown(),
-            ElevatedGreyButton(
-              label: 'Copy from my local layout',
-              fontSize: 11,
-              onPressed: _busy ? null : _importLocalCaptionForWire,
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Layout is per wire; game identifier (game ID segment) is per wire and sport. '
-          'Switch sport to edit that phrase, then publish.',
-          style: t.metaStyle.copyWith(height: 1.35),
-        ),
-        const SizedBox(height: 8),
         Expanded(
           child: CaptionLayoutBuilderDialog(
             key: ValueKey('admin_caption_$_captionBuilderRevision'),
@@ -1622,7 +1649,12 @@ class _AdminScreenState extends State<AdminScreen> {
                 Map<WireStyle, Map<String, String>>.from(_gameIdDrafts),
             onDraftChanged: _onCaptionDraftChanged,
             onWireChanged: _onCaptionWireChanged,
+            onSportChanged: (sport) {
+              unawaited(_onCaptionSportChanged(sport));
+            },
+            onCopyLocalLayout: _busy ? null : _importLocalCaptionForWire,
             onRegisterFlush: (flush) => _flushCaptionBuilder = flush,
+            onRegisterSetAllDefaults: (setAll) => _setAllCaptionDefaults = setAll,
           ),
         ),
       ],
@@ -1633,35 +1665,53 @@ class _AdminScreenState extends State<AdminScreen> {
     if (_section != _AdminSection.captionStructures) {
       return const SizedBox.shrink();
     }
+    final canDiscard = _captionDirty && !_busy;
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
         color: t.surface,
         border: Border(top: BorderSide(color: t.divider)),
       ),
       child: Row(
         children: [
-          _OutlinedAccentButton(
-            tokens: t,
-            label: _busy
-                ? 'Publishing…'
-                : 'Publish ${WireIptcSpecs.factoryWireLabel(_captionWire)}',
-            icon: PhosphorIconsRegular.cloudArrowUp,
-            onPressed: _busy ? null : () => _publishCaptions(),
+          Expanded(
+            child: Text(
+              _captionDirty
+                  ? 'Unpublished changes — not live until you set them as defaults'
+                  : 'Everything is published',
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: t.microStyle.copyWith(
+                fontSize: 11,
+                color: t.text.withValues(alpha: 0.55),
+              ),
+            ),
           ),
-          const SizedBox(width: 8),
-          _OutlinedAccentButton(
-            tokens: t,
-            label: 'Publish all wires',
-            icon: PhosphorIconsRegular.cloudArrowUp,
-            onPressed: _busy ? null : () => _publishCaptions(allWires: true),
-          ),
-          const SizedBox(width: 8),
-          _OutlinedAccentButton(
-            tokens: t,
-            label: 'Publish style library',
-            icon: PhosphorIconsRegular.palette,
+          TextButton(
             onPressed: _busy ? null : _publishCaptionStyleLibrary,
+            child: Text(
+              'Style library',
+              style: t.metaStyle.copyWith(
+                color: t.text.withValues(alpha: _busy ? 0.28 : 0.7),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: canDiscard ? _discardCaptionDrafts : null,
+            child: Text(
+              'Discard',
+              style: t.metaStyle.copyWith(
+                color: t.text.withValues(alpha: canDiscard ? 0.7 : 0.28),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedGreyButton(
+            label: _busy ? 'Publishing…' : 'Set all as defaults',
+            fontSize: 12,
+            isAdmin: true,
+            onPressed: _busy ? null : _setCaptionStructuresAsDefaults,
           ),
         ],
       ),

@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'dart:io';
 import '../services/camera_serial_service.dart';
 import '../theme/ff_tokens.dart';
-import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -28,8 +27,6 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
 
   List<MapEntry<String, String>> _filteredMappings = [];
   String _searchQuery = '';
-  bool _serialNumberMode = false;
-
   @override
   void initState() {
     super.initState();
@@ -90,15 +87,9 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
     }
 
     _filteredMappings.sort((a, b) {
-      if (_serialNumberMode) {
-        final serialCompare = a.key.compareTo(b.key);
-        if (serialCompare != 0) return serialCompare;
-        return a.value.compareTo(b.value);
-      } else {
-        final nameCompare = a.value.compareTo(b.value);
-        if (nameCompare != 0) return nameCompare;
-        return a.key.compareTo(b.key);
-      }
+      final nameCompare = a.value.compareTo(b.value);
+      if (nameCompare != 0) return nameCompare;
+      return a.key.compareTo(b.key);
     });
   }
 
@@ -406,68 +397,6 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                           ],
                         ),
                       ),
-                      Material(
-                        color: _serialNumberMode
-                            ? t.accent.withValues(alpha: 0.18)
-                            : t.sunken,
-                        borderRadius:
-                            BorderRadius.circular(FfTokens.radiusChip),
-                        child: InkWell(
-                          onTap: () {
-                            setState(() {
-                              _serialNumberMode = !_serialNumberMode;
-                              _updateFilteredMappings();
-                            });
-                          },
-                          borderRadius:
-                              BorderRadius.circular(FfTokens.radiusChip),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                PhosphorIcon(
-                                  _serialNumberMode
-                                      ? PhosphorIconsRegular.hash
-                                      : PhosphorIconsRegular.user,
-                                  size: 14,
-                                  color: _serialNumberMode
-                                      ? t.accent
-                                      : t.textSecondary,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  _serialNumberMode
-                                      ? 'Serial Mode'
-                                      : 'Name Mode',
-                                  style: t.metaStyle.copyWith(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: _serialNumberMode
-                                        ? t.accent
-                                        : t.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      AppCompactCheckbox(
-                        value: _serialNumberMode,
-                        accentColor: t.accent,
-                        onChanged: (value) {
-                          setState(() {
-                            _serialNumberMode = value;
-                            _updateFilteredMappings();
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 4),
                       IconButton(
                         onPressed: () => Navigator.of(context).pop(),
                         tooltip: 'Close',
@@ -575,9 +504,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                                 decoration: _fieldDecoration(
                                   t,
                                   label: '',
-                                  hint: _serialNumberMode
-                                      ? 'Search by serial number…'
-                                      : 'Search cameras or photographers…',
+                                  hint: 'Search cameras or photographers…',
                                   prefixIcon: PhosphorIcon(
                                     PhosphorIconsRegular.magnifyingGlass,
                                     size: 16,
@@ -683,16 +610,10 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                                           .getPhotographerData(serialNumber);
                                       final initials =
                                           photographerData?['initials'] ?? '';
-                                      final primary = _serialNumberMode
-                                          ? serialNumber
-                                          : photographerName;
-                                      final secondary = _serialNumberMode
-                                          ? (initials.isNotEmpty
-                                              ? '$photographerName · $initials'
-                                              : photographerName)
-                                          : (initials.isNotEmpty
-                                              ? 'SN: $serialNumber · $initials'
-                                              : 'SN: $serialNumber');
+                                      final primary = photographerName;
+                                      final secondary = initials.isNotEmpty
+                                          ? 'SN: $serialNumber · $initials'
+                                          : 'SN: $serialNumber';
 
                                       return Material(
                                         color: index.isEven
@@ -715,9 +636,7 @@ class _CameraSerialDialogState extends State<CameraSerialDialog> {
                                             style: t.bodyStyle.copyWith(
                                               fontSize: 13,
                                               fontWeight: FontWeight.w600,
-                                              color: _serialNumberMode
-                                                  ? t.accent
-                                                  : t.text,
+                                              color: t.text,
                                             ),
                                           ),
                                           subtitle: Text(

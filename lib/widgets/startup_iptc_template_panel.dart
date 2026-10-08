@@ -6,6 +6,7 @@ import '../caption_style/wire_iptc_specs.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/iptc_template_apply_service.dart';
 import 'app_styled_dialogs.dart';
+import 'ff_dropdown.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Startup right column: compact IPTC checklist filled from folder files.
@@ -931,13 +932,11 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
             ),
           ),
           Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
+            child: FfDropdownButton<String>(
                 value: IptcTemplateApplyService.urgencyValues.contains(current)
                     ? current
                     : '0',
                 isExpanded: true,
-                isDense: true,
                 style: widget.enabled
                     ? StartupIptcTemplatePanel._fieldValueStyle
                     : StartupIptcTemplatePanel._fieldValueDisabledStyle,
@@ -960,7 +959,6 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
                       }
                     : null,
               ),
-            ),
           ),
         ],
       ),

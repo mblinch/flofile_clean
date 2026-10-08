@@ -15,6 +15,7 @@ import '../../../caption_style/caption_style_catalog.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/caption_text_normalize.dart';
 import '../../../caption_style/game_info.dart';
+import '../../../caption_style/sport_verb_categories.dart';
 import '../../../caption_style/verb_authoring_model.dart';
 import '../../../caption_style/verb_caption_wording.dart';
 import '../../../caption_style/verb_sort_mode.dart';
@@ -385,6 +386,9 @@ class CaptionV2Controller extends ChangeNotifier {
   PreferencesService? _prefs;
   EffectiveVerbRepository? _verbRepository;
   EffectiveVerbCatalog _verbCatalog = EffectiveVerbCatalog.factory('baseball');
+
+  /// Bumps on each editor preview so a disk reload cannot paint over a newer save.
+  int _verbPreviewToken = 0;
   VerbSortMode verbSortMode = VerbSortMode.alphabetical;
   Map<String, int> _verbUsageCounts = {};
 
@@ -422,6 +426,9 @@ class CaptionV2Controller extends ChangeNotifier {
   bool showPersonalityField = true;
   bool applyVerbKeywords = true;
   bool applyPlayerNamesToKeywords = true;
+
+  /// Longest-side pixel threshold for the low-resolution warning. `0` is off.
+  int resolutionWarningThreshold = 0;
   bool metadataDirty = false;
   final Set<String> _basePersonalityNames = {};
   final Set<String> _managedKeywordKeys = {};
@@ -651,6 +658,9 @@ class CaptionV2Controller extends ChangeNotifier {
   int jerseyOcrPrescanTotal = 0;
   bool get jerseyOcrPrescanActive =>
       _jerseyOcrPrescanRunning && jerseyOcrPrescanDone < jerseyOcrPrescanTotal;
+
+  /// User pressed Stop. Holds for this session so a later kick does not resume.
+  bool _jerseyOcrPrescanStop = false;
 
   /// Preference gate for jersey OCR (UI + auto/loupe scans).
   /// Default off until the user enables it via the header OCR toggle.
@@ -2253,11 +2263,15 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<void> _loadVerbCatalog() async {
     final repository = _verbRepository;
     if (repository == null) return;
-    _verbCatalog = await repository.load(sport);
+    final token = _verbPreviewToken;
+    final catalog = await repository.load(sport);
+    if (token != _verbPreviewToken) return;
+    _verbCatalog = catalog;
     final prefs = _prefs;
     if (prefs != null) {
       _verbUsageCounts = await prefs.getVerbUsageCountsForSport(sport);
     }
+    if (token != _verbPreviewToken) return;
     if (!_verbCatalog.verbsByCategory.containsKey(verbCategory)) {
       verbCategory = _verbCatalog.categoryOrder.isEmpty
           ? null
@@ -2313,6 +2327,7 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<void> setSerialBylinesEnabled(bool enabled) async {
     if (enabled == serialBylinesEnabled) return;
     serialBylinesEnabled = enabled;
+    if (!enabled) pendingSerialBylinesPrompt = null;
     notifyListeners();
     await _prefs?.saveSerialNumberBylines(enabled);
   }
@@ -2330,7 +2345,9 @@ class CaptionV2Controller extends ChangeNotifier {
     _prefs = prefs;
     ftpModeEnabled = await prefs.getFtpModeEnabled();
     serialBylinesEnabled = await prefs.getSerialNumberBylines();
+    if (!serialBylinesEnabled) pendingSerialBylinesPrompt = null;
     burstDetectionEnabled = await prefs.getBurstDetectionEnabled();
+    resolutionWarningThreshold = await prefs.getResolutionWarningThreshold();
     await _refreshJerseyOcrEnabled();
     notifyListeners();
   }
@@ -2354,6 +2371,7 @@ class CaptionV2Controller extends ChangeNotifier {
     bool homeWearsDarkAnswered = false,
   }) async {
     sessionGeneration++;
+    _jerseyOcrPrescanStop = false;
     this.sport = sport;
     this.homeTeam = homeTeam;
     this.singleTeamMode = singleTeamMode;
@@ -2540,7 +2558,8 @@ class CaptionV2Controller extends ChangeNotifier {
       for (var i = 0; i < ordered.length; i++) {
         if (generation != sessionGeneration ||
             !jerseyOcrEnabled ||
-            !sessionLoading) {
+            !sessionLoading ||
+            _jerseyOcrPrescanStop) {
           break;
         }
         final path = ordered[i];
@@ -2571,7 +2590,11 @@ class CaptionV2Controller extends ChangeNotifier {
             sport: sportKey,
             prescan: true,
           );
-          if (generation != sessionGeneration || !jerseyOcrEnabled) break;
+          if (generation != sessionGeneration ||
+              !jerseyOcrEnabled ||
+              _jerseyOcrPrescanStop) {
+            break;
+          }
           _putJerseyOcrCache(key, hits);
         }
         _jerseyOcrPrescanned.add(path);
@@ -2582,6 +2605,7 @@ class CaptionV2Controller extends ChangeNotifier {
       // Surface the current frame's OCR result before the UI opens.
       if (generation == sessionGeneration &&
           jerseyOcrEnabled &&
+          !_jerseyOcrPrescanStop &&
           currentPath != null) {
         await runOcrTestScan(force: false);
       }
@@ -4290,10 +4314,10 @@ class CaptionV2Controller extends ChangeNotifier {
     List<String> orderedKeys,
   ) async {
     final prefs = _prefs;
-    if (prefs == null || category == 'Favorites') return;
+    if (prefs == null || category == 'Favorites' || category == 'All') return;
     final order = {
       for (final entry in _verbCatalog.verbsByCategory.entries)
-        if (entry.key != 'Favorites')
+        if (entry.key != 'Favorites' && entry.key != 'All')
           entry.key: entry.value.map((item) => item.key).toList(),
     };
     order[category] = List<String>.from(orderedKeys);
@@ -4535,6 +4559,7 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<void> moveVerb(String verb, String category, int index) async {
     final prefs = _prefs;
     if (prefs == null || !_verbCatalog.byKey.containsKey(verb)) return;
+    if (category == 'All') return;
     if (category == 'Favorites') {
       final favorites =
           (await prefs.getFavoriteVerbs(sport: sport)).toList(growable: true);
@@ -4551,7 +4576,7 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     final order = {
       for (final entry in _verbCatalog.verbsByCategory.entries)
-        if (entry.key != 'Favorites')
+        if (entry.key != 'Favorites' && entry.key != 'All')
           entry.key: entry.value.map((item) => item.key).toList(),
     };
     for (final verbs in order.values) {
@@ -4573,6 +4598,15 @@ class CaptionV2Controller extends ChangeNotifier {
         final override = Map<String, dynamic>.from(overrides[verb] ?? {});
         override['category'] = category;
         await prefs.saveVerbOverride(verb, override, sport: sport);
+        final pins = await prefs.getVerbCategoryOverrides(sport: sport);
+        final factoryCategory =
+            SportVerbCategories.categoryForVerb(verb, sport: sport);
+        if (factoryCategory != null && factoryCategory == category) {
+          pins.remove(verb);
+        } else {
+          pins[verb] = category;
+        }
+        await prefs.saveVerbCategoryOverrides(pins, sport: sport);
       }
     }
     await _loadVerbCatalog();
@@ -4589,16 +4623,62 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> saveCategoryOrder(List<String> order) async {
-    final cleaned = order.where((category) => category != 'Favorites').toList();
+    final cleaned = order
+        .where((category) => category != 'Favorites' && category != 'All')
+        .toList();
     await _prefs?.saveCategoryOrder(cleaned, sport: sport);
     await _loadVerbCatalog();
     notifyListeners();
   }
 
-  Future<void> reloadVerbCatalog() async {
-    await _loadVerbCatalog();
+  /// Move [from] to the slot occupied by [to]. Favorites stays first and All
+  /// stays last; neither can be dragged.
+  Future<void> reorderVerbCategory(String from, String to) async {
+    if (from == to) return;
+    if (from == 'Favorites' ||
+        from == 'All' ||
+        to == 'Favorites' ||
+        to == 'All') {
+      return;
+    }
+    final order = verbCategories
+        .where((category) => category != 'Favorites' && category != 'All')
+        .toList();
+    final fromIndex = order.indexOf(from);
+    final toIndex = order.indexOf(to);
+    if (fromIndex < 0 || toIndex < 0) return;
+    order.removeAt(fromIndex);
+    order.insert(toIndex, from);
+    await saveCategoryOrder(order);
+  }
+
+  /// Paint [bundle] on the caption verb list before prefs finish writing.
+  void showVerbBundle(Map<String, dynamic> bundle) {
+    _verbPreviewToken++;
+    _verbCatalog = EffectiveVerbRepository.fromBundle(sport: sport, bundle: bundle);
+    if (!_verbCatalog.verbsByCategory.containsKey(verbCategory)) {
+      verbCategory = _verbCatalog.categoryOrder.isEmpty
+          ? null
+          : _verbCatalog.categoryOrder.first;
+    }
+    if (selectedVerb != null && !_verbCatalog.byKey.containsKey(selectedVerb)) {
+      selectedVerb = null;
+    }
+    if (pinnedVerb != null && !_verbCatalog.byKey.containsKey(pinnedVerb)) {
+      pinnedVerb = null;
+    }
     notifyListeners();
   }
+
+  Future<void> reloadVerbCatalog() async {
+    final token = _verbPreviewToken;
+    await _loadVerbCatalog();
+    if (token != _verbPreviewToken) return;
+    notifyListeners();
+  }
+
+  /// Disk now matches the latest editor bundle. Reload the caption verb list.
+  Future<void> commitVerbBundleFromDisk() => reloadVerbCatalog();
 
   Map<String, dynamic> verbEditorInitialData(String verb) {
     final definition = verbDefinition(verb);
@@ -4682,7 +4762,7 @@ class CaptionV2Controller extends ChangeNotifier {
     );
     final order = {
       for (final entry in _verbCatalog.verbsByCategory.entries)
-        if (entry.key != 'Favorites')
+        if (entry.key != 'Favorites' && entry.key != 'All')
           entry.key: entry.value.map((item) => item.key).toList(),
     };
     order.putIfAbsent(category, () => <String>[]).add(label);
@@ -5938,7 +6018,7 @@ class CaptionV2Controller extends ChangeNotifier {
     final definition = verbDefinition(verb);
     if (definition != null) return definition.category;
     for (final e in verbsByCategory.entries) {
-      if (e.key == 'Favorites') continue;
+      if (e.key == 'Favorites' || e.key == 'All') continue;
       if (e.value.contains(verb)) return e.key;
     }
     return null;
@@ -6289,7 +6369,16 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Start (or resume) warming the OCR cache for the session's frames.
   /// No-op unless text recognition is on and the session is loaded.
+  /// Stop the folder pre-scan (loading screen and background badge).
+  void stopJerseyOcrPrescan() {
+    if (_jerseyOcrPrescanStop) return;
+    _jerseyOcrPrescanStop = true;
+    unawaited(JerseyOcrChannel.cancelPrescan());
+    notifyListeners();
+  }
+
   void _kickJerseyOcrPrescan() {
+    if (_jerseyOcrPrescanStop) return;
     if (!jerseyOcrEnabled || !sessionReady || imagePaths.isEmpty) return;
     if (_jerseyOcrPrescanRunning) return;
     if (_nextJerseyOcrPrescanPath() == null) return;
@@ -6370,7 +6459,9 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
     var lastNotify = DateTime.now();
     try {
-      while (jerseyOcrEnabled && generation == sessionGeneration) {
+      while (jerseyOcrEnabled &&
+          generation == sessionGeneration &&
+          !_jerseyOcrPrescanStop) {
         // The user's own frame / loupe scans come first — idle while one
         // is in flight so Vision isn't fighting itself for the GPU.
         if (_jerseyOcrInflight > 0) {
@@ -6388,7 +6479,11 @@ class CaptionV2Controller extends ChangeNotifier {
           jerseyOcrPrescanDone++;
           continue;
         }
-        if (generation != sessionGeneration || !jerseyOcrEnabled) break;
+        if (generation != sessionGeneration ||
+            !jerseyOcrEnabled ||
+            _jerseyOcrPrescanStop) {
+          break;
+        }
 
         final customWords = _ocrCustomWords();
         final sportKey = sport.trim().toLowerCase();
@@ -6408,7 +6503,11 @@ class CaptionV2Controller extends ChangeNotifier {
             sport: sportKey,
             prescan: true,
           );
-          if (generation != sessionGeneration || !jerseyOcrEnabled) break;
+          if (generation != sessionGeneration ||
+              !jerseyOcrEnabled ||
+              _jerseyOcrPrescanStop) {
+            break;
+          }
           _putJerseyOcrCache(key, hits);
           // If the user is sitting on this frame with no reads yet (frame
           // scan still pending / skipped), surface the result now.
@@ -7203,6 +7302,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
     final prefs = await PreferencesService.getInstance();
     final enabled = await prefs.getSerialNumberBylines();
+    serialBylinesEnabled = enabled;
     if (!enabled) return;
 
     final camera = CameraSerialService.instance;

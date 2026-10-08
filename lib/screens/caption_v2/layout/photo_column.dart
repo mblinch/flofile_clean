@@ -323,6 +323,53 @@ class _PhotoInfoHeader extends StatelessWidget {
   }
 }
 
+class _LowResolutionWarning extends StatelessWidget {
+  const _LowResolutionWarning({
+    required this.threshold,
+    required this.tokens,
+  });
+
+  final int threshold;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: const BoxDecoration(
+        color: FfTokens.dangerBg,
+        border: Border(
+          bottom: BorderSide(color: FfTokens.dangerBorder),
+        ),
+      ),
+      child: Row(
+        children: [
+          const PhosphorIcon(
+            PhosphorIconsRegular.warning,
+            color: FfTokens.danger,
+            size: 14,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Low resolution — longest side is below ${threshold}px',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: tokens.metaStyle.copyWith(
+                fontSize: tokens.textSizeMicro,
+                height: 1.2,
+                color: FfTokens.danger,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PhotoCard extends StatelessWidget {
   const _PhotoCard({
     required this.controller,
@@ -349,6 +396,16 @@ class _PhotoCard extends StatelessWidget {
       if (value != null && value.isNotEmpty) return value;
     }
     return '';
+  }
+
+  bool _isLowResolution(String width, String height) {
+    final threshold = controller.resolutionWarningThreshold;
+    if (threshold <= 0) return false;
+    final w = int.tryParse(width);
+    final h = int.tryParse(height);
+    if (w == null || h == null || w <= 0 || h <= 0) return false;
+    final longest = w > h ? w : h;
+    return longest < threshold;
   }
 
   String _formatFileSize(String imagePath) {
@@ -400,6 +457,11 @@ class _PhotoCard extends StatelessWidget {
           children: [
             if (path != null)
               _PhotoInfoHeader(controller: controller, tokens: tokens),
+            if (path != null && _isLowResolution(width, height))
+              _LowResolutionWarning(
+                threshold: controller.resolutionWarningThreshold,
+                tokens: tokens,
+              ),
             Expanded(
               child: Stack(
                 fit: StackFit.expand,
@@ -1475,6 +1537,25 @@ class _PrescanBadge extends StatelessWidget {
                 style: tokens.metaStyle.copyWith(
                   fontSize: 11,
                   color: tokens.textTertiary,
+                ),
+              ),
+              const SizedBox(width: 4),
+              TextButton(
+                onPressed: controller.stopJerseyOcrPrescan,
+                style: TextButton.styleFrom(
+                  foregroundColor: tokens.text,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: Text(
+                  'Stop',
+                  style: tokens.metaStyle.copyWith(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.text,
+                  ),
                 ),
               ),
             ],

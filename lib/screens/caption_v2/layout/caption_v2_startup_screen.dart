@@ -24,6 +24,7 @@ import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
 import '../../../widgets/app_styled_dialogs.dart';
+import '../../../widgets/ff_dropdown.dart';
 import '../../../widgets/caption_layout_builder_dialog.dart';
 import 'caption_v2_iptc_dialog.dart';
 import 'roster_import_dialog.dart';
@@ -2470,74 +2471,59 @@ class _TeamDropdown extends StatelessWidget {
           height: 34,
           child: Stack(
             children: [
-              DropdownButtonFormField<String?>(
-                key: ValueKey(
-                  '$label:$effective:${excludeTeam ?? ''}:$enabled:${teams.length}',
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: t.sunken,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: t.divider),
                 ),
-                focusNode: focusNode,
-                initialValue: effective,
-                isExpanded: true,
-                dropdownColor: t.elevated,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 13,
-                  color: t.text,
-                ),
-                iconEnabledColor: t.textSecondary,
-                iconDisabledColor: t.textTertiary,
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: hintText,
-                  hintStyle: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    color: t.textTertiary,
-                  ),
-                  filled: true,
-                  fillColor: t.sunken,
-                  contentPadding: const EdgeInsets.fromLTRB(12, 10, 40, 10),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: t.divider),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: t.accent),
-                  ),
-                  disabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: t.divider),
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: t.divider),
-                  ),
-                ),
-                items: [
-                  for (final name in teams)
-                    DropdownMenuItem<String?>(
-                      value: name,
-                      child: Text(
-                        favoriteNames.contains(name) ? '★ $name' : name,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 13,
-                          color: t.text,
-                        ),
+                child: Focus(
+                  focusNode: focusNode,
+                  child: FfDropdownButton<String?>(
+                    value: effective,
+                    isExpanded: true,
+                    menuColor: t.elevated,
+                    hint: Text(
+                      hintText,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        color: t.textTertiary,
                       ),
                     ),
-                ],
-                onChanged: enabled && teams.isNotEmpty
-                    ? (v) {
-                        if (v != null &&
-                            excludeTeam != null &&
-                            v == excludeTeam) {
-                          return;
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      color: t.text,
+                    ),
+                  items: [
+                    for (final name in teams)
+                      DropdownMenuItem<String?>(
+                        value: name,
+                        child: Text(
+                          favoriteNames.contains(name) ? '★ $name' : name,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 13,
+                            color: t.text,
+                          ),
+                        ),
+                      ),
+                  ],
+                  onChanged: enabled && teams.isNotEmpty
+                      ? (v) {
+                          if (v != null &&
+                              excludeTeam != null &&
+                              v == excludeTeam) {
+                            return;
+                          }
+                          onChanged(v);
                         }
-                        onChanged(v);
-                      }
-                    : null,
+                      : null,
+                  ),
+                ),
               ),
               Positioned(
                 right: 28,

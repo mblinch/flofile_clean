@@ -4,6 +4,7 @@ import 'package:phosphor_icons/phosphor_icons.dart';
 import '../services/camera_serial_service.dart';
 import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
+import 'ff_dropdown.dart';
 
 /// Result of assigning a photographer for an unknown / missing camera serial.
 class UnknownSerialAssignment {
@@ -258,24 +259,27 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
                         const SizedBox(height: 12),
                       ],
                       if (_useExisting && existing.isNotEmpty)
-                        DropdownButtonFormField<String>(
-                          value: _selectedExisting,
+                        InputDecorator(
                           decoration: _fieldDecoration(
                             t,
                             label: 'Photographer',
                           ),
-                          dropdownColor: t.surface,
-                          style: t.bodyStyle.copyWith(fontSize: 13),
-                          items: [
-                            for (final name in existing)
-                              DropdownMenuItem(
-                                value: name,
-                                child: Text(name),
-                              ),
-                          ],
-                          onChanged: (v) => setState(() {
-                            _selectedExisting = v;
-                          }),
+                          child: FfDropdownButton<String>(
+                            value: _selectedExisting,
+                            isExpanded: true,
+                            menuColor: t.surface,
+                            style: t.bodyStyle.copyWith(fontSize: 13),
+                            items: [
+                              for (final name in existing)
+                                DropdownMenuItem(
+                                  value: name,
+                                  child: Text(name),
+                                ),
+                            ],
+                            onChanged: (v) => setState(() {
+                              _selectedExisting = v;
+                            }),
+                          ),
                         )
                       else ...[
                         TextField(

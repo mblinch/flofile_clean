@@ -30,6 +30,7 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
   private let generationLock = NSLock()
   private var generation = 0
   private var loupeGeneration = 0
+  private var prescanGeneration = 0
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -41,34 +42,53 @@ class JerseyOcrPlugin: NSObject, FlutterPlugin {
   }
 
   private struct Ticket {
-    /// nil → prescan: always current.
     let frame: Int?
     let loupe: Int?
+    /// Set for background pre-scan. Bumping [prescanGeneration] stops it.
+    let prescan: Int?
   }
 
   private func bumpGeneration(loupe: Bool, prescan: Bool) -> Ticket {
-    if prescan { return Ticket(frame: nil, loupe: nil) }
     generationLock.lock()
     defer { generationLock.unlock() }
+    if prescan {
+      prescanGeneration += 1
+      return Ticket(frame: nil, loupe: nil, prescan: prescanGeneration)
+    }
     if loupe {
       loupeGeneration += 1
-      return Ticket(frame: generation, loupe: loupeGeneration)
+      return Ticket(frame: generation, loupe: loupeGeneration, prescan: nil)
     }
     generation += 1
     loupeGeneration += 1
-    return Ticket(frame: generation, loupe: nil)
+    return Ticket(frame: generation, loupe: nil, prescan: nil)
   }
 
   private func isCurrent(_ ticket: Ticket) -> Bool {
-    guard let frame = ticket.frame else { return true }
     generationLock.lock()
     defer { generationLock.unlock() }
+    if let prescan = ticket.prescan {
+      return prescanGeneration == prescan
+    }
+    guard let frame = ticket.frame else { return true }
     guard generation == frame else { return false }
     if let loupe = ticket.loupe { return loupeGeneration == loupe }
     return true
   }
 
+  /// Drop the in-flight pre-scan. Frame and loupe scans are left alone.
+  private func cancelPrescan() {
+    generationLock.lock()
+    prescanGeneration += 1
+    generationLock.unlock()
+  }
+
   func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    if call.method == "cancelPrescan" {
+      cancelPrescan()
+      result(nil)
+      return
+    }
     guard call.method == "recognize" else {
       result(FlutterMethodNotImplemented)
       return

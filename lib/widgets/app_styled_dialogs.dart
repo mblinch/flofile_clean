@@ -57,7 +57,7 @@ TextStyle appDialogFieldLabelStyleOf(BuildContext context) {
   if (t != null) {
     return TextStyle(
       fontFamily: FfTokens.labelFamily,
-      fontSize: 11,
+      fontSize: 13,
       fontWeight: FontWeight.w600,
       letterSpacing: 0.2,
       height: 1.2,
@@ -171,13 +171,13 @@ const TextStyle kAppDialogLabelTextStyle = TextStyle(
   color: Colors.black87,
 );
 
-/// Label above inputs (not on the outline border).
+/// Shared title above inputs. [appDialogFieldLabelStyleOf] is the themed copy.
 const TextStyle kAppDialogFieldLabelStyle = TextStyle(
   fontFamily: 'Inter',
-  fontSize: 10,
-  fontWeight: FontWeight.w500,
+  fontSize: 13,
+  fontWeight: FontWeight.w600,
   color: Color(0xFF6B6B6B),
-  letterSpacing: -0.2,
+  letterSpacing: 0.2,
   height: 1.2,
 );
 
@@ -211,7 +211,7 @@ ShapeBorder get kAppDialogShape => const RoundedRectangleBorder(
 const double kAppDialogControlHeight = 34.0;
 
 /// Shared label-row height so Dual-column fields stay vertically aligned.
-const double kAppDialogLabelRowHeight = 16.0;
+const double kAppDialogLabelRowHeight = 18.0;
 
 /// Outlined input — label sits above via [AppDialogLabeledField], not in the border.
 InputDecoration appDialogFieldDecoration({String? hintText}) => InputDecoration(
@@ -339,6 +339,7 @@ class AppDialogLabeledField extends StatelessWidget {
     this.required = false,
     this.spacing = 5,
     this.bottomGap = 12,
+    this.labelRowHeight = kAppDialogLabelRowHeight,
   });
 
   final String label;
@@ -350,6 +351,7 @@ class AppDialogLabeledField extends StatelessWidget {
   final bool required;
   final double spacing;
   final double bottomGap;
+  final double labelRowHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -366,7 +368,7 @@ class AppDialogLabeledField extends StatelessWidget {
         children: [
           if (showLabel) ...[
             SizedBox(
-              height: kAppDialogLabelRowHeight,
+              height: labelRowHeight,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -513,7 +515,7 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
   /// When set with [onDeleteItem], return false to hide trash for that value.
   final bool Function(T value)? canDeleteItem;
 
-  static const double _menuItemHeight = 30.0;
+  static const double _menuItemHeight = 26.0;
 
   Widget _selectedChild() {
     for (final item in items) {
@@ -1181,39 +1183,35 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
     final ff = appDialogTokens(context);
 
     if (ff != null && !admin && !teal) {
-      // Primary = gold; danger ghost = --red text/border, --redbg on hover;
-      // danger confirm (isPrimary+isDanger) = solid --red + dark ink.
+      // Primary matches the caption Copy / Paste chips (dark teal).
+      // Gold is admin-only. Danger confirm stays solid red.
       final isDangerConfirm = widget.isDanger && widget.isPrimary;
+      final tealPrimary = widget.isPrimary && !isDangerConfirm;
       final fill = !enabled
-          ? (widget.isPrimary
-              ? (isDangerConfirm
-                      ? FfTokens.danger
-                      : FfTokens.gold)
-                  .withValues(alpha: 0.4)
-              : ff.badgeFill)
+          ? (isDangerConfirm
+              ? FfTokens.danger.withValues(alpha: 0.4)
+              : tealPrimary
+                  ? const Color(0xFF15242E).withValues(alpha: 0.55)
+                  : ff.badgeFill)
           : isDangerConfirm
               ? FfTokens.danger
               : danger
                   ? FfTokens.dangerBg
-                  : widget.isPrimary
-                      ? (_pressed
-                          ? FfTokens.gold.withValues(alpha: 0.88)
-                          : (_hovered
-                              ? Color.lerp(FfTokens.gold, Colors.white, 0.12)!
-                              : FfTokens.gold))
+                  : tealPrimary
+                      ? null
                       : (_pressed
                           ? ff.badgeFill
                           : (_hovered ? ff.surface : ff.sunken));
       final fg = !enabled
-          ? (widget.isPrimary
-              ? FfTokens.inkOnGold.withValues(alpha: 0.4)
+          ? (tealPrimary || isDangerConfirm
+              ? Colors.white.withValues(alpha: 0.4)
               : ff.textSecondary)
           : isDangerConfirm
               ? FfTokens.inkOnGold
               : danger
                   ? FfTokens.danger
-                  : widget.isPrimary
-                      ? FfTokens.inkOnGold
+                  : tealPrimary
+                      ? Colors.white
                       : ff.text;
       return MouseRegion(
         cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
@@ -1233,6 +1231,30 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
             ),
             decoration: BoxDecoration(
               color: fill,
+              gradient: tealPrimary && enabled
+                  ? LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: _pressed
+                          ? const [
+                              Color(0xFF1A2A36),
+                              Color(0xFF0C141A),
+                              Color(0xFF080E12),
+                            ]
+                          : _hovered
+                              ? const [
+                                  Color(0xFF2E4658),
+                                  Color(0xFF1A2E3A),
+                                  Color(0xFF121F28),
+                                ]
+                              : const [
+                                  Color(0xFF243848),
+                                  Color(0xFF15242E),
+                                  Color(0xFF0E181F),
+                                ],
+                      stops: const [0.0, 0.45, 1.0],
+                    )
+                  : null,
               borderRadius: BorderRadius.circular(FfTokens.radiusChip),
               border: Border.all(
                 color: !enabled
@@ -1241,10 +1263,18 @@ class _ElevatedGreyButtonState extends State<ElevatedGreyButton> {
                         ? FfTokens.danger
                         : danger
                             ? FfTokens.dangerBorder
-                            : widget.isPrimary
-                                ? Colors.transparent
+                            : tealPrimary
+                                ? (_hovered
+                                    ? Colors.white.withValues(alpha: 0.92)
+                                    : FfTokens.nocturneAc
+                                        .withValues(alpha: 0.95))
                                 : ff.divider,
               ),
+              boxShadow: tealPrimary && enabled
+                  ? FfTokens.accentButtonGlow(
+                      _hovered ? Colors.white : FfTokens.nocturneAc,
+                    )
+                  : null,
             ),
             child: Row(
               mainAxisSize:

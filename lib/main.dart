@@ -16,6 +16,7 @@ import 'screens/caption_v2/caption_v2_flag.dart';
 import 'screens/caption_v2/caption_v2_screen.dart';
 import 'services/auth_service.dart';
 import 'widgets/app_auth_shell.dart';
+import 'widgets/click_hand_cursor.dart';
 import 'widgets/preferences_dialog.dart';
 import 'intents.dart';
 import 'widgets/app_styled_dialogs.dart';
@@ -195,6 +196,9 @@ class MyApp extends StatelessWidget {
           title: 'Caption Writer',
           navigatorKey: appNavigatorKey,
           debugShowCheckedModeBanner: false,
+          builder: (context, child) => ClickHandCursor(
+            child: child ?? const SizedBox.shrink(),
+          ),
           scrollBehavior: const FloScrollBehavior(),
           themeMode: kUseCaptionV2 ? ThemeMode.dark : ThemeMode.light,
           theme: ThemeData(
@@ -207,6 +211,9 @@ class MyApp extends StatelessWidget {
             fontFamily: 'Inter',
             iconTheme: const IconThemeData(size: FfIcons.size),
             extensions: const <ThemeExtension<dynamic>>[FfTokens.light],
+            switchTheme: const SwitchThemeData(
+              thumbColor: WidgetStatePropertyAll(Colors.white),
+            ),
             scrollbarTheme: ScrollbarThemeData(
               thickness: const WidgetStatePropertyAll(kFloScrollbarThickness),
               radius: const Radius.circular(4),
@@ -273,6 +280,9 @@ class MyApp extends StatelessWidget {
             extensions: const <ThemeExtension<dynamic>>[FfTokens.dark],
             focusColor: FfTokens.dark.accent.withValues(alpha: 0.0),
             splashFactory: NoSplash.splashFactory,
+            switchTheme: const SwitchThemeData(
+              thumbColor: WidgetStatePropertyAll(Colors.white),
+            ),
           ),
           home: AppAuthShell(
             child: kUseCaptionV2

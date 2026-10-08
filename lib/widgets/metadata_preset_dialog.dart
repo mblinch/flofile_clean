@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'dart:io';
 import '../utils/exiftool_helper.dart';
 import 'app_compact_checkbox.dart';
+import 'ff_dropdown.dart';
 import 'app_styled_dialogs.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -433,8 +434,11 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
           ),
         ),
         const SizedBox(height: 1),
-        DropdownButtonFormField<String>(
+        FfDropdownButton<String>(
           value: value,
+          isExpanded: true,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          style: const TextStyle(fontSize: 11, color: Colors.black),
           items: items
               .map((item) => DropdownMenuItem(
                     value: item['code'],
@@ -443,13 +447,6 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                   ))
               .toList(),
           onChanged: onChanged,
-          decoration: const InputDecoration(
-            isDense: true,
-            border: InputBorder.none,
-            contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-            filled: false,
-          ),
-          style: const TextStyle(fontSize: 11, color: Colors.black),
         ),
       ],
     );
@@ -510,9 +507,10 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                       borderRadius: BorderRadius.circular(2),
                       color: Colors.white,
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
+                    child: FfDropdownButton<String>(
                         value: selectedPreset,
+                        isExpanded: true,
+                        padding: EdgeInsets.zero,
                         hint: Row(
                           children: [
                             PhosphorIcon(PhosphorIconsRegular.gear,
@@ -542,21 +540,7 @@ class _MetadataPresetDialogState extends State<MetadataPresetDialog> {
                             _loadPreset(value);
                           }
                         },
-                        selectedItemBuilder: (context) => [
-                          Row(
-                            children: [
-                              PhosphorIcon(PhosphorIconsRegular.gear,
-                                  size: 16, color: Colors.grey.shade600),
-                              const SizedBox(width: 6),
-                              Text('Select an IPTC profile',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade600)),
-                            ],
-                          ),
-                        ],
                       ),
-                    ),
                   ),
                 ),
                 const SizedBox(width: 8),

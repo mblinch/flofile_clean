@@ -1274,8 +1274,14 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                     ? null
                     : () => _save(asDefault: false, closeAfter: false),
                 style: FilledButton.styleFrom(
-                  backgroundColor: FfTokens.gold,
-                  foregroundColor: FfTokens.inkOnGold,
+                  backgroundColor: const Color(0xFF15242E),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor:
+                      const Color(0xFF15242E).withValues(alpha: 0.45),
+                  disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
+                  side: BorderSide(
+                    color: FfTokens.nocturneAc.withValues(alpha: 0.95),
+                  ),
                 ),
                 child: Text(_isCreating ? 'Create' : 'Save'),
               ),
@@ -1286,7 +1292,7 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                       'Admin: publish this wording into app originals for '
                       '${widget.sport}. Other users keep personal defaults '
                       'until restore / first seed.',
-                  child: OutlinedButton(
+                  child: FilledButton(
                     onPressed: _busy
                         ? null
                         : () => _save(
@@ -1294,6 +1300,14 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                               asAppDefault: true,
                               closeAfter: false,
                             ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: FfTokens.gold,
+                      foregroundColor: FfTokens.inkOnGold,
+                      disabledBackgroundColor:
+                          FfTokens.gold.withValues(alpha: 0.4),
+                      disabledForegroundColor:
+                          FfTokens.inkOnGold.withValues(alpha: 0.4),
+                    ),
                     child: const Text('Set as App Default · Admin'),
                   ),
                 ),
@@ -1424,15 +1438,15 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
                 ),
                 filledButtonTheme: FilledButtonThemeData(
                   style: FilledButton.styleFrom(
-                    backgroundColor: FfTokens.gold,
-                    foregroundColor: FfTokens.inkOnGold,
+                    backgroundColor: const Color(0xFF15242E),
+                    foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        FfTokens.gold.withValues(alpha: 0.4),
+                        const Color(0xFF15242E).withValues(alpha: 0.45),
                     disabledForegroundColor:
-                        FfTokens.inkOnGold.withValues(alpha: 0.4),
+                        Colors.white.withValues(alpha: 0.4),
                     textStyle: t.metaStyle.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: FfTokens.inkOnGold,
+                      color: Colors.white,
                     ),
                   ),
                 ),

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
+
 import '../caption_style/sport_verb_categories.dart';
 import '../theme/ff_icons.dart';
 import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
-import 'package:phosphor_icons/phosphor_icons.dart';
+import 'ff_dropdown.dart';
 
 class VerbSearchHit {
   const VerbSearchHit({
@@ -109,6 +111,76 @@ class VerbEditorActionButton extends StatelessWidget {
   }
 }
 
+class VerbEditorIconAction {
+  const VerbEditorIconAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool danger;
+}
+
+/// Joined icon buttons that sit beside a dropdown. The name shows on hover.
+class VerbEditorIconGroup extends StatelessWidget {
+  const VerbEditorIconGroup({
+    super.key,
+    required this.tokens,
+    required this.actions,
+  });
+
+  final FfTokens tokens;
+  final List<VerbEditorIconAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.sunken,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: FfTokens.panelOutline, width: 0.5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < actions.length; i++) ...[
+            if (i > 0)
+              Container(width: 1, height: 18, color: tokens.divider),
+            _cell(actions[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _cell(VerbEditorIconAction action) {
+    final enabled = action.onPressed != null;
+    final color = !enabled
+        ? tokens.text.withValues(alpha: 0.28)
+        : action.danger
+            ? FfTokens.danger
+            : tokens.text.withValues(alpha: 0.82);
+    return Tooltip(
+      message: action.label,
+      child: InkWell(
+        onTap: action.onPressed,
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: 32,
+          height: 34,
+          child: Center(
+            child: PhosphorIcon(action.icon, size: 16, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class VerbEditorPickerBox extends StatelessWidget {
   const VerbEditorPickerBox({
     super.key,
@@ -126,25 +198,22 @@ class VerbEditorPickerBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      padding: const EdgeInsets.fromLTRB(0, 2, 0, 0),
       decoration: BoxDecoration(
         color: tokens.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tokens.divider),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            height: 26,
+            height: 22,
             child: Row(
               children: [
                 Text(
                   label,
                   softWrap: false,
-                  style: FfTokens.railLabel.copyWith(
-                    color: tokens.text.withValues(alpha: 0.70),
-                  ),
+                  style: appDialogFieldLabelStyleOf(context),
                 ),
                 const Spacer(),
                 for (var i = 0; i < actions.length; i++) ...[
@@ -154,7 +223,7 @@ class VerbEditorPickerBox extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           child,
         ],
       ),
@@ -198,50 +267,76 @@ class VerbEditorTopBar extends StatelessWidget {
         searchFocus.hasFocus && searchController.text.trim().isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: 140,
-            height: 34,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: t.sunken,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: t.divider),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: sport,
-                  isExpanded: true,
-                  dropdownColor: t.surface,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  style: t.metaStyle.copyWith(color: t.text),
-                  borderRadius: BorderRadius.circular(8),
-                  items: [
-                    for (final item in sports)
-                      DropdownMenuItem(
-                        value: item,
-                        child: Text(SportVerbCategories.displayLabel(item)),
-                      ),
-                  ],
-                  onChanged: busy
-                      ? null
-                      : (value) {
-                          if (value != null) onSportChanged(value);
-                        },
-                ),
-              ),
+          Text(
+            'Verb Editor',
+            style: t.bodyStyle.copyWith(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: t.text,
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(
-                  height: 34,
-                  child: TextField(
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              SizedBox(
+                width: 140,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sport',
+                      style: appDialogFieldLabelStyleOf(context),
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      height: 34,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: t.sunken,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: FfTokens.panelOutline,
+                            width: 0.5,
+                          ),
+                        ),
+                        child: FfDropdownButton<String>(
+                          value: sport,
+                          isExpanded: true,
+                          menuColor: t.surface,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          style: t.metaStyle.copyWith(color: t.text),
+                          items: [
+                            for (final item in sports)
+                              DropdownMenuItem(
+                                value: item,
+                                child: Text(
+                                  SportVerbCategories.displayLabel(item),
+                                ),
+                              ),
+                          ],
+                          onChanged: busy
+                              ? null
+                              : (value) {
+                                  if (value != null) onSportChanged(value);
+                                },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(
+                      height: 34,
+                      child: TextField(
                     controller: searchController,
                     focusNode: searchFocus,
                     enabled: !busy,
@@ -341,6 +436,8 @@ class VerbEditorTopBar extends StatelessWidget {
           ),
         ],
       ),
+        ],
+      ),
     );
   }
 }
@@ -413,7 +510,7 @@ class VerbEditorFooter extends StatelessWidget {
             fontSize: 11,
             isPrimary: true,
             isAdmin: !personalMode,
-            onPressed: busy || pendingChanges <= 0 ? null : onPublish,
+            onPressed: pendingChanges <= 0 ? null : onPublish,
           ),
         ],
       ),
@@ -555,32 +652,32 @@ class _DeleteCategoryV3DialogState extends State<_DeleteCategoryV3Dialog> {
                           danger: false,
                           title: 'Keep the verbs — move them to another category',
                           onTap: () => setState(() => _keepVerbs = true),
-                          child: DropdownButtonFormField<String>(
-                            value: _destination,
-                            dropdownColor: t.surface,
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: t.sunken,
-                              contentPadding: const EdgeInsets.symmetric(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: t.sunken,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: FfTokens.panelOutline,
+                                width: 0.5,
+                              ),
+                            ),
+                            child: FfDropdownButton<String>(
+                              value: _destination,
+                              isExpanded: true,
+                              menuColor: t.surface,
+                              style: t.metaStyle.copyWith(color: t.text),
+                              padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
                                 vertical: 8,
                               ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: t.divider),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: BorderSide(color: t.divider),
-                              ),
+                              items: [
+                                for (final d in widget.destinations)
+                                  DropdownMenuItem(value: d, child: Text(d)),
+                              ],
+                              onChanged: _keepVerbs
+                                  ? (v) => setState(() => _destination = v)
+                                  : null,
                             ),
-                            items: [
-                              for (final d in widget.destinations)
-                                DropdownMenuItem(value: d, child: Text(d)),
-                            ],
-                            onChanged: _keepVerbs
-                                ? (v) => setState(() => _destination = v)
-                                : null,
                           ),
                         ),
                       if (canKeep) const SizedBox(height: 8),
@@ -874,10 +971,12 @@ class CategoryRenameField extends StatelessWidget {
     required this.controller,
     required this.onSubmit,
     required this.onCancel,
+    this.focusNode,
   });
 
   final FfTokens tokens;
   final TextEditingController controller;
+  final FocusNode? focusNode;
   final ValueChanged<String> onSubmit;
   final VoidCallback onCancel;
 
@@ -890,26 +989,41 @@ class CategoryRenameField extends StatelessWidget {
       },
       child: Focus(
         autofocus: true,
-        child: TextField(
-          controller: controller,
-          autofocus: true,
-          style: t.metaStyle.copyWith(color: t.text, fontSize: 13),
-          cursorColor: t.accent,
-          onSubmitted: onSubmit,
-          onEditingComplete: () => onSubmit(controller.text),
-          onTapOutside: (_) => onSubmit(controller.text),
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: t.sunken,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            enabledBorder: OutlineInputBorder(
+        child: SizedBox(
+          height: 34,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: t.sunken,
               borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: t.accent),
+              border: Border.all(color: t.accent),
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: t.accent, width: 1.5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: TextField(
+                        controller: controller,
+                        focusNode: focusNode,
+                        autofocus: true,
+                        style: t.metaStyle.copyWith(color: t.text),
+                        cursorColor: t.accent,
+                        onSubmitted: onSubmit,
+                        decoration: const InputDecoration(
+                          isCollapsed: true,
+                          contentPadding: EdgeInsets.zero,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),

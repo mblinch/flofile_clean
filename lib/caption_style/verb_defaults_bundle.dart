@@ -21,6 +21,7 @@ class VerbDefaultsBundle {
   static Map<String, dynamic> withoutFavoriteVerbs(Map<String, dynamic> bundle) {
     final next = Map<String, dynamic>.from(bundle);
     next['favoriteVerbs'] = <String>[];
+    next.remove('hiddenCategories');
     return next;
   }
 
@@ -195,8 +196,23 @@ class VerbDefaultsBundle {
         final key = rawKey.toString();
         final factoryKey = resolveFactoryKey(key, record);
         if (factoryKey == null) {
-          // Drop legacy phrase-key / junk overrides. Real user-created verbs
-          // live in customVerbs; keeping these keys re-poisons Offense.
+          // A label that names a factory verb is an old phrase-key alias.
+          // Anything else is a real added default (for example "Celebrates")
+          // and has to stay in the catalog.
+          final label = (record['label'] ?? '').toString().trim();
+          final category =
+              remapCategory((record['category'] ?? '').toString().trim());
+          if (label.isEmpty ||
+              category.isEmpty ||
+              category == 'Favorites' ||
+              category == 'All') {
+            return;
+          }
+          record['key'] = key;
+          record['label'] = label;
+          record['category'] = category;
+          record['isCustom'] = false;
+          overrides[key] = record;
           return;
         }
         final canonical = key.toLowerCase() == factoryKey.toLowerCase();
@@ -259,11 +275,20 @@ class VerbDefaultsBundle {
       if (seenCategories.add(category)) categoryOrder.add(category);
     }
 
-    for (final value in ((factory['categoryOrder'] as List?) ?? const [])) {
-      addCategory(value.toString());
-    }
+    // Saved order wins. Factory categories that are missing are appended so a
+    // new sport verb still appears, without putting Offense/Defense back first
+    // after the user drags categories around.
     for (final value in ((next['categoryOrder'] as List?) ?? const [])) {
       addCategory(remapCategory(value.toString()));
+    }
+    // An explicit default list is the admin's category set. Don't put factory
+    // categories back after the admin removed them.
+    final explicitDefaults = next['defaultCategories'] is List &&
+        (next['defaultCategories'] as List).isNotEmpty;
+    if (!explicitDefaults) {
+      for (final value in ((factory['categoryOrder'] as List?) ?? const [])) {
+        addCategory(value.toString());
+      }
     }
     for (final record in overrides.values) {
       addCategory(remapCategory((record['category'] ?? '').toString()));

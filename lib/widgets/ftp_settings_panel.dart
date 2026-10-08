@@ -5,6 +5,7 @@ import '../services/preferences_service.dart';
 import '../theme/ff_tokens.dart';
 import '../utils/native_file_picker.dart';
 import 'app_styled_dialogs.dart';
+import 'ff_dropdown.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Standalone FTP Server Settings panel. Can be shown in a dialog or embedded
@@ -656,47 +657,23 @@ class _ProfileDropdown extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: tokens.divider),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
+      child: FfDropdownButton<String>(
           value: effectiveValue,
           isExpanded: true,
-          isDense: true,
-          dropdownColor: tokens.surface,
-          iconEnabledColor: tokens.textSecondary,
+          menuColor: tokens.surface,
           hint: Text(
             'Select profile',
             style: tokens.metaStyle.copyWith(
               fontSize: 11,
               color: tokens.textSecondary,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
           style: tokens.metaStyle.copyWith(
             fontSize: 11,
             color: tokens.text,
             fontWeight: FontWeight.w500,
           ),
-          selectedItemBuilder: (context) {
-            final labels = <String>[
-              if (showNewProfile) newProfileLabel,
-              ...profiles,
-            ];
-            return [
-              for (final label in labels)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    label,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.metaStyle.copyWith(
-                      fontSize: 11,
-                      color: tokens.text,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-            ];
-          },
+          padding: EdgeInsets.zero,
           items: [
             if (showNewProfile)
               DropdownMenuItem<String>(
@@ -729,7 +706,6 @@ class _ProfileDropdown extends StatelessWidget {
           ],
           onChanged: onChanged,
         ),
-      ),
     );
   }
 }

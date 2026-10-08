@@ -159,12 +159,7 @@ class FtpModeToggle extends StatelessWidget {
               onChanged: onChanged,
               activeTrackColor: tokens.accent,
               inactiveTrackColor: tokens.hover,
-              thumbColor: WidgetStateProperty.resolveWith((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return tokens.bg;
-                }
-                return tokens.textTertiary;
-              }),
+              thumbColor: const WidgetStatePropertyAll(Colors.white),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
           ),

@@ -16,6 +16,19 @@ class VerbUserCatalogService {
   }) async {
     final cached =
         await AppDefaultsFirestoreService.getCachedSportVerbSettings(sport);
+    final publishedCategories = <String>[
+      for (final value in ((cached?['categoryOrder'] as List?) ?? const []))
+        value.toString(),
+    ];
+    final publishedDefaults = <String>[
+      for (final value in ((cached?['defaultCategories'] as List?) ?? const []))
+        value.toString(),
+    ];
+    final publishedPins = <String, String>{
+      for (final entry
+          in ((cached?['categoryOverrides'] as Map?) ?? const {}).entries)
+        entry.key.toString(): entry.value.toString(),
+    };
     final base = cached != null && cached.isNotEmpty
         ? VerbDefaultsBundle.ensureComplete(
             Map<String, dynamic>.from(cached),
@@ -29,6 +42,9 @@ class VerbUserCatalogService {
     final localFavorites = await prefs.getFavoriteVerbs(sport: sport);
     final localOrder = await prefs.getVerbOrder(sport: sport);
     final localOverrides = await prefs.getVerbOverrides(sport: sport);
+    final localCategoryOverrides =
+        await prefs.getVerbCategoryOverrides(sport: sport);
+    final localHidden = await prefs.getHiddenCategories(sport: sport);
 
     final deleted = <String>{
       for (final value in ((base['deletedVerbs'] as List?) ?? const []))
@@ -45,22 +61,17 @@ class VerbUserCatalogService {
           deletedLower.contains(trimmed.toLowerCase());
     }
 
-    // Once the user has a local customVerbs file (even `[]`), that list is
-    // authoritative — Firebase customs must not resurrect deleted verbs.
+    // Published customs first, then the user's copies. A verb only in app
+    // defaults (and not deleted) still shows. The local copy wins when both
+    // exist. [hasLocalCustoms] still marks that a local file was read.
     final customsByKey = <String, Map<String, dynamic>>{};
-    if (hasLocalCustoms) {
-      for (final raw in localCustoms) {
-        final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-        if (key.isEmpty || isDeleted(key)) continue;
-        customsByKey[key] = Map<String, dynamic>.from(raw);
-      }
-    } else {
-      for (final raw in ((base['customVerbs'] as List?) ?? const [])) {
-        if (raw is! Map) continue;
-        final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-        if (key.isEmpty || isDeleted(key)) continue;
-        customsByKey[key] = Map<String, dynamic>.from(raw);
-      }
+    for (final raw in ((base['customVerbs'] as List?) ?? const [])) {
+      if (raw is! Map) continue;
+      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
+      if (key.isEmpty || isDeleted(key)) continue;
+      customsByKey[key] = Map<String, dynamic>.from(raw);
+    }
+    if (hasLocalCustoms || localCustoms.isNotEmpty) {
       for (final raw in localCustoms) {
         final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
         if (key.isEmpty || isDeleted(key)) continue;
@@ -77,6 +88,15 @@ class VerbUserCatalogService {
     });
     overrides.removeWhere((key, _) => isDeleted(key));
     base['verbOverrides'] = overrides;
+    // Local pins win, but a published move (Pre-Game, Post-Game, …) stays
+    // when this device never stored that pin.
+    final pins = Map<String, String>.from(publishedPins);
+    localCategoryOverrides.forEach((key, value) {
+      final category = value.trim();
+      if (category.isEmpty) return;
+      pins[key] = category;
+    });
+    base['categoryOverrides'] = pins;
 
     base['deletedVerbs'] = deleted.toList();
 
@@ -105,9 +125,46 @@ class VerbUserCatalogService {
     base['verbOrder'] = order;
 
     final categories = await prefs.getCategoryOrder(sport: sport);
-    if (categories.isNotEmpty) {
-      base['categoryOrder'] = categories;
+    // Saved drag order comes first. Categories that exist only on the
+    // published catalog are appended, so a new default category is not
+    // erased by an older local list.
+    final mergedCategories = <String>[];
+    final seenCategories = <String>{};
+    void addCategory(String category) {
+      final name = category.trim();
+      if (name.isEmpty || name == 'Favorites' || name == 'All') return;
+      if (seenCategories.add(name)) mergedCategories.add(name);
     }
+
+    for (final category in categories) {
+      addCategory(category);
+    }
+    for (final category in publishedCategories) {
+      addCategory(category);
+    }
+    if (mergedCategories.isNotEmpty) {
+      base['categoryOrder'] = mergedCategories;
+    }
+
+    final defaults = <String>[];
+    final seenDefaults = <String>{};
+    void addDefault(String category) {
+      final name = category.trim();
+      if (name.isEmpty || name == 'Favorites' || name == 'All') return;
+      if (seenDefaults.add(name.toLowerCase())) defaults.add(name);
+    }
+
+    final explicitDefaults =
+        publishedDefaults.isNotEmpty ? publishedDefaults : publishedCategories;
+    for (final category in explicitDefaults) {
+      addDefault(category);
+    }
+    base['defaultCategories'] = defaults;
+    final defaultNames = seenDefaults;
+    base['hiddenCategories'] = [
+      for (final category in localHidden)
+        if (defaultNames.contains(category.trim().toLowerCase())) category,
+    ];
 
     return VerbDefaultsBundle.ensureComplete(base, sport);
   }
@@ -120,7 +177,7 @@ class VerbUserCatalogService {
     final complete = VerbDefaultsBundle.ensureComplete(bundle, sport);
     final categories = ((complete['categoryOrder'] as List?) ?? const [])
         .map((value) => value.toString())
-        .where((value) => value != 'Favorites')
+        .where((value) => value != 'Favorites' && value != 'All')
         .toList();
     final favorites = ((complete['favoriteVerbs'] as List?) ?? const [])
         .map((value) => value.toString())
@@ -133,11 +190,15 @@ class VerbUserCatalogService {
         .map(Map<String, dynamic>.from)
         .where((item) {
           final key = (item['key'] ?? item['label'] ?? '').toString().trim();
-          if (key.isEmpty) return false;
-          return !deleted.contains(key) &&
-              !deleted.any((d) => d.toLowerCase() == key.toLowerCase());
+          return key.isNotEmpty;
         })
         .toList();
+    // Saving a user verb brings it back if it was previously hidden/deleted.
+    final customKeysLower = {
+      for (final item in custom)
+        (item['key'] ?? item['label'] ?? '').toString().trim().toLowerCase(),
+    }..removeWhere((value) => value.isEmpty);
+    deleted.removeWhere((value) => customKeysLower.contains(value.toLowerCase()));
     final order = <String, List<String>>{};
     final rawOrder = complete['verbOrder'];
     if (rawOrder is Map) {
@@ -167,6 +228,16 @@ class VerbUserCatalogService {
     }
 
     // Replace overrides wholesale so deleted keys cannot linger in prefs.
+    final pins = <String, String>{};
+    final rawPins = complete['categoryOverrides'];
+    if (rawPins is Map) {
+      rawPins.forEach((key, value) {
+        final category = value?.toString().trim() ?? '';
+        if (category.isEmpty) return;
+        pins[key.toString()] = category;
+      });
+    }
+
     await Future.wait([
       prefs.saveCategoryOrder(categories, sport: sport),
       prefs.saveFavoriteVerbs(favorites, sport: sport),
@@ -175,6 +246,14 @@ class VerbUserCatalogService {
       prefs.saveCustomVerbs(custom, sport: sport),
       prefs.saveVerbCatalogComplete(true, sport: sport),
       prefs.saveVerbOverrides(overrides, sport: sport),
+      prefs.saveVerbCategoryOverrides(pins, sport: sport),
+      prefs.saveHiddenCategories(
+        {
+          for (final value in ((complete['hiddenCategories'] as List?) ?? const []))
+            value.toString(),
+        },
+        sport: sport,
+      ),
     ]);
   }
 }

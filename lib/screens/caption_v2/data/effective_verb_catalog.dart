@@ -3,8 +3,8 @@ import '../../../caption_style/verb_authoring_model.dart';
 import '../../../caption_style/verb_caption_wording.dart';
 import '../../../caption_style/verb_defaults_bundle.dart';
 import '../../../caption_style/verb_sub_options.dart';
-import '../../../services/app_defaults_firestore_service.dart';
 import '../../../services/preferences_service.dart';
+import '../../../services/verb_user_catalog_service.dart';
 import '../../../utils/default_verb_keywords.dart';
 
 class EffectiveVerb {
@@ -84,6 +84,7 @@ class EffectiveVerbCatalog {
     required Map<String, String> customWordings,
     required Map<String, Map<String, dynamic>> overrides,
     required Set<String> deletedVerbs,
+    Set<String> hiddenCategories = const {},
     bool catalogComplete = false,
   }) {
     final factory = SportVerbCategories.copyForSport(sport);
@@ -110,73 +111,38 @@ class EffectiveVerbCatalog {
           deletedLower.contains(trimmed.toLowerCase());
     }
 
-    if (catalogComplete) {
-      for (final entry in overrides.entries) {
-        if (isDeleted(entry.key)) continue;
-        final category = remapCategory((entry.value['category'] ??
-                factoryCategory[entry.key] ??
-                (categoryOrder.isNotEmpty ? categoryOrder.first : 'Other'))
-            .toString());
-        factoryCategory[entry.key] = category;
-        records[entry.key] = {
-          'label': entry.key,
-          if (customWordings[entry.key] != null)
-            'verbPhrase': customWordings[entry.key],
-          ...entry.value,
-          'category': category,
+    // Shipped verbs always start from the factory lists. A complete catalog
+    // used to show only whatever was already in verbOverrides, which hid
+    // every default the override map had not stored yet.
+    for (final entry in factory.entries) {
+      for (final raw in entry.value) {
+        final key = raw.trim();
+        if (key.isEmpty || isDeleted(key)) continue;
+        factoryCategory[key] = entry.key;
+        records[key] = <String, dynamic>{
+          'label': key,
+          'category': entry.key,
+          'verbPhrase': customWordings[key],
           'isCustom': false,
         };
       }
-      // A published catalog can omit a verb the user already favorited.
-      // Keep those factory verbs so they still show in Favorites.
-      for (final entry in factory.entries) {
-        for (final raw in entry.value) {
-          final key = raw.trim();
-          if (key.isEmpty || records.containsKey(key) || isDeleted(key)) {
-            continue;
-          }
-          final wanted = favorites.any(
-            (favorite) => favorite.trim().toLowerCase() == key.toLowerCase(),
-          );
-          if (!wanted) continue;
-          factoryCategory[key] = entry.key;
-          records[key] = <String, dynamic>{
-            'label': key,
-            'category': entry.key,
-            'verbPhrase': customWordings[key],
-            'isCustom': false,
-          };
-        }
-      }
-    } else {
-      for (final entry in factory.entries) {
-        for (final raw in entry.value) {
-          final key = raw.trim();
-          if (key.isEmpty || isDeleted(key)) continue;
-          factoryCategory[key] = entry.key;
-          records[key] = <String, dynamic>{
-            'label': key,
-            'category': entry.key,
-            'verbPhrase': customWordings[key],
-            'isCustom': false,
-          };
-        }
-      }
+    }
 
-      for (final entry in overrides.entries) {
-        if (!records.containsKey(entry.key) || isDeleted(entry.key)) {
-          continue;
-        }
-        final merged = {
-          ...records[entry.key]!,
-          ...entry.value,
-          'isCustom': false,
-        };
-        if (merged['category'] != null) {
-          merged['category'] = remapCategory(merged['category'].toString());
-        }
-        records[entry.key] = merged;
+    for (final entry in overrides.entries) {
+      if (isDeleted(entry.key)) continue;
+      if (!records.containsKey(entry.key)) {
+        // User-created verbs belong in customVerbs. Ignore stray override keys.
+        continue;
       }
+      final merged = {
+        ...records[entry.key]!,
+        ...entry.value,
+        'isCustom': false,
+      };
+      if (merged['category'] != null) {
+        merged['category'] = remapCategory(merged['category'].toString());
+      }
+      records[entry.key] = merged;
     }
 
     for (final raw in customVerbs) {
@@ -217,11 +183,20 @@ class EffectiveVerbCatalog {
     void addCategory(String category) {
       if (category.isNotEmpty &&
           category != 'Favorites' &&
+          category != 'All' &&
           !orderedCategories.contains(category)) {
         orderedCategories.add(category);
       }
     }
 
+    final savedCategories = <String>{
+      for (final category in categoryOrder) remapCategory(category),
+    };
+    final hiddenCategoryNames = <String>{
+      for (final category in hiddenCategories) category.trim().toLowerCase(),
+    };
+    bool isHiddenCategory(String category) =>
+        hiddenCategoryNames.contains(category.trim().toLowerCase());
     for (final category in categoryOrder) {
       addCategory(remapCategory(category));
     }
@@ -360,7 +335,19 @@ class EffectiveVerbCatalog {
       );
     }
 
-    // Favorites is a pinned virtual category (not stored in categoryOrder prefs).
+    // Favorites and All are virtual categories (not stored in categoryOrder).
+    final allVerbs = <EffectiveVerb>[];
+    final seenInAll = <String>{};
+    for (final category in orderedCategories) {
+      if (isHiddenCategory(category)) continue;
+      for (final key in categoryKeys[category] ?? const <String>[]) {
+        final verb = byKey[key];
+        if (verb != null && seenInAll.add(verb.key)) allVerbs.add(verb);
+      }
+    }
+    allVerbs.sort(
+      (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+    );
     final effective = <String, List<EffectiveVerb>>{
       'Favorites': [
         for (final key in favoriteKeyOrder)
@@ -373,9 +360,12 @@ class EffectiveVerbCatalog {
           if (byKey.containsKey(key)) byKey[key]!,
       ];
       // Drop empty leftover categories (e.g. old hockey "Reactions" prefs).
-      if (verbs.isEmpty) continue;
+      // Categories the user saved, including a new empty one, stay visible.
+      if (verbs.isEmpty && !savedCategories.contains(category)) continue;
+      if (isHiddenCategory(category)) continue;
       effective[category] = verbs;
     }
+    effective['All'] = allVerbs;
     return EffectiveVerbCatalog(
       sport: sport,
       categoryOrder: List.unmodifiable(effective.keys),
@@ -426,158 +416,65 @@ class EffectiveVerbRepository {
   final PreferencesService preferences;
 
   Future<EffectiveVerbCatalog> load(String sport) async {
-    final values = await Future.wait<dynamic>([
-      preferences.getCategoryOrder(sport: sport),
-      preferences.getVerbOrder(sport: sport),
-      preferences.getFavoriteVerbs(sport: sport),
-      preferences.getCustomVerbs(sport: sport),
-      preferences.getCustomVerbWordings(sport: sport),
-      preferences.getVerbOverrides(sport: sport),
-      preferences.getDeletedVerbs(sport: sport),
-      preferences.getVerbCatalogComplete(sport: sport),
-    ]);
-    var categoryOrder = values[0] as List<String>;
-    var verbOrder = values[1] as Map<String, List<String>>;
-    var favorites = values[2] as Set<String>;
-    var customVerbs = values[3] as List<Map<String, dynamic>>;
-    var customWordings = values[4] as Map<String, String>;
-    var overrides = values[5] as Map<String, Map<String, dynamic>>;
-    var deletedVerbs = values[6] as Set<String>;
-    var catalogComplete = values[7] as bool;
+    final bundle = await VerbUserCatalogService.loadMergedBundle(
+      prefs: preferences,
+      sport: sport,
+    );
+    return EffectiveVerbRepository.fromBundle(sport: sport, bundle: bundle);
+  }
 
-    // Offline / first launch: prefer the cached Firebase catalog file over
-    // the hardcoded factory seed when local prefs have never been seeded.
-    if (!catalogComplete &&
-        categoryOrder.isEmpty &&
-        overrides.isEmpty &&
-        customVerbs.isEmpty) {
-      final cached =
-          await AppDefaultsFirestoreService.getCachedSportVerbSettings(sport);
-      if (cached != null && VerbDefaultsBundle.isComplete(cached)) {
-        await preferences.importPreferences({
-          'verbSettingsBySport': {
-            sport: VerbDefaultsBundle.withoutFavoriteVerbs(cached),
-          },
-        });
-        return load(sport);
-      }
+  /// Live catalog from an editor bundle, before prefs have been re-read.
+  static EffectiveVerbCatalog fromBundle({
+    required String sport,
+    required Map<String, dynamic> bundle,
+  }) {
+    final complete = VerbDefaultsBundle.ensureComplete(
+      Map<String, dynamic>.from(bundle),
+      sport,
+    );
+    List<String> strings(Object? raw) => [
+          for (final value in ((raw as List?) ?? const [])) value.toString(),
+        ];
+    Map<String, List<String>> stringListMap(Object? raw) {
+      if (raw is! Map) return {};
+      return {
+        for (final entry in raw.entries)
+          entry.key.toString(): strings(entry.value),
+      };
     }
 
-    // Fold phrase-alias override keys (e.g. "battles against") and restore
-    // factory categories so complete catalogs cannot dump junk into Offense.
-    if (catalogComplete || overrides.isNotEmpty) {
-      final beforeOverrides = {
-        for (final entry in overrides.entries)
-          entry.key: Map<String, dynamic>.from(entry.value),
-      };
-      final healed = VerbDefaultsBundle.ensureComplete(
-        {
-          VerbDefaultsBundle.catalogCompleteKey: catalogComplete,
-          'categoryOrder': categoryOrder,
-          'verbOrder': verbOrder,
-          'favoriteVerbs': favorites.toList(),
-          'customVerbs': customVerbs,
-          'customVerbWordings': customWordings,
-          'verbOverrides': overrides,
-          'deletedVerbs': deletedVerbs.toList(),
-        },
-        sport,
-      );
-      final healedOverrides = <String, Map<String, dynamic>>{
-        for (final entry
-            in ((healed['verbOverrides'] as Map?) ?? const {}).entries)
-          if (entry.value is Map)
-            entry.key.toString(): Map<String, dynamic>.from(entry.value as Map),
-      };
-      final healedOrder = <String, List<String>>{
-        for (final entry in ((healed['verbOrder'] as Map?) ?? const {}).entries)
-          entry.key.toString(): [
-            for (final value in ((entry.value as List?) ?? const []))
-              value.toString(),
-          ],
-      };
-      final healedCategories = [
-        for (final value in ((healed['categoryOrder'] as List?) ?? const []))
-          value.toString(),
-      ];
-      final changed = !_sameOverrideMaps(beforeOverrides, healedOverrides) ||
-          !_sameStringListMap(verbOrder, healedOrder);
-
-      categoryOrder = healedCategories;
-      verbOrder = healedOrder;
-      overrides = healedOverrides;
-      deletedVerbs = {
-        for (final value in ((healed['deletedVerbs'] as List?) ?? const []))
-          value.toString(),
-      };
-      catalogComplete = true;
-
-      if (changed) {
-        await preferences.importPreferences({
-          'verbSettingsBySport': {sport: healed},
-        });
-      }
+    final customVerbs = <Map<String, dynamic>>[
+      for (final raw in ((complete['customVerbs'] as List?) ?? const []))
+        if (raw is Map) Map<String, dynamic>.from(raw),
+    ];
+    final overrides = <String, Map<String, dynamic>>{};
+    final rawOverrides = complete['verbOverrides'];
+    if (rawOverrides is Map) {
+      rawOverrides.forEach((key, value) {
+        if (value is Map) {
+          overrides[key.toString()] = Map<String, dynamic>.from(value);
+        }
+      });
     }
-
+    final wordings = <String, String>{};
+    final rawWordings = complete['customVerbWordings'];
+    if (rawWordings is Map) {
+      rawWordings.forEach((key, value) {
+        final text = value?.toString() ?? '';
+        if (text.isNotEmpty) wordings[key.toString()] = text;
+      });
+    }
     return EffectiveVerbCatalog.merge(
       sport: sport,
-      categoryOrder: categoryOrder,
-      verbOrder: verbOrder,
-      favorites: favorites,
+      categoryOrder: strings(complete['categoryOrder']),
+      verbOrder: stringListMap(complete['verbOrder']),
+      favorites: strings(complete['favoriteVerbs']).toSet(),
       customVerbs: customVerbs,
-      customWordings: customWordings,
+      customWordings: wordings,
       overrides: overrides,
-      deletedVerbs: deletedVerbs,
-      catalogComplete: catalogComplete,
+      deletedVerbs: strings(complete['deletedVerbs']).toSet(),
+      hiddenCategories: strings(complete['hiddenCategories']).toSet(),
+      catalogComplete: VerbDefaultsBundle.isComplete(complete),
     );
-  }
-
-  static bool _sameStringListMap(
-    Map<String, List<String>> a,
-    Map<String, List<String>> b,
-  ) {
-    if (a.length != b.length) return false;
-    for (final entry in a.entries) {
-      final other = b[entry.key];
-      if (other == null || other.length != entry.value.length) return false;
-      for (var i = 0; i < entry.value.length; i++) {
-        if (other[i] != entry.value[i]) return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _sameOverrideMaps(
-    Map<String, Map<String, dynamic>> a,
-    Map<String, Map<String, dynamic>> b,
-  ) {
-    if (a.length != b.length) return false;
-    for (final entry in a.entries) {
-      final other = b[entry.key];
-      if (other == null) return false;
-      if (!_sameJsonish(entry.value, other)) return false;
-    }
-    return true;
-  }
-
-  static bool _sameJsonish(Object? a, Object? b) {
-    if (identical(a, b)) return true;
-    if (a is Map && b is Map) {
-      if (a.length != b.length) return false;
-      for (final key in a.keys) {
-        if (!b.containsKey(key) || !_sameJsonish(a[key], b[key])) {
-          return false;
-        }
-      }
-      return true;
-    }
-    if (a is List && b is List) {
-      if (a.length != b.length) return false;
-      for (var i = 0; i < a.length; i++) {
-        if (!_sameJsonish(a[i], b[i])) return false;
-      }
-      return true;
-    }
-    return a == b;
   }
 }

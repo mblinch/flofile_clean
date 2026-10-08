@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'app_styled_dialogs.dart';
+import 'ff_dropdown.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:convert';
@@ -9281,16 +9282,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                                                                                                       ),
                                                                                                     ),
                                                                                                   ),
-                                                                                                  DropdownButtonFormField<int>(
+                                                                                                  FfDropdownButton<int>(
                                                                                                     value: _rbiCount,
-                                                                                                    decoration: const InputDecoration(
-                                                                                                      isDense: true,
-                                                                                                      contentPadding: EdgeInsets.symmetric(
-                                                                                                        horizontal: 2,
-                                                                                                        vertical: 1,
-                                                                                                      ),
-                                                                                                      border: InputBorder.none,
-                                                                                                      labelText: null,
+                                                                                                    isExpanded: true,
+                                                                                                    padding: const EdgeInsets.symmetric(
+                                                                                                      horizontal: 2,
+                                                                                                      vertical: 1,
                                                                                                     ),
                                                                                                     items: [0, 1, 2, 3, 4].map((
                                                                                                       rbi,
@@ -13705,14 +13702,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                 children: [
                   const Text('RBI:', style: TextStyle(fontSize: 10)),
                   const SizedBox(height: 2),
-                  DropdownButtonFormField<int>(
+                  FfDropdownButton<int>(
                     value: _rbiCount,
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
+                    isExpanded: true,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
                     ),
                     items: [0, 1, 2, 3, 4].map((rbi) {
                       return DropdownMenuItem(
@@ -20392,15 +20387,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                       borderRadius: BorderRadius.circular(2),
                       border: Border.all(color: Colors.grey.shade300),
                     ),
-                    child: DropdownButtonFormField<String>(
+                    child: FfDropdownButton<String>(
                       value: _currentFtpProfile,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 8,
-                        ),
-                        isDense: false,
+                      isExpanded: true,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
                       ),
                       items: [
                         DropdownMenuItem<String>(
@@ -20466,7 +20458,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                         size: 16,
                         color: Colors.grey.shade600,
                       ),
-                      dropdownColor: Colors.white,
+                      menuColor: Colors.white,
                       style: TextStyle(
                         fontSize: 11,
                         color: Colors.grey.shade700,

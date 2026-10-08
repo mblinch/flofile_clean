@@ -230,6 +230,13 @@ class AppDefaultsFirestoreService {
     }
   }
 
+  /// Published sport catalog already in memory. Null before the cache loads.
+  static Map<String, dynamic>? peekCachedSportVerbSettings(String sport) {
+    final slice = _memoryCache?.sportVerbSettings(sport);
+    if (slice == null || slice.isEmpty) return null;
+    return slice;
+  }
+
   static Future<Map<String, dynamic>?> getCachedSportVerbSettings(
     String sport,
   ) async {

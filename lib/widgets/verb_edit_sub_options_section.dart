@@ -19,6 +19,7 @@ class VerbEditSubOptionsSection extends StatefulWidget {
     required this.onChanged,
     this.sport,
     this.showBorder = true,
+    this.showCelebrationToggle = true,
   });
 
   final String verbLabel;
@@ -26,6 +27,7 @@ class VerbEditSubOptionsSection extends StatefulWidget {
   final ValueChanged<VerbSubOptions> onChanged;
   final String? sport;
   final bool showBorder;
+  final bool showCelebrationToggle;
 
   @override
   State<VerbEditSubOptionsSection> createState() =>
@@ -146,6 +148,7 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
             defaultOn: defaults.celebrationEnabled,
             onEnabledChanged: (v) =>
                 _patch((o) => o.copyWith(celebrationEnabled: v)),
+            showSwitch: widget.showCelebrationToggle,
             children: [
               AppDialogLabeledTextField(
                 label: '',
@@ -213,18 +216,13 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
       blocks = rbiBlock ?? celebrationBlock!;
     }
 
-    final t = appDialogTokens(context);
     final body = Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'MODIFIERS',
-          style: t != null
-              ? FfTokens.railLabel.copyWith(
-                  color: t.text.withValues(alpha: 0.70),
-                )
-              : kAppDialogFieldLabelStyle,
+          'Modifiers',
+          style: appDialogFieldLabelStyleOf(context),
         ),
         const SizedBox(height: 6),
         blocks,
@@ -259,23 +257,19 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
     required bool enabled,
     required bool defaultOn,
     required ValueChanged<bool> onEnabledChanged,
+    bool showSwitch = true,
     required List<Widget> children,
   }) {
     final t = appDialogTokens(context);
     final accent = t?.accent ?? kFloTealLight;
-    final labelStyle = t != null
-        ? TextStyle(
-            fontFamily: FfTokens.labelFamily,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.1,
-            color: enabled ? t.text : t.text.withValues(alpha: 0.42),
-          )
-        : kAppDialogFieldTextStyle.copyWith(
-            fontWeight: FontWeight.w600,
-            fontSize: 11,
-            color: enabled ? null : const Color(0xFFB0B0B0),
-          );
+    final baseLabel = appDialogFieldLabelStyleOf(context);
+    final labelStyle = baseLabel.copyWith(
+      color: enabled
+          ? baseLabel.color
+          : (t != null
+              ? t.text.withValues(alpha: 0.42)
+              : const Color(0xFFB0B0B0)),
+    );
     final explanationStyle = t != null
         ? t.metaStyle.copyWith(
             fontSize: 10.5,
@@ -354,8 +348,8 @@ class _VerbEditSubOptionsSectionState extends State<VerbEditSubOptionsSection> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          header,
-          const SizedBox(height: 6),
+          if (showSwitch) header,
+          if (showSwitch) const SizedBox(height: 6),
           Opacity(
             opacity: enabled ? 1 : 0.45,
             child: IgnorePointer(

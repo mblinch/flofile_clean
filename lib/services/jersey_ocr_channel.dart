@@ -120,6 +120,16 @@ class JerseyOcrChannel {
   static bool get supported =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
+  /// Aborts the in-flight background pre-scan. Frame and loupe scans continue.
+  static Future<void> cancelPrescan() async {
+    if (!supported) return;
+    try {
+      await _channel.invokeMethod<void>('cancelPrescan');
+    } catch (e, st) {
+      debugPrint('JerseyOcrChannel.cancelPrescan failed: $e\n$st');
+    }
+  }
+
   /// Returns text hits (digits + names), highest confidence / spatial score first.
   ///
   /// [customWords] biases Vision toward roster last names / jersey numbers.

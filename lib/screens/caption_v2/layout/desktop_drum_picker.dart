@@ -15,6 +15,7 @@ import '../widgets/quiet_filter_field.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/verb_tile.dart';
 import 'caption_v2_verb_editor.dart';
+import 'verb_accordion.dart';
 import 'duplicate_jersey_dialog.dart';
 import 'player_data_issue_dialog.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
@@ -81,58 +82,8 @@ class _DrumPickerState extends State<DrumPicker> {
 
   CaptionV2Controller get controller => widget.controller;
 
-  List<String> get _categories {
-    final categories = controller.verbCategories
-        .where(
-          (category) =>
-              category == 'Favorites' ||
-              (controller.verbDefinitionsByCategory[category] ??
-                      const <EffectiveVerb>[])
-                  .isNotEmpty,
-        )
-        .toList();
-    final sport = controller.sport.toLowerCase();
-    final Map<String, int> order;
-    if (sport == 'hockey') {
-      order = const {
-        'favorites': -1,
-        'offense': 0,
-        'defense': 1,
-        'goalie': 2,
-        'nongameaction': 3,
-        'nongame': 3,
-      };
-    } else if (sport == 'soccer') {
-      order = const {
-        'favorites': -1,
-        'offense': 0,
-        'defense': 1,
-        'goalkeeper': 2,
-        'setpieces': 3,
-        'reactions': 4,
-        'nongameaction': 5,
-        'nongame': 5,
-      };
-    } else {
-      order = const {
-        'favorites': -1,
-        'offense': 0,
-        'running': 1,
-        'defense': 2,
-        'nongameaction': 3,
-        'nongame': 3,
-        'reactions': 4,
-        'pitching': 5,
-      };
-    }
-    int rank(String category) {
-      final key = category.toLowerCase().replaceAll(RegExp(r'[\s_-]'), '');
-      return order[key] ?? order.length;
-    }
-
-    categories.sort((a, b) => rank(a).compareTo(rank(b)));
-    return categories;
-  }
+  List<String> get _categories =>
+      verbCategoriesForDisplay(controller.verbCategories);
 
   String get _category {
     final categories = _categories;
@@ -147,7 +98,8 @@ class _DrumPickerState extends State<DrumPicker> {
   List<EffectiveVerb> _verbsForCategory(String category) {
     final verbs = controller.verbDefinitionsByCategory[category] ??
         const <EffectiveVerb>[];
-    // Favorites first within the open category; pinned stays in-list too.
+    // All stays A–Z. Other categories still float favorites to the top.
+    if (category == 'All') return verbs;
     return [
       ...verbs.where((verb) => verb.isFavorite),
       ...verbs.where((verb) => !verb.isFavorite),
@@ -1351,6 +1303,11 @@ class _VerbAccordion extends StatelessWidget {
   /// Must match [_PinnedHintBar] fixed height (padding + label + bottom border).
   static const pinnedBarHeight = 26.0;
   static const rowHeight = 24.0;
+  /// Vertical padding around an unselected row (1px top + 1px bottom).
+  static const rowOuterPadding = 2.0;
+  static const selectedRowHeight = 36.0;
+  /// Vertical padding around a selected row (2px top + 2px bottom).
+  static const selectedRowOuterPadding = 4.0;
   static const rbiExtrasHeight = 32.0;
   static const baseExtrasHeight = 32.0;
   static const celebrationExtrasHeight = 32.0;
@@ -1410,7 +1367,6 @@ class _VerbAccordion extends StatelessWidget {
         final openVerbs = collapsed
             ? const <EffectiveVerb>[]
             : (verbsByCategory[selectedCategory] ?? const <EffectiveVerb>[]);
-        final openVerbCount = openVerbs.length;
         final selectedInOpen = !collapsed &&
             selectedVerbKey != null &&
             !pinnedSelected &&
@@ -1422,7 +1378,15 @@ class _VerbAccordion extends StatelessWidget {
             : 0.0;
         // Always reserve the pinned bar (title + verb on one row).
         final pinnedHeight = pinnedBarHeight + pinnedExtras;
-        final openBodyHeight = openVerbCount * rowHeight + extrasHeight;
+        // Each row's padding sits outside [rowHeight]. Leaving it out made a
+        // long All list look like it fit, then overflow by 2px per verb.
+        var openBodyHeight = extrasHeight;
+        for (final verb in openVerbs) {
+          final selected = verb.key == selectedVerbKey;
+          openBodyHeight += selected
+              ? selectedRowHeight + selectedRowOuterPadding
+              : rowHeight + rowOuterPadding;
+        }
         final minContentHeight = categories.length * minHeaderHeight +
             openBodyHeight +
             pinnedHeight;
@@ -1450,6 +1414,79 @@ class _VerbAccordion extends StatelessWidget {
             openBodyHeight;
         final stillOverflows =
             bounded && resolvedHeight > constraints.maxHeight + 0.5;
+
+        if (needsScroll || stillOverflows) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _PinnedVerbSlot(
+                height: pinnedBarHeight,
+                tokens: tokens,
+                controller: controller,
+                verb: pinned,
+                selected: pinnedSelected,
+                committed: pinnedSelected,
+                showRbi: pinned != null &&
+                    pinnedSelected &&
+                    controller.verbNeedsRbi(pinned.key),
+                showBase: pinned != null &&
+                    pinnedSelected &&
+                    controller.verbNeedsBase(pinned.key),
+                showCelebration: pinned != null &&
+                    pinnedSelected &&
+                    controller.verbNeedsCelebration(pinned.key),
+                rbi: controller.rbi,
+                selectedBase: controller.selectedBase,
+                celebrationType: controller.celebrationType,
+                reactionOptions: pinned != null &&
+                        pinnedSelected &&
+                        controller.verbNeedsCelebration(pinned.key)
+                    ? controller.reactionOptionsFor(pinned.key)
+                    : const <String>[],
+                onTap: pinned == null ? null : () => onPinnedVerbTap(pinned),
+                onRbiChanged: controller.setRbi,
+                onBaseChanged: controller.setSelectedBase,
+                onCelebrationChanged: controller.setCelebrationType,
+              ),
+              for (final category in categories)
+                if (collapsed || category != selectedCategory)
+                  _VerbAccordionSection(
+                    controller: controller,
+                    category: category,
+                    displayCategory: _displayCategory(category),
+                    verbs: const <EffectiveVerb>[],
+                    headerHeight: headerHeight,
+                    open: false,
+                    selectedIndex: selectedIndex,
+                    selectedVerbKey: selectedVerbKey,
+                    armed: armed,
+                    tokens: tokens,
+                    onOpen: () => onCategorySelected(category),
+                    onVerbArmed: onVerbArmed,
+                    onToggleFavorite: onToggleFavorite,
+                  )
+                else
+                  Expanded(
+                    child: _VerbAccordionSection(
+                      controller: controller,
+                      category: category,
+                      displayCategory: _displayCategory(category),
+                      verbs: openVerbs,
+                      headerHeight: headerHeight,
+                      open: true,
+                      scrollable: true,
+                      selectedIndex: selectedIndex,
+                      selectedVerbKey: selectedVerbKey,
+                      armed: armed,
+                      tokens: tokens,
+                      onOpen: () => onCategorySelected(category),
+                      onVerbArmed: onVerbArmed,
+                      onToggleFavorite: onToggleFavorite,
+                    ),
+                  ),
+            ],
+          );
+        }
 
         final column = Column(
           mainAxisSize: MainAxisSize.min,
@@ -1504,12 +1541,7 @@ class _VerbAccordion extends StatelessWidget {
           ],
         );
 
-        if (!needsScroll && !stillOverflows) return column;
-
-        return SingleChildScrollView(
-          physics: const ClampingScrollPhysics(),
-          child: column,
-        );
+        return column;
       },
     );
   }
@@ -1530,6 +1562,7 @@ class _VerbAccordionSection extends StatelessWidget {
     required this.onOpen,
     required this.onVerbArmed,
     required this.onToggleFavorite,
+    this.scrollable = false,
   });
 
   final CaptionV2Controller controller;
@@ -1538,6 +1571,7 @@ class _VerbAccordionSection extends StatelessWidget {
   final List<EffectiveVerb> verbs;
   final double headerHeight;
   final bool open;
+  final bool scrollable;
   final int selectedIndex;
   final String? selectedVerbKey;
   final bool armed;
@@ -1557,7 +1591,10 @@ class _VerbAccordionSection extends StatelessWidget {
         : tokens.divider;
     return Column(
       children: [
-        Material(
+        VerbCategoryDropTarget(
+          category: category,
+          controller: controller,
+          child: Material(
           color: isFavorites ? FfTokens.favoritesFill : Colors.transparent,
           child: InkWell(
             key: ValueKey('verb-accordion-$category'),
@@ -1599,30 +1636,52 @@ class _VerbAccordionSection extends StatelessWidget {
                       style: FfTokens.categoryLabel(color: labelColor),
                     ),
                   ),
+                  VerbCategoryDragHandle(
+                    category: category,
+                    color: labelColor,
+                  ),
                 ],
               ),
             ),
           ),
         ),
-        AnimatedSize(
-          duration: const Duration(milliseconds: 160),
-          curve: Curves.easeOut,
-          alignment: Alignment.topCenter,
-          child: open
-              ? _VerbRows(
-                  controller: controller,
-                  verbs: verbs,
-                  selectedIndex: selectedIndex,
-                  selectedVerbKey: selectedVerbKey,
-                  armed: armed,
-                  tokens: tokens,
-                  leadingPadding: 30,
-                  fontSize: 13.5,
-                  onVerbArmed: onVerbArmed,
-                  onToggleFavorite: onToggleFavorite,
-                )
-              : const SizedBox.shrink(),
         ),
+        if (open && scrollable)
+          Expanded(
+            child: _VerbRows(
+              controller: controller,
+              verbs: verbs,
+              selectedIndex: selectedIndex,
+              selectedVerbKey: selectedVerbKey,
+              armed: armed,
+              tokens: tokens,
+              leadingPadding: 30,
+              fontSize: 13.5,
+              scrollable: true,
+              onVerbArmed: onVerbArmed,
+              onToggleFavorite: onToggleFavorite,
+            ),
+          )
+        else
+          AnimatedSize(
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: open
+                ? _VerbRows(
+                    controller: controller,
+                    verbs: verbs,
+                    selectedIndex: selectedIndex,
+                    selectedVerbKey: selectedVerbKey,
+                    armed: armed,
+                    tokens: tokens,
+                    leadingPadding: 30,
+                    fontSize: 13.5,
+                    onVerbArmed: onVerbArmed,
+                    onToggleFavorite: onToggleFavorite,
+                  )
+                : const SizedBox.shrink(),
+          ),
       ],
     );
   }
@@ -1741,11 +1800,15 @@ class _VerbRowsState extends State<_VerbRows> {
       );
     }
     if (widget.scrollable) {
-      return ListView.builder(
+      return Scrollbar(
         controller: _scrollController,
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        itemCount: widget.verbs.length,
-        itemBuilder: (context, index) => _row(index),
+        thumbVisibility: true,
+        child: ListView.builder(
+          controller: _scrollController,
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          itemCount: widget.verbs.length,
+          itemBuilder: (context, index) => _row(index),
+        ),
       );
     }
     return Column(
@@ -2090,7 +2153,6 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
                       child: _DrumVerbActionButton(
                         label: 'Save',
                         tokens: widget.tokens,
-                        emphasized: !widget.controller.ftpModeEnabled,
                         onTap: () => widget.controller
                             .saveOrTransmitFromVerbMenu(transmit: false),
                       ),
@@ -2101,7 +2163,6 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
                         child: _DrumVerbActionButton(
                           label: 'FTP',
                           tokens: widget.tokens,
-                          emphasized: true,
                           onTap: () => widget.controller
                               .saveOrTransmitFromVerbMenu(transmit: true),
                         ),
@@ -2121,43 +2182,48 @@ class _DrumVerbActionButton extends StatelessWidget {
   const _DrumVerbActionButton({
     required this.label,
     required this.tokens,
-    required this.emphasized,
     required this.onTap,
   });
 
   final String label;
   final FfTokens tokens;
-  final bool emphasized;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final teal = FfTokens.accentHover;
     return Material(
-      color: emphasized
-          ? teal.withValues(alpha: 0.32)
-          : teal.withValues(alpha: 0.18),
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(6),
-        child: Container(
+        child: Ink(
           height: 26,
-          alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: emphasized
-                  ? teal.withValues(alpha: 0.85)
-                  : teal.withValues(alpha: 0.5),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF243848),
+                Color(0xFF15242E),
+                Color(0xFF0E181F),
+              ],
+              stops: [0.0, 0.45, 1.0],
             ),
+            border: Border.all(
+              color: FfTokens.nocturneAc.withValues(alpha: 0.95),
+            ),
+            boxShadow: FfTokens.accentButtonGlow(FfTokens.nocturneAc),
           ),
-          child: Text(
-            label,
-            style: tokens.labelStyle.copyWith(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: tokens.text,
+          child: Center(
+            child: Text(
+              label,
+              style: tokens.labelStyle.copyWith(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
@@ -2208,10 +2274,14 @@ class _VerbAccordionRow extends StatelessWidget {
         child: Padding(
           padding: EdgeInsets.symmetric(
             horizontal: 6,
-            vertical: selected ? 2 : 1,
+            vertical: selected
+                ? _VerbAccordion.selectedRowOuterPadding / 2
+                : _VerbAccordion.rowOuterPadding / 2,
           ),
           child: Container(
-            height: selected ? 36 : _VerbAccordion.rowHeight,
+            height: selected
+                ? _VerbAccordion.selectedRowHeight
+                : _VerbAccordion.rowHeight,
             clipBehavior: Clip.none,
             padding: EdgeInsets.only(left: leadingPadding - 6, right: 4),
             decoration: BoxDecoration(

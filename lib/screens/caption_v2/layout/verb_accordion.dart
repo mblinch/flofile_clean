@@ -12,6 +12,106 @@ import '../widgets/verb_tile.dart';
 import 'caption_v2_verb_editor.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
+/// Favorites stays first and All stays last. Everything else keeps saved order.
+List<String> verbCategoriesForDisplay(Iterable<String> categories) {
+  final list = categories.toList();
+  return [
+    if (list.contains('Favorites')) 'Favorites',
+    for (final name in list)
+      if (name != 'Favorites' && name != 'All') name,
+    if (list.contains('All')) 'All',
+  ];
+}
+
+bool verbCategoryOrderLocked(String category) =>
+    category == 'Favorites' || category == 'All';
+
+/// Header chrome that accepts a category drop. Favorites and All are fixed.
+class VerbCategoryDropTarget extends StatelessWidget {
+  const VerbCategoryDropTarget({
+    required this.category,
+    required this.controller,
+    required this.child,
+  });
+
+  final String category;
+  final CaptionV2Controller controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (verbCategoryOrderLocked(category)) return child;
+    return DragTarget<String>(
+      onWillAcceptWithDetails: (details) =>
+          details.data != category && !verbCategoryOrderLocked(details.data),
+      onAcceptWithDetails: (details) {
+        controller.reorderVerbCategory(details.data, category);
+      },
+      builder: (context, candidate, rejected) {
+        if (candidate.isEmpty) return child;
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            border: Border(
+              top: BorderSide(color: FfTokens.nocturneAc, width: 2),
+            ),
+          ),
+          child: child,
+        );
+      },
+    );
+  }
+}
+
+class VerbCategoryDragHandle extends StatelessWidget {
+  const VerbCategoryDragHandle({
+    required this.category,
+    required this.color,
+  });
+
+  final String category;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (verbCategoryOrderLocked(category)) return const SizedBox.shrink();
+    return Tooltip(
+      message: 'Drag to reorder category',
+      child: MouseRegion(
+        cursor: SystemMouseCursors.grab,
+        child: Draggable<String>(
+          data: category,
+          feedback: Material(
+            color: const Color(0xFF15242E),
+            elevation: 6,
+            borderRadius: BorderRadius.circular(6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Text(
+                category,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          childWhenDragging: PhosphorIcon(
+            PhosphorIconsRegular.dotsSixVertical,
+            size: 12,
+            color: color.withValues(alpha: 0.25),
+          ),
+          child: PhosphorIcon(
+            PhosphorIconsRegular.dotsSixVertical,
+            size: 12,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Default no-scroll verb accordion. Favorites is a pinned virtual category.
 class DefaultVerbAccordion extends StatefulWidget {
   const DefaultVerbAccordion({
@@ -41,28 +141,8 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
 
   CaptionV2Controller get controller => widget.controller;
 
-  List<String> get _categories {
-    final available = controller.verbCategories;
-    const preferred = [
-      'Favorites',
-      'Offense',
-      'Defense',
-      'Goalie',
-      'Goalkeeper',
-      'Pitching',
-      'Running',
-      'Set Pieces',
-      'Non Game-Action',
-      'Reactions',
-    ];
-    final ordered = <String>[
-      for (final name in preferred)
-        if (available.contains(name)) name,
-      for (final name in available)
-        if (!preferred.contains(name)) name,
-    ];
-    return ordered;
-  }
+  List<String> get _categories =>
+      verbCategoriesForDisplay(controller.verbCategories);
 
   List<EffectiveVerb> _verbsFor(String category) {
     return controller.verbDefinitionsByCategory[category] ??
@@ -291,13 +371,15 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                           headerH: headerH,
                           verbRowH: verbRowH,
                           verbs: openVerbs,
-                          // Custom arrange needs a single column for drag order.
-                          twoUp: controller.verbSortMode == VerbSortMode.custom
+                          // All is the full catalog — always one scrolling column.
+                          twoUp: category == 'All' ||
+                                  controller.verbSortMode == VerbSortMode.custom
                               ? false
                               : twoUp,
                           rearrangeable:
                               controller.verbSortMode == VerbSortMode.custom &&
-                                  category != 'Favorites',
+                                  category != 'Favorites' &&
+                                  category != 'All',
                           tokens: t,
                           controller: controller,
                           onOpen: () => _open(category),
@@ -427,13 +509,21 @@ class _AccordionSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final header = _CategoryHeader(
-      label: displayName,
-      open: open,
-      height: headerH,
-      tokens: tokens,
-      onTap: onOpen,
-      gold: category == 'Favorites',
+    final header = VerbCategoryDropTarget(
+      category: category,
+      controller: controller,
+      child: _CategoryHeader(
+        label: displayName,
+        open: open,
+        height: headerH,
+        tokens: tokens,
+        onTap: onOpen,
+        gold: category == 'Favorites',
+        trailing: VerbCategoryDragHandle(
+          category: category,
+          color: tokens.textSecondary,
+        ),
+      ),
     );
     if (!open) {
       return Column(
@@ -468,8 +558,10 @@ class _AccordionSection extends StatelessWidget {
         Expanded(
           child: rearrangeable
               ? board
-              : SingleChildScrollView(
-                  child: board,
+              : Scrollbar(
+                  child: SingleChildScrollView(
+                    child: board,
+                  ),
                 ),
         ),
       ],
@@ -633,6 +725,7 @@ class _CategoryHeader extends StatefulWidget {
     required this.tokens,
     required this.onTap,
     this.gold = false,
+    this.trailing,
   });
 
   final String label;
@@ -641,6 +734,7 @@ class _CategoryHeader extends StatefulWidget {
   final FfTokens tokens;
   final VoidCallback onTap;
   final bool gold;
+  final Widget? trailing;
 
   @override
   State<_CategoryHeader> createState() => _CategoryHeaderState();
@@ -703,6 +797,7 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                   style: FfTokens.categoryLabel(color: labelColor),
                 ),
               ),
+              if (widget.trailing != null) widget.trailing!,
             ],
           ),
         ),
@@ -1152,7 +1247,6 @@ class VerbExtrasPanel extends StatelessWidget {
                       child: _VerbActionButton(
                         label: 'Save',
                         tokens: tokens,
-                        emphasized: !controller.ftpModeEnabled,
                         onTap: () => controller.saveOrTransmitFromVerbMenu(
                           transmit: false,
                         ),
@@ -1164,7 +1258,6 @@ class VerbExtrasPanel extends StatelessWidget {
                         child: _VerbActionButton(
                           label: 'FTP',
                           tokens: tokens,
-                          emphasized: true,
                           onTap: () => controller.saveOrTransmitFromVerbMenu(
                             transmit: true,
                           ),
@@ -1204,43 +1297,48 @@ class _VerbActionButton extends StatelessWidget {
   const _VerbActionButton({
     required this.label,
     required this.tokens,
-    required this.emphasized,
     required this.onTap,
   });
 
   final String label;
   final FfTokens tokens;
-  final bool emphasized;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final teal = FfTokens.accentHover;
     return Material(
-      color: emphasized
-          ? teal.withValues(alpha: 0.32)
-          : teal.withValues(alpha: 0.18),
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(6),
-        child: Container(
+        child: Ink(
           height: 28,
-          alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(
-              color: emphasized
-                  ? teal.withValues(alpha: 0.85)
-                  : teal.withValues(alpha: 0.5),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF243848),
+                Color(0xFF15242E),
+                Color(0xFF0E181F),
+              ],
+              stops: [0.0, 0.45, 1.0],
             ),
+            border: Border.all(
+              color: FfTokens.nocturneAc.withValues(alpha: 0.95),
+            ),
+            boxShadow: FfTokens.accentButtonGlow(FfTokens.nocturneAc),
           ),
-          child: Text(
-            label,
-            style: tokens.labelStyle.copyWith(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: tokens.text,
+          child: Center(
+            child: Text(
+              label,
+              style: tokens.labelStyle.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+              ),
             ),
           ),
         ),

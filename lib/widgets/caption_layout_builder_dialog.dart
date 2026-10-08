@@ -10,12 +10,14 @@ import '../caption_style/caption_style_catalog.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/date_formula.dart';
 import '../caption_style/game_info.dart';
+import '../caption_style/sport_verb_categories.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/current_user_service.dart';
 import '../services/preferences_service.dart';
 import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
 import 'date_formula_editor.dart';
+import 'ff_dropdown.dart';
 import 'location_formula_editor.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -35,7 +37,10 @@ class CaptionLayoutBuilderDialog extends StatefulWidget {
     this.initialSport,
     this.onDraftChanged,
     this.onWireChanged,
+    this.onSportChanged,
+    this.onCopyLocalLayout,
     this.onRegisterFlush,
+    this.onRegisterSetAllDefaults,
   });
 
   /// When true, renders without [Dialog] chrome (for embedding in admin).
@@ -50,7 +55,10 @@ class CaptionLayoutBuilderDialog extends StatefulWidget {
   final String? initialSport;
   final void Function(WireStyle wire, CaptionTemplate template)? onDraftChanged;
   final ValueChanged<WireStyle>? onWireChanged;
+  final ValueChanged<String>? onSportChanged;
+  final VoidCallback? onCopyLocalLayout;
   final void Function(Future<void> Function() flush)? onRegisterFlush;
+  final void Function(Future<void> Function() setAll)? onRegisterSetAllDefaults;
 
   /// Returns the applied [CaptionTemplate] when Done succeeds; `null` on Cancel.
   static Future<CaptionTemplate?> show(BuildContext context) {
@@ -350,6 +358,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _syncBylineControllersFromTemplate();
     });
     widget.onRegisterFlush?.call(flushDraft);
+    widget.onRegisterSetAllDefaults?.call(_setAllStylesAsDefaults);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncDateUiFromTemplate();
     });
@@ -3616,9 +3625,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     return Container(
       height: 26,
       decoration: BoxDecoration(
-        color: t.bg,
+        color: t.sunken,
         borderRadius: BorderRadius.circular(radius),
-        border: Border.all(color: t.divider),
+        border: Border.all(color: FfTokens.panelOutline, width: 0.5),
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
@@ -3632,9 +3641,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               ),
             Expanded(
               child: Material(
-                color: options[i].selected
-                    ? const Color(0xFF3A4050)
-                    : Colors.transparent,
+                color: options[i].selected ? t.selected : Colors.transparent,
                 child: InkWell(
                   onTap: _coreStyleLocked ? null : options[i].onTap,
                   child: Center(
@@ -3829,29 +3836,23 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     required Future<void> Function(bool) onSave,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.only(top: 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          SizedBox(
-            width: 108,
+          Expanded(
             child: Text(label, style: _layoutOptionTextStyle),
           ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _optionSegmentedControl(
-              options: [
-                _SegOption(
-                  label: 'On',
-                  selected: value,
-                  onTap: () => onSave(true),
-                ),
-                _SegOption(
-                  label: 'Off',
-                  selected: !value,
-                  onTap: () => onSave(false),
-                ),
-              ],
+          SizedBox(
+            width: 36,
+            height: 22,
+            child: FittedBox(
+              child: Switch.adaptive(
+                value: value,
+                activeTrackColor: _ffOf(context).accent,
+                inactiveTrackColor: _ffOf(context).hover,
+                thumbColor: const WidgetStatePropertyAll(Colors.white),
+                onChanged: _coreStyleLocked ? null : (next) => onSave(next),
+              ),
             ),
           ),
         ],
@@ -4203,24 +4204,133 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           child: Text('Byline (credit)', style: menuStyle),
         ),
       ],
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: _ffOf(context).sunken,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: FfTokens.panelOutline, width: 0.5),
+        ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            PhosphorIcon(PhosphorIconsRegular.plusCircle, size: 13, color: _ffOf(context).accent),
-            const SizedBox(width: 4),
-            Text(
-              '+ Add field',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: _ffOf(context).accent,
-              ),
+            PhosphorIcon(
+              PhosphorIconsRegular.plus,
+              size: 12,
+              color: _ffOf(context).text.withValues(alpha: 0.8),
             ),
-            PhosphorIcon(PhosphorIconsRegular.caretDown, size: 18, color: _ffOf(context).accent),
+            const SizedBox(width: 6),
+            Text(
+              'Add field',
+              style: _ffOf(context).metaStyle.copyWith(
+                    fontSize: 12,
+                    color: _ffOf(context).text,
+                  ),
+            ),
+            const SizedBox(width: 4),
+            PhosphorIcon(
+              PhosphorIconsRegular.caretDown,
+              size: 12,
+              color: _ffOf(context).text.withValues(alpha: 0.55),
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _adminCaptionToolbar() {
+    final t = _ffOf(context);
+    final sports = AppDefaultsFirestoreService.catalogSports;
+    Widget menuBox({required double width, required Widget child}) {
+      return SizedBox(
+        width: width,
+        height: 34,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: t.sunken,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: FfTokens.panelOutline, width: 0.5),
+          ),
+          child: child,
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              menuBox(
+                width: 140,
+                child: FfDropdownButton<String>(
+                  value: sports.contains(_sessionSport) ? _sessionSport : sports.first,
+                  isExpanded: true,
+                  menuColor: t.surface,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  style: t.metaStyle.copyWith(color: t.text),
+                  items: [
+                    for (final sport in sports)
+                      DropdownMenuItem(
+                        value: sport,
+                        child: Text(SportVerbCategories.displayLabel(sport)),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null || value == _sessionSport) return;
+                    widget.onSportChanged?.call(value);
+                  },
+                ),
+              ),
+              SizedBox(
+                width: 168,
+                height: 34,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _buildCaptionStyleDropdown(),
+                ),
+              ),
+              if (widget.onCopyLocalLayout != null)
+                OutlinedButton.icon(
+                  onPressed: widget.onCopyLocalLayout,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: t.text,
+                    backgroundColor: t.sunken,
+                    side: const BorderSide(color: FfTokens.panelOutline, width: 0.5),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(0, 34),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  icon: PhosphorIcon(
+                    PhosphorIconsRegular.copy,
+                    size: 14,
+                    color: t.text.withValues(alpha: 0.8),
+                  ),
+                  label: Text(
+                    'Copy from my local layout',
+                    style: t.metaStyle.copyWith(color: t.text, fontSize: 12),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Layout is shared by every sport on this wire. The game identifier phrase is set per sport — switch sport to edit it.',
+            style: t.metaStyle.copyWith(
+              color: t.text.withValues(alpha: 0.45),
+              height: 1.35,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -4272,7 +4382,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
   /// Fixed slate fill for formula preview snippets — same in every state so
   /// chips don't flash selectedFill / faded sunken while editing.
-  static const Color _snippetFill = Color(0xFF2C3143);
+  static const Color _snippetFill = FfTokens.nocturneSunken;
 
   /// Shared height for snippet chips and glue/punctuation text boxes.
   static const double _snippetChipHeight = 32;
@@ -4758,63 +4868,42 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         return items;
       },
       child: Container(
-        height: 26,
+        height: widget.embedded ? 34 : 26,
+        width: double.infinity,
         decoration: BoxDecoration(
-          color: t.bg,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: t.divider),
+          color: t.sunken,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: FfTokens.panelOutline, width: 0.5),
         ),
         clipBehavior: Clip.antiAlias,
-        // Stretch so the selected fill covers the full chip height — otherwise
-        // ColoredBox shrink-wraps the label and looks like a grey bar through
-        // the middle of the text.
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: ColoredBox(
-                color: const Color(0xFF3A4050),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Row(
-                    children: [
-                      if (locked) ...[
-                        PhosphorIcon(PhosphorIconsRegular.lock,
-                          size: 12,
-                          color: t.text.withValues(alpha: 0.45),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              height: 1.0,
-                              fontWeight: FontWeight.w500,
-                              color: locked ? t.textSecondary : t.text,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Row(
+            children: [
+              if (locked) ...[
+                PhosphorIcon(PhosphorIconsRegular.lock,
+                  size: 12,
+                  color: t.text.withValues(alpha: 0.45),
+                ),
+                const SizedBox(width: 4),
+              ],
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: t.metaStyle.copyWith(
+                    color: locked ? t.textSecondary : t.text,
                   ),
                 ),
               ),
-            ),
-            Container(width: 1, color: t.divider),
-            SizedBox(
-              width: 26,
-              child: PhosphorIcon(PhosphorIconsRegular.caretDown,
-                size: 14,
-                color: t.text.withValues(alpha: 0.42),
+              Icon(
+                Icons.arrow_drop_down,
+                size: 18,
+                color: t.text.withValues(alpha: 0.7),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -4855,21 +4944,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Fields shown'.toUpperCase(),
+                'Extra IPTC fields'.toUpperCase(),
                 style: _sectionTitleStyle,
-              ),
-              const SizedBox(width: 4),
-              Tooltip(
-                message:
-                    'Turn optional fields on or off while you edit.\n'
-                    'Personality appears first, then Keywords, '
-                    'in a column beside the caption.\n'
-                    'Keywords sits below Personality in that column.',
-                waitDuration: const Duration(milliseconds: 400),
-                child: PhosphorIcon(PhosphorIconsRegular.question,
-                  size: 14,
-                  color: _ffOf(context).textSecondary,
-                ),
               ),
             ],
           ),
@@ -4921,8 +4997,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           decoration: BoxDecoration(
             color: _snippetFill,
-            border: Border.all(color: _ffOf(context).divider),
-            borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+            border: Border.all(color: FfTokens.panelOutline, width: 0.5),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             playerPreviewText,
@@ -4936,13 +5012,13 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           ),
         ),
         const SizedBox(height: 4),
-        optionRow('Team order:', _teamOrderSegments()),
-        optionRow('English:', _englishSegments()),
-        optionRow('Number:', _numberFormatSegments()),
-        optionRow('Position:', _positionSegments()),
-        optionRow('Time of Game:', _timingPhraseSegments()),
+        optionRow('Team order', _teamOrderSegments()),
+        optionRow('English', _englishSegments()),
+        optionRow('Number', _numberFormatSegments()),
+        optionRow('Position', _positionSegments()),
+        optionRow('Time of game', _timingPhraseSegments()),
         optionRow(
-          'Diacritics:',
+          'Diacritics',
           Tooltip(
             message:
                 'Keep accents as on the roster, or strip them (e.g. José → Jose).',
@@ -5210,6 +5286,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                       children: [
+                                      if (widget.embedded && widget.adminMode)
+                                        _adminCaptionToolbar(),
                                       // RESOLVES TO
                                       const SizedBox(height: 8),
                                       Row(
@@ -5233,9 +5311,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                             decoration: BoxDecoration(
                                               color: _ffOf(context).sunken,
                                               borderRadius:
-                                                  BorderRadius.circular(6),
+                                                  BorderRadius.circular(8),
                                               border: Border.all(
-                                                color: _ffOf(context).divider,
+                                                color: FfTokens.panelOutline,
+                                                width: 0.5,
                                               ),
                                             ),
                                             child: Padding(
@@ -5290,29 +5369,30 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                       'Structure'.toUpperCase(),
                                                       style: _sectionTitleStyle,
                                                     ),
-                                                    const SizedBox(width: 8),
-                                                    Expanded(
-                                                      child: Text(
-                                                        'Drag to reorder · click a field to edit it · separators are the gaps',
-                                                        style: _t.microStyle.copyWith(
-                                                          color: _t.text.withValues(alpha: 0.40),
-                                                        ),
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ),
+                                                    const Spacer(),
                                                     _lockableEditorSurface(
                                                       child: _addSnippetMenuButton(),
                                                     ),
                                                   ],
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  'Drag to reorder · click a field to edit · click a gap to change its separator',
+                                                  style: _t.microStyle.copyWith(
+                                                    color: _t.text.withValues(alpha: 0.40),
+                                                  ),
                                                 ),
                                                 const SizedBox(height: 6),
                                                 Container(
                                                   width: double.infinity,
                                                   padding: const EdgeInsets.all(8),
                                                   decoration: BoxDecoration(
-                                                    color: _ffOf(context).sunken,
-                                                    borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-                                                    border: Border.all(color: _ffOf(context).divider),
+                                                    color: _ffOf(context).surface,
+                                                    borderRadius: BorderRadius.circular(10),
+                                                    border: Border.all(
+                                                      color: FfTokens.panelOutline,
+                                                      width: 0.5,
+                                                    ),
                                                   ),
                                                   child: _lockableEditorSurface(
                                                     child: LayoutBuilder(
@@ -5355,31 +5435,6 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                   const SizedBox(height: 8),
                                                   _buildInlineFieldEditor(),
                                                 ],
-                                                if (widget.adminMode) ...[
-                                                  const SizedBox(height: 8),
-                                                  Align(
-                                                    alignment: Alignment.centerRight,
-                                                    child: TextButton(
-                                                      style: TextButton.styleFrom(
-                                                        padding: const EdgeInsets.symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 2,
-                                                        ),
-                                                        minimumSize: const Size(0, 28),
-                                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                                      ),
-                                                      onPressed: _setAllStylesAsDefaults,
-                                                      child: Text(
-                                                        'Set all as defaults',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          fontWeight: FontWeight.w600,
-                                                          color: _ffOf(context).accent,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
                                               ],
                                             ),
                                             ),
@@ -5387,12 +5442,23 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                           const SizedBox(width: 12),
                                           SizedBox(
                                             width: 300,
-                                            child: Column(
+                                            child: Container(
+                                              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                                              decoration: BoxDecoration(
+                                                borderRadius: BorderRadius.circular(10),
+                                                border: Border.all(
+                                                  color: FfTokens.panelOutline,
+                                                  width: 0.5,
+                                                ),
+                                              ),
+                                              child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.stretch,
                                               children: [
                                                 _lockableEditorSurface(
                                                   child: _buildPlayerOutputSection(playerPreviewText),
                                                 ),
+                                                const SizedBox(height: 8),
+                                                Divider(height: 1, color: _t.divider),
                                                 _lockableEditorSurface(
                                                   child: _buildFieldsShownSection(),
                                                 ),
@@ -5433,6 +5499,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                                                   ),
                                                 ],
                                               ],
+                                            ),
                                             ),
                                           ),
                                         ],

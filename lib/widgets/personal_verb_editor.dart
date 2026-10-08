@@ -22,6 +22,7 @@ class PersonalVerbEditor extends StatefulWidget {
     this.initialVerbKey,
     this.createOnOpen = false,
     this.onCatalogChanged,
+    this.onCatalogPersisted,
   });
 
   final PreferencesService prefs;
@@ -29,8 +30,11 @@ class PersonalVerbEditor extends StatefulWidget {
   final String? initialVerbKey;
   final bool createOnOpen;
 
-  /// Fired after a successful persist (e.g. reload a live caption session).
-  final Future<void> Function(String sport)? onCatalogChanged;
+  final void Function(String sport, Map<String, dynamic> bundle)?
+      onCatalogChanged;
+
+  /// Fired after the latest bundle is on disk.
+  final Future<void> Function(String sport)? onCatalogPersisted;
 
   @override
   State<PersonalVerbEditor> createState() => _PersonalVerbEditorState();
@@ -45,6 +49,8 @@ class _PersonalVerbEditorState extends State<PersonalVerbEditor> {
   bool _loading = true;
   String? _error;
   bool _openedCreate = false;
+  int _saveGen = 0;
+  Future<void> _saveTail = Future<void>.value();
 
   @override
   void initState() {
@@ -79,22 +85,30 @@ class _PersonalVerbEditorState extends State<PersonalVerbEditor> {
     }
   }
 
-  Future<void> _onBundleChanged(Map<String, dynamic> next) async {
+  Future<void> _onBundleChanged(Map<String, dynamic> next) {
+    final gen = ++_saveGen;
+    final sport = _sport;
     setState(() {
       _bundle = next;
       _busy = true;
     });
-    try {
-      await VerbUserCatalogService.persistBundle(
-        prefs: widget.prefs,
-        sport: _sport,
-        bundle: next,
-      );
-      final notify = widget.onCatalogChanged;
-      if (notify != null) await notify(_sport);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    widget.onCatalogChanged?.call(sport, next);
+    _saveTail = _saveTail.catchError((Object _) {}).then((_) async {
+      if (gen != _saveGen) return;
+      try {
+        await VerbUserCatalogService.persistBundle(
+          prefs: widget.prefs,
+          sport: sport,
+          bundle: next,
+        );
+        if (gen != _saveGen) return;
+        final persisted = widget.onCatalogPersisted;
+        if (persisted != null) await persisted(sport);
+      } finally {
+        if (mounted && gen == _saveGen) setState(() => _busy = false);
+      }
+    });
+    return _saveTail;
   }
 
   @override
@@ -140,6 +154,7 @@ class _PersonalVerbEditorState extends State<PersonalVerbEditor> {
           if (widget.createOnOpen) _openedCreate = true;
           unawaited(_onBundleChanged(next));
         },
+        onPersistIdle: () => _saveTail,
       );
     }
 

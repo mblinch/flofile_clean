@@ -16,6 +16,7 @@ import '../../theme/ff_tokens.dart';
 import '../../widgets/admin_screen.dart';
 import '../../widgets/app_styled_dialogs.dart';
 import '../../widgets/caption_layout_builder_dialog.dart';
+import '../../widgets/ff_dropdown.dart';
 import '../../widgets/flo_chrome_header.dart';
 import '../../widgets/oriented_file_preview.dart';
 import '../../utils/oriented_image_bytes.dart';
@@ -62,6 +63,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   String _jerseyBuffer = '';
   bool? _jerseyBufferIsHome;
   bool _burstSaveDialogOpen = false;
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    unawaited(_controller.reloadVerbCatalog());
+  }
   bool _saveInFlight = false;
   VoidCallback? _confirmBurstSaveSelected;
   bool _serialBylinesPromptOpen = false;
@@ -130,7 +137,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         });
       }
     }
-    if (_controller.pendingSerialBylinesPrompt != null &&
+    if (_controller.serialBylinesEnabled &&
+        _controller.pendingSerialBylinesPrompt != null &&
         !_serialBylinesPromptOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_promptSerialBylines());
@@ -256,6 +264,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   Future<void> _promptSerialBylines() async {
     if (!mounted || _serialBylinesPromptOpen) return;
+    if (!_controller.serialBylinesEnabled) return;
     final pending = _controller.pendingSerialBylinesPrompt;
     if (pending == null) return;
     _serialBylinesPromptOpen = true;
@@ -1152,6 +1161,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
               : _SessionLoadingPane(
                   tokens: t,
                   label: c.sessionLoadingLabel ?? 'Loading…',
+                  onStop: (c.sessionLoadingLabel ?? '')
+                          .startsWith('Text recognition')
+                      ? c.stopJerseyOcrPrescan
+                      : null,
                 ),
           title: c.sessionReady ? 'Loading folder' : 'New Session',
         ),
@@ -1893,8 +1906,24 @@ class _TopChrome extends StatelessWidget {
   ) async {
     await showDialog<void>(
       context: context,
-      builder: (context) => const PreferencesDialog(),
+      builder: (context) => PreferencesDialog(
+        onVerbCatalogChanged: controller == null
+            ? null
+            : (sport, bundle) {
+                if (sport == controller.sport) {
+                  controller.showVerbBundle(bundle);
+                }
+              },
+        onVerbCatalogPersisted: controller == null
+            ? null
+            : (sport) async {
+                if (sport == controller.sport) {
+                  await controller.commitVerbBundleFromDisk();
+                }
+              },
+      ),
     );
+    await controller?.reloadVerbCatalog();
     await controller?.reloadApplicationModes();
   }
 }
@@ -2039,7 +2068,7 @@ class _GameGoogleSearchButton extends StatelessWidget {
   }
 }
 
-/// Compact "Modes" chip listing application modes that are currently on.
+/// Compact "Modes" chip. Each mode shows On or Off beside its name.
 /// Tap opens Preferences → Application to change them.
 class _ActiveModesStatus extends StatelessWidget {
   const _ActiveModesStatus({
@@ -2055,19 +2084,26 @@ class _ActiveModesStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showOcr = defaultTargetPlatform == TargetPlatform.macOS;
-    final on = <String>[
-      if (controller.ftpModeEnabled) 'FTP',
-      if (controller.burstDetectionEnabled) 'Burst',
-      if (showOcr && controller.jerseyOcrPreferenceEnabled) 'Text Recognition',
-      if (controller.serialBylinesEnabled) 'Serial',
+    final modes = <(String, bool)>[
+      ('FTP', controller.ftpModeEnabled),
+      ('Burst', controller.burstDetectionEnabled),
+      if (showOcr) ('Text', controller.jerseyOcrPreferenceEnabled),
+      ('Serial', controller.serialBylinesEnabled),
     ];
-    final listLabel = on.isEmpty ? 'None on' : on.join(' · ');
-    final tooltip = on.isEmpty
-        ? 'No modes on — open Preferences to enable'
-        : 'On: ${on.join(', ')} — open Preferences to change';
+    final tooltip = modes
+        .map((mode) => '${mode.$1} ${mode.$2 ? 'On' : 'Off'}')
+        .join(', ');
+
+    TextStyle stateStyle(bool on) => TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          height: 1.1,
+          color: on ? tokens.accent : tokens.textSecondary.withValues(alpha: 0.7),
+        );
 
     return Tooltip(
-      message: tooltip,
+      message: '$tooltip — open Preferences to change',
       waitDuration: const Duration(milliseconds: 350),
       child: Material(
         color: Colors.transparent,
@@ -2095,21 +2131,37 @@ class _ActiveModesStatus extends StatelessWidget {
                     color: tokens.textSecondary,
                   ),
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  listLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    height: 1.1,
-                    color: on.isEmpty
-                        ? tokens.textSecondary.withValues(alpha: 0.7)
-                        : tokens.accent,
+                for (var i = 0; i < modes.length; i++) ...[
+                  SizedBox(width: i == 0 ? 8 : 6),
+                  if (i > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Text(
+                        '·',
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 11,
+                          height: 1.1,
+                          color: tokens.textSecondary.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    ),
+                  Text(
+                    modes[i].$1,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      height: 1.1,
+                      color: tokens.text,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 4),
+                  Text(
+                    modes[i].$2 ? 'On' : 'Off',
+                    style: stateStyle(modes[i].$2),
+                  ),
+                ],
               ],
             ),
           ),
@@ -2186,12 +2238,10 @@ class _AdminWindowSizeDropdown extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: tokens.divider),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
+      child: FfDropdownButton<String>(
           value: value,
-          isDense: true,
           isExpanded: true,
-          dropdownColor: tokens.surface,
+          menuColor: tokens.surface,
           icon: PhosphorIcon(PhosphorIconsRegular.caretDown,
             size: 16,
             color: tokens.textSecondary,
@@ -2200,6 +2250,7 @@ class _AdminWindowSizeDropdown extends StatelessWidget {
             color: tokens.text,
             fontSize: tokens.textSizeMicro,
           ),
+          padding: EdgeInsets.zero,
           items: const [
             DropdownMenuItem(value: _compact, child: Text('1280 × 800')),
             DropdownMenuItem(value: _standard, child: Text('1400 × 900')),
@@ -2209,7 +2260,6 @@ class _AdminWindowSizeDropdown extends StatelessWidget {
             if (next != null) _resize(context, next);
           },
         ),
-      ),
     );
   }
 }
@@ -2492,10 +2542,12 @@ class _SessionLoadingPane extends StatelessWidget {
   const _SessionLoadingPane({
     required this.tokens,
     required this.label,
+    this.onStop,
   });
 
   final FfTokens tokens;
   final String label;
+  final VoidCallback? onStop;
 
   @override
   Widget build(BuildContext context) {
@@ -2532,6 +2584,19 @@ class _SessionLoadingPane extends StatelessWidget {
                   color: tokens.textSecondary,
                 ),
               ),
+              if (onStop != null) ...[
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: onStop,
+                  child: Text(
+                    'Stop',
+                    style: tokens.metaStyle.copyWith(
+                      color: tokens.text,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../services/mlb_api_service.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/ff_dropdown.dart';
 import '../data/roster_text_parser.dart';
 import 'duplicate_jersey_dialog.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
@@ -684,21 +685,23 @@ class _AddPlayerDialogState extends State<_AddPlayerDialog> {
               ),
               const SizedBox(height: 10),
               if (baseball)
-                DropdownButtonFormField<String>(
-                  initialValue: _baseballPosition,
-                  isExpanded: true,
-                  dropdownColor: t.surface,
-                  style: t.bodyStyle,
+                InputDecorator(
                   decoration: _fieldDecoration(t, 'Position'),
-                  items: [
-                    for (final position in _baseballPositions)
-                      DropdownMenuItem(
-                        value: position,
-                        child: Text(position),
-                      ),
-                  ],
-                  onChanged: (value) =>
-                      setState(() => _baseballPosition = value),
+                  child: FfDropdownButton<String>(
+                    value: _baseballPosition,
+                    isExpanded: true,
+                    menuColor: t.surface,
+                    style: t.bodyStyle,
+                    items: [
+                      for (final position in _baseballPositions)
+                        DropdownMenuItem(
+                          value: position,
+                          child: Text(position),
+                        ),
+                    ],
+                    onChanged: (value) =>
+                        setState(() => _baseballPosition = value),
+                  ),
                 )
               else
                 TextField(
