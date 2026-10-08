@@ -181,6 +181,9 @@ class PreferencesService {
   /// Bumped when the jersey OCR preference is saved.
   final ValueNotifier<int> jerseyOcrRevision = ValueNotifier<int>(0);
 
+  /// Bumped when FTP mode, serial bylines, or burst detection is saved.
+  final ValueNotifier<int> applicationModesRevision = ValueNotifier<int>(0);
+
   bool _suppressCloudSync = false;
   int _suppressUserTypedMarkDepth = 0;
   bool get _suppressUserTypedMark => _suppressUserTypedMarkDepth > 0;
@@ -262,6 +265,7 @@ class PreferencesService {
   Future<void> saveBurstDetectionEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyBurstDetectionEnabled, enabled);
+    applicationModesRevision.value = applicationModesRevision.value + 1;
     _afterLocalPreferencesChanged();
   }
 
@@ -319,6 +323,7 @@ class PreferencesService {
   Future<void> saveFtpModeEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyFtpModeEnabled, enabled);
+    applicationModesRevision.value = applicationModesRevision.value + 1;
     _afterLocalPreferencesChanged();
   }
 
@@ -998,6 +1003,7 @@ class PreferencesService {
   Future<void> saveSerialNumberBylines(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keySerialNumberBylines, enabled);
+    applicationModesRevision.value = applicationModesRevision.value + 1;
     _afterLocalPreferencesChanged();
   }
 

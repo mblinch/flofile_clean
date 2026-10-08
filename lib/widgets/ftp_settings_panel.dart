@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/ftpclient_service.dart';
 import '../services/preferences_service.dart';
 import '../theme/ff_tokens.dart';
+import '../utils/native_file_picker.dart';
 import 'app_styled_dialogs.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -28,17 +29,16 @@ class FtpSettingsPanel extends StatefulWidget {
   });
 
   @override
-  State<FtpSettingsPanel> createState() => _FtpSettingsPanelState();
+  State<FtpSettingsPanel> createState() => FtpSettingsPanelState();
 }
 
-class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
+class FtpSettingsPanelState extends State<FtpSettingsPanel> {
   static const _newProfileValue = '__new_profile__';
 
   late PreferencesService _prefs;
   Map<String, Map<String, dynamic>> _profiles = {};
   String? _currentProfile;
   bool _creatingNew = false;
-  bool _confirmDelete = false;
   bool _passiveMode = true;
   bool _testing = false;
   String? _statusMessage;
@@ -107,9 +107,45 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
     _passwordController.text = p?['password']?.toString() ?? '';
     _portController.text = (p?['port'] ?? 21).toString();
     _remotePathController.text = p?['remotePath']?.toString() ?? '';
+    _renameController.text = p?['renameAs']?.toString() ?? '';
+    _duplicateFolderController.text = p?['duplicateFolder']?.toString() ?? '';
     _passiveMode = p?['passiveMode'] as bool? ?? true;
-    _confirmDelete = false;
+    _savedFields = _fieldSnapshot();
   }
+
+  Map<String, String> _savedFields = {
+    'name': '',
+    'host': '',
+    'username': '',
+    'password': '',
+    'port': '21',
+    'remotePath': '',
+    'passive': '1',
+    'rename': '',
+    'duplicate': '',
+  };
+
+  Map<String, String> _fieldSnapshot() => {
+        'name': _nameController.text.trim(),
+        'host': _hostController.text.trim(),
+        'username': _usernameController.text.trim(),
+        'password': _passwordController.text,
+        'port': _portController.text.trim(),
+        'remotePath': _remotePathController.text.trim(),
+        'passive': _passiveMode ? '1' : '0',
+        'rename': _renameController.text.trim(),
+        'duplicate': _duplicateFolderController.text.trim(),
+      };
+
+  bool get hasUnsavedChanges {
+    final now = _fieldSnapshot();
+    for (final entry in now.entries) {
+      if (_savedFields[entry.key] != entry.value) return true;
+    }
+    return false;
+  }
+
+  Future<bool> save() => _save();
 
   Future<void> _persist() async {
     await _prefs.saveFtpProfiles(_profiles);
@@ -117,7 +153,87 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
     widget.onProfilesChanged?.call();
   }
 
-  void _selectProfile(String name) {
+  /// Returns true when the caller may leave this form.
+  /// Save keeps the edits, Don't save drops them, closing the prompt stays.
+  Future<bool> confirmLeave() async {
+    if (!hasUnsavedChanges) return true;
+    final choice = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (ctx) {
+        final tokens = Theme.of(ctx).extension<FfTokens>() ?? FfTokens.dark;
+        return AppDialogFfStyle(
+          enabled: true,
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: tokens.surface,
+                    borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+                    border: Border.all(color: tokens.divider),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Save FTP changes?',
+                          style: tokens.labelStyle.copyWith(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'This profile has changes that aren’t saved yet.',
+                          style: tokens.bodyStyle.copyWith(
+                            fontSize: 13,
+                            height: 1.35,
+                            color: tokens.text.withValues(alpha: 0.88),
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            ElevatedGreyButton(
+                              label: 'Don’t save',
+                              fontSize: 11,
+                              onPressed: () => Navigator.pop(ctx, false),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedGreyButton(
+                              label: 'Save',
+                              fontSize: 11,
+                              isPrimary: true,
+                              onPressed: () => Navigator.pop(ctx, true),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || choice == null) return false;
+    if (choice == false) return true;
+    return save();
+  }
+
+  Future<void> _selectProfile(String name) async {
+    if (!_creatingNew && name == _currentProfile) return;
+    if (!await confirmLeave()) return;
+    if (!mounted) return;
     setState(() {
       _creatingNew = false;
       _currentProfile = name;
@@ -127,7 +243,9 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
     _persist();
   }
 
-  void _startNewProfile() {
+  Future<void> _startNewProfile() async {
+    if (!await confirmLeave()) return;
+    if (!mounted) return;
     setState(() {
       _creatingNew = true;
       _currentProfile = null;
@@ -137,7 +255,7 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
     });
   }
 
-  Future<void> _save() async {
+  Future<bool> _save() async {
     final name = _nameController.text.trim();
     final host = _hostController.text.trim();
     final username = _usernameController.text.trim();
@@ -148,7 +266,7 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
         _statusMessage =
             'Profile name, host, username, and password are required.';
       });
-      return;
+      return false;
     }
     final data = {
       'host': host,
@@ -157,6 +275,8 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
       'port': int.tryParse(_portController.text.trim()) ?? 21,
       'remotePath': _remotePathController.text.trim(),
       'passiveMode': _passiveMode,
+      'renameAs': _renameController.text.trim(),
+      'duplicateFolder': _duplicateFolderController.text.trim(),
     };
     final previous = _creatingNew ? null : _currentProfile;
     setState(() {
@@ -170,18 +290,23 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
       _creatingNew = false;
       _statusError = false;
       _statusMessage = 'Saved “$name”.';
-      _confirmDelete = false;
     });
     await _persist();
+    _savedFields = _fieldSnapshot();
+    return true;
   }
 
   Future<void> _delete() async {
     final name = _currentProfile;
     if (name == null) return;
-    if (!_confirmDelete) {
-      setState(() => _confirmDelete = true);
-      return;
-    }
+    final ok = await showAppConfirmDialog(
+      context: context,
+      title: 'Delete profile?',
+      message: 'Are you sure you want to delete “$name”?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Delete',
+    );
+    if (ok != true || !mounted) return;
     setState(() {
       _profiles.remove(name);
       _currentProfile = _profiles.isEmpty ? null : _profiles.keys.first;
@@ -191,6 +316,15 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
       _statusMessage = 'Deleted “$name”.';
     });
     await _persist();
+  }
+
+  Future<void> _browseDuplicateFolder() async {
+    final current = _duplicateFolderController.text.trim();
+    final picked = await NativeFilePicker.pickDirectory(
+      initialDirectory: current.isEmpty ? null : current,
+    );
+    if (picked == null || picked.isEmpty || !mounted) return;
+    setState(() => _duplicateFolderController.text = picked);
   }
 
   Future<void> _testConnection() async {
@@ -403,28 +537,6 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
                     onChanged: (v) => setState(() => _passiveMode = v),
                   ),
                 ),
-                const Spacer(),
-                _FillBtn(
-                  tokens: t,
-                  label: _testing ? 'Testing…' : 'Test',
-                  onTap: _testing ? null : _testConnection,
-                ),
-                const SizedBox(width: 8),
-                _FillBtn(
-                  tokens: t,
-                  label: _creatingNew ? 'Save profile' : 'Save',
-                  emphasized: true,
-                  onTap: _testing ? null : _save,
-                ),
-                if (!_creatingNew && _currentProfile != null) ...[
-                  const SizedBox(width: 8),
-                  _FillBtn(
-                    tokens: t,
-                    label: _confirmDelete ? 'Confirm delete' : 'Delete',
-                    danger: true,
-                    onTap: _testing ? null : _delete,
-                  ),
-                ],
               ],
             ),
           ),
@@ -444,11 +556,51 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
               controller: _renameController,
               bottomGap: 0,
             ),
-            right: AppDialogLabeledTextField(
-              label: 'Duplicate folder',
-              controller: _duplicateFolderController,
-              bottomGap: 0,
+            right: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AppDialogLabeledTextField(
+                  label: 'Duplicate folder',
+                  controller: _duplicateFolderController,
+                  hintText: 'Also save a copy here',
+                  bottomGap: 4,
+                ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _GhostBtn(
+                    tokens: t,
+                    label: 'Browse…',
+                    onTap: _browseDuplicateFolder,
+                  ),
+                ),
+              ],
             ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (!_creatingNew && _currentProfile != null) ...[
+                _FillBtn(
+                  tokens: t,
+                  label: 'Delete',
+                  danger: true,
+                  onTap: _testing ? null : _delete,
+                ),
+                const SizedBox(width: 8),
+              ],
+              _FillBtn(
+                tokens: t,
+                label: _testing ? 'Testing…' : 'Test',
+                onTap: _testing ? null : _testConnection,
+              ),
+              const SizedBox(width: 8),
+              _FillBtn(
+                tokens: t,
+                label: _creatingNew ? 'Save profile' : 'Save',
+                onTap: _testing ? null : _save,
+              ),
+            ],
           ),
           if (!widget.embedded) ...[
             const SizedBox(height: 10),
@@ -457,7 +609,10 @@ class _FtpSettingsPanelState extends State<FtpSettingsPanel> {
               child: _GhostBtn(
                 tokens: t,
                 label: 'Close',
-                onTap: () => widget.onClose?.call(),
+                onTap: () async {
+                  if (!await confirmLeave()) return;
+                  widget.onClose?.call();
+                },
               ),
             ),
           ],
@@ -631,40 +786,32 @@ class _FillBtn extends StatelessWidget {
     required this.tokens,
     required this.label,
     required this.onTap,
-    this.emphasized = false,
     this.danger = false,
   });
 
   final FfTokens tokens;
   final String label;
   final VoidCallback? onTap;
-  final bool emphasized;
   final bool danger;
 
   @override
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     final fill = !enabled
-        ? (emphasized ? FfTokens.gold.withValues(alpha: 0.4) : tokens.sunken)
+        ? tokens.sunken
         : danger
             ? FfTokens.dangerBg
-            : emphasized
-                ? FfTokens.gold
-                : tokens.selectedFill;
+            : tokens.selectedFill;
     final border = !enabled
         ? tokens.divider
         : danger
             ? FfTokens.dangerBorder
-            : emphasized
-                ? FfTokens.gold
-                : tokens.divider;
+            : tokens.divider;
     final textColor = !enabled
         ? tokens.text.withValues(alpha: 0.38)
         : danger
             ? FfTokens.danger
-            : emphasized
-                ? FfTokens.inkOnGold
-                : tokens.text;
+            : tokens.text;
     return Material(
       color: fill,
       borderRadius: BorderRadius.circular(6),

@@ -1,5 +1,6 @@
 import Cocoa
 import FlutterMacOS
+import UniformTypeIdentifiers
 
 class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private let enforcedMinContentSize = NSSize(width: 1280, height: 800)
@@ -7,6 +8,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
   private static var lifecycleChannel: FlutterMethodChannel?
   private var jerseyMonitor: Any?
   private var windowControlChannel: FlutterMethodChannel?
+  private var filePickerChannel: FlutterMethodChannel?
   static var jerseyShortcutsEnabled = true
   static var skipQuitConfirm = false
 
@@ -67,6 +69,7 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
     _installJerseyShortcutChannel(flutterViewController)
     _installJerseyEventMonitor()
     _installWindowControlChannel(flutterViewController)
+    _installFilePickerChannel(flutterViewController)
     _installLifecycleChannel(flutterViewController)
 
     super.awakeFromNib()
@@ -152,6 +155,51 @@ class MainFlutterWindow: NSWindow, NSWindowDelegate {
       }
       self.setFrame(nextFrame, display: true, animate: true)
       result(nil)
+    }
+  }
+
+  /// NSOpenPanel for `.app` bundles — avoids AppleScript deadlocks with Flutter dialogs.
+  private func _installFilePickerChannel(_ flutterViewController: FlutterViewController) {
+    let channel = FlutterMethodChannel(
+      name: "caption_writer/file_picker",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    filePickerChannel = channel
+    channel.setMethodCallHandler { [weak self] call, result in
+      guard call.method == "pickApplication" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      DispatchQueue.main.async {
+        self?._pickApplication(result: result)
+      }
+    }
+  }
+
+  private func _pickApplication(result: @escaping FlutterResult) {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = false
+    panel.canCreateDirectories = false
+    panel.treatsFilePackagesAsDirectories = false
+    panel.message = "Choose Photoshop"
+    panel.prompt = "Choose"
+    panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+    if #available(macOS 11.0, *) {
+      panel.allowedContentTypes = [.application]
+    } else {
+      panel.allowedFileTypes = ["app"]
+    }
+
+    // Application-modal panel (not a sheet) so it doesn't deadlock against an
+    // open Flutter Preferences dialog.
+    panel.begin { response in
+      if response == .OK, let url = panel.url {
+        result(url.path)
+      } else {
+        result(nil)
+      }
     }
   }
 

@@ -916,44 +916,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
     final showBase = armed && controller.verbNeedsBase(verb.key);
     final showCelebration = armed && controller.verbNeedsCelebration(verb.key);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: Material(
-            color: Colors.transparent,
-            clipBehavior: Clip.none,
-            child: CmdClick(
-              useInkWell: true,
-              onTap: () {
-                widget.onVerbArmed?.call();
-                controller.selectVerb(verb.key);
-              },
-              onCmdTap: () {
-                widget.onVerbArmed?.call();
-                controller.toggleVerbPin(verb.key);
-              },
-              onSecondaryTapDown: (details) => _contextMenu(context, details),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 1),
-                child: Container(
-                height: widget.rowHeight,
-                padding: const EdgeInsets.only(left: 12, right: 4),
-                clipBehavior: Clip.none,
-                decoration: BoxDecoration(
-                  color: armed ? tokens.selected : null,
-                  borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-                  boxShadow:
-                      armed ? FfTokens.selectionGlow(tokens.accent) : null,
-                  // Match player-row selected outline.
-                  border: armed
-                      ? Border(
-                          left: BorderSide(color: tokens.accent, width: 2),
-                        )
-                      : null,
-                ),
-                child: Row(
+    final label = Row(
                   children: [
                     if (widget.showDragHandle)
                       Padding(
@@ -1010,18 +973,14 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                         ),
                       ),
                   ],
-                ),
-              ),
-              ),
-            ),
-          ),
-        ),
-        if (armed &&
+    );
+
+    final extras = armed &&
             (showRbi ||
                 showBase ||
                 showCelebration ||
-                widget.showSaveActions))
-          VerbExtrasPanel(
+                widget.showSaveActions)
+        ? VerbExtrasPanel(
             controller: controller,
             verbKey: verb.key,
             showRbi: showRbi,
@@ -1029,8 +988,53 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
             showCelebration: showCelebration,
             showSaveActions: widget.showSaveActions,
             tokens: tokens,
-          ),
-      ],
+            embedded: true,
+          )
+        : null;
+
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: armed ? 4 : 0,
+        vertical: armed ? 2 : 1,
+      ),
+      child: Container(
+        padding: EdgeInsets.fromLTRB(armed ? 8 : 12, 0, armed ? 8 : 4, 0),
+        decoration: BoxDecoration(
+          color: armed ? tokens.selected : null,
+          borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+          border: armed ? Border.all(color: tokens.accent, width: 1.5) : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: CmdClick(
+                useInkWell: true,
+                onTap: () {
+                  widget.onVerbArmed?.call();
+                  controller.selectVerb(verb.key);
+                },
+                onCmdTap: () {
+                  widget.onVerbArmed?.call();
+                  controller.toggleVerbPin(verb.key);
+                },
+                onSecondaryTapDown: (details) =>
+                    _contextMenu(context, details),
+                child: SizedBox(
+                  height: armed ? 34 : widget.rowHeight,
+                  child: label,
+                ),
+              ),
+            ),
+            if (extras != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: extras,
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1050,6 +1054,7 @@ class VerbExtrasPanel extends StatelessWidget {
     required this.showCelebration,
     required this.tokens,
     this.showSaveActions = true,
+    this.embedded = false,
   });
 
   final CaptionV2Controller controller;
@@ -1059,6 +1064,9 @@ class VerbExtrasPanel extends StatelessWidget {
   final bool showCelebration;
   final bool showSaveActions;
   final FfTokens tokens;
+
+  /// Drawn inside the selected verb border, without a second card.
+  final bool embedded;
 
   bool get _hasOptionRows => showRbi || showBase || showCelebration;
 
@@ -1083,16 +1091,7 @@ class VerbExtrasPanel extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 10, 8),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
-        decoration: BoxDecoration(
-          color: tokens.bg,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: tokens.divider),
-        ),
-        child: Column(
+    final body = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (showRbi) ...[
@@ -1144,41 +1143,58 @@ class VerbExtrasPanel extends StatelessWidget {
                 onChanged: controller.setCelebrationType,
               ),
             if (showActions) ...[
-              if (_hasOptionRows) ...[
-                const SizedBox(height: 8),
-                Divider(height: 1, thickness: 1, color: tokens.divider),
-                const SizedBox(height: 8),
-              ],
-              Row(
-                children: [
-                  Expanded(
-                    child: _VerbActionButton(
-                      label: 'Save',
-                      tokens: tokens,
-                      emphasized: !controller.ftpModeEnabled,
-                      onTap: () => controller.saveOrTransmitFromVerbMenu(
-                        transmit: false,
-                      ),
-                    ),
-                  ),
-                  if (controller.ftpModeEnabled) ...[
-                    const SizedBox(width: 6),
+              if (_hasOptionRows) const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  children: [
                     Expanded(
                       child: _VerbActionButton(
-                        label: 'FTP',
+                        label: 'Save',
                         tokens: tokens,
-                        emphasized: true,
+                        emphasized: !controller.ftpModeEnabled,
                         onTap: () => controller.saveOrTransmitFromVerbMenu(
-                          transmit: true,
+                          transmit: false,
                         ),
                       ),
                     ),
+                    if (controller.ftpModeEnabled) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _VerbActionButton(
+                          label: 'FTP',
+                          tokens: tokens,
+                          emphasized: true,
+                          onTap: () => controller.saveOrTransmitFromVerbMenu(
+                            transmit: true,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ],
           ],
+    );
+
+    if (embedded) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: body,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 10, 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+        decoration: BoxDecoration(
+          color: tokens.bg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: tokens.divider),
         ),
+        child: body,
       ),
     );
   }
@@ -1199,10 +1215,11 @@ class _VerbActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final teal = FfTokens.accentHover;
     return Material(
       color: emphasized
-          ? tokens.accent.withValues(alpha: 0.22)
-          : tokens.selectedFill,
+          ? teal.withValues(alpha: 0.32)
+          : teal.withValues(alpha: 0.18),
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: onTap,
@@ -1214,8 +1231,8 @@ class _VerbActionButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: emphasized
-                  ? tokens.accent.withValues(alpha: 0.65)
-                  : tokens.divider,
+                  ? teal.withValues(alpha: 0.85)
+                  : teal.withValues(alpha: 0.5),
             ),
           ),
           child: Text(

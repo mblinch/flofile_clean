@@ -54,6 +54,7 @@ enum _PrefsCategory {
 
 class _PreferencesDialogState extends State<PreferencesDialog> {
   late PreferencesService _preferencesService;
+  final _ftpPanelKey = GlobalKey<FtpSettingsPanelState>();
   final TextEditingController _photoshopPathController =
       TextEditingController();
   final TextEditingController _resolutionController = TextEditingController();
@@ -85,6 +86,19 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   Future<void> _initializePreferences() async {
     _preferencesService = await PreferencesService.getInstance();
     await _loadCurrentPreferences();
+  }
+
+  Future<void> _setApplicationPref(
+    String key,
+    bool value,
+    Future<void> Function(bool value) save,
+  ) async {
+    setState(() {
+      final next = Map<String, dynamic>.from(_currentPreferences ?? {});
+      next[key] = value;
+      _currentPreferences = next;
+    });
+    await save(value);
   }
 
   Future<void> _loadCurrentPreferences() async {
@@ -147,7 +161,16 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
 
     return AppDialogFfStyle(
       enabled: true,
-      child: Dialog(
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) async {
+          if (didPop) return;
+          final ftp = _ftpPanelKey.currentState;
+          if (ftp != null && !await ftp.confirmLeave()) return;
+          if (!context.mounted) return;
+          Navigator.of(context).pop();
+        },
+        child: Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(20),
         child: Container(
@@ -200,7 +223,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: () => Navigator.pop(context),
+                          onTap: () => Navigator.maybePop(context),
                           borderRadius: BorderRadius.circular(4),
                           child: Padding(
                             padding: const EdgeInsets.all(4),
@@ -298,6 +321,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             ),
           ),
         ),
+        ),
       ),
     );
   }
@@ -310,7 +334,15 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     return Material(
       color: selected ? _t.selectedFill : Colors.transparent,
       child: InkWell(
-        onTap: () => setState(() => _selectedCategory = category),
+        onTap: () async {
+          if (_selectedCategory == _PrefsCategory.ftp &&
+              category != _PrefsCategory.ftp) {
+            final ftp = _ftpPanelKey.currentState;
+            if (ftp != null && !await ftp.confirmLeave()) return;
+          }
+          if (!mounted) return;
+          setState(() => _selectedCategory = category);
+        },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           decoration: BoxDecoration(
@@ -364,145 +396,99 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           Divider(height: 1, color: _t.divider),
           const SizedBox(height: 20),
         ],
-        _buildInlineRow(
-          'FTP Mode',
-          child: Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _PrefsToggle(
-                      value: ftpMode,
-                      onChanged: (v) async {
-                        await _preferencesService.saveFtpModeEnabled(v);
-                        await _loadCurrentPreferences();
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Show FTP buttons and shortcuts. Turn off for caption-only sessions.',
-                  style: TextStyle(fontSize: 11, color: _t.textSecondary),
-                ),
-              ],
-            ),
+        Text(
+          'Modes',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: _t.text,
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: _t.divider),
-        ),
-        _buildInlineRow(
-          'Serial Number Bylines',
-          child: Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _PrefsToggle(
-                      value: serialBylines,
-                      onChanged: (v) async {
-                        await _preferencesService.saveSerialNumberBylines(v);
-                        await _loadCurrentPreferences();
-                      },
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedGreyButton(
-                      label: 'Update Serial Number List',
-                      fontSize: 11,
-                      onPressed: () async {
-                        final cameraService = CameraSerialService.instance;
-                        await cameraService.initialize();
-                        if (!context.mounted) return;
-                        await showDialog<void>(
-                          context: context,
-                          builder: (context) =>
-                              CameraSerialDialog(cameraService: cameraService),
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Write photographer name and bylines according to camera serial numbers.',
-                  style: TextStyle(fontSize: 11, color: _t.textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Divider(height: 1, thickness: 1, color: _t.divider),
-        ),
-        _buildInlineRow(
-          'Burst sequence detection',
-          child: Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    _PrefsToggle(
-                      value: burstOn,
-                      onChanged: (v) async {
-                        await _preferencesService.saveBurstDetectionEnabled(v);
-                        await _loadCurrentPreferences();
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'When saving, detect rapid bursts only forward in time from the current photo (each following shot ≤1s after the previous; earlier frames are ignored) and offer to apply the same caption to those frames. Default is off.',
-                  style: TextStyle(fontSize: 11, color: _t.textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (showJerseyOcr) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Divider(height: 1, thickness: 1, color: _t.divider),
-          ),
-          _buildInlineRow(
-            'Jersey OCR',
-            child: Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      _PrefsToggle(
-                        value: jerseyOcr,
-                        onChanged: (v) async {
-                          await _preferencesService.saveJerseyOcrEnabled(v);
-                          await _loadCurrentPreferences();
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Scan jersey numbers and names on the current photo (macOS admin).',
-                    style: TextStyle(fontSize: 11, color: _t.textSecondary),
-                  ),
-                ],
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.start,
+          children: [
+            _PrefsModeBuffButton(
+              icon: PhosphorIconsRegular.cloudArrowUp,
+              label: 'FTP mode',
+              tooltip:
+                  'Show FTP transmit buttons and shortcuts. Turn off for caption-only sessions.',
+              enabled: ftpMode,
+              onToggle: () => _setApplicationPref(
+                'ftpModeEnabled',
+                !ftpMode,
+                _preferencesService.saveFtpModeEnabled,
               ),
             ),
-          ),
-        ],
+            _PrefsModeBuffButton(
+              icon: PhosphorIconsRegular.stack,
+              label: 'Burst mode',
+              tooltip:
+                  'When saving, detect rapid bursts forward from the current photo and offer to apply the same caption to those frames.',
+              enabled: burstOn,
+              onToggle: () => _setApplicationPref(
+                'burstDetectionEnabled',
+                !burstOn,
+                _preferencesService.saveBurstDetectionEnabled,
+              ),
+            ),
+            if (showJerseyOcr)
+              _PrefsModeBuffButton(
+                icon: PhosphorIconsRegular.scan,
+                label: 'Text Recognition',
+                tooltip:
+                    'Scan jersey numbers and names on the current photo (macOS).',
+                enabled: jerseyOcr,
+                onToggle: () => _setApplicationPref(
+                  'jerseyOcrEnabled',
+                  !jerseyOcr,
+                  _preferencesService.saveJerseyOcrEnabled,
+                ),
+              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _PrefsModeBuffButton(
+                  icon: PhosphorIconsRegular.camera,
+                  label: 'Serial number mode',
+                  tooltip:
+                      'Write photographer name and bylines according to camera serial numbers.',
+                  enabled: serialBylines,
+                  onToggle: () => _setApplicationPref(
+                    'serialNumberBylines',
+                    !serialBylines,
+                    _preferencesService.saveSerialNumberBylines,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                SizedBox(
+                  width: _PrefsModeBuffButton.width,
+                  child: ElevatedGreyButton(
+                    label: 'Serial number list',
+                    fontSize: 10,
+                    fullWidth: true,
+                    onPressed: () async {
+                      final cameraService = CameraSerialService.instance;
+                      await cameraService.initialize();
+                      if (!context.mounted) return;
+                      await showDialog<void>(
+                        context: context,
+                        builder: (context) => CameraSerialDialog(
+                          cameraService: cameraService,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 16),
           child: Divider(height: 1, thickness: 1, color: _t.divider),
         ),
         _buildInlineRow('Resolution (pixels)',
@@ -593,10 +579,11 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                           label: 'Browse',
                           fontSize: 11,
                           onPressed: () async {
-                            final path = await NativeFilePicker.pickFile(
-                                allowedExtensions: ['app']);
-                            if (path == null || path.isEmpty || !mounted)
+                            final path =
+                                await NativeFilePicker.pickApplication();
+                            if (path == null || path.isEmpty || !mounted) {
                               return;
+                            }
                             _photoshopPathController.text = path;
                             await _preferencesService.savePhotoshopPath(path);
                             await _loadCurrentPreferences();
@@ -954,23 +941,45 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           ),
         ),
         const SizedBox(height: 10),
-        _buildModernPreferenceItem(
-          'Signed in as',
-          label,
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: ElevatedGreyButton(
-            label: 'Sign out',
-            fontSize: 11,
-            isDanger: true,
-            onPressed: () async {
-              await AuthService.instance.signOut();
-              if (!context.mounted) return;
-              Navigator.pop(context);
-            },
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Signed in as',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: _t.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: _t.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            ElevatedGreyButton(
+              label: 'Sign out',
+              fontSize: 11,
+              isDanger: true,
+              onPressed: () async {
+                await AuthService.instance.signOut();
+                if (!context.mounted) return;
+                Navigator.maybePop(context);
+              },
+            ),
+          ],
         ),
       ],
     );
@@ -982,6 +991,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       children: [
         // Full FTP Server Settings panel (same as the FTP settings dialog)
         FtpSettingsPanel(
+          key: _ftpPanelKey,
           embedded: true,
         ),
       ],
@@ -1066,13 +1076,13 @@ class _PrefsToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => onChanged(!value),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onChanged(!value),
+          child: Text(
             value ? 'On' : 'Off',
             style: TextStyle(
               fontSize: 11,
@@ -1080,28 +1090,128 @@ class _PrefsToggle extends StatelessWidget {
               color: value ? t.accent : t.textSecondary,
             ),
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 40,
-            height: 24,
-            child: FittedBox(
-              fit: BoxFit.contain,
-              alignment: Alignment.center,
-              child: Switch(
-                value: value,
-                onChanged: onChanged,
-                activeTrackColor: t.accent,
-                activeThumbColor: t.inkOnAccent,
-                inactiveTrackColor: t.sunken,
-                inactiveThumbColor: t.textSecondary,
-                trackOutlineColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) {
-                    return t.accent;
-                  }
-                  return t.divider;
-                }),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 40,
+          height: 24,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            alignment: Alignment.center,
+            child: Switch(
+              value: value,
+              onChanged: onChanged,
+              activeTrackColor: t.accent,
+              activeThumbColor: t.inkOnAccent,
+              inactiveTrackColor: t.sunken,
+              inactiveThumbColor: t.textSecondary,
+              trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return t.accent;
+                }
+                return t.divider;
+              }),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Mode buff toggle used in Preferences → Application.
+class _PrefsModeBuffButton extends StatelessWidget {
+  const _PrefsModeBuffButton({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.enabled,
+    required this.onToggle,
+  });
+
+  static const double width = 132;
+
+  final IconData icon;
+  final String label;
+  /// Shown under the button (also used as hover tooltip).
+  final String tooltip;
+  final bool enabled;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final on = enabled;
+    final color = on ? t.accent : t.textSecondary;
+    final fill = on ? t.accent.withValues(alpha: 0.18) : t.elevated;
+    final border = on ? t.accent.withValues(alpha: 0.85) : t.divider;
+    return SizedBox(
+      width: width,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Tooltip(
+            message: tooltip,
+            waitDuration: const Duration(milliseconds: 350),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: onToggle,
+                borderRadius: BorderRadius.circular(8),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOut,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: fill,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: border),
+                    boxShadow: on
+                        ? [
+                            BoxShadow(
+                              color: t.accent.withValues(alpha: 0.28),
+                              blurRadius: 10,
+                              spreadRadius: 0,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PhosphorIcon(icon, size: 18, color: color),
+                      const SizedBox(height: 4),
+                      Text(
+                        label,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          height: 1.15,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            tooltip,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 9.5,
+              height: 1.3,
+              color: t.textSecondary,
             ),
           ),
         ],

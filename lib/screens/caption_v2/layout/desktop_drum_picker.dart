@@ -2036,14 +2036,6 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
             onToggleFavorite: widget.onToggleFavorite,
           ),
           if (hasOptionRows || showActions) ...[
-            Padding(
-              padding: EdgeInsets.fromLTRB(widget.leadingPadding, 2, 8, 0),
-              child: Divider(
-                height: 1,
-                thickness: 1,
-                color: widget.tokens.divider,
-              ),
-            ),
             if (widget.showRbi)
               Padding(
                 padding: EdgeInsets.fromLTRB(widget.leadingPadding, 3, 8, 1),
@@ -2088,9 +2080,9 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
               Padding(
                 padding: EdgeInsets.fromLTRB(
                   widget.leadingPadding,
-                  hasOptionRows ? 4 : 3,
+                  hasOptionRows ? 10 : 8,
                   8,
-                  2,
+                  6,
                 ),
                 child: Row(
                   children: [
@@ -2104,7 +2096,7 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
                       ),
                     ),
                     if (widget.controller.ftpModeEnabled) ...[
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _DrumVerbActionButton(
                           label: 'FTP',
@@ -2118,14 +2110,6 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
                   ],
                 ),
               ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(widget.leadingPadding, 2, 8, 2),
-              child: Divider(
-                height: 1,
-                thickness: 1,
-                color: widget.tokens.divider,
-              ),
-            ),
           ],
         ],
       ),
@@ -2148,10 +2132,11 @@ class _DrumVerbActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final teal = FfTokens.accentHover;
     return Material(
       color: emphasized
-          ? tokens.accent.withValues(alpha: 0.22)
-          : tokens.selectedFill,
+          ? teal.withValues(alpha: 0.32)
+          : teal.withValues(alpha: 0.18),
       borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: onTap,
@@ -2163,8 +2148,8 @@ class _DrumVerbActionButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: emphasized
-                  ? tokens.accent.withValues(alpha: 0.65)
-                  : tokens.divider,
+                  ? teal.withValues(alpha: 0.85)
+                  : teal.withValues(alpha: 0.5),
             ),
           ),
           child: Text(
@@ -2221,22 +2206,19 @@ class _VerbAccordionRow extends StatelessWidget {
         onSecondaryTapDown: (details) =>
             _showContextMenu(context, details.globalPosition),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          padding: EdgeInsets.symmetric(
+            horizontal: 6,
+            vertical: selected ? 2 : 1,
+          ),
           child: Container(
-            height: _VerbAccordion.rowHeight,
+            height: selected ? 36 : _VerbAccordion.rowHeight,
             clipBehavior: Clip.none,
             padding: EdgeInsets.only(left: leadingPadding - 6, right: 4),
             decoration: BoxDecoration(
               color: fill,
               borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-              boxShadow: selected
-                  ? FfTokens.selectionGlow(tokens.accent)
-                  : null,
-              // Same selected outline as player rows: 2px accent left bar.
               border: selected
-                  ? Border(
-                      left: BorderSide(color: tokens.accent, width: 2),
-                    )
+                  ? Border.all(color: tokens.accent, width: 1.5)
                   : null,
             ),
             child: Row(
@@ -2812,6 +2794,9 @@ class _NumberCellState extends State<_NumberCell> {
     final jerseySize = widget.jerseySize;
     final hovering = _hovered;
     final glowColor = hovering ? Colors.white : FfTokens.panelOutline;
+    final numberGlow = selected
+        ? Color.lerp(tokens.accent, Colors.white, hovering ? 0.28 : 0.1)!
+        : (hovering ? Colors.white : const Color(0xFFD5DEE6));
     final borderColor = hovering
         ? Colors.white.withValues(alpha: 0.92)
         : FfTokens.panelOutline;
@@ -2883,14 +2868,22 @@ class _NumberCellState extends State<_NumberCell> {
                                       : tokens.text,
                                   shadows: [
                                     Shadow(
-                                      color:
-                                          glowColor.withValues(alpha: 0.85),
-                                      blurRadius: 10,
+                                      color: numberGlow.withValues(
+                                        alpha: hovering ? 0.8 : 0.62,
+                                      ),
+                                      blurRadius: 6,
                                     ),
                                     Shadow(
-                                      color:
-                                          glowColor.withValues(alpha: 0.45),
-                                      blurRadius: 18,
+                                      color: numberGlow.withValues(
+                                        alpha: hovering ? 0.5 : 0.36,
+                                      ),
+                                      blurRadius: 14,
+                                    ),
+                                    Shadow(
+                                      color: numberGlow.withValues(
+                                        alpha: hovering ? 0.28 : 0.18,
+                                      ),
+                                      blurRadius: 22,
                                     ),
                                   ],
                                 ),

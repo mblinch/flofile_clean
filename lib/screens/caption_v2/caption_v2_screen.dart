@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
@@ -11,7 +12,6 @@ import 'package:path/path.dart' as p;
 import '../../services/admin_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/mlb_api_service.dart';
-import '../../theme/ff_glow.dart';
 import '../../theme/ff_tokens.dart';
 import '../../widgets/admin_screen.dart';
 import '../../widgets/app_styled_dialogs.dart';
@@ -62,8 +62,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   String _jerseyBuffer = '';
   bool? _jerseyBufferIsHome;
   bool _burstSaveDialogOpen = false;
+  bool _saveInFlight = false;
   VoidCallback? _confirmBurstSaveSelected;
   bool _serialBylinesPromptOpen = false;
+  /// Burst available after a normal save — user opts in via Review burst / B.
+  _PendingBurstOffer? _pendingBurst;
 
   static const double _desktopBreakpoint = 1100;
   static double get _gap => 8;
@@ -108,6 +111,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (_controller.searchQuery.isEmpty && _searchText.text.isNotEmpty) {
       _searchText.clear();
     }
+    _clearPendingBurstIfPastChain();
     final status = _controller.statusMessage;
     if (status != _lastObservedStatus) {
       _lastObservedStatus = status;
@@ -131,6 +135,121 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_promptSerialBylines());
       });
+    }
+    setState(() {});
+  }
+
+  void _clearPendingBurst() {
+    if (_pendingBurst == null) return;
+    _pendingBurst = null;
+  }
+
+  void _clearPendingBurstIfPastChain() {
+    final pending = _pendingBurst;
+    if (pending == null) return;
+    if (!_controller.burstDetectionEnabled) {
+      _clearPendingBurst();
+      return;
+    }
+    final path = _controller.currentPath;
+    if (path == null) return;
+    final curIdx = _controller.imagePaths.indexOf(path);
+    if (curIdx < 0) return;
+    var lastIdx = -1;
+    for (final pth in pending.chain) {
+      final i = _controller.imagePaths.indexOf(pth);
+      if (i > lastIdx) lastIdx = i;
+    }
+    if (lastIdx >= 0 && curIdx > lastIdx) {
+      _clearPendingBurst();
+    }
+  }
+
+  Map<String, String> _snapshotSavedCaptionValues() {
+    final previous = _controller.previousCaption;
+    final caption = previous?.caption ??
+        _controller.captionValues()['IPTC:Caption-Abstract'] ??
+        '';
+    final personality =
+        previous?.personality ?? _controller.personality;
+    final headline = previous?.headline.isNotEmpty == true
+        ? previous!.headline
+        : _controller.headline;
+    final keywords = previous?.keywords.isNotEmpty == true
+        ? previous!.keywords
+        : _controller.keywords;
+    return {
+      'IPTC:Caption-Abstract': caption,
+      'Caption-Abstract': caption,
+      'IPTC:Description': caption,
+      'Description': caption,
+      'XMP:Description': caption,
+      'XMP-getty:Personality': personality,
+      'Personality': personality,
+      'IPTC:Headline': headline,
+      'Headline': headline,
+      'XMP:Headline': headline,
+      'IPTC:Keywords': keywords,
+      'Keywords': keywords,
+      'XMP:Subject': keywords,
+      'XMP-dc:Subject': keywords,
+    };
+  }
+
+  void _setPendingBurst({
+    required List<String> chain,
+    Set<String>? initiallySelected,
+  }) {
+    if (chain.length < 2) return;
+    setState(() {
+      _pendingBurst = _PendingBurstOffer(
+        chain: List<String>.from(chain),
+        initiallySelected: initiallySelected == null
+            ? null
+            : Set<String>.from(initiallySelected),
+        captionValues: _snapshotSavedCaptionValues(),
+      );
+    });
+  }
+
+  Future<void> _reviewPendingBurst() async {
+    final pending = _pendingBurst;
+    if (pending == null || _burstSaveDialogOpen) return;
+    final decision = await _showBurstSaveDialog(
+      pending.chain,
+      initiallySelected: pending.initiallySelected,
+    );
+    if (!mounted) return;
+    if (decision == null || decision.currentOnly) {
+      _clearPendingBurst();
+      setState(() {});
+      return;
+    }
+    final alreadySaved = decision.paths
+        .where(_controller.savedImages.contains)
+        .toList();
+    final toWrite = decision.paths
+        .where((p) => !_controller.savedImages.contains(p))
+        .toList();
+    CaptionSaveResult? result;
+    if (toWrite.isNotEmpty) {
+      result = await _controller.savePathsWithFixedValues(
+        toWrite,
+        pending.captionValues,
+      );
+    }
+    if (!mounted) return;
+    final savedPaths = <String>{
+      ...alreadySaved,
+      ...?result?.succeededPaths,
+    };
+    _clearPendingBurst();
+    if (savedPaths.isNotEmpty) {
+      _controller.advanceAfterBurstSelection(
+        chain: pending.chain,
+        savedPaths: savedPaths,
+        keepSearchOpen: _controller.searchOpen,
+      );
     }
     setState(() {});
   }
@@ -278,6 +397,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   bool _handleHardwareKey(KeyEvent event) {
     if (_handleSaveShortcut(event)) return true;
+    if (_handleBurstReviewShortcut(event)) return true;
 
     if (_controller.searchOpen) return false;
     if (event is! KeyUpEvent || _jerseyBuffer.isEmpty) return false;
@@ -291,6 +411,23 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         key == LogicalKeyboardKey.altGraph;
     if (modifierReleased) _flushJerseyBuffer();
     return false;
+  }
+
+  /// B opens the pending burst review when the alert is showing.
+  bool _handleBurstReviewShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    if (_pendingBurst == null || _burstSaveDialogOpen) return false;
+    if (captionV2FocusIsEditable()) return false;
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed ||
+        keys.isControlPressed ||
+        keys.isAltPressed ||
+        keys.isShiftPressed) {
+      return false;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.keyB) return false;
+    unawaited(_reviewPendingBurst());
+    return true;
   }
 
   /// Global ⌘S / Ctrl+S / Shift+Enter / ⌘⇧Enter — same reliability as V1.
@@ -562,8 +699,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }) async {
     // Avoid stacking another burst picker while one is already open
     // (e.g. ⌘S while the dialog is visible).
-    if (_burstSaveDialogOpen) return;
-
+    if (_burstSaveDialogOpen || _saveInFlight) return;
+    _saveInFlight = true;
+    try {
     final keepFirebar = _controller.searchOpen;
 
     void restoreFirebarFocus() {
@@ -581,42 +719,20 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (selected.length >= 2 && _controller.burstDetectionEnabled) {
       final burstGroup = _controller.burstGroupOverlapping(selected);
       final alreadySaved = selected.every(_controller.savedImages.contains);
-      if (burstGroup != null && !alreadySaved) {
-        final decision = await _showBurstSaveDialog(
-          burstGroup,
-          initiallySelected: selected.toSet(),
-        );
-        if (!mounted || decision == null) return;
-        if (decision.currentOnly) {
-          final result = await _controller.savePaths(selected);
-          if (!mounted) return;
-          if (transmit) await _transmitSaved(result);
-          if (!mounted) return;
-          _controller.setSelectedImagePaths(result.failedPaths);
-          restoreFirebarFocus();
-          return;
-        }
-        final result = await _controller.savePaths(decision.paths);
-        if (!mounted) return;
-        if (transmit) await _transmitSaved(result);
-        if (!mounted) return;
-        _controller.setSelectedImagePaths(result.failedPaths);
-        if (result.anySucceeded && advance) {
-          _controller.advanceAfterBurstSelection(
-            chain: burstGroup,
-            savedPaths: decision.paths,
-            keepSearchOpen: keepFirebar,
-          );
-          restoreFirebarFocus();
-        }
-        return;
-      }
-
       final result = await _controller.savePaths(selected);
       if (!mounted) return;
       if (transmit) await _transmitSaved(result);
       if (!mounted) return;
       _controller.setSelectedImagePaths(result.failedPaths);
+      if (result.anySucceeded &&
+          burstGroup != null &&
+          !alreadySaved &&
+          burstGroup.length > 1) {
+        _setPendingBurst(
+          chain: burstGroup,
+          initiallySelected: selected.toSet(),
+        );
+      }
       restoreFirebarFocus();
       return;
     }
@@ -627,28 +743,17 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final anchorAlreadySaved =
         chain.isNotEmpty && _controller.savedImages.contains(chain.first);
     if (chain.length > 1 && !anchorAlreadySaved) {
-      final decision = await _showBurstSaveDialog(chain);
-      if (!mounted || decision == null) return;
-      if (decision.currentOnly) {
-        final result = await _controller.savePaths([chain.first]);
-        if (transmit) await _transmitSaved(result);
-        if (result.anySucceeded && mounted && advance) {
+      final result = await _controller.savePaths([chain.first]);
+      if (!mounted) return;
+      if (transmit) await _transmitSaved(result);
+      if (!mounted) return;
+      if (result.anySucceeded) {
+        _setPendingBurst(chain: chain);
+        if (advance) {
           next
               ? _controller.nextFrame(keepSearchOpen: keepFirebar)
               : _controller.prevFrame(keepSearchOpen: keepFirebar);
-          restoreFirebarFocus();
         }
-        return;
-      }
-
-      final result = await _controller.savePaths(decision.paths);
-      if (transmit) await _transmitSaved(result);
-      if (result.anySucceeded && mounted && advance) {
-        _controller.advanceAfterBurstSelection(
-          chain: chain,
-          savedPaths: decision.paths,
-          keepSearchOpen: keepFirebar,
-        );
         restoreFirebarFocus();
       }
       return;
@@ -666,6 +771,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           ? _controller.nextFrame(keepSearchOpen: keepFirebar)
           : _controller.prevFrame(keepSearchOpen: keepFirebar);
       restoreFirebarFocus();
+    }
+    } finally {
+      _saveInFlight = false;
     }
   }
 
@@ -1252,6 +1360,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   ),
                   const SizedBox(height: 6),
                 ],
+                if (_pendingBurst != null) ...[
+                  _BurstAvailableBanner(
+                    frameCount: _pendingBurst!.chain.length,
+                    tokens: t,
+                    onReview: () => unawaited(_reviewPendingBurst()),
+                    onDismiss: () => setState(_clearPendingBurst),
+                  ),
+                  const SizedBox(height: 6),
+                ],
                 _buildCaptionStrip(c),
                 const SizedBox(height: 8),
                 _buildSearchBlock(c),
@@ -1286,6 +1403,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             _MissingCaptionIptcBanner(
               labels: c.missingCaptionIptcLabels,
               tokens: t,
+            ),
+          ],
+          if (_pendingBurst != null) ...[
+            const SizedBox(height: 6),
+            _BurstAvailableBanner(
+              frameCount: _pendingBurst!.chain.length,
+              tokens: t,
+              onReview: () => unawaited(_reviewPendingBurst()),
+              onDismiss: () => setState(_clearPendingBurst),
             ),
           ],
           const SizedBox(height: 8),
@@ -1464,6 +1590,102 @@ class _MissingCaptionIptcBanner extends StatelessWidget {
   }
 }
 
+/// Opt-in burst review after a normal save (no auto dialog).
+class _PendingBurstOffer {
+  const _PendingBurstOffer({
+    required this.chain,
+    required this.captionValues,
+    this.initiallySelected,
+  });
+
+  final List<String> chain;
+  final Map<String, String> captionValues;
+  final Set<String>? initiallySelected;
+}
+
+class _BurstAvailableBanner extends StatelessWidget {
+  const _BurstAvailableBanner({
+    required this.frameCount,
+    required this.tokens,
+    required this.onReview,
+    required this.onDismiss,
+  });
+
+  final int frameCount;
+  final FfTokens tokens;
+  final VoidCallback onReview;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: tokens.accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: tokens.accent.withValues(alpha: 0.55)),
+      ),
+      child: Row(
+        children: [
+          PhosphorIcon(
+            PhosphorIconsRegular.stack,
+            size: 14,
+            color: tokens.accent,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Burst available · $frameCount frames',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: tokens.accent,
+              ),
+            ),
+          ),
+          Text(
+            'B',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: tokens.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onReview,
+            style: TextButton.styleFrom(
+              foregroundColor: tokens.accent,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Review burst'),
+          ),
+          const SizedBox(width: 2),
+          IconButton(
+            onPressed: onDismiss,
+            tooltip: 'Dismiss',
+            icon: PhosphorIcon(
+              PhosphorIconsRegular.x,
+              size: 14,
+              color: tokens.textSecondary,
+            ),
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BurstSaveDecision {
   const _BurstSaveDecision._({
     required this.currentOnly,
@@ -1588,23 +1810,15 @@ class _TopChrome extends StatelessWidget {
           else if (headerTitle != null && headerTitle.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 4),
-              child: FfGlow(
-                // Keep the spotlight centre on the letters — a tall ellipse
-                // drops the bright core well below a single-line title.
-                glowX: -0.20,
-                glowY: -1.10,
-                glowW: 168,
-                glowH: 40,
-                child: Text(
-                  headerTitle,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.2,
-                    height: 1,
-                    color: t.text,
-                  ),
+              child: Text(
+                headerTitle,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.2,
+                  height: 1,
+                  color: t.text,
                 ),
               ),
             ),
@@ -1615,13 +1829,6 @@ class _TopChrome extends StatelessWidget {
               tokens: t,
             ),
           const Expanded(child: SizedBox.shrink()),
-          if (c != null) ...[
-            _ModeBuffBar(
-              controller: c,
-              tokens: t,
-            ),
-            const SizedBox(width: 8),
-          ],
           if (c != null &&
               AdminService.isCurrentUserAdminSync() &&
               defaultTargetPlatform == TargetPlatform.macOS) ...[
@@ -1653,6 +1860,14 @@ class _TopChrome extends StatelessWidget {
                 await c?.reloadVerbCatalog();
               },
               child: const _TopAdminBadge(),
+            ),
+          ],
+          if (c != null) ...[
+            const SizedBox(width: 8),
+            _ActiveModesStatus(
+              controller: c,
+              tokens: t,
+              onOpenPreferences: () => _openPreferences(context, c),
             ),
           ],
           const SizedBox(width: 4),
@@ -1824,164 +2039,75 @@ class _GameGoogleSearchButton extends StatelessWidget {
   }
 }
 
-/// Mode buff toggles — always visible; tap turns each mode on/off.
-class _ModeBuffBar extends StatelessWidget {
-  const _ModeBuffBar({
+/// Compact "Modes" chip listing application modes that are currently on.
+/// Tap opens Preferences → Application to change them.
+class _ActiveModesStatus extends StatelessWidget {
+  const _ActiveModesStatus({
     required this.controller,
     required this.tokens,
+    required this.onOpenPreferences,
   });
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
+  final VoidCallback onOpenPreferences;
 
   @override
   Widget build(BuildContext context) {
     final showOcr = defaultTargetPlatform == TargetPlatform.macOS;
-    final buffs = <_ModeBuffSpec>[
-      _ModeBuffSpec(
-        icon: PhosphorIconsRegular.cloudArrowUp,
-        label: 'FTP mode',
-        tooltip: controller.ftpModeEnabled
-            ? 'FTP mode on — tap to turn off'
-            : 'FTP mode off — tap to turn on',
-        enabled: controller.ftpModeEnabled,
-        onToggle: () => unawaited(
-          controller.setFtpModeEnabled(!controller.ftpModeEnabled),
-        ),
-      ),
-      _ModeBuffSpec(
-        icon: PhosphorIconsRegular.camera,
-        label: 'Serial number mode',
-        tooltip: controller.serialBylinesEnabled
-            ? 'Serial number mode on — tap to turn off'
-            : 'Serial number mode off — tap to turn on',
-        enabled: controller.serialBylinesEnabled,
-        onToggle: () => unawaited(
-          controller.setSerialBylinesEnabled(!controller.serialBylinesEnabled),
-        ),
-      ),
-      _ModeBuffSpec(
-        icon: PhosphorIconsRegular.stack,
-        label: 'Burst mode',
-        tooltip: controller.burstDetectionEnabled
-            ? 'Burst mode on — tap to turn off'
-            : 'Burst mode off — tap to turn on',
-        enabled: controller.burstDetectionEnabled,
-        onToggle: () => unawaited(
-          controller.setBurstDetectionEnabled(!controller.burstDetectionEnabled),
-        ),
-      ),
-      if (showOcr)
-        _ModeBuffSpec(
-          icon: PhosphorIconsRegular.scan,
-          label: 'Text Recognition',
-          tooltip: controller.jerseyOcrPreferenceEnabled
-              ? 'Text Recognition on — tap to turn off'
-              : 'Text Recognition off — tap to turn on',
-          enabled: controller.jerseyOcrPreferenceEnabled,
-          onToggle: () => unawaited(
-            controller.setJerseyOcrPreferenceEnabled(
-              !controller.jerseyOcrPreferenceEnabled,
-            ),
-          ),
-        ),
+    final on = <String>[
+      if (controller.ftpModeEnabled) 'FTP',
+      if (controller.burstDetectionEnabled) 'Burst',
+      if (showOcr && controller.jerseyOcrPreferenceEnabled) 'Text Recognition',
+      if (controller.serialBylinesEnabled) 'Serial',
     ];
+    final listLabel = on.isEmpty ? 'None on' : on.join(' · ');
+    final tooltip = on.isEmpty
+        ? 'No modes on — open Preferences to enable'
+        : 'On: ${on.join(', ')} — open Preferences to change';
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < buffs.length; i++) ...[
-          if (i > 0) const SizedBox(width: 6),
-          _ModeBuffIcon(spec: buffs[i], tokens: tokens),
-        ],
-      ],
-    );
-  }
-}
-
-class _ModeBuffSpec {
-  const _ModeBuffSpec({
-    required this.icon,
-    required this.label,
-    required this.tooltip,
-    required this.enabled,
-    required this.onToggle,
-  });
-
-  final IconData icon;
-  final String label;
-  final String tooltip;
-  final bool enabled;
-  final VoidCallback onToggle;
-}
-
-class _ModeBuffIcon extends StatelessWidget {
-  const _ModeBuffIcon({
-    required this.spec,
-    required this.tokens,
-  });
-
-  static const double _width = 108;
-
-  final _ModeBuffSpec spec;
-  final FfTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    final on = spec.enabled;
-    final teal = tokens.accent;
-    final grey = tokens.textSecondary;
-    final color = on ? teal : grey;
-    final fill = on ? teal.withValues(alpha: 0.18) : tokens.elevated;
-    final border = on ? teal.withValues(alpha: 0.85) : tokens.divider;
     return Tooltip(
-      message: spec.tooltip,
+      message: tooltip,
       waitDuration: const Duration(milliseconds: 350),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: spec.onToggle,
+          onTap: onOpenPreferences,
           borderRadius: BorderRadius.circular(8),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            curve: Curves.easeOut,
-            width: _width,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: fill,
+              color: tokens.elevated,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: border),
-              boxShadow: on
-                  ? [
-                      BoxShadow(
-                        color: teal.withValues(alpha: 0.30),
-                        blurRadius: 10,
-                        spreadRadius: 0,
-                      ),
-                    ]
-                  : null,
+              border: Border.all(color: tokens.divider),
             ),
-            child: Column(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                PhosphorIcon(
-                  spec.icon,
-                  size: 15,
-                  color: color,
-                ),
-                const SizedBox(height: 2),
                 Text(
-                  spec.label,
-                  textAlign: TextAlign.center,
+                  'MODES',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    height: 1.1,
+                    color: tokens.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  listLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 8.5,
-                    fontWeight: FontWeight.w600,
-                    height: 1.05,
-                    letterSpacing: 0,
-                    color: color,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    height: 1.1,
+                    color: on.isEmpty
+                        ? tokens.textSecondary.withValues(alpha: 0.7)
+                        : tokens.accent,
                   ),
                 ),
               ],
@@ -2432,6 +2558,7 @@ class _JerseyColorGateState extends State<_JerseyColorGate> {
   bool _pickingHome = true;
   String? _path;
   Offset? _dropper;
+  final ScrollController _thumbs = ScrollController();
 
   CaptionV2Controller get c => widget.controller;
 
@@ -2439,6 +2566,12 @@ class _JerseyColorGateState extends State<_JerseyColorGate> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _thumbs.dispose();
+    super.dispose();
   }
 
   @override
@@ -2661,34 +2794,63 @@ class _JerseyColorGateState extends State<_JerseyColorGate> {
           const SizedBox(height: 8),
           SizedBox(
             height: 64,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: paths.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 6),
-              itemBuilder: (context, index) {
-                final selected = index == c.currentIndex;
-                return GestureDetector(
-                  onTap: () => c.showColorPickFrame(index),
-                  child: Container(
-                    width: 86,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: selected ? t.accent : t.divider,
-                        width: selected ? 2 : 1,
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(5),
-                      child: OrientedFilePreview(
-                        path: paths[index],
-                        fit: BoxFit.cover,
-                        cacheWidth: OrientedImageBytes.thumbMaxWidth,
-                      ),
-                    ),
-                  ),
+            child: Listener(
+              onPointerSignal: (event) {
+                if (event is! PointerScrollEvent || !_thumbs.hasClients) {
+                  return;
+                }
+                // Horizontal trackpad scrolls the list itself. A vertical
+                // mouse wheel does not, so map that onto the strip.
+                final dx = event.scrollDelta.dx;
+                final dy = event.scrollDelta.dy;
+                if (dx.abs() >= dy.abs() || dy == 0) return;
+                final position = _thumbs.position;
+                final target = (position.pixels + dy).clamp(
+                  position.minScrollExtent,
+                  position.maxScrollExtent,
                 );
+                if (target != position.pixels) position.jumpTo(target);
               },
+              child: ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context).copyWith(
+                  dragDevices: {
+                    PointerDeviceKind.touch,
+                    PointerDeviceKind.mouse,
+                    PointerDeviceKind.trackpad,
+                    PointerDeviceKind.stylus,
+                  },
+                ),
+                child: ListView.separated(
+                  controller: _thumbs,
+                  scrollDirection: Axis.horizontal,
+                  itemCount: paths.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 6),
+                  itemBuilder: (context, index) {
+                    final selected = index == c.currentIndex;
+                    return GestureDetector(
+                      onTap: () => c.showColorPickFrame(index),
+                      child: Container(
+                        width: 86,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: selected ? t.accent : t.divider,
+                            width: selected ? 2 : 1,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: OrientedFilePreview(
+                            path: paths[index],
+                            fit: BoxFit.cover,
+                            cacheWidth: OrientedImageBytes.thumbMaxWidth,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 8),

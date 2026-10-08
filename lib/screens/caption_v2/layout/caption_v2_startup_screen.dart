@@ -1298,15 +1298,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             ),
           ],
         ),
-        if (_sportChosen && _homeFilled && _awayFilled) ...[
-          const SizedBox(height: 8),
-          _JerseyColorRow(
-            awayTeam: _awayTeam ?? 'Away',
-            homeTeam: _homeTeam ?? 'Home',
-            homeWearsDark: _homeWearsDark,
-            onChanged: (value) => setState(() => _homeWearsDark = value),
-          ),
-        ],
         if (_loadingTeams && availableTeamsEmpty) ...[
           const SizedBox(height: 6),
           Text(
@@ -1329,27 +1320,14 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             ),
           ),
         ],
-        const SizedBox(height: 4),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: _GhostButton(
-            label: 'Paste rosters from a webpage or other source',
-            icon: PhosphorIconsRegular.fileText,
-            onPressed: _sportChosen ? _pasteRoster : null,
-          ),
+        const SizedBox(height: 8),
+        _PasteRosterButton(
+          enabled: _sportChosen,
+          pastedCount: _usingCustomRosters
+              ? (_awayRoster?.length ?? 0) + (_homeRoster?.length ?? 0)
+              : 0,
+          onPressed: _sportChosen ? _pasteRoster : null,
         ),
-        if (_usingCustomRosters &&
-            (_homeRoster != null || _awayRoster != null)) ...[
-          const SizedBox(height: 2),
-          Text(
-            '${(_awayRoster?.length ?? 0) + (_homeRoster?.length ?? 0)} players pasted',
-            style: const TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 11,
-              color: FfTokens.statusSaved,
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -2145,8 +2123,8 @@ class _StepBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return Container(
-      width: 22,
-      height: 22,
+      width: 16,
+      height: 16,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: complete ? t.selected : Colors.transparent,
@@ -2159,14 +2137,14 @@ class _StepBadge extends StatelessWidget {
       child: complete
           ? PhosphorIcon(
               PhosphorIconsRegular.check,
-              size: 12,
+              size: 8,
               color: t.accent,
             )
           : Text(
               '$number',
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 11,
+                fontSize: 9,
                 fontWeight: FontWeight.w600,
                 color: t.textSecondary,
               ),
@@ -2633,135 +2611,75 @@ class _SwapButton extends StatelessWidget {
   }
 }
 
-/// "Who's in dark tonight?" — Away / Home pills. Tells OCR which bench a
-/// dark or white jersey belongs to when both rosters share a number.
-class _JerseyColorRow extends StatelessWidget {
-  const _JerseyColorRow({
-    required this.awayTeam,
-    required this.homeTeam,
-    required this.homeWearsDark,
-    required this.onChanged,
+class _PasteRosterButton extends StatelessWidget {
+  const _PasteRosterButton({
+    required this.enabled,
+    required this.pastedCount,
+    required this.onPressed,
   });
 
-  final String awayTeam;
-  final String homeTeam;
-  final bool? homeWearsDark;
-  final ValueChanged<bool?> onChanged;
+  final bool enabled;
+  final int pastedCount;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final answered = homeWearsDark != null;
-    // Unanswered: show the away/home order; answered: dark team first.
-    final darkTeam = homeWearsDark == true ? homeTeam : awayTeam;
-    final lightTeam = homeWearsDark == true ? awayTeam : homeTeam;
-    // Clicking either pill swaps who is dark; a sport default counts as
-    // an answer the user can flip.
-    void swap() => onChanged(homeWearsDark == true ? false : true);
-    return Row(
-      children: [
-        _JerseyPill(
-          heading: 'Dark Jersey',
-          team: answered ? darkTeam : '—',
-          dark: true,
-          active: answered,
-          onTap: swap,
-        ),
-        const SizedBox(width: 6),
-        _JerseyPill(
-          heading: 'Light Jersey',
-          team: answered ? lightTeam : '—',
-          dark: false,
-          active: answered,
-          onTap: swap,
-        ),
-        const SizedBox(width: 8),
-        _GhostButton(
-          label: answered ? 'Not sure' : 'Set',
-          onPressed: answered ? () => onChanged(null) : swap,
-        ),
-        const Spacer(),
-        Tooltip(
-          message: 'Click to swap. Text recognition uses this to tell home '
-              'from away when both teams share a jersey number.',
-          child: PhosphorIcon(
-            PhosphorIconsRegular.info,
-            size: 14,
-            color: t.textTertiary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// "Dark Jersey — Maple Leafs" pill. Swatch shows the jersey tone.
-class _JerseyPill extends StatelessWidget {
-  const _JerseyPill({
-    required this.heading,
-    required this.team,
-    required this.dark,
-    required this.active,
-    required this.onTap,
-  });
-
-  final String heading;
-  final String team;
-  final bool dark;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final pasted = pastedCount > 0;
+    final color = enabled ? t.accent : t.textTertiary;
     return Material(
-      color: active ? FfTokens.nocturneAccentSoft : t.sunken,
-      borderRadius: BorderRadius.circular(999),
+      color: enabled ? t.accent.withValues(alpha: 0.12) : t.sunken,
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(999),
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          constraints: const BoxConstraints(maxWidth: 210),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: active ? t.accent : t.divider),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: enabled ? t.accent.withValues(alpha: 0.85) : t.divider,
+            ),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: dark ? const Color(0xFF14181C) : Colors.white,
-                  border: Border.all(color: t.divider),
+              PhosphorIcon(
+                PhosphorIconsRegular.clipboardText,
+                size: 18,
+                color: color,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Paste rosters',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: enabled ? t.text : t.textTertiary,
+                      ),
+                    ),
+                    Text(
+                      pasted
+                          ? '$pastedCount players pasted'
+                          : 'From a webpage or other source',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11,
+                        color: pasted ? FfTokens.statusSaved : t.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 6),
-              Text(
-                heading,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: active ? t.text : t.textSecondary,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  team,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w500,
-                    color: active ? t.textSecondary : t.textTertiary,
-                  ),
-                ),
+              PhosphorIcon(
+                PhosphorIconsRegular.caretRight,
+                size: 14,
+                color: color,
               ),
             ],
           ),
@@ -2889,8 +2807,8 @@ class _ReadyRow extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 14,
-            height: 14,
+            width: 11,
+            height: 11,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: markColor),
@@ -2900,13 +2818,13 @@ class _ReadyRow extends StatelessWidget {
             child: done && !warning
                 ? PhosphorIcon(
                     PhosphorIconsRegular.check,
-                    size: 10,
+                    size: 7,
                     color: t.accent,
                   )
                 : (warning
                     ? const PhosphorIcon(
                         PhosphorIconsRegular.warning,
-                        size: 10,
+                        size: 7,
                         color: FfTokens.danger,
                       )
                     : null),

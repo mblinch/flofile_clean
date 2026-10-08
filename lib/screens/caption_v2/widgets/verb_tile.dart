@@ -159,9 +159,6 @@ class _VerbTileState extends State<VerbTile> {
               decoration: BoxDecoration(
                 color: fill,
                 borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-                boxShadow: widget.selected && !widget.firebarSelected
-                    ? FfTokens.selectionGlow(t.accent)
-                    : null,
                 border: widget.firebarSelected
                     ? Border.all(
                         color: FfTokens.firebar.withValues(alpha: 0.42),

@@ -20,7 +20,6 @@ import '../services/preferences_service.dart';
 import '../services/roster_compare_service.dart';
 import '../services/roster_issues_service.dart';
 import '../services/tank01_roster_sync_service.dart';
-import '../services/verb_user_catalog_service.dart';
 import '../caption_style/verb_sub_options.dart';
 import '../caption_style/verb_defaults_bundle.dart';
 import '../theme/ff_glow.dart';
@@ -560,15 +559,10 @@ class _AdminScreenState extends State<AdminScreen> {
     return VerbDefaultsBundle.buildFactory(sport);
   }
 
-  /// Firebase catalog plus unpublished local customs/order/deletes from prefs.
+  /// Published app originals only. Personal verb edits stay in Preferences
+  /// and are not mixed into this draft.
   Future<Map<String, dynamic>> _sportBundleForAdmin(String sport) async {
-    // Same merge rules as the live app so tombstones / local customVerbs
-    // authority cannot be undone by reopening Admin.
-    final bundle = await VerbUserCatalogService.loadMergedBundle(
-      prefs: _prefs,
-      sport: sport,
-    );
-    // Favorites are personal — never bake them into the admin publish draft.
+    final bundle = _sportBundleFromCatalog(sport);
     bundle['favoriteVerbs'] = <String>[];
     return bundle;
   }
@@ -585,18 +579,6 @@ class _AdminScreenState extends State<AdminScreen> {
 
   void _onAdminVerbBundleChanged(Map<String, dynamic> next) {
     setState(() => _setActiveVerbBundle(next));
-    unawaited(_persistAdminVerbBundleLocally(_verbSport, next));
-  }
-
-  Future<void> _persistAdminVerbBundleLocally(
-    String sport,
-    Map<String, dynamic> bundle,
-  ) {
-    return VerbUserCatalogService.persistBundle(
-      prefs: _prefs,
-      sport: sport,
-      bundle: bundle,
-    );
   }
 
   Future<void> _importLocalVerbsForSport() async {
@@ -724,9 +706,9 @@ class _AdminScreenState extends State<AdminScreen> {
       _setActiveVerbBundle(bundle);
       await AppDefaultsFirestoreService.publishVerbsForSport(
           _verbSport, bundle);
-      await _persistAdminVerbBundleLocally(_verbSport, bundle);
       _catalog = AppDefaultsFirestoreService.getCachedCatalog();
-      _verbBundles[_verbSport] = await _sportBundleForAdmin(_verbSport);
+      _verbBundles[_verbSport] = Map<String, dynamic>.from(bundle);
+      _verbBundles[_verbSport]!['favoriteVerbs'] = <String>[];
       if (!mounted) return;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(

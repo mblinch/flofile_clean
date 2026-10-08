@@ -2,9 +2,12 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class NativeFilePicker {
+  static const MethodChannel _filePickerChannel =
+      MethodChannel('caption_writer/file_picker');
   /// Pick a directory. macOS keeps the AppleScript dialog; other platforms
   /// use [file_picker] so Android/iOS work.
   static Future<String?> pickDirectory({String? initialDirectory}) async {
@@ -58,6 +61,23 @@ class NativeFilePicker {
       print('File picker exception: $e');
       return null;
     }
+  }
+
+  /// Pick a macOS `.app` (or executable path on other platforms).
+  ///
+  /// On macOS uses a native [NSOpenPanel] via MethodChannel so `.app` bundles
+  /// are selectable and we avoid AppleScript deadlocks with Flutter dialogs.
+  static Future<String?> pickApplication({
+    String? initialDirectory,
+  }) async {
+    if (!kIsWeb && Platform.isMacOS) {
+      return _pickApplicationMacOS();
+    }
+    return pickFile(
+      allowedExtensions: Platform.isWindows ? ['exe'] : null,
+      initialDirectory: initialDirectory ??
+          (Platform.isLinux ? '/usr/bin' : null),
+    );
   }
 
   /// Android/iOS need runtime photo access before Directory/File reads work.
@@ -147,6 +167,41 @@ class NativeFilePicker {
       }
     } catch (e) {
       print('File picker exception: $e');
+      return null;
+    }
+  }
+
+  static Future<String?> _pickApplicationMacOS() async {
+    try {
+      final path =
+          await _filePickerChannel.invokeMethod<String>('pickApplication');
+      if (path == null || path.isEmpty) return null;
+      return path;
+    } on MissingPluginException {
+      // Fallback for tests / older builds without the native channel.
+      return _pickApplicationMacOSAppleScriptFallback();
+    } on PlatformException catch (e) {
+      print('Application picker error: $e');
+      return null;
+    } catch (e) {
+      print('Application picker exception: $e');
+      return null;
+    }
+  }
+
+  static Future<String?> _pickApplicationMacOSAppleScriptFallback() async {
+    try {
+      const script = '''
+set chosenApp to choose application with prompt "Choose Photoshop"
+return POSIX path of (path to chosenApp)
+''';
+      final result = await Process.run('osascript', ['-e', script]);
+      if (result.exitCode == 0) {
+        final path = result.stdout.toString().trim();
+        return path.isEmpty ? null : path;
+      }
+      return null;
+    } catch (_) {
       return null;
     }
   }

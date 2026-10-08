@@ -1425,27 +1425,10 @@ class CaptionV2Controller extends ChangeNotifier {
 
   List<EffectiveVerb> _sortedVerbs(List<EffectiveVerb> verbs) {
     if (verbs.isEmpty) return const [];
-    late final List<EffectiveVerb> ranked;
-    switch (verbSortMode) {
-      case VerbSortMode.custom:
-        ranked = List<EffectiveVerb>.from(verbs);
-        break;
-      case VerbSortMode.mostUsed:
-        ranked = List<EffectiveVerb>.from(verbs);
-        ranked.sort((a, b) {
-          final byCount =
-              (_verbUsageCounts[b.key] ?? 0).compareTo(_verbUsageCounts[a.key] ?? 0);
-          if (byCount != 0) return byCount;
-          return a.label.toLowerCase().compareTo(b.label.toLowerCase());
-        });
-        break;
-      case VerbSortMode.alphabetical:
-        ranked = List<EffectiveVerb>.from(verbs);
-        ranked.sort(
-          (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-        );
-        break;
-    }
+    final ranked = List<EffectiveVerb>.from(verbs);
+    ranked.sort(
+      (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
+    );
     return ranked;
   }
 
@@ -2222,6 +2205,7 @@ class CaptionV2Controller extends ChangeNotifier {
     );
     _prefs!.ftpProfilesRevision.addListener(_onFtpProfilesChanged);
     _prefs!.jerseyOcrRevision.addListener(_onJerseyOcrPreferenceChanged);
+    _prefs!.applicationModesRevision.addListener(_onApplicationModesChanged);
     final syncId = await _prefs!.getSyncAccountId();
     mlbTimestampAvailable = MlbInningFeatureGate.isEnabled(syncId);
     final previous = await _prefs!.getLastSavedMetadata();
@@ -6052,6 +6036,10 @@ class CaptionV2Controller extends ChangeNotifier {
     unawaited(_refreshJerseyOcrEnabled());
   }
 
+  void _onApplicationModesChanged() {
+    unawaited(reloadApplicationModes());
+  }
+
   /// Reloads the preference gate. OCR is off by default; macOS only.
   Future<void> _refreshJerseyOcrEnabled() async {
     final prefOn = await _prefs?.getJerseyOcrEnabled() ?? false;
@@ -7616,6 +7604,81 @@ class CaptionV2Controller extends ChangeNotifier {
     return result.anySucceeded;
   }
 
+  /// Write a previously captured caption [values] map to [paths].
+  ///
+  /// Used when applying a saved caption to the rest of a burst after the
+  /// user opts in via Review burst (caption selection may already be cleared).
+  Future<CaptionSaveResult> savePathsWithFixedValues(
+    List<String> paths,
+    Map<String, String> values,
+  ) async {
+    final targets = <String>[];
+    for (final path in paths) {
+      if (imagePaths.contains(path) && !targets.contains(path)) {
+        targets.add(path);
+      }
+    }
+    if (targets.isEmpty) {
+      statusMessage = 'No image to save';
+      notifyListeners();
+      return const CaptionSaveResult(
+        requestedPaths: [],
+        succeededPaths: [],
+      );
+    }
+    if (values.isEmpty) {
+      statusMessage = 'No caption to apply';
+      notifyListeners();
+      return CaptionSaveResult(
+        requestedPaths: targets,
+        succeededPaths: const [],
+      );
+    }
+
+    final templateSucceeded = <String>[];
+    for (final pth in targets) {
+      if (await _applyIptcTemplateOnSaveIfEnabled(pth)) {
+        templateSucceeded.add(pth);
+      }
+    }
+
+    final succeeded = await _writer.writeCaptionToPaths(
+      paths: targets,
+      values: values,
+    );
+    if (succeeded.isNotEmpty) {
+      savedImages.addAll(succeeded);
+      captionedImages.addAll(succeeded);
+      unawaited(FloCaptionMark.markSaved(succeeded));
+      await _persistSaved();
+      for (final pth in succeeded) {
+        await _syncFileSig(pth);
+      }
+      await _storePreviousCaption(
+        caption: values['IPTC:Caption-Abstract'] ?? '',
+        personality: values['XMP-getty:Personality'] ?? '',
+      );
+    }
+
+    final result = CaptionSaveResult(
+      requestedPaths: List.unmodifiable(targets),
+      succeededPaths: List.unmodifiable(succeeded),
+    );
+    if (!result.anySucceeded) {
+      statusMessage = targets.length == 1
+          ? 'Save failed (exiftool?)'
+          : 'Save failed for all ${targets.length} frames';
+    } else if (!result.allSucceeded) {
+      statusMessage = 'Saved ${succeeded.length} of ${targets.length}; '
+          '${result.failedPaths.length} failed';
+    } else {
+      statusMessage =
+          targets.length == 1 ? 'Saved' : 'Saved ${targets.length} frames';
+    }
+    notifyListeners();
+    return result;
+  }
+
   void advancePastHandledChain(
     List<String> chain, {
     bool keepSearchOpen = false,
@@ -7787,6 +7850,12 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    // Claim the slot before any await so a second click cannot open
+    // another login while this one is still connecting.
+    transmitting = true;
+    transmitProgress = 0;
+    transmitStatus = 'Connecting…';
+    notifyListeners();
 
     final alreadySent =
         paths.where((path) => sentImages.contains(path)).toList();
@@ -7795,7 +7864,13 @@ class CaptionV2Controller extends ChangeNotifier {
       final allow = await confirmRetransmit?.call(alreadySent) ?? true;
       if (allow) toSend = [...toSend, ...alreadySent];
     }
-    if (toSend.isEmpty) return;
+    if (toSend.isEmpty) {
+      transmitting = false;
+      transmitStatus = null;
+      transmitProgress = 0;
+      notifyListeners();
+      return;
+    }
 
     transmitting = true;
     transmitProgress = 0;
@@ -7840,6 +7915,8 @@ class CaptionV2Controller extends ChangeNotifier {
     final port = int.tryParse(profile['port']?.toString() ?? '') ?? 21;
     final remoteDir = profile['remotePath']?.toString() ?? '/';
     final passive = profile['passiveMode'] != false;
+    final renameAs = profile['renameAs']?.toString() ?? '';
+    final duplicateFolder = profile['duplicateFolder']?.toString() ?? '';
 
     if (host.isEmpty || user.isEmpty || pass.isEmpty) {
       transmitting = false;
@@ -7853,6 +7930,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
     var ok = 0;
     String? lastError;
+    String? copyError;
     for (var i = 0; i < toSend.length; i++) {
       final path = toSend[i];
       transmittingPath = path;
@@ -7862,9 +7940,16 @@ class CaptionV2Controller extends ChangeNotifier {
           : 'Uploading…';
       notifyListeners();
 
+      final fileName = ftpTransferFileName(path, renameAs);
       final remote = remoteDir.endsWith('/')
-          ? '$remoteDir${p.basename(path)}'
-          : '$remoteDir/${p.basename(path)}';
+          ? '$remoteDir$fileName'
+          : '$remoteDir/$fileName';
+      final copied = await copyFtpDuplicate(
+        sourcePath: path,
+        folder: duplicateFolder,
+        fileName: fileName,
+      );
+      if (copied != null) copyError = copied;
       final result = await FtpClientService.uploadFile(
         host: host,
         username: user,
@@ -7909,15 +7994,22 @@ class CaptionV2Controller extends ChangeNotifier {
     transmittingPath = null;
     transmitProgress = 0;
     transmitStatus = null;
+    final copyNote = copyError == null
+        ? (duplicateFolder.trim().isEmpty ? '' : ' · copy saved')
+        : ' · copy failed: $copyError';
     if (ok == toSend.length) {
-      statusMessage =
-          toSend.length == 1 ? 'FTP complete' : 'Sent $ok / ${toSend.length}';
+      statusMessage = (toSend.length == 1
+              ? 'FTP complete'
+              : 'Sent $ok / ${toSend.length}') +
+          copyNote;
     } else if (ok == 0) {
       statusMessage =
-          lastError == null ? 'FTP failed' : 'FTP failed: $lastError';
+          (lastError == null ? 'FTP failed' : 'FTP failed: $lastError') +
+              copyNote;
     } else {
       statusMessage = 'Sent $ok / ${toSend.length}'
-          '${lastError == null ? '' : ' — $lastError'}';
+          '${lastError == null ? '' : ' — $lastError'}'
+          '$copyNote';
     }
     notifyListeners();
   }
@@ -8671,6 +8763,7 @@ class CaptionV2Controller extends ChangeNotifier {
     );
     _prefs?.ftpProfilesRevision.removeListener(_onFtpProfilesChanged);
     _prefs?.jerseyOcrRevision.removeListener(_onJerseyOcrPreferenceChanged);
+    _prefs?.applicationModesRevision.removeListener(_onApplicationModesChanged);
     super.dispose();
   }
 }

@@ -621,14 +621,29 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
     super.dispose();
   }
 
+  JerseyOcrSuggestion? _verbAnchor;
+
   @override
   void didUpdateWidget(covariant _PhotoLoupePreview oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.path != widget.path || oldWidget.version != widget.version) {
       widget.ocrHover.value = null;
+      _verbAnchor = null;
       _cancelHold();
       _loadBytes();
     }
+  }
+
+  void _openVerbsFor(JerseyOcrSuggestion match) {
+    _cancelHold();
+    widget.controller.selectPlayerFromTextRecognition(match);
+    setState(() {
+      if (_verbAnchor != null && _sameOcrMark(_verbAnchor!, match)) {
+        _verbAnchor = null;
+      } else {
+        _verbAnchor = match;
+      }
+    });
   }
 
   void _onPointerDown(PointerDownEvent event) {
@@ -851,6 +866,10 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                       matches: widget.controller.jerseySuggestions,
                       hover: widget.ocrHover,
                       enabled: widget.controller.jerseyOcrEnabled,
+                      controller: widget.controller,
+                      verbAnchor: _verbAnchor,
+                      onNameTap: _openVerbsFor,
+                      onVerbPicked: () => setState(() => _verbAnchor = null),
                     ),
                   if (showLoupe && sampleAt != null) ...[
                     _buildLoupe(
@@ -1012,18 +1031,32 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   }
 }
 
+bool _sameOcrMark(JerseyOcrSuggestion a, JerseyOcrSuggestion b) {
+  return a.isHome == b.isHome &&
+      a.player == b.player &&
+      a.matchedText == b.matchedText;
+}
+
 class _OcrNumberMarks extends StatelessWidget {
   const _OcrNumberMarks({
     required this.imageRect,
     required this.matches,
     required this.hover,
     required this.enabled,
+    required this.controller,
+    required this.verbAnchor,
+    required this.onNameTap,
+    required this.onVerbPicked,
   });
 
   final Rect imageRect;
   final List<JerseyOcrSuggestion> matches;
-  final ValueListenable<JerseyOcrSuggestion?> hover;
+  final ValueNotifier<JerseyOcrSuggestion?> hover;
   final bool enabled;
+  final CaptionV2Controller controller;
+  final JerseyOcrSuggestion? verbAnchor;
+  final ValueChanged<JerseyOcrSuggestion> onNameTap;
+  final VoidCallback onVerbPicked;
 
   @override
   Widget build(BuildContext context) {
@@ -1035,12 +1068,11 @@ class _OcrNumberMarks extends StatelessWidget {
     return ValueListenableBuilder<JerseyOcrSuggestion?>(
       valueListenable: hover,
       builder: (context, hovered, _) {
-        return IgnorePointer(
-          child: Stack(
-            children: [
-              for (final match in marks) ..._mark(match, hovered),
-            ],
-          ),
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            for (final match in marks) ..._mark(match, hovered),
+          ],
         );
       },
     );
@@ -1084,53 +1116,84 @@ class _OcrNumberMarks extends StatelessWidget {
       fontWeight: FontWeight.w700,
       height: 1.1,
     );
+    final landscape = imageRect.width >= imageRect.height;
+    // Landscape photos: name centered above the box.
+    // Portrait photos: name centered on the right of the box.
+    final namePosition = landscape
+        ? (
+            left: rect.center.dx,
+            top: (rect.top - 16).clamp(imageRect.top, imageRect.bottom),
+            translation: const Offset(-0.5, -1),
+          )
+        : (
+            left: (rect.right + 4).clamp(imageRect.left, imageRect.right),
+            top: rect.center.dy,
+            translation: const Offset(0, -0.5),
+          );
+    final nameChip = DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: const BorderRadius.all(Radius.circular(3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        child: Text(label, style: labelStyle),
+      ),
+    );
+    final showVerbs =
+        verbAnchor != null && _sameOcrMark(verbAnchor!, match);
+    final menuTop = landscape
+        ? namePosition.top + 4
+        : namePosition.top + 12;
+    final menuLeft = landscape
+        ? (rect.center.dx - 100).clamp(imageRect.left, imageRect.right - 8)
+        : namePosition.left;
     return [
       Positioned(
         left: rect.left,
         top: rect.top,
         width: rect.width,
         height: rect.height,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: emphasized ? 0.28 : 0.16),
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: color, width: emphasized ? 2.5 : 2),
-          ),
-        ),
-      ),
-      // Name + number above the box.
-      Positioned(
-        left: rect.left,
-        top: (rect.top - 16).clamp(0.0, imageRect.bottom),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: const BorderRadius.all(Radius.circular(3)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-            child: Text(label, style: labelStyle),
-          ),
-        ),
-      ),
-      // Jersey tone + raw read below the box.
-      if (detail.isNotEmpty)
-        Positioned(
-          left: rect.left,
-          top: (rect.bottom + 2).clamp(0.0, imageRect.bottom - 14),
+        child: IgnorePointer(
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.92),
-              borderRadius: const BorderRadius.all(Radius.circular(3)),
+              color: color.withValues(alpha: emphasized ? 0.28 : 0.16),
+              borderRadius: BorderRadius.circular(3),
+              border: Border.all(color: color, width: emphasized ? 2.5 : 2),
             ),
-            child: Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-              child: Text(
-                detail,
-                style: labelStyle.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+      Positioned(
+        left: namePosition.left,
+        top: namePosition.top,
+        child: FractionalTranslation(
+          translation: namePosition.translation,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => hover.value = match,
+            onExit: (_) {
+              if (identical(hover.value, match)) hover.value = null;
+            },
+            child: Tooltip(
+              message: detail.isEmpty ? label : detail,
+              waitDuration: const Duration(milliseconds: 250),
+              child: GestureDetector(
+                onTap: () => onNameTap(match),
+                child: nameChip,
               ),
             ),
+          ),
+        ),
+      ),
+      if (showVerbs)
+        Positioned(
+          left: menuLeft,
+          top: menuTop.clamp(imageRect.top, imageRect.bottom - 40),
+          child: _PhotoVerbCascade(
+            controller: controller,
+            maxHeight: (imageRect.bottom - menuTop - 8).clamp(120.0, 340.0),
+            onPicked: onVerbPicked,
           ),
         ),
     ];
@@ -1150,6 +1213,138 @@ class _OcrNumberMarks extends StatelessWidget {
       padded.top.clamp(imageRect.top, imageRect.bottom),
       padded.right.clamp(imageRect.left, imageRect.right),
       padded.bottom.clamp(imageRect.top, imageRect.bottom),
+    );
+  }
+}
+
+/// Category cascade that floats on the photo after a scanned name is tapped.
+class _PhotoVerbCascade extends StatefulWidget {
+  const _PhotoVerbCascade({
+    required this.controller,
+    required this.maxHeight,
+    required this.onPicked,
+  });
+
+  final CaptionV2Controller controller;
+  final double maxHeight;
+  final VoidCallback onPicked;
+
+  @override
+  State<_PhotoVerbCascade> createState() => _PhotoVerbCascadeState();
+}
+
+class _PhotoVerbCascadeState extends State<_PhotoVerbCascade> {
+  String _open = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final cats = widget.controller.verbCategories;
+    final current = widget.controller.verbCategory;
+    if (current != null && cats.contains(current)) {
+      _open = current;
+    } else if (cats.contains('Offense')) {
+      _open = 'Offense';
+    } else if (cats.isNotEmpty) {
+      _open = cats.first;
+    }
+  }
+
+  String _display(String category) {
+    if (category == 'Non Game-Action') return 'Non-game';
+    return category;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final categories = widget.controller.verbCategories;
+    final verbsByCat = widget.controller.verbDefinitionsByCategory;
+    return Material(
+      elevation: 10,
+      color: t.surface,
+      shadowColor: Colors.black54,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 200,
+          maxHeight: widget.maxHeight,
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(color: t.divider),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            children: [
+              for (final category in categories) ...[
+                InkWell(
+                  onTap: () => setState(() {
+                    _open = _open == category ? '' : category;
+                  }),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 5, 6, 5),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _display(category),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: _open == category ? t.accent : t.text,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          _open == category
+                              ? Icons.expand_more
+                              : Icons.chevron_right,
+                          size: 16,
+                          color: t.textSecondary,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_open == category)
+                  for (final verb in verbsByCat[category] ?? const [])
+                    InkWell(
+                      onTap: () {
+                        widget.controller.selectVerb(verb.key);
+                        widget.onPicked();
+                      },
+                      child: Container(
+                        color: widget.controller.selectedVerb == verb.key
+                            ? t.accent.withValues(alpha: 0.16)
+                            : null,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+                        child: Text(
+                          verb.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: widget.controller.selectedVerb == verb.key
+                                ? t.accent
+                                : t.text,
+                          ),
+                        ),
+                      ),
+                    ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

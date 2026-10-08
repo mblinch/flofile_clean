@@ -495,6 +495,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   int _ftpPort = 21;
   String _ftpRemotePath = '';
   bool _ftpPassiveMode = true;
+  String _ftpRenameAs = '';
+  String _ftpDuplicateFolder = '';
 
   // FTP Profile Management
   Map<String, Map<String, dynamic>> _ftpProfiles = {};
@@ -17922,9 +17924,12 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       throw Exception('Please configure FTP settings first!');
     }
 
-    // Use original filename
-    final originalFileName = p.basename(imagePath);
-    final remoteFileName = originalFileName;
+    final remoteFileName = ftpTransferFileName(imagePath, _ftpRenameAs);
+    await copyFtpDuplicate(
+      sourcePath: imagePath,
+      folder: _ftpDuplicateFolder,
+      fileName: remoteFileName,
+    );
 
     // Build full remote path
     final fullRemotePath = _ftpRemotePath.isNotEmpty
@@ -18101,9 +18106,13 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       }
     }
 
-    // Use original filename
-    final originalFileName = p.basename(widget.currentImagePath!);
-    final remoteFileName = originalFileName;
+    final remoteFileName =
+        ftpTransferFileName(widget.currentImagePath!, _ftpRenameAs);
+    await copyFtpDuplicate(
+      sourcePath: widget.currentImagePath!,
+      folder: _ftpDuplicateFolder,
+      fileName: remoteFileName,
+    );
 
     // Build full remote path
     final fullRemotePath = _ftpRemotePath.isNotEmpty
@@ -19464,6 +19473,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       'port': port ?? _ftpPort,
       'remotePath': remotePath ?? _ftpRemotePath,
       'passiveMode': passiveMode ?? _ftpPassiveMode,
+      'renameAs': _ftpRenameAs,
+      'duplicateFolder': _ftpDuplicateFolder,
     };
 
     setState(() {
@@ -19477,6 +19488,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _ftpPort = profileData['port'] as int;
       _ftpRemotePath = profileData['remotePath'] as String;
       _ftpPassiveMode = profileData['passiveMode'] as bool;
+      _ftpRenameAs = profileData['renameAs'] as String? ?? _ftpRenameAs;
+      _ftpDuplicateFolder =
+          profileData['duplicateFolder'] as String? ?? _ftpDuplicateFolder;
     });
 
     // Save to persistent storage
@@ -19501,6 +19515,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _ftpPort = profile['port'] ?? 21;
         _ftpRemotePath = profile['remotePath'] ?? '';
         _ftpPassiveMode = profile['passiveMode'] ?? true;
+        _ftpRenameAs = profile['renameAs']?.toString() ?? '';
+        _ftpDuplicateFolder = profile['duplicateFolder']?.toString() ?? '';
         _currentFtpProfile = profileName;
       });
 
@@ -19582,6 +19598,9 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
               _ftpPort = profile['port'] ?? 21;
               _ftpRemotePath = profile['remotePath'] ?? '';
               _ftpPassiveMode = profile['passiveMode'] ?? true;
+              _ftpRenameAs = profile['renameAs']?.toString() ?? '';
+              _ftpDuplicateFolder =
+                  profile['duplicateFolder']?.toString() ?? '';
             });
             print('DEBUG: Loaded FTP profile "$currentProfile" on app startup');
           }
@@ -20140,6 +20159,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
                           'port': int.tryParse(portController.text) ?? 21,
                           'remotePath': remotePathController.text,
                           'passiveMode': profile['passiveMode'] ?? true,
+                          'renameAs': profile['renameAs'] ?? '',
+                          'duplicateFolder': profile['duplicateFolder'] ?? '',
                         };
                         Navigator.pop(context); // Close edit dialog
                         // Reopen FTP settings dialog with success message

@@ -366,9 +366,13 @@ class VerbEditorFooter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = tokens;
-    final status = pendingChanges <= 0
-        ? 'Everything is published'
-        : '$pendingChanges unpublished change${pendingChanges == 1 ? '' : 's'} — saved as draft, not live until published';
+    final status = personalMode
+        ? (pendingChanges <= 0
+            ? 'Saved to your account only — app defaults are unchanged'
+            : '$pendingChanges unsaved change${pendingChanges == 1 ? '' : 's'}')
+        : (pendingChanges <= 0
+            ? 'Everything is published'
+            : '$pendingChanges unpublished change${pendingChanges == 1 ? '' : 's'} — saved as draft, not live until published');
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 12),
