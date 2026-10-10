@@ -2470,63 +2470,77 @@ class _TeamDropdown extends StatelessWidget {
         SizedBox(
           height: 34,
           child: Stack(
+            fit: StackFit.expand,
             children: [
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: t.sunken,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: t.divider),
+                  border: Border.all(
+                    color: FfTokens.panelOutline.withValues(alpha: 0.7),
+                    width: 0.5,
+                  ),
                 ),
                 child: Focus(
                   focusNode: focusNode,
-                  child: FfDropdownButton<String?>(
-                    value: effective,
-                    isExpanded: true,
-                    menuColor: t.elevated,
-                    hint: Text(
-                      hintText,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 13,
-                        color: t.textTertiary,
-                      ),
-                    ),
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 13,
-                      color: t.text,
-                    ),
-                  items: [
-                    for (final name in teams)
-                      DropdownMenuItem<String?>(
-                        value: name,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FfDropdownButton<String?>(
+                      value: effective,
+                      isExpanded: true,
+                      menuColor: t.elevated,
+                      padding: const EdgeInsets.only(left: 12, right: 4),
+                      hint: Padding(
+                        padding: const EdgeInsets.only(right: 22),
                         child: Text(
-                          favoriteNames.contains(name) ? '★ $name' : name,
+                          hintText,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontFamily: FfTokens.fontFamily,
                             fontSize: 13,
-                            color: t.text,
+                            color: t.textTertiary,
                           ),
                         ),
                       ),
-                  ],
-                  onChanged: enabled && teams.isNotEmpty
-                      ? (v) {
-                          if (v != null &&
-                              excludeTeam != null &&
-                              v == excludeTeam) {
-                            return;
-                          }
-                          onChanged(v);
-                        }
-                      : null,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        color: t.text,
+                      ),
+                      items: [
+                        for (final name in teams)
+                          DropdownMenuItem<String?>(
+                            value: name,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 22),
+                          child: Text(
+                            favoriteNames.contains(name) ? '★ $name' : name,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 13,
+                              color: t.text,
+                            ),
+                          ),
+                        ),
+                          ),
+                      ],
+                      onChanged: enabled && teams.isNotEmpty
+                          ? (v) {
+                              if (v != null &&
+                                  excludeTeam != null &&
+                                  v == excludeTeam) {
+                                return;
+                              }
+                              onChanged(v);
+                            }
+                          : null,
+                    ),
                   ),
                 ),
               ),
               Positioned(
-                right: 28,
+                right: 26,
                 top: 0,
                 bottom: 0,
                 child: IconButton(

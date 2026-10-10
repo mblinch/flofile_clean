@@ -8,6 +8,26 @@ import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
 import 'ff_dropdown.dart';
 
+TextStyle verbEditorPanelTitle(FfTokens t) => FfTokens.railLabel.copyWith(
+      color: t.text.withValues(alpha: 0.48),
+      fontSize: 10,
+      letterSpacing: 1.15,
+    );
+
+TextStyle verbEditorFieldLabel(FfTokens t) => t.microStyle.copyWith(
+      fontSize: 11,
+      color: t.text.withValues(alpha: 0.82),
+    );
+
+BoxDecoration verbEditorPanelDecoration(FfTokens t) => BoxDecoration(
+      color: t.surface.withValues(alpha: 0.55),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: FfTokens.panelOutline.withValues(alpha: 0.45),
+        width: 0.5,
+      ),
+    );
+
 class VerbSearchHit {
   const VerbSearchHit({
     required this.key,
@@ -271,12 +291,8 @@ class VerbEditorTopBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Verb Editor',
-            style: t.bodyStyle.copyWith(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: t.text,
-            ),
+            'VERB EDITOR',
+            style: verbEditorPanelTitle(t),
           ),
           const SizedBox(height: 10),
           Row(
@@ -289,7 +305,7 @@ class VerbEditorTopBar extends StatelessWidget {
                   children: [
                     Text(
                       'Sport',
-                      style: appDialogFieldLabelStyleOf(context),
+                      style: verbEditorFieldLabel(t),
                     ),
                     const SizedBox(height: 6),
                     SizedBox(
@@ -371,7 +387,10 @@ class VerbEditorTopBar extends StatelessWidget {
                             ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: t.divider),
+                        borderSide: const BorderSide(
+                          color: FfTokens.panelOutline,
+                          width: 0.5,
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -379,7 +398,10 @@ class VerbEditorTopBar extends StatelessWidget {
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide(color: t.divider),
+                        borderSide: const BorderSide(
+                          color: FfTokens.panelOutline,
+                          width: 0.5,
+                        ),
                       ),
                     ),
                   ),

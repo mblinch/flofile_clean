@@ -340,6 +340,7 @@ class AppDialogLabeledField extends StatelessWidget {
     this.spacing = 5,
     this.bottomGap = 12,
     this.labelRowHeight = kAppDialogLabelRowHeight,
+    this.labelStyle,
   });
 
   final String label;
@@ -352,6 +353,7 @@ class AppDialogLabeledField extends StatelessWidget {
   final double spacing;
   final double bottomGap;
   final double labelRowHeight;
+  final TextStyle? labelStyle;
 
   @override
   Widget build(BuildContext context) {
@@ -359,7 +361,7 @@ class AppDialogLabeledField extends StatelessWidget {
         labelLeading != null ||
         labelTrailing != null ||
         required;
-    final labelStyle = appDialogFieldLabelStyleOf(context);
+    final labelStyle = this.labelStyle ?? appDialogFieldLabelStyleOf(context);
     final t = appDialogTokens(context);
     return Padding(
       padding: EdgeInsets.only(bottom: bottomGap),

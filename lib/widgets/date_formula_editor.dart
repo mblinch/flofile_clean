@@ -1,17 +1,22 @@
 import 'package:flutter/material.dart';
 import '../caption_style/date_formula.dart';
+import '../theme/ff_tokens.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
-/// Matches the caption layout dialog's accent blue.
-const Color _editorBlue = Color(0xFF0052CC);
+/// Matches the caption layout dialog's accent.
+const Color _editorBlue = FfTokens.nocturneAc;
 
-/// Neutral surface used by the chip / panel (matches existing caption editor chips).
-const Color _chipSurface = Color(0xFFF4F4F5);
-const Color _chipBorder = Color(0x14000000);
-const Color _fieldText = Color(0xFF3A3A3A);
+/// Chip fill matches the structure-row field chips.
+const Color _chipSurface = FfTokens.nocturneSunken;
+const Color _chipBorder = Color(0x665A6570);
+const Color _fieldText = FfTokens.nocturneTx;
+const Color _mutedText = FfTokens.nocturneT3;
 
 /// Active state for the ALL CAPS (Aa) control only; chip fill stays neutral.
-const Color _capsButtonBg = Color(0xFFD0E3FA);
+const Color _capsButtonBg = FfTokens.nocturneAccentDeep;
+
+/// Separator text boxes.
+const Color _textBoxFill = Color(0xFF1B3344);
 
 /// All date kinds the editor exposes, in the canonical order they appear when
 /// an existing template hasn't placed them yet (mirrors the location editor's
@@ -217,50 +222,95 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _tokenRow(),
-        const SizedBox(height: 6),
-        _spaceLegend(),
-        const SizedBox(height: 6),
         _previewLine(),
+        const SizedBox(height: 8),
+        _tokenRow(),
+        _unusedFieldOptions(),
       ],
     );
   }
 
-  Widget _spaceLegend() {
+  Widget _tokenRow() {
+    final visible = <int>[
+      for (var i = 0; i < _fields.length; i++)
+        if (_fields[i].enabled) i,
+    ];
+    if (visible.isEmpty) return const SizedBox.shrink();
+    final children = <Widget>[
+      _separatorInput(visible.first),
+    ];
+    for (final i in visible) {
+      children.add(_fieldChip(i));
+      children.add(_separatorInput(i + 1));
+    }
+    return Wrap(
+      spacing: 0,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
+    );
+  }
+
+  Widget _unusedFieldOptions() {
+    final unused = <int>[
+      for (var i = 0; i < _fields.length; i++)
+        if (!_fields[i].enabled) i,
+    ];
+    if (unused.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Text(
-        '⎵ = space',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
-          color: Colors.grey.shade500,
-        ),
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final i in unused)
+            _addableFieldChip(
+              label: _dateIptcChipLabel(_fields[i].kind),
+              onTap: () => _setEnabled(i, true),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _tokenRow() {
-    final children = <Widget>[];
-    if (_fields.isNotEmpty) {
-      children.add(_separatorInput(0));
-    }
-    for (var i = 0; i < _fields.length; i++) {
-      children.add(_fieldChip(i));
-      children.add(_separatorInput(i + 1));
-    }
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Wrap(
-        spacing: 0,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: children,
+  Widget _addableFieldChip({
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: _chipSurface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0x29E8EEF4),
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add, size: 14, color: _mutedText),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: _fieldText,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -287,28 +337,26 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
       return Opacity(
         opacity: enabled ? 1.0 : 0.55,
         child: Container(
-          height: 28,
-          padding: const EdgeInsets.only(left: 2, right: 6),
+          height: 32,
+          padding: const EdgeInsets.only(left: 6, right: 4),
           decoration: BoxDecoration(
             color: _chipSurface,
-            border: Border.all(color: _chipBorder),
-            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: const Color(0x29E8EEF4),
+              width: 0.5,
+            ),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               handle,
-              const SizedBox(width: 4),
-              _ChipSwitch(
-                value: enabled,
-                onChanged: (v) => _setEnabled(index, v),
-              ),
               const SizedBox(width: 6),
               Text(
                 _dateIptcChipLabel(f.kind),
                 style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                   color: _fieldText,
                   height: 1,
                 ),
@@ -316,10 +364,10 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
               const SizedBox(width: 4),
               Text(
                 sample,
-                style: TextStyle(
-                  fontSize: 11,
+                style: const TextStyle(
+                  fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: Colors.grey.shade600,
+                  color: _mutedText,
                   height: 1,
                 ),
               ),
@@ -343,7 +391,7 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
                 _chipIconButton(
                   tooltip: 'ALL CAPS',
                   onTap: () => _toggleCaps(index),
-                  background: f.caps ? _capsButtonBg : Colors.white,
+                  background: f.caps ? _capsButtonBg : _chipSurface,
                   child: const Text(
                     'Aa',
                     style: TextStyle(
@@ -355,6 +403,24 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
                   ),
                 ),
               ],
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'Remove',
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => _setEnabled(index, false),
+                    child: const Padding(
+                      padding: EdgeInsets.all(2),
+                      child: PhosphorIcon(
+                        PhosphorIconsRegular.x,
+                        size: 12,
+                        color: _mutedText,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -365,7 +431,7 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
           child: PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
             size: 14,
-            color: Colors.grey.shade500,
+            color: _mutedText,
           ),
         );
 
@@ -427,7 +493,7 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
       child: Material(
         color: background,
         shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.grey.shade300),
+          side: const BorderSide(color: _chipBorder),
           borderRadius: BorderRadius.circular(3),
         ),
         child: InkWell(
@@ -453,7 +519,7 @@ class _DateFormulaEditorState extends State<DateFormulaEditor> {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
+              color: _mutedText,
               letterSpacing: 0.3,
             ),
           ),
@@ -516,31 +582,6 @@ String _dateIptcChipLabel(DateFieldKind k) {
       return 'IPTC:Day';
     case DateFieldKind.year:
       return 'IPTC:Year';
-  }
-}
-
-/// Compact iOS-style switch sized to fit inside a 28px-tall editor chip.
-class _ChipSwitch extends StatelessWidget {
-  const _ChipSwitch({required this.value, required this.onChanged});
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 32,
-      height: 18,
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: Switch.adaptive(
-          value: value,
-          onChanged: onChanged,
-          activeColor: Colors.white,
-          activeTrackColor: _editorBlue,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-      ),
-    );
   }
 }
 
@@ -638,10 +679,10 @@ class _GearButtonState extends State<_GearButton> {
           width: 18,
           height: 18,
           child: Material(
-            color: widget.active ? const Color(0xFFEAF2FF) : Colors.white,
+            color: widget.active ? FfTokens.nocturneAccentSoft : _chipSurface,
             shape: RoundedRectangleBorder(
               side: BorderSide(
-                color: widget.active ? _editorBlue : Colors.grey.shade300,
+                color: widget.active ? _editorBlue : _chipBorder,
                 width: widget.active ? 1.4 : 1,
               ),
               borderRadius: BorderRadius.circular(3),
@@ -652,7 +693,7 @@ class _GearButtonState extends State<_GearButton> {
               child: Center(
                 child: PhosphorIcon(PhosphorIconsRegular.gear,
                   size: 11,
-                  color: Colors.grey.shade700,
+                  color: _fieldText,
                 ),
               ),
             ),
@@ -680,12 +721,12 @@ class _OptionsCard extends StatelessWidget {
     return Container(
       width: 200,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.grey.shade300),
+        color: FfTokens.nocturneEl,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: _chipBorder),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withValues(alpha: 0.28),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -702,7 +743,7 @@ class _OptionsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
-                color: Colors.grey.shade500,
+                color: _mutedText,
                 letterSpacing: 0.5,
               ),
             ),
@@ -723,7 +764,7 @@ class _OptionsCard extends StatelessWidget {
     return InkWell(
       onTap: () => onSelect(index),
       child: Container(
-        color: selected ? const Color(0xFFEAF2FF) : Colors.transparent,
+        color: selected ? FfTokens.nocturneAccentSoft : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Row(
           children: [
@@ -742,7 +783,7 @@ class _OptionsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9,
                 fontFamily: 'monospace',
-                color: Colors.grey.shade500,
+                color: _mutedText,
               ),
             ),
           ],
@@ -763,7 +804,7 @@ class _VisibleSpaceTextController extends TextEditingController {
   }) {
     final spaceStyle = style?.copyWith(
       fontSize: (style.fontSize ?? 15) * 0.75,
-      color: Colors.grey.shade500,
+      color: style.color,
     );
     return TextSpan(
       style: style,
@@ -845,9 +886,17 @@ class _DateSeparatorInputState extends State<_DateSeparatorInput> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = _focused ? _editorBlue : Colors.grey.shade300;
-    final borderWidth = _focused ? 1.5 : 1.0;
-    final fieldWidth = _fieldWidthFor(_ctrl.text, _style);
+    final borderColor =
+        _focused ? _editorBlue : const Color(0x29E8EEF4);
+    final borderWidth = _focused ? 1.5 : 0.5;
+    final idle = _idleLabel(_ctrl.text);
+    final measureText = _focused
+        ? (_ctrl.text.isEmpty ? ' ' : _ctrl.text.replaceAll(' ', '⎵'))
+        : (idle.isEmpty ? ' ' : idle);
+    final fieldWidth = _fieldWidthFor(
+      measureText,
+      _focused ? _style : _idleStyle,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -858,33 +907,50 @@ class _DateSeparatorInputState extends State<_DateSeparatorInput> {
         },
         child: Container(
           width: fieldWidth,
-          height: 34,
+          height: 32,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
+            color: _textBoxFill,
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: borderColor, width: borderWidth),
           ),
           alignment: Alignment.center,
-          child: TextField(
-            controller: _ctrl,
-            focusNode: _focus,
-            style: _style,
-            textAlign: TextAlign.center,
-            cursorWidth: 1.2,
-            cursorColor: _editorBlue,
-            decoration: const InputDecoration(
-              isDense: true,
-              isCollapsed: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 4),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
-            onChanged: _handleChanged,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              TextField(
+                controller: _ctrl,
+                focusNode: _focus,
+                style: _style.copyWith(
+                  color: _focused ? _fieldText : Colors.transparent,
+                ),
+                textAlign: TextAlign.center,
+                cursorWidth: 1.2,
+                cursorColor: _editorBlue,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  isCollapsed: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 4),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                ),
+                onChanged: _handleChanged,
+              ),
+              if (!_focused && idle.isNotEmpty)
+                IgnorePointer(
+                  child: Text(idle, style: _idleStyle),
+                ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  static String _idleLabel(String raw) {
+    if (raw.isEmpty) return '';
+    if (raw.trim().isEmpty) return '[space]';
+    return raw.replaceAll(' ', '[space]');
   }
 
   static const TextStyle _style = TextStyle(
@@ -894,8 +960,14 @@ class _DateSeparatorInputState extends State<_DateSeparatorInput> {
     fontFamily: 'monospace',
   );
 
+  static const TextStyle _idleStyle = TextStyle(
+    fontSize: 11,
+    color: _mutedText,
+    height: 1,
+  );
+
   static double _fieldWidthFor(String text, TextStyle style) {
-    final visible = text.isEmpty ? ' ' : text.replaceAll(' ', '⎵');
+    final visible = text.isEmpty ? ' ' : text;
     final painter = TextPainter(
       text: TextSpan(text: visible, style: style),
       textDirection: TextDirection.ltr,

@@ -4,18 +4,23 @@ import '../caption_style/caption_formula_renderer.dart';
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
 import '../caption_style/region_abbrev.dart';
+import '../theme/ff_tokens.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
-/// Matches the caption layout dialog's accent blue.
-const Color _editorBlue = Color(0xFF0052CC);
+/// Matches the caption layout dialog's accent.
+const Color _editorBlue = FfTokens.nocturneAc;
 
-/// Neutral surface used by the chip / panel (matches existing caption editor chips).
-const Color _chipSurface = Color(0xFFF4F4F5);
-const Color _chipBorder = Color(0x14000000);
-const Color _fieldText = Color(0xFF3A3A3A);
+/// Chip fill matches the structure-row field chips.
+const Color _chipSurface = FfTokens.nocturneSunken;
+const Color _chipBorder = Color(0x665A6570);
+const Color _fieldText = FfTokens.nocturneTx;
+const Color _mutedText = FfTokens.nocturneT3;
 
 /// Active state for the ALL CAPS (Aa) control only; chip fill stays neutral.
-const Color _capsButtonBg = Color(0xFFD0E3FA);
+const Color _capsButtonBg = FfTokens.nocturneAccentDeep;
+
+/// Separator text boxes.
+const Color _textBoxFill = Color(0xFF1B3344);
 
 /// All geo field kinds the editor exposes, in the canonical order they appear
 /// when an existing template hasn't placed them yet.
@@ -42,6 +47,7 @@ class LocationFormulaEditor extends StatefulWidget {
     required this.options,
     required this.onChanged,
     this.sampleGameInfo,
+    this.adaptsUsIntl = false,
   });
 
   final LocationLineOptions options;
@@ -51,6 +57,10 @@ class LocationFormulaEditor extends StatefulWidget {
   /// Falls back to canonical Toronto / Ontario / Canada values when null or
   /// the corresponding field is empty.
   final GameInfo? sampleGameInfo;
+
+  /// Getty (and any layout with auto-adapt) writes City, State in the US and
+  /// City, Country everywhere else, even though both chips stay in the editor.
+  final bool adaptsUsIntl;
 
   @override
   State<LocationFormulaEditor> createState() => _LocationFormulaEditorState();
@@ -267,50 +277,109 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _tokenRow(),
-        const SizedBox(height: 6),
-        _spaceLegend(),
-        const SizedBox(height: 6),
+        if (widget.adaptsUsIntl || widget.options.autoAdaptUsIntl) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+            child: Text(
+              'United States games use City, State. Games everywhere else use City, Country. Both chips stay here; the caption picks one from the game’s country.',
+              style: const TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                fontWeight: FontWeight.w500,
+                color: _mutedText,
+              ),
+            ),
+          ),
+        ],
         _previewLine(),
+        const SizedBox(height: 8),
+        _tokenRow(),
+        _unusedFieldOptions(),
       ],
     );
   }
 
-  Widget _spaceLegend() {
+  Widget _tokenRow() {
+    final visible = <int>[
+      for (var i = 0; i < _fields.length; i++)
+        if (_fields[i].enabled) i,
+    ];
+    if (visible.isEmpty) return const SizedBox.shrink();
+    final children = <Widget>[
+      _separatorInput(visible.first),
+    ];
+    for (final i in visible) {
+      children.add(_fieldChip(i));
+      children.add(_separatorInput(i + 1));
+    }
+    return Wrap(
+      spacing: 0,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: children,
+    );
+  }
+
+  Widget _unusedFieldOptions() {
+    final unused = <int>[
+      for (var i = 0; i < _fields.length; i++)
+        if (!_fields[i].enabled) i,
+    ];
+    if (unused.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Text(
-        '⎵ = space',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
-          color: Colors.grey.shade500,
-        ),
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final i in unused)
+            _addableFieldChip(
+              label: _locationFieldLabel(_fields[i].kind),
+              onTap: () => _setEnabled(i, true),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _tokenRow() {
-    final children = <Widget>[];
-    if (_fields.isNotEmpty) {
-      children.add(_separatorInput(0));
-    }
-    for (var i = 0; i < _fields.length; i++) {
-      children.add(_fieldChip(i));
-      children.add(_separatorInput(i + 1));
-    }
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Wrap(
-        spacing: 0,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: children,
+  Widget _addableFieldChip({
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: _chipSurface,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: const Color(0x29E8EEF4),
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.add, size: 14, color: _mutedText),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: _fieldText,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -347,28 +416,26 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
       return Opacity(
         opacity: enabled ? 1.0 : 0.55,
         child: Container(
-          height: 28,
-          padding: const EdgeInsets.only(left: 2, right: 6),
+          height: 32,
+          padding: const EdgeInsets.only(left: 6, right: 4),
           decoration: BoxDecoration(
             color: _chipSurface,
-            border: Border.all(color: _chipBorder),
-            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: const Color(0x29E8EEF4),
+              width: 0.5,
+            ),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               handle,
-              const SizedBox(width: 4),
-              _ChipSwitch(
-                value: enabled,
-                onChanged: (v) => _setEnabled(index, v),
-              ),
               const SizedBox(width: 6),
               Text(
                 _locationFieldLabel(f.kind),
                 style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
                   color: _fieldText,
                   height: 1,
                 ),
@@ -376,10 +443,10 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
               const SizedBox(width: 4),
               Text(
                 sample,
-                style: TextStyle(
-                  fontSize: 11,
+                style: const TextStyle(
+                  fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: Colors.grey.shade600,
+                  color: _mutedText,
                   height: 1,
                 ),
               ),
@@ -401,7 +468,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
               _chipIconButton(
                 tooltip: 'ALL CAPS',
                 onTap: () => _toggleCaps(index),
-                background: f.caps ? _capsButtonBg : Colors.white,
+                background: f.caps ? _capsButtonBg : _chipSurface,
                 child: const Text(
                   'Aa',
                   style: TextStyle(
@@ -409,6 +476,24 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
                     fontWeight: FontWeight.w600,
                     color: _fieldText,
                     height: 1,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'Remove',
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () => _setEnabled(index, false),
+                    child: const Padding(
+                      padding: EdgeInsets.all(2),
+                      child: PhosphorIcon(
+                        PhosphorIconsRegular.x,
+                        size: 12,
+                        color: _mutedText,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -425,7 +510,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
           child: PhosphorIcon(PhosphorIconsRegular.dotsSixVertical,
             size: 14,
-            color: Colors.grey.shade500,
+            color: _mutedText,
           ),
         );
 
@@ -487,7 +572,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
       child: Material(
         color: background,
         shape: RoundedRectangleBorder(
-          side: BorderSide(color: Colors.grey.shade300),
+          side: BorderSide(color: _chipBorder),
           borderRadius: BorderRadius.circular(3),
         ),
         child: InkWell(
@@ -516,7 +601,7 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: Colors.grey.shade600,
+              color: _mutedText,
               letterSpacing: 0.3,
             ),
           ),
@@ -588,33 +673,6 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
       regionCode: 'ON',
       country: 'Canada',
       countryCode: 'CAN',
-    );
-  }
-}
-
-/// Compact iOS-style switch sized to fit inside a 28px-tall editor chip.
-class _ChipSwitch extends StatelessWidget {
-  const _ChipSwitch({required this.value, required this.onChanged});
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    // Use a scaled Switch.adaptive so the look matches the host platform's
-    // toggle (Cupertino on macOS/iOS, Material on Linux/Windows/Android).
-    return SizedBox(
-      width: 32,
-      height: 18,
-      child: FittedBox(
-        fit: BoxFit.contain,
-        child: Switch.adaptive(
-          value: value,
-          onChanged: onChanged,
-          activeColor: Colors.white,
-          activeTrackColor: _editorBlue,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-      ),
     );
   }
 }
@@ -700,7 +758,7 @@ class _CountryVariantGearButtonState extends State<_CountryVariantGearButton> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = (_open || _iso) ? const Color(0xFFEAF2FF) : Colors.white;
+    final bg = (_open || _iso) ? FfTokens.nocturneAccentSoft : _chipSurface;
     return CompositedTransformTarget(
       link: _link,
       child: Tooltip(
@@ -712,7 +770,7 @@ class _CountryVariantGearButtonState extends State<_CountryVariantGearButton> {
             color: bg,
             shape: RoundedRectangleBorder(
               side: BorderSide(
-                color: _open ? _editorBlue : Colors.grey.shade300,
+                color: _open ? _editorBlue : _chipBorder,
                 width: _open ? 1.4 : 1,
               ),
               borderRadius: BorderRadius.circular(3),
@@ -723,7 +781,7 @@ class _CountryVariantGearButtonState extends State<_CountryVariantGearButton> {
               child: Center(
                 child: PhosphorIcon(PhosphorIconsRegular.gear,
                   size: 11,
-                  color: Colors.grey.shade700,
+                  color: _fieldText,
                 ),
               ),
             ),
@@ -748,9 +806,9 @@ class _CountryVariantOptionsCard extends StatelessWidget {
     return Container(
       width: 212,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: FfTokens.nocturneEl,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: _chipBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -770,7 +828,7 @@ class _CountryVariantOptionsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
-                color: Colors.grey.shade500,
+                color: _mutedText,
                 letterSpacing: 0.5,
               ),
             ),
@@ -794,7 +852,7 @@ class _CountryVariantOptionsCard extends StatelessWidget {
     return InkWell(
       onTap: () => onPick(value),
       child: Container(
-        color: selected ? const Color(0xFFEAF2FF) : Colors.transparent,
+        color: selected ? FfTokens.nocturneAccentSoft : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         child: Row(
           children: [
@@ -813,7 +871,7 @@ class _CountryVariantOptionsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9,
                 fontFamily: 'monospace',
-                color: Colors.grey.shade500,
+                color: _mutedText,
               ),
             ),
           ],
@@ -904,7 +962,7 @@ class _RegionVariantGearButtonState extends State<_RegionVariantGearButton> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = (_open || _short) ? const Color(0xFFEAF2FF) : Colors.white;
+    final bg = (_open || _short) ? FfTokens.nocturneAccentSoft : _chipSurface;
     return CompositedTransformTarget(
       link: _link,
       child: Tooltip(
@@ -917,7 +975,7 @@ class _RegionVariantGearButtonState extends State<_RegionVariantGearButton> {
             color: bg,
             shape: RoundedRectangleBorder(
               side: BorderSide(
-                color: _open ? _editorBlue : Colors.grey.shade300,
+                color: _open ? _editorBlue : _chipBorder,
                 width: _open ? 1.4 : 1,
               ),
               borderRadius: BorderRadius.circular(3),
@@ -928,7 +986,7 @@ class _RegionVariantGearButtonState extends State<_RegionVariantGearButton> {
               child: Center(
                 child: PhosphorIcon(PhosphorIconsRegular.gear,
                   size: 11,
-                  color: Colors.grey.shade700,
+                  color: _fieldText,
                 ),
               ),
             ),
@@ -953,9 +1011,9 @@ class _RegionVariantOptionsCard extends StatelessWidget {
     return Container(
       width: 272,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: FfTokens.nocturneEl,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: Colors.grey.shade300),
+        border: Border.all(color: _chipBorder),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.08),
@@ -975,7 +1033,7 @@ class _RegionVariantOptionsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
-                color: Colors.grey.shade500,
+                color: _mutedText,
                 letterSpacing: 0.5,
               ),
             ),
@@ -994,7 +1052,7 @@ class _RegionVariantOptionsCard extends StatelessWidget {
     return InkWell(
       onTap: () => onPick(value),
       child: Container(
-        color: selected ? const Color(0xFFEAF2FF) : Colors.transparent,
+        color: selected ? FfTokens.nocturneAccentSoft : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
         child: Row(
           children: [
@@ -1013,7 +1071,7 @@ class _RegionVariantOptionsCard extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9,
                 fontFamily: 'monospace',
-                color: Colors.grey.shade500,
+                color: _mutedText,
               ),
             ),
           ],
@@ -1047,7 +1105,7 @@ class _VisibleSpaceTextController extends TextEditingController {
   }) {
     final spaceStyle = style?.copyWith(
       fontSize: (style.fontSize ?? 15) * 0.75,
-      color: Colors.grey.shade500,
+      color: style.color,
     );
     return TextSpan(
       style: style,
@@ -1128,17 +1186,20 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = _focused ? _editorBlue : Colors.grey.shade300;
-    final borderWidth = _focused ? 1.5 : 1.0;
-    final fieldWidth = _fieldWidthFor(_ctrl.text, _style);
+    final borderColor =
+        _focused ? _editorBlue : const Color(0x29E8EEF4);
+    final borderWidth = _focused ? 1.5 : 0.5;
+    final idle = _idleLabel(_ctrl.text);
+    final measureText = _focused
+        ? (_ctrl.text.isEmpty ? ' ' : _ctrl.text.replaceAll(' ', '⎵'))
+        : (idle.isEmpty ? ' ' : idle);
+    final fieldWidth = _fieldWidthFor(
+      measureText,
+      _focused ? _style : _idleStyle,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 2),
-      // GestureDetector wraps the entire 38×28 box so clicks anywhere inside
-      // (including the padding around the TextField's intrinsic size) focus
-      // the input. Without this, the live hit area is just the small rendered
-      // TextField glyph row, which is why the previous version felt like it
-      // needed multiple clicks to "catch".
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
@@ -1146,33 +1207,50 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
         },
         child: Container(
           width: fieldWidth,
-          height: 34,
+          height: 32,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(4),
+            color: _textBoxFill,
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: borderColor, width: borderWidth),
           ),
           alignment: Alignment.center,
-          child: TextField(
-            controller: _ctrl,
-            focusNode: _focus,
-            style: _style,
-            textAlign: TextAlign.center,
-            cursorWidth: 1.2,
-            cursorColor: _editorBlue,
-            decoration: const InputDecoration(
-              isDense: true,
-              isCollapsed: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 4),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
-              focusedBorder: InputBorder.none,
-            ),
-            onChanged: _handleChanged,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              TextField(
+                controller: _ctrl,
+                focusNode: _focus,
+                style: _style.copyWith(
+                  color: _focused ? _fieldText : Colors.transparent,
+                ),
+                textAlign: TextAlign.center,
+                cursorWidth: 1.2,
+                cursorColor: _editorBlue,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  isCollapsed: true,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 4),
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                ),
+                onChanged: _handleChanged,
+              ),
+              if (!_focused && idle.isNotEmpty)
+                IgnorePointer(
+                  child: Text(idle, style: _idleStyle),
+                ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  static String _idleLabel(String raw) {
+    if (raw.isEmpty) return '';
+    if (raw.trim().isEmpty) return '[space]';
+    return raw.replaceAll(' ', '[space]');
   }
 
   static const TextStyle _style = TextStyle(
@@ -1182,8 +1260,14 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
     fontFamily: 'monospace',
   );
 
+  static const TextStyle _idleStyle = TextStyle(
+    fontSize: 11,
+    color: _mutedText,
+    height: 1,
+  );
+
   static double _fieldWidthFor(String text, TextStyle style) {
-    final visible = text.isEmpty ? ' ' : text.replaceAll(' ', '⎵');
+    final visible = text.isEmpty ? ' ' : text;
     final painter = TextPainter(
       text: TextSpan(text: visible, style: style),
       textDirection: TextDirection.ltr,

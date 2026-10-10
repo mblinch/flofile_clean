@@ -70,6 +70,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   bool _isLoading = true;
   bool _isAdmin = false;
   late _PrefsCategory _selectedCategory;
+  Offset _dialogOffset = Offset.zero;
 
   FfTokens get _t => Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
 
@@ -181,7 +182,9 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
         child: Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(20),
-        child: Container(
+        child: Transform.translate(
+          offset: _dialogOffset,
+          child: Container(
           width: width,
           height: height,
           decoration: BoxDecoration(
@@ -220,14 +223,29 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   ),
                   child: Row(
                     children: [
-                      Text(
-                        'Preferences',
-                        style: _t.labelStyle.copyWith(
-                          fontSize: 13,
-                          color: _t.text,
+                      Expanded(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanUpdate: (details) {
+                            setState(() => _dialogOffset += details.delta);
+                          },
+                          child: MouseRegion(
+                            cursor: SystemMouseCursors.grab,
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Preferences',
+                                  style: _t.labelStyle.copyWith(
+                                    fontSize: 13,
+                                    color: _t.text,
+                                  ),
+                                ),
+                                const Spacer(),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
-                      const Spacer(),
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -328,6 +346,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               ],
             ),
           ),
+        ),
         ),
         ),
       ),

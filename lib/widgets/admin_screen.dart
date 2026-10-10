@@ -598,28 +598,6 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() => _setActiveVerbBundle(bundle));
   }
 
-  Future<void> _importLocalCaptionForWire() async {
-    final local = await _prefs.getCaptionTemplateWireDefault(_captionWire);
-    if (!mounted) return;
-    if (local == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'No local caption structure saved for '
-            '${WireIptcSpecs.factoryWireLabel(_captionWire)}.',
-          ),
-        ),
-      );
-      return;
-    }
-    setState(() {
-      _captionDrafts[_captionWire] = local.copyWith(wireStyle: _captionWire);
-      _stashGameIdFromTemplate(_captionWire, local);
-      _applyGameIdToCaptionDraft(_captionWire, _captionSport);
-      _captionBuilderRevision++;
-    });
-  }
-
   void _stashGameIdFromTemplate(WireStyle wire, CaptionTemplate template) {
     _gameIdDrafts.putIfAbsent(wire, () => {});
     _gameIdDrafts[wire]![_captionSport] = template.gameIdentifierText.trim();
@@ -1652,7 +1630,6 @@ class _AdminScreenState extends State<AdminScreen> {
             onSportChanged: (sport) {
               unawaited(_onCaptionSportChanged(sport));
             },
-            onCopyLocalLayout: _busy ? null : _importLocalCaptionForWire,
             onRegisterFlush: (flush) => _flushCaptionBuilder = flush,
             onRegisterSetAllDefaults: (setAll) => _setAllCaptionDefaults = setAll,
           ),
@@ -1719,32 +1696,20 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   Widget _buildHeaderActions(FfTokens t) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _OutlinedAccentButton(
-          tokens: t,
-          label: _loading ? 'Loading…' : 'Reload',
-          icon: PhosphorIconsRegular.cloudArrowDown,
-          onPressed: _loading || _busy ? null : _bootstrap,
-        ),
-        const SizedBox(width: 8),
-        Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: _busy ? null : () => Navigator.pop(context),
-            borderRadius: BorderRadius.circular(4),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: PhosphorIcon(
-                PhosphorIconsRegular.x,
-                size: 20,
-                color: t.textSecondary,
-              ),
-            ),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _busy ? null : () => Navigator.pop(context),
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: PhosphorIcon(
+            PhosphorIconsRegular.x,
+            size: 20,
+            color: t.textSecondary,
           ),
         ),
-      ],
+      ),
     );
   }
 
@@ -1908,7 +1873,15 @@ class _AdminScreenState extends State<AdminScreen> {
                                   child: ColoredBox(
                                     color: t.bg,
                                     child: _section == _AdminSection.verbs
-                                        ? _buildVerbsContent()
+                                        ? Padding(
+                                            padding: const EdgeInsets.fromLTRB(
+                                              _contentPadding,
+                                              _contentPadding,
+                                              _contentPadding,
+                                              0,
+                                            ),
+                                            child: _buildVerbsContent(),
+                                          )
                                         : _section ==
                                                 _AdminSection.captionStructures
                                             ? Padding(
@@ -2788,55 +2761,6 @@ class AdminBadgeButton extends StatelessWidget {
           onClosed: onClosed,
         ),
         child: child,
-      ),
-    );
-  }
-}
-
-class _OutlinedAccentButton extends StatelessWidget {
-  const _OutlinedAccentButton({
-    required this.tokens,
-    required this.label,
-    required this.onPressed,
-    this.icon,
-  });
-
-  final FfTokens tokens;
-  final String label;
-  final VoidCallback? onPressed;
-  final IconData? icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onPressed != null;
-    final color = enabled ? tokens.accent : tokens.text.withValues(alpha: 0.28);
-    return SizedBox(
-      height: 32,
-      child: OutlinedButton(
-        onPressed: onPressed,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: color,
-          side: BorderSide(color: color),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          textStyle: TextStyle(
-            fontFamily: FfTokens.labelFamily,
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(7),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              PhosphorIcon(icon!, size: 14, color: color),
-              const SizedBox(width: 6),
-            ],
-            Text(label),
-          ],
-        ),
       ),
     );
   }

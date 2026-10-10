@@ -1710,7 +1710,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(label, style: appDialogFieldLabelStyleOf(context)),
+            Text(label, style: verbEditorFieldLabel(t)),
             if (besideTitle != null) ...[
               const SizedBox(width: 10),
               besideTitle,
@@ -3975,7 +3975,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
             children: [
               Text(
                 label,
-                style: appDialogFieldLabelStyleOf(context),
+                style: verbEditorFieldLabel(tokens),
               ),
               Text(
                 hint,
@@ -4051,7 +4051,10 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
       color: widget.canvasColor,
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
-        child: Column(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+          decoration: verbEditorPanelDecoration(t),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _ResolvedPreview(
@@ -4084,10 +4087,11 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: AppDialogLabeledField(
+                  child:             AppDialogLabeledField(
                     label: 'Single player',
                     bottomGap: 0,
                     labelRowHeight: 22,
+                    labelStyle: verbEditorFieldLabel(t),
                     child: AppDialogControlShell(
                       child: TextField(
                         controller: _singular,
@@ -4109,7 +4113,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                       children: [
                         Text(
                           'Two or more',
-                          style: appDialogFieldLabelStyleOf(context),
+                          style: verbEditorFieldLabel(t),
                         ),
                         const SizedBox(width: 6),
                         _fieldSwitch(
@@ -4151,7 +4155,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                       children: [
                         Text(
                           'Reactions',
-                          style: appDialogFieldLabelStyleOf(context),
+                          style: verbEditorFieldLabel(t),
                         ),
                         const SizedBox(width: 6),
                         _fieldSwitch(
@@ -4192,6 +4196,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
                     label: 'Joiner',
                     bottomGap: 0,
                     labelRowHeight: 22,
+                    labelStyle: verbEditorFieldLabel(t),
                     child: AppDialogControlShell(
                       child: TextField(
                         controller: _opponentJoiner,
@@ -4224,8 +4229,9 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
               child: Divider(height: 1, color: t.divider),
             ),
             AppDialogLabeledField(
-              label: 'Keywords',
+              label: 'KEYWORDS',
               bottomGap: 0,
+              labelStyle: verbEditorPanelTitle(t),
               child: AppDialogControlShell(
                 child: TextField(
                   controller: _keywords,
@@ -4252,6 +4258,7 @@ class _VerbEditorPaneState extends State<_VerbEditorPane> {
               showCelebrationToggle: false,
             ),
           ],
+          ),
         ),
       ),
     );
@@ -4585,19 +4592,22 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text(
-              'Preview',
-              style: appDialogFieldLabelStyleOf(context),
+              'PREVIEW',
+              style: verbEditorPanelTitle(t),
             ),
           ),
         ),
         const SizedBox(height: 5),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           decoration: BoxDecoration(
             color: t.sunken,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: t.divider),
+            border: Border.all(
+              color: FfTokens.panelOutline,
+              width: 0.5,
+            ),
           ),
           child: Text.rich(
             TextSpan(
@@ -4629,20 +4639,23 @@ class _ResolvedPreviewState extends State<_ResolvedPreview> {
             children: [
               for (final v in variants)
                 Material(
-                  color: v.id == selectedId ? t.selectedFill : t.badgeFill,
+                  color: v.id == selectedId ? t.sunken : Colors.transparent,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+                    borderRadius: BorderRadius.circular(8),
                     side: BorderSide(
-                      color: v.id == selectedId ? t.accent : t.divider,
+                      color: v.id == selectedId
+                          ? t.text.withValues(alpha: 0.28)
+                          : FfTokens.panelOutline.withValues(alpha: 0.55),
+                      width: 0.5,
                     ),
                   ),
                   child: InkWell(
                     onTap: () => setState(() => _variantId = v.id),
-                    borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+                    borderRadius: BorderRadius.circular(8),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
-                        vertical: 4,
+                        vertical: 6,
                       ),
                       child: Text(
                         v.label,
