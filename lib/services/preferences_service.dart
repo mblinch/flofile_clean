@@ -1250,6 +1250,39 @@ class PreferencesService {
     _afterLocalPreferencesChanged();
   }
 
+  String _verbAdminAckKey(String sport) =>
+      'verb_admin_ack_${sport.toLowerCase().trim()}';
+
+  /// Fingerprint of the published verb catalog the user already answered for.
+  Future<String?> getVerbAdminAcknowledgement(String sport) async {
+    final prefs = await _getPrefs();
+    final value = prefs.getString(_verbAdminAckKey(sport));
+    if (value == null || value.isEmpty) return null;
+    return value;
+  }
+
+  Future<void> saveVerbAdminAcknowledgement(
+    String sport,
+    String fingerprint,
+  ) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_verbAdminAckKey(sport), fingerprint);
+  }
+
+  /// Drop personal verb copies for [sport] so the published admin catalog shows.
+  /// Favorites, category order, and usage counts stay.
+  Future<void> adoptPublishedVerbs(String sport) async {
+    final prefs = await _getPrefs();
+    final normalized = sport.toLowerCase().trim();
+    await prefs.remove(_getVerbOverridesKey(normalized));
+    await prefs.remove(_getCustomVerbsKey(normalized));
+    await prefs.remove(_getCustomVerbWordingsKey(normalized));
+    await prefs.remove(_getVerbWordingDefaultsKey(normalized));
+    await prefs.remove(_getDeletedVerbsKey(normalized));
+    await prefs.remove(_getVerbCategoryOverridesKey(normalized));
+    _afterLocalPreferencesChanged();
+  }
+
   // Verb wording defaults (reset baselines for Edit Verb — mirror of caption wire defaults)
   String _getVerbWordingDefaultsKey(String sport) {
     return '${_keyVerbWordingDefaults}_${sport.toLowerCase()}';

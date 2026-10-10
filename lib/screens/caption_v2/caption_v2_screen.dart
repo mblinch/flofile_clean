@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../../services/admin_service.dart';
+import '../../services/verb_admin_choice.dart';
 import '../../services/auth_service.dart';
 import '../../services/mlb_api_service.dart';
 import '../../theme/ff_tokens.dart';
@@ -1870,6 +1871,15 @@ class _TopChrome extends StatelessWidget {
             const SizedBox(width: 4),
             AdminBadgeButton(
               onClosed: () async {
+                final sport = c?.sport;
+                if (sport != null &&
+                    sport.trim().isNotEmpty &&
+                    context.mounted) {
+                  await VerbAdminChoice.offer(
+                    context: context,
+                    sport: sport,
+                  );
+                }
                 await c?.reloadVerbCatalog();
               },
               child: const _TopAdminBadge(),

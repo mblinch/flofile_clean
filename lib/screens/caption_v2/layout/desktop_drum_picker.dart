@@ -1755,7 +1755,7 @@ class _VerbRowsState extends State<_VerbRows> {
 
   Widget _row(int index) {
     final verb = widget.verbs[index];
-    // Only the committed/caption verb gets the teal selected fill.
+    // Only the committed/caption verb gets the selected fill.
     // Do not highlight the keyboard cursor index (often 0) when nothing is
     // selected — that made the top cascade verb look permanently selected.
     final committed = widget.selectedVerbKey == verb.key;
@@ -2079,101 +2079,126 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
         widget.committed &&
         (!hasOptionRows || optionsComplete);
 
+    final boxed = widget.selected;
+    // The highlight box sits 6px in from the lane, so inner left insets
+    // stay aligned with unselected rows (leadingPadding from the lane edge).
+    final insetLeft = boxed ? widget.leadingPadding - 6 : widget.leadingPadding;
+    final column = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _VerbAccordionRow(
+          controller: widget.controller,
+          verb: widget.verb,
+          selected: widget.selected,
+          committed: widget.committed,
+          hovered: _hovered,
+          boxed: boxed,
+          fontSize: widget.fontSize,
+          leadingPadding: widget.leadingPadding,
+          tokens: widget.tokens,
+          onTap: widget.onTap,
+          onToggleFavorite: widget.onToggleFavorite,
+        ),
+        if (hasOptionRows || showActions) ...[
+          if (widget.showRbi)
+            Padding(
+              padding: EdgeInsets.fromLTRB(insetLeft, 3, 8, 1),
+              child: RbiRow(
+                value: widget.rbi,
+                compact: true,
+                homeRunStyle: widget.verb.key == 'Home Run',
+                onChanged: widget.onRbiChanged,
+              ),
+            ),
+          if (widget.showBase)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                insetLeft,
+                widget.showRbi ? 4 : 3,
+                8,
+                1,
+              ),
+              child: BaseRow(
+                value: widget.selectedBase,
+                compact: true,
+                onChanged: widget.onBaseChanged,
+              ),
+            ),
+          if (widget.showCelebration)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                insetLeft,
+                (widget.showRbi || widget.showBase) ? 4 : 3,
+                8,
+                2,
+              ),
+              child: CelebrationDropdown(
+                compact: true,
+                reactions: widget.reactionOptions,
+                celebrations: widget.celebrationTypeOptions,
+                selected: widget.celebrationType,
+                onChanged: widget.onCelebrationChanged,
+              ),
+            ),
+          if (showActions)
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                insetLeft,
+                hasOptionRows ? 10 : 8,
+                8,
+                6,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _DrumVerbActionButton(
+                      label: 'Save',
+                      tokens: widget.tokens,
+                      onTap: () => widget.controller
+                          .saveOrTransmitFromVerbMenu(transmit: false),
+                    ),
+                  ),
+                  if (widget.controller.ftpModeEnabled) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _DrumVerbActionButton(
+                        label: 'FTP',
+                        tokens: widget.tokens,
+                        onTap: () => widget.controller
+                            .saveOrTransmitFromVerbMenu(transmit: true),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+      ],
+    );
+
     return MouseRegion(
       onEnter: (_) => _setHovered(true),
       onExit: (_) => _setHovered(false),
       cursor: SystemMouseCursors.click,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _VerbAccordionRow(
-            controller: widget.controller,
-            verb: widget.verb,
-            selected: widget.selected,
-            committed: widget.committed,
-            hovered: _hovered,
-            fontSize: widget.fontSize,
-            leadingPadding: widget.leadingPadding,
-            tokens: widget.tokens,
-            onTap: widget.onTap,
-            onToggleFavorite: widget.onToggleFavorite,
-          ),
-          if (hasOptionRows || showActions) ...[
-            if (widget.showRbi)
-              Padding(
-                padding: EdgeInsets.fromLTRB(widget.leadingPadding, 3, 8, 1),
-                child: RbiRow(
-                  value: widget.rbi,
-                  compact: true,
-                  homeRunStyle: widget.verb.key == 'Home Run',
-                  onChanged: widget.onRbiChanged,
-                ),
+      child: boxed
+          ? Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 6,
+                vertical: _VerbAccordion.selectedRowOuterPadding / 2,
               ),
-            if (widget.showBase)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  widget.leadingPadding,
-                  widget.showRbi ? 4 : 3,
-                  8,
-                  1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: FfTokens.nocturneHv,
+                  borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+                  border: Border.all(
+                    color: FfTokens.panelOutline,
+                    width: 1.5,
+                  ),
                 ),
-                child: BaseRow(
-                  value: widget.selectedBase,
-                  compact: true,
-                  onChanged: widget.onBaseChanged,
-                ),
+                child: column,
               ),
-            if (widget.showCelebration)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  widget.leadingPadding,
-                  (widget.showRbi || widget.showBase) ? 4 : 3,
-                  8,
-                  2,
-                ),
-                child: CelebrationDropdown(
-                  compact: true,
-                  reactions: widget.reactionOptions,
-                  celebrations: widget.celebrationTypeOptions,
-                  selected: widget.celebrationType,
-                  onChanged: widget.onCelebrationChanged,
-                ),
-              ),
-            if (showActions)
-              Padding(
-                padding: EdgeInsets.fromLTRB(
-                  widget.leadingPadding,
-                  hasOptionRows ? 10 : 8,
-                  8,
-                  6,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _DrumVerbActionButton(
-                        label: 'Save',
-                        tokens: widget.tokens,
-                        onTap: () => widget.controller
-                            .saveOrTransmitFromVerbMenu(transmit: false),
-                      ),
-                    ),
-                    if (widget.controller.ftpModeEnabled) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _DrumVerbActionButton(
-                          label: 'FTP',
-                          tokens: widget.tokens,
-                          onTap: () => widget.controller
-                              .saveOrTransmitFromVerbMenu(transmit: true),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-          ],
-        ],
-      ),
+            )
+          : column,
     );
   }
 }
@@ -2243,6 +2268,7 @@ class _VerbAccordionRow extends StatelessWidget {
     required this.tokens,
     required this.onTap,
     required this.onToggleFavorite,
+    this.boxed = false,
     this.leadingPadding = 26,
   });
 
@@ -2251,6 +2277,8 @@ class _VerbAccordionRow extends StatelessWidget {
   final bool selected;
   final bool committed;
   final bool hovered;
+  /// Parent draws the grey selection box around the verb and its actions.
+  final bool boxed;
   final double fontSize;
   final FfTokens tokens;
   final VoidCallback onTap;
@@ -2259,9 +2287,11 @@ class _VerbAccordionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = selected
-        ? tokens.selected
-        : (hovered ? tokens.hover : null);
+    final fill = boxed
+        ? null
+        : selected
+            ? tokens.selected
+            : (hovered ? tokens.hover : null);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: CmdClick(
@@ -2273,10 +2303,12 @@ class _VerbAccordionRow extends StatelessWidget {
             _showContextMenu(context, details.globalPosition),
         child: Padding(
           padding: EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: selected
-                ? _VerbAccordion.selectedRowOuterPadding / 2
-                : _VerbAccordion.rowOuterPadding / 2,
+            horizontal: boxed ? 0 : 6,
+            vertical: boxed
+                ? 0
+                : selected
+                    ? _VerbAccordion.selectedRowOuterPadding / 2
+                    : _VerbAccordion.rowOuterPadding / 2,
           ),
           child: Container(
             height: selected
@@ -2287,7 +2319,7 @@ class _VerbAccordionRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: fill,
               borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-              border: selected
+              border: selected && !boxed
                   ? Border.all(color: tokens.accent, width: 1.5)
                   : null,
             ),

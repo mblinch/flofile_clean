@@ -21,6 +21,7 @@ import '../../../services/iptc_template_import_service.dart';
 import '../../../services/jersey_ocr_channel.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/preferences_service.dart';
+import '../../../services/verb_admin_choice.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
 import '../../../widgets/app_styled_dialogs.dart';
@@ -93,6 +94,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   PreferencesService? _prefs;
 
   String? _sport;
+  int _sportSelectGen = 0;
   String? _folderPath;
   int _imageCount = 0;
   String? _homeTeam;
@@ -327,6 +329,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     bool persist = true,
     bool restoreTeams = false,
   }) async {
+    final gen = ++_sportSelectGen;
     if (!mounted) return;
     setState(() {
       _sport = sport;
@@ -351,6 +354,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           }
         }());
       }
+      if (!mounted || gen != _sportSelectGen) return;
+      await VerbAdminChoice.offer(
+        context: context,
+        sport: sport,
+        stillCurrent: () => mounted && gen == _sportSelectGen,
+      );
+      if (!mounted || gen != _sportSelectGen) return;
       await _loadFavorites(sport);
       await _loadTeams(restoreLastTeams: restoreTeams);
       await _loadCaptionStyles();
