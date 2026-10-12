@@ -5274,9 +5274,11 @@ class _KeyboardFirePanelState extends State<KeyboardFirePanel> {
                               isActive && subOpts.rbiEnabled && !isBunts;
                           final showHomeRunMenu = isActive && isHomeRun;
                           final showBaseMenu = isActive &&
+                              kbSport == 'baseball' &&
                               VerbSubOptions.legacyBaseSubMenu(verb);
                           // Cele-only strip for customs / non-RBI verbs with celebration on.
                           final showCeleOnlyMenu = isActive &&
+                              kbSport == 'baseball' &&
                               subOpts.celebrationEnabled &&
                               !showRbiMenu &&
                               !showHomeRunMenu &&

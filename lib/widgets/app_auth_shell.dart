@@ -37,13 +37,16 @@ class _AppAuthShellState extends State<AppAuthShell> {
             !skipped) {
           return Scaffold(
             backgroundColor: t.bg,
-            body: Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: t.accent,
+            body: DecoratedBox(
+              decoration: BoxDecoration(gradient: t.groundWash),
+              child: Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: t.accent,
+                  ),
                 ),
               ),
             ),

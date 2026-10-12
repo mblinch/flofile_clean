@@ -407,21 +407,15 @@ class VerbSubOptions {
     return true;
   }
 
-  /// Celebration block in the verb editor.
-  ///
-  /// Always shown for baseball (any verb can opt in; defaults stay off for
-  /// non-hit / non-celebration verbs). Other sports keep the prior rules.
+  /// Celebration control (party button and mode menu). Baseball only.
   static bool showCelebrationEditor({
     required String verbLabel,
     VerbSubOptions? value,
     bool isCustom = false,
     String? sport,
   }) {
-    if (isBaseballSport(sport)) return true;
-    return isCustom ||
-        isHitVerb(verbLabel) ||
-        isCelebrationVerb(verbLabel) ||
-        (value?.celebrationEnabled ?? false);
+    if (!isBaseballSport(sport)) return false;
+    return true;
   }
 
   static bool showEditorPanel({
@@ -525,10 +519,11 @@ class VerbSubOptions {
           (raw['grandSlamPhrase'] as String?)?.trim().isNotEmpty == true
               ? (raw['grandSlamPhrase'] as String).trim()
               : d.grandSlamPhrase,
-      celebrationEnabled: raw['celebrationEnabled'] as bool? ??
-          raw['celeButton'] as bool? ??
-          raw['celebrationChips'] as bool? ??
-          d.celebrationEnabled,
+      celebrationEnabled: baseball &&
+          (raw['celebrationEnabled'] as bool? ??
+              raw['celeButton'] as bool? ??
+              raw['celebrationChips'] as bool? ??
+              d.celebrationEnabled),
       celebrationPhrase:
           (raw['celebrationPhrase'] as String?)?.trim().isNotEmpty == true
               ? (raw['celebrationPhrase'] as String).trim()
@@ -550,7 +545,7 @@ class VerbSubOptions {
       rbiStyle: RbiCaptionStyle.defaultStyle,
       homeRunStyle: HomeRunCaptionStyle.defaultStyle,
       grandSlamPhrase: defaultGrandSlamPhrase,
-      celebrationEnabled: isHit || isCele,
+      celebrationEnabled: baseball && (isHit || isCele),
       celebrationPhrase: defaultReactionPhrases,
       celebrationTypes: defaultCelebrationTypesForSport(sport),
     );

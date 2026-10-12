@@ -4,7 +4,16 @@ import 'verb_sub_options.dart';
 class VerbCaptionWording {
   VerbCaptionWording._();
 
-  static String defaultWording(String verb) {
+  /// Baseball factory verbs that talk about bases. The same labels on other
+  /// sports (a custom "Runs") stay plain verbs.
+  static bool _plainRunningVerb(String verb, String? sport) {
+    if (sport == null || sport.trim().isEmpty) return false;
+    if (VerbSubOptions.isBaseballSport(sport)) return false;
+    return const {'Steals', 'Slides', 'Runs', 'Rounds'}.contains(verb);
+  }
+
+  static String defaultWording(String verb, {String? sport}) {
+    if (_plainRunningVerb(verb, sport)) return verb.toLowerCase();
     switch (verb) {
       case 'Home Run':
         return 'home run';
@@ -191,7 +200,23 @@ class VerbCaptionWording {
 
   /// Default plural caption phrase for [verb] when none is saved.
   /// Uses [singularPhrase] for heuristics when there is no explicit map entry.
-  static String defaultPluralWording(String verb, String singularPhrase) {
+  static String defaultPluralWording(
+    String verb,
+    String singularPhrase, {
+    String? sport,
+  }) {
+    if (_plainRunningVerb(verb, sport)) {
+      switch (verb) {
+        case 'Runs':
+          return 'run';
+        case 'Steals':
+          return 'steal';
+        case 'Slides':
+          return 'slide';
+        case 'Rounds':
+          return 'round';
+      }
+    }
     const byVerb = <String, String>{
       'Single': 'hit a single',
       'Double': 'hit a double',
@@ -249,7 +274,23 @@ class VerbCaptionWording {
 
   /// Default -ing / gerund phrase used in reaction captions
   /// (e.g. "celebrates after [hitting a single]").
-  static String defaultIngWording(String verb, String singularPhrase) {
+  static String defaultIngWording(
+    String verb,
+    String singularPhrase, {
+    String? sport,
+  }) {
+    if (_plainRunningVerb(verb, sport)) {
+      switch (verb) {
+        case 'Runs':
+          return 'running';
+        case 'Steals':
+          return 'stealing';
+        case 'Slides':
+          return 'sliding';
+        case 'Rounds':
+          return 'rounding';
+      }
+    }
     const byVerb = <String, String>{
       'Single': 'hitting a single',
       'Double': 'hitting a double',

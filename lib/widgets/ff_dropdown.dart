@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../theme/ff_tokens.dart';
+import 'ff_menu.dart';
 
-/// Compact dropdown. Material [DropdownButton] menus cannot be shorter than
-/// 48px, so this opens a [showMenu] with short rows instead.
+/// Compact dropdown. Opens the same overlay menu as the New Session team picker.
 class FfDropdownButton<T> extends StatelessWidget {
   const FfDropdownButton({
     super.key,
@@ -28,15 +29,13 @@ class FfDropdownButton<T> extends StatelessWidget {
   final Color? menuColor;
   final EdgeInsetsGeometry padding;
 
-  static const double menuItemHeight = 26;
-
   @override
   Widget build(BuildContext context) {
     final selected = _match(value);
-    final label = selected?.child ??
-        hint ??
-        const SizedBox.shrink();
-    final base = style ?? DefaultTextStyle.of(context).style;
+    final label = selected?.child ?? hint ?? const SizedBox.shrink();
+    final base = (style ?? DefaultTextStyle.of(context).style).copyWith(
+      fontFamily: style?.fontFamily ?? FfTokens.fontFamily,
+    );
     final closed = DefaultTextStyle(
       style: base,
       overflow: TextOverflow.ellipsis,
@@ -54,10 +53,12 @@ class FfDropdownButton<T> extends StatelessWidget {
           children: [
             if (isExpanded) Expanded(child: closed) else Flexible(child: closed),
             icon ??
-                Icon(
-                  Icons.arrow_drop_down,
-                  size: 18,
-                  color: base.color?.withValues(alpha: 0.7),
+                PhosphorIcon(
+                  PhosphorIconsRegular.caretDown,
+                  size: 12,
+                  color: (base.color ?? FfTokens.sessionT3).withValues(
+                    alpha: 0.85,
+                  ),
                 ),
           ],
         ),
@@ -76,50 +77,26 @@ class FfDropdownButton<T> extends StatelessWidget {
     final box = context.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) return;
     final origin = box.localToGlobal(Offset.zero);
-    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-    final width = box.size.width;
-    final picked = await showMenu<_Pick<T>>(
+    final width = box.size.width < 160 ? 220.0 : box.size.width;
+    final picked = await showFfMenu<T>(
       context: context,
-      color: menuColor ?? Theme.of(context).colorScheme.surface,
-      surfaceTintColor: Colors.transparent,
-      elevation: 2,
-      shadowColor: const Color(0x80000000),
-      menuPadding: const EdgeInsets.symmetric(vertical: 4),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.all(Radius.circular(8)),
-        side: BorderSide(color: FfTokens.panelOutline, width: 0.5),
-      ),
-      constraints: BoxConstraints(
-        minWidth: width,
-        maxWidth: width < 160 ? 220 : width,
-        maxHeight: 320,
-      ),
-      position: RelativeRect.fromRect(
-        Rect.fromLTWH(origin.dx, origin.dy + box.size.height, width, 0),
-        Offset.zero & overlay.size,
-      ),
-      items: [
+      anchorGlobal: origin & box.size,
+      width: width,
+      color: menuColor,
+      choices: [
         for (final item in items)
-          PopupMenuItem<_Pick<T>>(
-            value: _Pick(item.value),
-            enabled: item.enabled,
-            height: item.child is Divider ? 8 : menuItemHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: DefaultTextStyle(
-              style: style ?? DefaultTextStyle.of(context).style,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
+          if (item.child is Divider)
+            FfMenuChoice<T>.divider()
+          else
+            FfMenuChoice<T>(
+              value: item.value,
+              enabled: item.enabled,
+              selected: item.value == value,
               child: item.child,
             ),
-          ),
       ],
     );
     if (picked == null) return;
     onChanged?.call(picked.value);
   }
-}
-
-class _Pick<T> {
-  const _Pick(this.value);
-  final T? value;
 }

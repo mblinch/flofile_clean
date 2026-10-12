@@ -62,15 +62,27 @@ class CaptionV2CaptionDomain {
       return '$leadIn $hitNoun';
     }
 
-    if (runningVerbs.contains(verb)) {
+    if (VerbSubOptions.isBaseballSport(sport) && runningVerbs.contains(verb)) {
       return runningAction(verb: verb, plural: plural, base: base);
     }
 
-    final singular = singularPhrase?.trim().isNotEmpty == true
+    var singular = singularPhrase?.trim().isNotEmpty == true
         ? singularPhrase!.trim()
         : _v1DefaultWording(verb, sport);
-    if (plural && pluralPhrase?.trim().isNotEmpty == true) {
-      return pluralPhrase!.trim();
+    var pluralText = pluralPhrase?.trim() ?? '';
+    if (!VerbSubOptions.isBaseballSport(sport)) {
+      final baseballSingular = VerbCaptionWording.defaultWording(verb);
+      if (singular == baseballSingular) {
+        singular = VerbCaptionWording.defaultWording(verb, sport: sport);
+      }
+      final baseballPlural = VerbCaptionWording.defaultPluralWording(
+        verb,
+        baseballSingular,
+      );
+      if (pluralText == baseballPlural) pluralText = '';
+    }
+    if (plural && pluralText.isNotEmpty) {
+      return pluralText;
     }
     if (plural &&
         const {
@@ -101,7 +113,7 @@ class CaptionV2CaptionDomain {
       }
     }
     return plural
-        ? VerbCaptionWording.defaultPluralWording(verb, singular)
+        ? VerbCaptionWording.defaultPluralWording(verb, singular, sport: sport)
         : singular;
   }
 
@@ -229,7 +241,7 @@ class CaptionV2CaptionDomain {
             ? 'battles for the ball'
             : 'battles';
       default:
-        return VerbCaptionWording.defaultWording(verb);
+        return VerbCaptionWording.defaultWording(verb, sport: sport);
     }
   }
 

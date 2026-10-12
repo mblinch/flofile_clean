@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'caption_formula_renderer.dart';
 import 'caption_template.dart';
+import '../services/app_defaults_firestore_service.dart';
 import '../services/preferences_service.dart';
 
 /// One entry in the caption-style picker (built-in wire or saved library row).
@@ -33,6 +34,8 @@ class CaptionStyleCatalog {
   });
 
   static const String tokGetty = 'wire:getty';
+  /// Getty structure with the NBAE copyright line on the note to user.
+  static const String tokNbae = 'wire:nbae';
   static const String tokImagn = 'wire:imagn';
   static const String tokAp = 'wire:ap';
   static const String tokCp = 'wire:cp';
@@ -97,12 +100,15 @@ class CaptionStyleCatalog {
       }
     }
 
-    final gettyDef = await prefs.getCaptionTemplateWireDefault(WireStyle.getty);
-    final imagnDef = await prefs.getCaptionTemplateWireDefault(WireStyle.imagn);
-    final apDef = await prefs.getCaptionTemplateWireDefault(WireStyle.ap);
-    final cpDef = await prefs.getCaptionTemplateWireDefault(WireStyle.cp);
-    final gettyIntlDef =
-        await prefs.getCaptionTemplateWireDefault(WireStyle.gettyInternational);
+    final sportKey = resolvedSport.isEmpty ? 'baseball' : resolvedSport;
+    final adminWires = AppDefaultsFirestoreService.mergedCaptionWireDefaults(
+      sport: sportKey,
+    );
+    final gettyDef = adminWires[WireStyle.getty];
+    final imagnDef = adminWires[WireStyle.imagn];
+    final apDef = adminWires[WireStyle.ap];
+    final cpDef = adminWires[WireStyle.cp];
+    final gettyIntlDef = adminWires[WireStyle.gettyInternational];
     final lib = await prefs.getCaptionStyleLibrary();
     final active = await prefs.getCaptionTemplate();
 
@@ -348,6 +354,7 @@ class CaptionStyleCatalog {
     }
     switch (token) {
       case tokGetty:
+      case tokNbae:
         return _wireLabel(WireStyle.getty, 'Getty');
       case tokImagn:
         return _wireLabel(WireStyle.imagn, 'Imagn');
@@ -446,6 +453,7 @@ class CaptionStyleCatalog {
       case tokCustom:
         return WireStyle.custom;
       case tokGetty:
+      case tokNbae:
       default:
         return WireStyle.getty;
     }

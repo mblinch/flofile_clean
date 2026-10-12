@@ -229,12 +229,30 @@ class FloHeaderRestartButton extends StatelessWidget {
   }
 }
 
+String _accountInitials({String? displayName, String? email}) {
+  final name = displayName?.trim() ?? '';
+  if (name.isNotEmpty) {
+    final parts = name.split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+    final letters = parts.map((part) => part[0]).take(2).join();
+    if (letters.isNotEmpty) return letters.toUpperCase();
+  }
+  final local = (email ?? '').split('@').first.trim();
+  if (local.length >= 2) return local.substring(0, 2).toUpperCase();
+  if (local.isNotEmpty) return local.toUpperCase();
+  return '•';
+}
+
 /// Account label that opens the app-styled context menu (Sign out).
 class FloHeaderSignedInAs extends StatefulWidget {
   const FloHeaderSignedInAs({
     this.foreground,
     this.foregroundMuted,
     this.compact = false,
+    this.initials = false,
+    this.showStatusDot = true,
+    this.avatarFill,
+    this.initialsDiameter = 28,
+    this.initialsBorder = true,
   });
 
   /// Account email / icon color. Defaults to [AppTokens.onAccent].
@@ -246,63 +264,28 @@ class FloHeaderSignedInAs extends StatefulWidget {
   /// Shows only the account icon and menu arrow in space-constrained chrome.
   final bool compact;
 
+  /// Circle with the account initials, a signed-in dot, and the menu arrow.
+  final bool initials;
+
+  /// Gold status dot on the initials avatar. The session bar draws its own
+  /// admin dot, so it passes false.
+  final bool showStatusDot;
+
+  /// Fill behind the initials. Defaults to a tint of [foreground].
+  final Color? avatarFill;
+
+  /// Diameter of the initials circle.
+  final double initialsDiameter;
+
+  /// Hairline ring around the initials circle.
+  final bool initialsBorder;
+
   @override
   State<FloHeaderSignedInAs> createState() => _FloHeaderSignedInAsState();
 }
 
 class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
-  final GlobalKey _arrowKey = GlobalKey();
-
-  Future<void> _openAccountMenu(String account) async {
-    final arrowBox = _arrowKey.currentContext?.findRenderObject() as RenderBox?;
-    final overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox?;
-    if (arrowBox == null || overlay == null) return;
-
-    // Anchor under the dropdown arrow; prefer aligning to the arrow's right edge.
-    final arrowTopLeft = arrowBox.localToGlobal(Offset.zero);
-    final arrowBottomRight = arrowBox.localToGlobal(
-      Offset(arrowBox.size.width, arrowBox.size.height),
-    );
-    final position = RelativeRect.fromLTRB(
-      arrowTopLeft.dx,
-      arrowBottomRight.dy,
-      overlay.size.width - arrowBottomRight.dx,
-      overlay.size.height - arrowBottomRight.dy,
-    );
-
-    final result = await showAppContextMenu<String>(
-      context: context,
-      position: position,
-      items: [
-        PopupMenuItem<String>(
-          enabled: false,
-          height: kAppContextMenuItemHeight + 2,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-          child: Text(
-            account,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: kAppContextMenuTextStyle.copyWith(
-              color: AppTokens.inkSecondary,
-              fontWeight: FontWeight.w400,
-              fontSize: 10,
-            ),
-          ),
-        ),
-        const PopupMenuDivider(height: 1),
-        AppPopupMenu.tile(
-          value: 'sign_out',
-          label: 'Sign out',
-          icon: PhosphorIconsRegular.signOut,
-        ),
-      ],
-    );
-
-    if (result == 'sign_out') {
-      await AuthService.instance.signOut();
-    }
-  }
+  final MenuController _menu = MenuController();
 
   @override
   Widget build(BuildContext context) {
@@ -315,44 +298,183 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
             ? user.displayName!.trim()
             : 'Account');
 
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final fg = widget.foreground ?? AppTokens.onAccent;
-    final avatarFill = widget.foreground != null
-        ? fg.withValues(alpha: 0.18)
-        : AppTokens.accent;
+    final avatarFill = widget.avatarFill ??
+        (widget.foreground != null
+            ? fg.withValues(alpha: 0.18)
+            : AppTokens.accent);
+    final initialsSize = widget.initialsDiameter;
+    final initials = widget.initials
+        ? _accountInitials(
+            displayName: user.displayName,
+            email: user.email,
+          )
+        : '';
 
     return Padding(
       padding: const EdgeInsets.only(right: 4),
-      child: Tooltip(
-        message: 'Account',
-        waitDuration: const Duration(milliseconds: 350),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: () => _openAccountMenu(account),
-            borderRadius: BorderRadius.circular(AppTokens.radiusControl),
-            hoverColor: AppTokens.onAccentOverlay,
-            splashColor: AppTokens.onAccentSubtle,
+      child: MenuAnchor(
+        controller: _menu,
+        alignmentOffset: const Offset(0, 6),
+        style: MenuStyle(
+          backgroundColor: WidgetStatePropertyAll(t.surface),
+          surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+          elevation: const WidgetStatePropertyAll(8),
+          padding: const WidgetStatePropertyAll(
+            EdgeInsets.symmetric(vertical: 6),
+          ),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: t.divider),
+            ),
+          ),
+        ),
+        menuChildren: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 220, maxWidth: 280),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+              child: Text(
+                account,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: t.textSecondary,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
+          Divider(height: 1, thickness: 1, color: t.divider),
+          MenuItemButton(
+            style: ButtonStyle(
+              foregroundColor: WidgetStatePropertyAll(t.text),
+              overlayColor: WidgetStatePropertyAll(
+                t.text.withValues(alpha: 0.06),
+              ),
+              padding: const WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+            onPressed: () => AuthService.instance.signOut(),
+            leadingIcon: PhosphorIcon(
+              PhosphorIconsRegular.signOut,
+              size: 15,
+              color: t.text,
+            ),
+            child: Text(
+              'Sign out',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: t.text,
+              ),
+            ),
+          ),
+        ],
+        builder: (context, controller, child) {
+          return Tooltip(
+            message: 'Account',
+            waitDuration: const Duration(milliseconds: 350),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  if (controller.isOpen) {
+                    controller.close();
+                  } else {
+                    controller.open();
+                  }
+                },
+                borderRadius: BorderRadius.circular(AppTokens.radiusControl),
+                hoverColor: AppTokens.onAccentOverlay,
+                splashColor: AppTokens.onAccentSubtle,
+                child: child,
+              ),
+            ),
+          );
+        },
+        child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: widget.initials ? 0 : 8,
+                vertical: widget.initials ? 0 : 4,
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: avatarFill,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: fg.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: PhosphorIcon(PhosphorIconsRegular.user,
-                      color: fg,
-                      size: 11,
-                    ),
-                  ),
-                  if (!widget.compact) ...[
+                  widget.initials
+                      ? SizedBox(
+                          width: initialsSize,
+                          height: initialsSize,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Container(
+                                width: initialsSize,
+                                height: initialsSize,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: avatarFill,
+                                  shape: BoxShape.circle,
+                                  border: widget.initialsBorder
+                                      ? Border.all(
+                                          color: fg.withValues(alpha: 0.28),
+                                        )
+                                      : null,
+                                ),
+                                child: Text(
+                                  initials,
+                                  style: TextStyle(
+                                    fontSize: initialsSize >= 32 ? 12 : 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: fg,
+                                    height: 1,
+                                  ),
+                                ),
+                              ),
+                              if (widget.showStatusDot)
+                                Positioned(
+                                  right: -1,
+                                  bottom: -1,
+                                  child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF5C451),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: const Color(0xFF1A1D24),
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        )
+                      : Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: avatarFill,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: fg.withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: PhosphorIcon(
+                            PhosphorIconsRegular.user,
+                            color: fg,
+                            size: 11,
+                          ),
+                        ),
+                  if (!widget.compact && !widget.initials) ...[
                     const SizedBox(width: 4),
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 200),
@@ -368,17 +490,17 @@ class _FloHeaderSignedInAsState extends State<FloHeaderSignedInAs> {
                       ),
                     ),
                   ],
-                  const SizedBox(width: 2),
-                  PhosphorIcon(PhosphorIconsRegular.caretDown,
-                    key: _arrowKey,
-                    color: fg,
-                    size: 16,
-                  ),
+                  if (!widget.initials) ...[
+                    const SizedBox(width: 2),
+                    PhosphorIcon(
+                      PhosphorIconsRegular.caretDown,
+                      color: fg,
+                      size: 16,
+                    ),
+                  ],
                 ],
               ),
             ),
-          ),
-        ),
       ),
     );
   }

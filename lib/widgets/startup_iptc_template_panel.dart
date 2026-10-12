@@ -5,9 +5,30 @@ import '../caption_style/caption_template.dart';
 import '../caption_style/wire_iptc_specs.dart';
 import '../services/app_defaults_firestore_service.dart';
 import '../services/iptc_template_apply_service.dart';
+import '../theme/ff_tokens.dart';
 import 'app_styled_dialogs.dart';
 import 'ff_dropdown.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+
+/// Light by default. Caption V2 wraps the panel in the session chrome.
+class IptcPanelStyle extends InheritedWidget {
+  const IptcPanelStyle({
+    required this.session,
+    required super.child,
+  });
+
+  final bool session;
+
+  static bool sessionOf(BuildContext context) {
+    return context
+            .dependOnInheritedWidgetOfExactType<IptcPanelStyle>()
+            ?.session ??
+        false;
+  }
+
+  @override
+  bool updateShouldNotify(IptcPanelStyle oldWidget) => session != oldWidget.session;
+}
 
 /// Startup right column: compact IPTC checklist filled from folder files.
 class StartupIptcTemplatePanel extends StatelessWidget {
@@ -33,6 +54,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     this.visibleTemplates = const [],
     this.selectedTemplateId,
     this.onTemplateSelected,
+    this.sessionStyle = false,
   });
 
   final WireStyle selectedWire;
@@ -40,6 +62,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
   final List<IptcTemplateCatalogEntry> visibleTemplates;
   final String? selectedTemplateId;
   final ValueChanged<IptcTemplateCatalogEntry>? onTemplateSelected;
+  final bool sessionStyle;
   final Map<String, String> values;
   final Set<String> foundInFilesKeys;
   final void Function(String storageKey, String value)? onValueChanged;
@@ -164,7 +187,9 @@ class StartupIptcTemplatePanel extends StatelessWidget {
     final left = remaining.sublist(0, mid);
     final right = remaining.sublist(mid);
 
-    return Column(
+    return IptcPanelStyle(
+      session: sessionStyle,
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (!fieldsOnly) ...[
@@ -197,9 +222,11 @@ class StartupIptcTemplatePanel extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontFamily: 'Inter',
-                          fontSize: 9,
+                          fontSize: sessionStyle ? 12 : 9,
                           fontVariations: const [FontVariation('wght', 600)],
-                          color: Color(0xFF333333),
+                          color: sessionStyle
+                              ? FfTokens.sessionT2
+                              : const Color(0xFF333333),
                         ),
                       ),
                     ),
@@ -430,6 +457,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
           ),
         ),
       ],
+      ),
     );
   }
 }
@@ -571,37 +599,36 @@ class _IptcApplyModeSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final session = IptcPanelStyle.sessionOf(context);
+    final modes = <(String, IptcApplyMode)>[
+      ('Off', IptcApplyMode.none),
+      ('On import', IptcApplyMode.onImport),
+      ('On save', IptcApplyMode.onSave),
+    ];
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8E8E8),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
-      ),
+      decoration: session
+          ? null
+          : BoxDecoration(
+              color: const Color(0xFFE8E8E8),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
+            ),
       child: Row(
         children: [
-          Expanded(
-            child: _segment(
-              label: 'Off',
-              selected: mode == IptcApplyMode.none,
-              onTap: () => _select(IptcApplyMode.none),
+          for (var i = 0; i < modes.length; i++) ...[
+            if (!session && i > 0)
+              Container(width: 0.7, height: 22, color: const Color(0xFFD0D0D0)),
+            Expanded(
+              child: _segment(
+                label: modes[i].$1,
+                selected: mode == modes[i].$2,
+                onTap: () => _select(modes[i].$2),
+                session: session,
+                index: i,
+                count: modes.length,
+              ),
             ),
-          ),
-          Container(width: 0.7, height: 22, color: const Color(0xFFD0D0D0)),
-          Expanded(
-            child: _segment(
-              label: 'On import',
-              selected: mode == IptcApplyMode.onImport,
-              onTap: () => _select(IptcApplyMode.onImport),
-            ),
-          ),
-          Container(width: 0.7, height: 22, color: const Color(0xFFD0D0D0)),
-          Expanded(
-            child: _segment(
-              label: 'On save',
-              selected: mode == IptcApplyMode.onSave,
-              onTap: () => _select(IptcApplyMode.onSave),
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -616,29 +643,59 @@ class _IptcApplyModeSelector extends StatelessWidget {
     required String label,
     required bool selected,
     required VoidCallback onTap,
+    required bool session,
+    required int index,
+    required int count,
   }) {
+    final radius = session
+        ? BorderRadius.horizontal(
+            left: index == 0 ? const Radius.circular(10) : Radius.zero,
+            right: index == count - 1 ? const Radius.circular(10) : Radius.zero,
+          )
+        : BorderRadius.circular(3);
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onChanged == null ? null : onTap,
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: radius,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+          height: session ? 32 : null,
+          padding: EdgeInsets.symmetric(horizontal: session ? 8 : 5, vertical: session ? 0 : 3),
           alignment: Alignment.center,
-          color: selected ? Colors.white : Colors.transparent,
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 9,
-              fontVariations: [
-                FontVariation('wght', selected ? 700 : 500),
+          decoration: BoxDecoration(
+            color: session
+                ? (selected ? FfTokens.nocturneHv : FfTokens.nocturneSunken)
+                : (selected ? Colors.white : Colors.transparent),
+            borderRadius: radius,
+            border: session && selected
+                ? Border.all(color: FfTokens.nocturneLn2)
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (session && selected) ...[
+                const PhosphorIcon(PhosphorIconsBold.check, size: 12),
+                const SizedBox(width: 4),
               ],
-              color:
-                  selected ? const Color(0xFF333333) : const Color(0xFF888888),
-            ),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: session ? 12 : 9,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: session
+                        ? (selected ? FfTokens.sessionTx : FfTokens.sessionT2)
+                        : (selected
+                            ? const Color(0xFF333333)
+                            : const Color(0xFF888888)),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -779,42 +836,65 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
       !_focused &&
       IptcTemplateApplyService.isInAppGeneratedPlaceholder(_controller.text);
 
-  TextStyle get _valueStyle {
+  TextStyle _valueStyleFor(BuildContext context) {
+    final session = IptcPanelStyle.sessionOf(context);
+    final base = session
+        ? const TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 13,
+            height: 1.25,
+            color: FfTokens.sessionTx,
+          )
+        : StartupIptcTemplatePanel._fieldValueStyle;
     if (!widget.enabled) {
-      return StartupIptcTemplatePanel._fieldValueDisabledStyle;
+      return session
+          ? base.copyWith(color: FfTokens.sessionT3)
+          : StartupIptcTemplatePanel._fieldValueDisabledStyle;
     }
     if (_showingPlaceholder) {
-      return StartupIptcTemplatePanel._fieldValueStyle.copyWith(
-        color: const Color(0xFFD32F2F),
+      return base.copyWith(
+        color: FfTokens.danger,
         fontStyle: FontStyle.italic,
       );
     }
-    return StartupIptcTemplatePanel._fieldValueStyle;
+    return base;
   }
 
-  BoxDecoration get _fieldDecoration => BoxDecoration(
-        color: widget.enabled
-            ? Colors.white
-            : StartupIptcTemplatePanel._fieldDisabledFill,
+  BoxDecoration _decorationFor(BuildContext context) {
+    final session = IptcPanelStyle.sessionOf(context);
+    if (session) {
+      return BoxDecoration(
+        color: widget.enabled ? FfTokens.nocturneSunken : FfTokens.nocturneEl,
         border: Border.all(
           color: widget.enabled
-              ? (_focused
-                  ? const Color(0xFF4A7A96)
-                  : const Color(0xFFD0D0D0))
-              : StartupIptcTemplatePanel._fieldDisabledBorder,
-          width: widget.enabled && _focused ? 1.0 : 0.7,
+              ? (_focused ? FfTokens.nocturneAc : FfTokens.sessionLn2)
+              : Colors.transparent,
         ),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: widget.enabled
-            ? [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 1,
-                  offset: const Offset(0, 0.5),
-                ),
-              ]
-            : const [],
+        borderRadius: BorderRadius.circular(8),
       );
+    }
+    return BoxDecoration(
+      color: widget.enabled
+          ? Colors.white
+          : StartupIptcTemplatePanel._fieldDisabledFill,
+      border: Border.all(
+        color: widget.enabled
+            ? (_focused ? const Color(0xFF4A7A96) : const Color(0xFFD0D0D0))
+            : StartupIptcTemplatePanel._fieldDisabledBorder,
+        width: widget.enabled && _focused ? 1.0 : 0.7,
+      ),
+      borderRadius: BorderRadius.circular(4),
+      boxShadow: widget.enabled
+          ? [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 1,
+                offset: const Offset(0, 0.5),
+              ),
+            ]
+          : const [],
+    );
+  }
 
   bool get _isUrgency =>
       widget.spec.label == StartupIptcTemplatePanel._urgencyLabel;
@@ -830,7 +910,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
     return Container(
       height: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: _fieldDecoration,
+      decoration: _decorationFor(context),
       child: Row(
         crossAxisAlignment: widget.showFoundInFiles
             ? CrossAxisAlignment.start
@@ -858,7 +938,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
                     singleLine ? TextInputType.text : TextInputType.multiline,
                 textInputAction:
                     singleLine ? TextInputAction.next : TextInputAction.newline,
-                style: _valueStyle,
+                style: _valueStyleFor(context),
                 decoration: const InputDecoration(
                   isDense: true,
                   border: InputBorder.none,
@@ -891,7 +971,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
       return Container(
         height: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        decoration: _fieldDecoration,
+        decoration: _decorationFor(context),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -906,7 +986,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
             Expanded(
               child: Text(
                 '',
-                style: StartupIptcTemplatePanel._fieldValueDisabledStyle,
+                style: _valueStyleFor(context),
               ),
             ),
           ],
@@ -917,7 +997,7 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
     return Container(
       height: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: _fieldDecoration,
+      decoration: _decorationFor(context),
       child: Row(
         crossAxisAlignment: widget.showFoundInFiles
             ? CrossAxisAlignment.start
@@ -937,17 +1017,13 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
                     ? current
                     : '0',
                 isExpanded: true,
-                style: widget.enabled
-                    ? StartupIptcTemplatePanel._fieldValueStyle
-                    : StartupIptcTemplatePanel._fieldValueDisabledStyle,
+                style: _valueStyleFor(context),
                 items: IptcTemplateApplyService.urgencyValues.map((level) {
                   return DropdownMenuItem<String>(
                     value: level,
                     child: Text(
                       IptcTemplateApplyService.urgencyMenuLabel(level),
-                      style: widget.enabled
-                          ? StartupIptcTemplatePanel._fieldValueStyle
-                          : StartupIptcTemplatePanel._fieldValueDisabledStyle,
+                      style: _valueStyleFor(context),
                     ),
                   );
                 }).toList(),
@@ -996,7 +1072,16 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final displayLabel = StartupIptcTemplatePanel._labelOnOneLine(label);
-    final labelStyle = enabled ? _labelStyle : _labelDisabledStyle;
+    final session = IptcPanelStyle.sessionOf(context);
+    final labelStyle = session
+        ? TextStyle(
+            fontFamily: 'Inter',
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            height: 1.15,
+            color: enabled ? FfTokens.sessionT2 : FfTokens.sessionT3,
+          )
+        : (enabled ? _labelStyle : _labelDisabledStyle);
 
     if (!showFoundInFiles) {
       return Text(
@@ -1018,15 +1103,15 @@ class _FieldLabel extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: labelStyle,
         ),
-        const Text(
+        Text(
           'Found in files',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontFamily: 'Inter',
-            fontSize: 8,
-            fontVariations: [FontVariation('wght', 600)],
-            color: Color(0xFF2E7D32),
+            fontSize: session ? 10 : 8,
+            fontVariations: const [FontVariation('wght', 600)],
+            color: session ? FfTokens.sessionOk : const Color(0xFF2E7D32),
             height: 1.1,
           ),
         ),
@@ -1077,6 +1162,8 @@ class _WireTemplateDropdown extends StatelessWidget {
     final safeInitial =
         itemIds.contains(initialId) ? initialId : itemIds.first;
 
+    final session = IptcPanelStyle.sessionOf(context);
+    final ink = session ? FfTokens.sessionTx : const Color(0xFF3A6076);
     return DropdownFlutter<String>(
       key: ValueKey('startup_iptc_wire_$safeInitial'),
       hintText: 'Select IPTC template',
@@ -1105,9 +1192,9 @@ class _WireTemplateDropdown extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             fontFamily: 'Inter',
-            fontSize: compact ? 10 : 11,
+            fontSize: session ? 13 : (compact ? 10 : 11),
             fontVariations: const [FontVariation('wght', 600)],
-            color: const Color(0xFF3A6076),
+            color: ink,
           ),
         );
       },
@@ -1123,30 +1210,36 @@ class _WireTemplateDropdown extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontFamily: 'Inter',
-                fontSize: 11,
+                fontSize: session ? 13 : 11,
                 fontVariations: [
                   FontVariation('wght', isSelected ? 700 : 500),
                 ],
-                color: const Color(0xFF3A6076),
+                color: ink,
               ),
             ),
           ),
         );
       },
       decoration: CustomDropdownDecoration(
-        closedFillColor: Colors.white,
-        expandedFillColor: Colors.white,
-        closedBorder: Border.all(color: const Color(0xFFD0D0D0), width: 0.7),
-        expandedBorder: Border.all(color: const Color(0xFF4A7A96), width: 1.0),
-        closedBorderRadius: BorderRadius.circular(5),
+        closedFillColor: session ? FfTokens.nocturneSunken : Colors.white,
+        expandedFillColor: session ? FfTokens.nocturneEl : Colors.white,
+        closedBorder: Border.all(
+          color: session ? FfTokens.sessionLn2 : const Color(0xFFD0D0D0),
+          width: session ? 1 : 0.7,
+        ),
+        expandedBorder: Border.all(
+          color: session ? FfTokens.nocturneAc : const Color(0xFF4A7A96),
+          width: 1.0,
+        ),
+        closedBorderRadius: BorderRadius.circular(session ? 8 : 5),
         expandedBorderRadius: BorderRadius.circular(8),
         hintStyle: TextStyle(
           fontFamily: 'Inter',
-          fontSize: compact ? 10 : 11,
-          color: Colors.grey.shade500,
+          fontSize: session ? 13 : (compact ? 10 : 11),
+          color: session ? FfTokens.sessionT3 : Colors.grey.shade500,
         ),
-        listItemDecoration: const ListItemDecoration(
-          selectedColor: Color(0xFFEEF3F6),
+        listItemDecoration: ListItemDecoration(
+          selectedColor: session ? FfTokens.nocturneHv : const Color(0xFFEEF3F6),
         ),
       ),
       onChanged: (id) {

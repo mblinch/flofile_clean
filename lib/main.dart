@@ -1,3 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart'
+    show FirebaseFirestore, Settings;
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:io';
@@ -11,6 +15,7 @@ import 'package:phosphor_icons/phosphor_icons.dart';
 
 import 'theme/ff_icons.dart';
 import 'theme/ff_tokens.dart';
+import 'widgets/ff_menu.dart';
 import 'screens/caption_builder_screen.dart';
 import 'screens/caption_v2/caption_v2_flag.dart';
 import 'screens/caption_v2/caption_v2_screen.dart';
@@ -94,6 +99,13 @@ Future<void> _initFirebaseIfConfigured() async {
   }
   try {
     await Firebase.initializeApp(options: options);
+    if (kDebugMode && Platform.isMacOS) {
+      // Debug and the installed app share ~/Library/Application Support/firestore.
+      // Firestore aborts the process if a second copy opens that database.
+      FirebaseFirestore.instance.settings = const Settings(
+        persistenceEnabled: false,
+      );
+    }
     if (Firebase.apps.isNotEmpty) {
       print('[Firebase] Initialized for project: ${options.projectId}');
     }
@@ -224,16 +236,14 @@ class MyApp extends StatelessWidget {
               // Keep thumb in the reserved gutter; content uses kFloScrollbarGutter.
               minThumbLength: 28,
             ),
-            popupMenuTheme: PopupMenuThemeData(
-              color: Colors.white,
+            popupMenuTheme: const PopupMenuThemeData(
+              color: FfTokens.sessionEl,
               surfaceTintColor: Colors.transparent,
-              elevation: 0,
-              menuPadding: EdgeInsets.zero,
-              shadowColor: Colors.black.withValues(alpha: 0.12),
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-                side: BorderSide(color: Color(0xFFD0D0D0)),
-              ),
+              elevation: 16,
+              menuPadding: EdgeInsets.all(6),
+              shadowColor: FfTokens.sessionMenuShadow,
+              shape: FfMenuSurface.shape,
+              textStyle: ffMenuTextStyle,
             ),
           ),
           darkTheme: ThemeData(
@@ -252,6 +262,23 @@ class MyApp extends StatelessWidget {
             cardColor: FfTokens.dark.surface,
             dialogTheme: DialogThemeData(
               backgroundColor: FfTokens.dark.surface,
+            ),
+            snackBarTheme: SnackBarThemeData(
+              backgroundColor: FfTokens.nocturneEl.withValues(alpha: 0.72),
+              contentTextStyle: const TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: FfTokens.nocturneTx,
+              ),
+              behavior: SnackBarBehavior.floating,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: const BorderSide(color: FfTokens.nocturneLn2),
+              ),
+              actionTextColor: FfTokens.nocturneAc,
+              closeIconColor: FfTokens.nocturneT2,
             ),
             useMaterial3: true,
             fontFamily: FfTokens.fontFamily,
@@ -280,6 +307,15 @@ class MyApp extends StatelessWidget {
             extensions: const <ThemeExtension<dynamic>>[FfTokens.dark],
             focusColor: FfTokens.dark.accent.withValues(alpha: 0.0),
             splashFactory: NoSplash.splashFactory,
+            popupMenuTheme: const PopupMenuThemeData(
+              color: FfTokens.sessionEl,
+              surfaceTintColor: Colors.transparent,
+              elevation: 16,
+              menuPadding: EdgeInsets.all(6),
+              shadowColor: FfTokens.sessionMenuShadow,
+              shape: FfMenuSurface.shape,
+              textStyle: ffMenuTextStyle,
+            ),
             switchTheme: const SwitchThemeData(
               thumbColor: WidgetStatePropertyAll(Colors.white),
             ),

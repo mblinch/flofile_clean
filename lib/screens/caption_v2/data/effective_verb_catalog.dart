@@ -171,7 +171,7 @@ class EffectiveVerbCatalog {
         }
         final phrase = (entry.value['verbPhrase'] ??
                 customWordings[entry.key] ??
-                VerbCaptionWording.defaultWording(entry.key))
+                VerbCaptionWording.defaultWording(entry.key, sport: sport))
             .toString()
             .trim();
         if (phrase.toLowerCase() == lower) return entry.key;
@@ -274,9 +274,16 @@ class EffectiveVerbCatalog {
       final singular = (raw['verbPhrase'] ?? customWordings[entry.key] ?? '')
           .toString()
           .trim();
-      final effectiveSingular = singular.isEmpty
-          ? VerbCaptionWording.defaultWording(entry.key)
-          : singular;
+      final baseballSingular = VerbCaptionWording.defaultWording(entry.key);
+      final sportSingular =
+          VerbCaptionWording.defaultWording(entry.key, sport: sport);
+      final effectiveSingular = _wordingForSport(
+        stored: singular,
+        applyDefault: singular.isEmpty,
+        sport: sport,
+        baseballDefault: baseballSingular,
+        sportDefault: sportSingular,
+      );
       final usePlural = raw['usePluralPhrase'] != false;
       final hasPlural = raw.containsKey('pluralPhrase');
       final savedPlural = (raw['pluralPhrase'] ?? '').toString().trim();
@@ -293,14 +300,24 @@ class EffectiveVerbCatalog {
       // Respect intentional clears: empty stored plural stays empty. When plural
       // is disabled, fall back to singular so multi-player captions don't invent
       // a plural phrase.
+      final baseballPlural = VerbCaptionWording.defaultPluralWording(
+        entry.key,
+        effectiveSingular,
+      );
+      final sportPlural = VerbCaptionWording.defaultPluralWording(
+        entry.key,
+        effectiveSingular,
+        sport: sport,
+      );
       final resolvedPlural = !usePlural
           ? effectiveSingular
-          : hasPlural
-              ? savedPlural
-              : VerbCaptionWording.defaultPluralWording(
-                  entry.key,
-                  effectiveSingular,
-                );
+          : _wordingForSport(
+              stored: hasPlural ? savedPlural : '',
+              applyDefault: !hasPlural,
+              sport: sport,
+              baseballDefault: baseballPlural,
+              sportDefault: sportPlural,
+            );
       byKey[entry.key] = EffectiveVerb(
         key: entry.key,
         label: label.isEmpty ? entry.key : label,
@@ -310,12 +327,20 @@ class EffectiveVerbCatalog {
             .toString()),
         singularPhrase: effectiveSingular,
         pluralPhrase: resolvedPlural,
-        ingPhrase: hasIng
-            ? savedIng
-            : VerbCaptionWording.defaultIngWording(
-                entry.key,
-                effectiveSingular,
-              ),
+        ingPhrase: _wordingForSport(
+          stored: hasIng ? savedIng : '',
+          applyDefault: !hasIng,
+          sport: sport,
+          baseballDefault: VerbCaptionWording.defaultIngWording(
+            entry.key,
+            effectiveSingular,
+          ),
+          sportDefault: VerbCaptionWording.defaultIngWording(
+            entry.key,
+            effectiveSingular,
+            sport: sport,
+          ),
+        ),
         keywords: keywords,
         wantsOpponent: _wantsOpponentFromRecord(raw, entry.key),
         omitAgainst: raw['omitAgainst'] == true,
@@ -408,6 +433,26 @@ class EffectiveVerbCatalog {
     if (raw['wantsOpponent'] is bool) return raw['wantsOpponent'] as bool;
     return _opponentJoinerFromRecord(raw).trim().isNotEmpty;
   }
+}
+
+/// Empty wording uses the sport default. A stored baseball base phrase
+/// ("runs to a base") on another sport is treated as that leftover default.
+String _wordingForSport({
+  required String stored,
+  required bool applyDefault,
+  required String sport,
+  required String baseballDefault,
+  required String sportDefault,
+}) {
+  if (!applyDefault) {
+    if (!VerbSubOptions.isBaseballSport(sport) &&
+        stored.trim().isNotEmpty &&
+        stored.trim() == baseballDefault) {
+      return sportDefault;
+    }
+    return stored;
+  }
+  return VerbSubOptions.isBaseballSport(sport) ? baseballDefault : sportDefault;
 }
 
 class EffectiveVerbRepository {

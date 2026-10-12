@@ -142,14 +142,15 @@ class _PlayerRowState extends State<PlayerRow> {
                   ),
                   SizedBox(width: veryCompact ? 2 : 3),
                   SizedBox(
-                    width: 20,
+                    width: 28,
                     child: Text(
                       widget.jersey,
                       textAlign: TextAlign.right,
                       maxLines: 1,
                       softWrap: false,
                       overflow: TextOverflow.ellipsis,
-                      style: FfTokens.rosterJersey(color: t.textTertiary),
+                      style: FfTokens.rosterJersey(color: t.textTertiary)
+                          .copyWith(fontSize: 14),
                     ),
                   ),
                   SizedBox(width: veryCompact ? 5 : 8),
@@ -161,7 +162,7 @@ class _PlayerRowState extends State<PlayerRow> {
                         normal: FfTokens.rosterName(
                           color: t.text,
                           selected: widget.selected,
-                        ),
+                        ).copyWith(fontSize: 15),
                       ),
                       maxLines: 1,
                       softWrap: false,

@@ -56,11 +56,13 @@ enum _PrefsCategory {
   application,
   ftp,
   verbs,
+  caption,
 }
 
 class _PreferencesDialogState extends State<PreferencesDialog> {
   late PreferencesService _preferencesService;
   final _ftpPanelKey = GlobalKey<FtpSettingsPanelState>();
+  final _captionEditorKey = GlobalKey<CaptionLayoutBuilderDialogState>();
   final TextEditingController _photoshopPathController =
       TextEditingController();
   final TextEditingController _resolutionController = TextEditingController();
@@ -108,6 +110,17 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     await save(value);
   }
 
+  Future<void> _saveResolutionThreshold(String text) async {
+    if ((_currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000) <=
+        0) {
+      return;
+    }
+    final v = int.tryParse(text.trim());
+    if (v == null || v <= 0) return;
+    await _preferencesService.saveResolutionWarningThreshold(v);
+    await _loadCurrentPreferences();
+  }
+
   Future<void> _loadCurrentPreferences() async {
     setState(() {
       _isLoading = true;
@@ -133,7 +146,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   }
 
   InputDecoration _fieldDecoration({String? hintText}) {
-    final radius = BorderRadius.circular(6);
+    final radius = BorderRadius.circular(8);
     return InputDecoration(
       isDense: true,
       filled: true,
@@ -143,27 +156,27 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       hintStyle: TextStyle(fontSize: 11, color: _t.textTertiary),
       border: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: BorderSide(color: _t.accent.withValues(alpha: 0.55)),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: BorderSide(color: _t.accent.withValues(alpha: 0.55)),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: BorderSide(color: _t.accent, width: 1.2),
+        borderSide: BorderSide(color: _t.accent),
       ),
       disabledBorder: OutlineInputBorder(
         borderRadius: radius,
-        borderSide: BorderSide(color: _t.divider),
+        borderSide: BorderSide.none,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    const sidebarWidth = 180.0;
-    const contentPadding = 28.0;
+    const sidebarWidth = 168.0;
+    const contentPadding = 16.0;
     final size = MediaQuery.sizeOf(context);
     final width = math.min(1200.0, size.width * 0.94);
     final height = math.min(720.0, size.height * 0.90);
@@ -176,6 +189,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           if (didPop) return;
           final ftp = _ftpPanelKey.currentState;
           if (ftp != null && !await ftp.confirmLeave()) return;
+          await _captionEditorKey.currentState?.persistEmbeddedEdits();
           if (!context.mounted) return;
           Navigator.of(context).pop();
         },
@@ -188,39 +202,18 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           width: width,
           height: height,
           decoration: BoxDecoration(
-            color: _t.surface,
-            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-            border: Border.all(color: _t.accent.withValues(alpha: 0.85)),
-            boxShadow: [
-              ...FfTokens.accentButtonGlow(_t.accent),
-              BoxShadow(
-                color: _t.bg.withValues(alpha: 0.55),
-                blurRadius: 20,
-                offset: const Offset(0, 4),
-              ),
-            ],
+            color: _t.bg,
+            borderRadius: BorderRadius.circular(FfTokens.radiusCard),
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+            borderRadius: BorderRadius.circular(FfTokens.radiusCard),
             child: Column(
               children: [
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color.lerp(_t.accent, _t.surface, 0.82)!,
-                        _t.surface,
-                      ],
-                    ),
-                    border: Border(
-                      bottom: BorderSide(color: _t.divider, width: 1),
-                    ),
-                  ),
+                  height: 44,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+                  alignment: Alignment.centerLeft,
                   child: Row(
                     children: [
                       Expanded(
@@ -231,17 +224,9 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                           },
                           child: MouseRegion(
                             cursor: SystemMouseCursors.grab,
-                            child: Row(
-                              children: [
-                                Text(
-                                  'Preferences',
-                                  style: _t.labelStyle.copyWith(
-                                    fontSize: 13,
-                                    color: _t.text,
-                                  ),
-                                ),
-                                const Spacer(),
-                              ],
+                            child: Text(
+                              'PREFERENCES',
+                              style: FfTokens.panelLabel(color: _t.textTertiary),
                             ),
                           ),
                         ),
@@ -250,12 +235,14 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                         color: Colors.transparent,
                         child: InkWell(
                           onTap: () => Navigator.maybePop(context),
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.all(4),
-                            child: PhosphorIcon(
+                          borderRadius: BorderRadius.circular(8),
+                          hoverColor: _t.hover,
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: Icon(
                               PhosphorIconsRegular.x,
-                              size: 20,
+                              size: 16,
                               color: _t.textSecondary,
                             ),
                           ),
@@ -277,51 +264,36 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                           children: [
                             Container(
                               width: sidebarWidth,
-                              decoration: BoxDecoration(
-                                color: _t.sunken,
-                                border: Border(
-                                  right: BorderSide(color: _t.divider),
-                                ),
-                              ),
+                              color: _t.surface,
                               child: ListView(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
+                                padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
                                 children: [
                                   _buildSidebarTile(
                                     _PrefsCategory.application,
                                     'Application',
+                                    PhosphorIconsRegular.slidersHorizontal,
                                   ),
-                                  Divider(
-                                      height: 1,
-                                      thickness: 1,
-                                      color: _t.divider),
                                   _buildSidebarTile(
                                     _PrefsCategory.ftp,
                                     'FTP',
+                                    PhosphorIconsRegular.cloudArrowUp,
                                   ),
-                                  Divider(
-                                      height: 1,
-                                      thickness: 1,
-                                      color: _t.divider),
                                   _buildSidebarTile(
                                     _PrefsCategory.verbs,
                                     'Verbs',
+                                    PhosphorIconsRegular.listBullets,
+                                  ),
+                                  _buildSidebarTile(
+                                    _PrefsCategory.caption,
+                                    'Caption',
+                                    PhosphorIconsRegular.textAa,
                                   ),
                                 ],
                               ),
                             ),
                             Expanded(
                               child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topCenter,
-                                    end: Alignment.bottomCenter,
-                                    colors: [
-                                      Color.lerp(_t.accent, _t.bg, 0.88)!,
-                                      _t.bg,
-                                    ],
-                                  ),
-                                ),
+                                decoration: const BoxDecoration(),
                                 child: _selectedCategory ==
                                         _PrefsCategory.verbs
                                     ? Padding(
@@ -333,7 +305,10 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                                         ),
                                         child: _buildVerbsContent(),
                                       )
-                                    : SingleChildScrollView(
+                                    : _selectedCategory ==
+                                            _PrefsCategory.caption
+                                        ? _buildCaptionContent()
+                                        : SingleChildScrollView(
                                         padding: const EdgeInsets.all(
                                             contentPadding),
                                         child: _buildCategoryContent(),
@@ -356,36 +331,59 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   Widget _buildSidebarTile(
     _PrefsCategory category,
     String label,
+    IconData icon,
   ) {
     final selected = _selectedCategory == category;
-    return Material(
-      color: selected ? _t.selectedFill : Colors.transparent,
-      child: InkWell(
-        onTap: () async {
-          if (_selectedCategory == _PrefsCategory.ftp &&
-              category != _PrefsCategory.ftp) {
-            final ftp = _ftpPanelKey.currentState;
-            if (ftp != null && !await ftp.confirmLeave()) return;
-          }
-          if (!mounted) return;
-          setState(() => _selectedCategory = category);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          decoration: BoxDecoration(
-            border: selected
-                ? Border(
-                    left: BorderSide(color: _t.accent, width: 2),
-                  )
-                : null,
-          ),
-          alignment: Alignment.centerLeft,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-              color: selected ? _t.accent : _t.textSecondary,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Material(
+        color: selected ? _t.hover : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: () async {
+            if (_selectedCategory == _PrefsCategory.ftp &&
+                category != _PrefsCategory.ftp) {
+              final ftp = _ftpPanelKey.currentState;
+              if (ftp != null && !await ftp.confirmLeave()) return;
+            }
+            if (_selectedCategory == _PrefsCategory.caption &&
+                category != _PrefsCategory.caption) {
+              await _captionEditorKey.currentState?.persistEmbeddedEdits();
+            }
+            if (!mounted) return;
+            setState(() => _selectedCategory = category);
+          },
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: _t.hover,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border(
+                left: BorderSide(
+                  color: selected ? _t.accent : Colors.transparent,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                PhosphorIcon(
+                  icon,
+                  size: 15,
+                  color: selected ? _t.text : _t.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: selected ? _t.text : _t.textSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -400,6 +398,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       case _PrefsCategory.ftp:
         return _buildFtpContent();
       case _PrefsCategory.verbs:
+      case _PrefsCategory.caption:
         return const SizedBox.shrink();
     }
   }
@@ -424,19 +423,17 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
           const SizedBox(height: 20),
         ],
         Text(
-          'Modes',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: _t.text,
-          ),
+          'MODES',
+          style: FfTokens.panelLabel(color: _t.textTertiary),
         ),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.start,
-          children: [
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: _t.surface,
+            borderRadius: BorderRadius.circular(FfTokens.radiusCard),
+          ),
+          child: Column(
+            children: [
             _PrefsModeBuffButton(
               icon: PhosphorIconsRegular.cloudArrowUp,
               label: 'FTP mode',
@@ -474,45 +471,53 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   _preferencesService.saveJerseyOcrEnabled,
                 ),
               ),
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _PrefsModeBuffButton(
-                  icon: PhosphorIconsRegular.camera,
-                  label: 'Serial number mode',
-                  tooltip:
-                      'Write photographer name and bylines according to camera serial numbers.',
-                  enabled: serialBylines,
-                  onToggle: () => _setApplicationPref(
-                    'serialNumberBylines',
-                    !serialBylines,
-                    _preferencesService.saveSerialNumberBylines,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                SizedBox(
-                  width: _PrefsModeBuffButton.width,
-                  child: ElevatedGreyButton(
-                    label: 'Serial number list',
-                    fontSize: 10,
-                    fullWidth: true,
-                    onPressed: () async {
-                      final cameraService = CameraSerialService.instance;
-                      await cameraService.initialize();
-                      if (!context.mounted) return;
-                      await showDialog<void>(
-                        context: context,
-                        builder: (context) => CameraSerialDialog(
-                          cameraService: cameraService,
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
+            _PrefsModeBuffButton(
+              icon: PhosphorIconsRegular.camera,
+              label: 'Serial number mode',
+              tooltip:
+                  'Write photographer name and bylines according to camera serial numbers.',
+              enabled: serialBylines,
+              onToggle: () => _setApplicationPref(
+                'serialNumberBylines',
+                !serialBylines,
+                _preferencesService.saveSerialNumberBylines,
+              ),
             ),
-          ],
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () async {
+                    final cameraService = CameraSerialService.instance;
+                    await cameraService.initialize();
+                    if (!context.mounted) return;
+                    await showDialog<void>(
+                      context: context,
+                      builder: (context) => CameraSerialDialog(
+                        cameraService: cameraService,
+                      ),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: _t.textSecondary,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'Serial number list',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            ],
+          ),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -553,15 +558,9 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                           ],
                           style: TextStyle(fontSize: 11, color: _t.text),
                           decoration: _fieldDecoration(hintText: 'e.g. 3000'),
-                          onSubmitted: (text) async {
-                            if (!resolutionEnabled) return;
-                            final v = int.tryParse(text);
-                            if (v != null && v > 0) {
-                              await _preferencesService
-                                  .saveResolutionWarningThreshold(v);
-                              await _loadCurrentPreferences();
-                            }
-                          },
+                          onSubmitted: _saveResolutionThreshold,
+                          onEditingComplete: () =>
+                              _saveResolutionThreshold(_resolutionController.text),
                         ),
                       ),
                     ],
@@ -696,19 +695,9 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 const SizedBox(height: 8),
                 Text(
                   'Show or hide optional Personality and Keywords beside the main caption. '
-                  'They stack in a column to the right; Keywords is the field after Personality.',
+                  'They stack in a column to the right; Keywords is the field after Personality. '
+                  'Caption structure is edited under Caption.',
                   style: TextStyle(fontSize: 11, color: _t.textSecondary),
-                ),
-                const SizedBox(height: 10),
-                ElevatedGreyButton(
-                  label: 'Caption Layout',
-                  fontSize: 11,
-                  icon: PhosphorIconsRegular.rows,
-                  onPressed: () async {
-                    await CaptionLayoutBuilderDialog.show(context);
-                    if (!mounted) return;
-                    await _loadCurrentPreferences();
-                  },
                 ),
               ],
             ),
@@ -750,29 +739,16 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                       decoration: CustomDropdownDecoration(
                         closedFillColor: _t.sunken,
                         expandedFillColor: _t.surface,
-                        closedBorder: Border.all(
-                          color: _t.accent.withValues(alpha: 0.55),
-                        ),
-                        expandedBorder: Border.all(
-                          color: _t.accent.withValues(alpha: 0.85),
-                        ),
-                        closedBorderRadius: BorderRadius.circular(6),
+                        closedBorder: Border.all(color: Colors.transparent),
+                        expandedBorder: Border.all(color: _t.accent),
+                        closedBorderRadius: BorderRadius.circular(8),
                         expandedBorderRadius: BorderRadius.circular(8),
-                        closedShadow: FfTokens.accentButtonGlow(_t.accent),
-                        expandedShadow: [
-                          ...FfTokens.accentButtonGlow(_t.accent),
-                          BoxShadow(
-                            color: _t.bg.withValues(alpha: 0.55),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
                         hintStyle:
-                            TextStyle(fontSize: 11, color: _t.textSecondary),
-                        headerStyle: TextStyle(fontSize: 11, color: _t.text),
-                        listItemStyle: TextStyle(fontSize: 11, color: _t.text),
+                            TextStyle(fontSize: 13, color: _t.textSecondary),
+                        headerStyle: TextStyle(fontSize: 13, color: _t.text),
+                        listItemStyle: TextStyle(fontSize: 13, color: _t.text),
                         listItemDecoration: ListItemDecoration(
-                          selectedColor: _t.selectedFill,
+                          selectedColor: _t.hover,
                         ),
                       ),
                       onChanged: (label) async {
@@ -896,6 +872,13 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     );
   }
 
+  Widget _buildCaptionContent() {
+    return CaptionLayoutBuilderDialog(
+      key: _captionEditorKey,
+      embedded: true,
+    );
+  }
+
   Widget _buildVerbsContent() {
     final sport =
         _sportForDefault.isEmpty ? 'baseball' : _sportForDefault;
@@ -924,13 +907,8 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Account',
-          style: TextStyle(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: _t.text,
-          ),
+          'ACCOUNT',
+          style: FfTokens.panelLabel(color: _t.textTertiary),
         ),
         const SizedBox(height: 10),
         Row(
@@ -1122,11 +1100,8 @@ class _PrefsModeBuffButton extends StatelessWidget {
     required this.onToggle,
   });
 
-  static const double width = 132;
-
   final IconData icon;
   final String label;
-  /// Shown under the button (also used as hover tooltip).
   final String tooltip;
   final bool enabled;
   final VoidCallback onToggle;
@@ -1134,79 +1109,44 @@ class _PrefsModeBuffButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final on = enabled;
-    final color = on ? t.accent : t.textSecondary;
-    final fill = on ? t.accent.withValues(alpha: 0.18) : t.elevated;
-    final border = on ? t.accent.withValues(alpha: 0.85) : t.divider;
-    return SizedBox(
-      width: width,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Tooltip(
-            message: tooltip,
-            waitDuration: const Duration(milliseconds: 350),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onToggle,
-                borderRadius: BorderRadius.circular(8),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 140),
-                  curve: Curves.easeOut,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: fill,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: border),
-                    boxShadow: on
-                        ? [
-                            BoxShadow(
-                              color: t.accent.withValues(alpha: 0.28),
-                              blurRadius: 10,
-                              spreadRadius: 0,
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PhosphorIcon(icon, size: 18, color: color),
-                      const SizedBox(height: 4),
-                      Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          height: 1.15,
-                          color: color,
-                        ),
-                      ),
-                    ],
+    return Tooltip(
+      message: tooltip,
+      waitDuration: const Duration(milliseconds: 350),
+      child: InkWell(
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              PhosphorIcon(
+                icon,
+                size: 16,
+                color: enabled ? t.text : t.textSecondary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: t.text,
                   ),
                 ),
               ),
-            ),
+              Switch(
+                value: enabled,
+                onChanged: (_) => onToggle(),
+                activeTrackColor: t.accent,
+                activeThumbColor: Colors.white,
+                inactiveTrackColor: t.sunken,
+                inactiveThumbColor: Colors.white,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            tooltip,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 9.5,
-              height: 1.3,
-              color: t.textSecondary,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -133,6 +133,7 @@ Future<void> showCaptionV2PhotoMenu({
   final action = await showMenu<_PhotoAction>(
     context: context,
     position: menuPosition,
+    popUpAnimationStyle: AnimationStyle.noAnimation,
     color: t.surface,
     surfaceTintColor: Colors.transparent,
     elevation: 12,

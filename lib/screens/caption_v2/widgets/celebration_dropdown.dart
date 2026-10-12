@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/ff_menu.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 /// Compact celebrate/react control: party toggle + mode dropdown.
@@ -115,7 +116,11 @@ class CelebrationDropdown extends StatelessWidget {
             tooltip: 'Celebrate / React',
             padding: EdgeInsets.zero,
             offset: const Offset(0, 28),
-            color: t.surface,
+            color: FfTokens.sessionEl,
+            surfaceTintColor: Colors.transparent,
+            elevation: 16,
+            shadowColor: FfTokens.sessionMenuShadow,
+            shape: FfMenuSurface.shape,
             enabled: options.isNotEmpty,
             onSelected: (value) => onChanged(value),
             itemBuilder: (context) => [

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/oriented_file_preview.dart';
 import 'frame_status_dot.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -32,6 +33,9 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.transmitEnabled = true,
     this.showTransmit = true,
     this.onFtpHistory,
+    this.ftpProgress,
+    this.ftpActive = false,
+    this.ftpThumbPath,
   });
 
   final VoidCallback? onSavePrevious;
@@ -47,83 +51,459 @@ class CaptionV2ActionRow extends StatelessWidget {
   final bool showTransmit;
   final VoidCallback? onFtpHistory;
 
+  /// 0.0–1.0 while an upload is running. Shown to the right of the FTP button.
+  final double? ftpProgress;
+  final bool ftpActive;
+
+  /// File currently uploading. The bar keeps the last path after it finishes.
+  final String? ftpThumbPath;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final hideHints = MediaQuery.sizeOf(context).width < 1100;
-    final buttons = <Widget>[
-      _UtilityButton(
-        label: '‹ Save & Prev',
-        tokens: t,
-        onPressed: onSavePrevious,
-      ),
-      _UtilityButton(
-        label: 'Copy',
-        tokens: t,
-        onPressed: onCopy,
-      ),
-      _UtilityButton(
-        label: 'Paste',
-        tokens: t,
-        enabled: pasteEnabled,
-        dimWhenDisabled: false,
-        onPressed: onPaste,
-      ),
-      _UtilityButton(
-        label: 'Paste Last',
-        tokens: t,
-        onPressed: onPastePrevious,
-      ),
-      _UtilityButton(
-        label: 'Save & Next',
-        hint: hideHints ? null : '⌘S ›',
-        tokens: t,
-        enabled: saveNextEnabled,
-        onPressed: onSaveNext,
-      ),
-      if (showTransmit)
-        _UtilityButton(
-          label: transmitLabel,
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _ActionGroup(
           tokens: t,
-          enabled: transmitEnabled,
-          onPressed: onTransmit,
+          onCopy: onCopy,
+          onPaste: onPaste,
+          onPasteLast: onPastePrevious,
+          pasteEnabled: pasteEnabled,
         ),
-    ];
-
-    return SizedBox(
-      height: 32,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < buttons.length; i++) ...[
-            if (i > 0) const SizedBox(width: 4),
-            Expanded(child: buttons[i]),
-            if (showTransmit &&
-                onFtpHistory != null &&
-                i == buttons.length - 1) ...[
-              const SizedBox(width: 4),
-              IconButton(
-                tooltip: 'FTP history',
-                onPressed: onFtpHistory,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(
-                  width: 32,
-                  height: 32,
+        _ActionButton(
+          icon: PhosphorIconsRegular.caretLeft,
+          label: 'Save & Prev',
+          tooltip: 'Save & Prev',
+          tokens: t,
+          primary: true,
+          iconAtEnd: false,
+          onPressed: onSavePrevious,
+        ),
+        _ActionButton(
+          icon: PhosphorIconsRegular.caretRight,
+          label: 'Save & Next',
+          tooltip: 'Save & Next  ·  ⌘S',
+          tokens: t,
+          primary: true,
+          onPressed: onSaveNext,
+          enabled: saveNextEnabled,
+        ),
+        if (showTransmit)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ActionButton(
+                icon: PhosphorIconsRegular.cloudArrowUp,
+                label: transmitLabel,
+                tooltip: 'FTP · $transmitLabel',
+                tokens: t,
+                primary: true,
+                enabled: transmitEnabled,
+                onPressed: onTransmit,
+              ),
+              if (onFtpHistory != null) ...[
+                const SizedBox(width: 6),
+                _FtpTrailingSlot(
+                  active: ftpActive,
+                  history: _ActionButton(
+                    icon: PhosphorIconsRegular.clockCounterClockwise,
+                    label: 'FTP history',
+                    tooltip: 'FTP history',
+                    tokens: t,
+                    iconAtEnd: false,
+                    onPressed: onFtpHistory,
+                  ),
+                  bar: _FtpProgressBar(
+                    progress: ftpProgress ?? 0,
+                    active: ftpActive,
+                    thumbPath: ftpThumbPath,
+                    tokens: t,
+                  ),
                 ),
-                icon: PhosphorIcon(
-                  PhosphorIconsRegular.clockCounterClockwise,
-                  size: 18,
-                  color: t.textSecondary,
+              ] else if (ftpActive) ...[
+                const SizedBox(width: 6),
+                _FtpProgressBar(
+                  progress: ftpProgress ?? 0,
+                  active: true,
+                  thumbPath: ftpThumbPath,
+                  tokens: t,
+                ),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+class _FtpTrailingSlot extends StatelessWidget {
+  const _FtpTrailingSlot({
+    required this.active,
+    required this.history,
+    required this.bar,
+  });
+
+  final bool active;
+  final Widget history;
+  final Widget bar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.centerLeft,
+      children: [
+        Visibility(
+          visible: !active,
+          maintainSize: true,
+          maintainState: true,
+          maintainAnimation: true,
+          child: history,
+        ),
+        if (active)
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: bar,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _FtpProgressBar extends StatefulWidget {
+  const _FtpProgressBar({
+    required this.progress,
+    required this.active,
+    required this.tokens,
+    this.thumbPath,
+  });
+
+  final double progress;
+  final bool active;
+  final FfTokens tokens;
+  final String? thumbPath;
+
+  @override
+  State<_FtpProgressBar> createState() => _FtpProgressBarState();
+}
+
+class _FtpProgressBarState extends State<_FtpProgressBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _anim;
+  double _from = 0;
+  double _to = 0;
+  String? _thumbPath;
+  int _run = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _anim = AnimationController(vsync: this)
+      ..addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _anim.dispose();
+    super.dispose();
+  }
+
+  double get _shown =>
+      _from + (_to - _from) * Curves.easeOut.transform(_anim.value);
+
+  @override
+  void didUpdateWidget(covariant _FtpProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final incoming = widget.thumbPath;
+    if (incoming != null && incoming.isNotEmpty) _thumbPath = incoming;
+    final next = widget.progress.clamp(0.0, 1.0);
+    if (widget.active && !oldWidget.active) {
+      _run++;
+      _from = 0;
+      _to = 0;
+      _anim.value = 1;
+      _animateTo(next);
+    } else if (widget.active) {
+      _animateTo(next);
+    } else if (oldWidget.active) {
+      final run = ++_run;
+      if (_shown > 0.02 || oldWidget.progress > 0.02) {
+        _animateTo(1);
+        Future<void>.delayed(const Duration(milliseconds: 600), () {
+          if (!mounted || run != _run || widget.active) return;
+          _animateTo(0);
+          setState(() => _thumbPath = null);
+        });
+      } else {
+        _animateTo(0);
+        _thumbPath = null;
+      }
+    }
+  }
+
+  void _animateTo(double target) {
+    final shown = _shown;
+    if ((target - shown).abs() < 0.004) {
+      _from = target;
+      _to = target;
+      _anim.value = 1;
+      return;
+    }
+    _from = shown;
+    _to = target;
+    final ms = ((target - shown).abs() * 800).round().clamp(160, 800);
+    _anim.duration = Duration(milliseconds: ms);
+    _anim.forward(from: 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = widget.tokens;
+    final shown = _shown;
+    final pct = (shown * 100).round();
+    final thumb = _thumbPath;
+    return SizedBox(
+      height: 28,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (thumb != null && thumb.isNotEmpty) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: OrientedFilePreview(
+                  path: thumb,
+                  fit: BoxFit.cover,
+                  cacheWidth: 54,
+                  filterQuality: FilterQuality.low,
                 ),
               ),
-            ],
+            ),
+            const SizedBox(width: 4),
           ],
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: SizedBox(
+              width: 64,
+              height: 10,
+              child: LinearProgressIndicator(
+                value: shown,
+                backgroundColor: tokens.sunken,
+                color: tokens.accent,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(
+            width: 28,
+            child: Text(
+              widget.active || shown > 0 ? '$pct%' : '',
+              textAlign: TextAlign.left,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+                color: tokens.text,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
+class _ActionButton extends StatelessWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.tokens,
+    required this.onPressed,
+    this.hint,
+    this.primary = false,
+    this.iconAtEnd = true,
+    this.iconOnly = false,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final String? hint;
+  final FfTokens tokens;
+  final VoidCallback? onPressed;
+  final bool primary;
+  /// Caret sits after the label. Save & Prev keeps it on the left.
+  final bool iconAtEnd;
+  final bool iconOnly;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = primary ? Colors.white : tokens.textSecondary;
+    final leadingIcon = !iconAtEnd || !primary;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: primary ? const Color(0xFF272D34) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: primary ? const Color(0xFF343C45) : tokens.surface,
+          child: Container(
+            height: 28,
+            padding: EdgeInsets.symmetric(horizontal: iconOnly ? 10 : 11),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (leadingIcon)
+                  Icon(icon, size: 14, color: fg),
+                if (!iconOnly) ...[
+                  if (leadingIcon) const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: fg,
+                    ),
+                  ),
+                ],
+                if (hint != null) ...[
+                  const SizedBox(width: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      hint!,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white.withValues(alpha: 0.85),
+                      ),
+                    ),
+                  ),
+                ],
+                if (!leadingIcon) ...[
+                  const SizedBox(width: 4),
+                  Icon(icon, size: 14, color: fg),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionGroup extends StatelessWidget {
+  const _ActionGroup({
+    required this.tokens,
+    required this.onCopy,
+    required this.onPaste,
+    required this.onPasteLast,
+    required this.pasteEnabled,
+  });
+
+  final FfTokens tokens;
+  final VoidCallback? onCopy;
+  final VoidCallback? onPaste;
+  final VoidCallback? onPasteLast;
+  final bool pasteEnabled;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget item({
+      required IconData icon,
+      required String label,
+      required String tooltip,
+      required VoidCallback? onPressed,
+      required bool enabled,
+    }) {
+      return Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: enabled ? onPressed : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 11),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 14, color: tokens.textSecondary),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: tokens.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: tokens.surface,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: 28,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            item(
+              icon: PhosphorIconsRegular.copy,
+              label: 'Copy',
+              tooltip: 'Copy',
+              onPressed: onCopy,
+              enabled: true,
+            ),
+            Container(width: 1, height: 28, color: tokens.divider),
+            item(
+              icon: PhosphorIconsRegular.clipboardText,
+              label: 'Paste',
+              tooltip: 'Paste',
+              onPressed: onPaste,
+              enabled: pasteEnabled,
+            ),
+            Container(width: 1, height: 28, color: tokens.divider),
+            item(
+              icon: PhosphorIconsRegular.clockCounterClockwise,
+              label: 'Paste last',
+              tooltip: 'Paste last',
+              onPressed: onPasteLast,
+              enabled: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 class FtpModeToggle extends StatelessWidget {
   const FtpModeToggle({
     super.key,

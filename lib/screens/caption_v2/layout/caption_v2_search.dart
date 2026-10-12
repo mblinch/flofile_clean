@@ -139,11 +139,13 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
       },
       child: Container(
         height: active ? 72 : 32,
-        padding: const EdgeInsets.fromLTRB(10, 0, 10, 0),
+        padding: const EdgeInsets.fromLTRB(14, 0, 6, 0),
         decoration: BoxDecoration(
-          color: tokens.sunken,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: tokens.divider),
+          color: tokens.bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: FfTokens.firebar.withValues(alpha: 0.35),
+          ),
         ),
         child: Column(
           children: [

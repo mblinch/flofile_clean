@@ -7,6 +7,7 @@ import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import '../widgets/custom_name_entry.dart';
 import '../widgets/pinned_player_bar.dart';
+import '../widgets/team_players_button.dart';
 import '../widgets/player_row.dart';
 import '../widgets/quiet_filter_field.dart';
 import 'caption_v2_verb_editor.dart';
@@ -43,10 +44,6 @@ class _RosterColumnState extends State<RosterColumn> {
   final _filter = TextEditingController();
   final _columnFocusNode = FocusNode(debugLabel: 'Roster column');
   final _scrollController = ScrollController();
-  final _customNameController = TextEditingController();
-  final _customJerseyController = TextEditingController();
-  final _customNameFocusNode = FocusNode(debugLabel: 'Custom name');
-  final _customJerseyFocusNode = FocusNode(debugLabel: 'Custom jersey');
   RosterViewMode _viewMode = RosterViewMode.classic;
   String? _lastFirebarSelectionKey;
   int _seenPlayerSearchClearGeneration = -1;
@@ -57,7 +54,6 @@ class _RosterColumnState extends State<RosterColumn> {
     _seenPlayerSearchClearGeneration =
         widget.controller.playerSearchClearGeneration;
     widget.controller.addListener(_onController);
-    _syncCustomNameFromPin();
   }
 
   @override
@@ -68,7 +64,6 @@ class _RosterColumnState extends State<RosterColumn> {
       widget.controller.addListener(_onController);
       _seenPlayerSearchClearGeneration =
           widget.controller.playerSearchClearGeneration;
-      _syncCustomNameFromPin();
     }
   }
 
@@ -78,104 +73,16 @@ class _RosterColumnState extends State<RosterColumn> {
     _columnFocusNode.dispose();
     _scrollController.dispose();
     _filter.dispose();
-    _customNameController.dispose();
-    _customJerseyController.dispose();
-    _customNameFocusNode.dispose();
-    _customJerseyFocusNode.dispose();
     super.dispose();
   }
 
   void _onController() {
     if (!mounted) return;
-    _syncCustomNameFromPin();
     final generation = widget.controller.playerSearchClearGeneration;
     if (generation == _seenPlayerSearchClearGeneration) return;
     _seenPlayerSearchClearGeneration = generation;
     if (_filter.text.isEmpty) return;
     _filter.clear();
-    setState(() {});
-  }
-
-  bool get _customNamePinned {
-    final pinned = widget.controller.pinnedPlayer;
-    if (pinned == null || pinned.isHome != widget.isHome) return false;
-    final id = pinned.player.playerId?.trim();
-    if (id != null && id.isNotEmpty) return false;
-    final name = _customNameController.text.trim();
-    if (name.isEmpty) return false;
-    final jersey = _customJerseyController.text.trim();
-    final player = widget.controller.findRosterPlayer(
-      isHome: widget.isHome,
-      fullName: name,
-      jerseyNumber: jersey.isEmpty ? null : jersey,
-    );
-    if (player == null) return false;
-    return widget.controller.isPlayerPinned(player, isHome: widget.isHome);
-  }
-
-  void _syncCustomNameFromPin() {
-    final pinned = widget.controller.pinnedPlayer;
-    if (pinned == null || pinned.isHome != widget.isHome) return;
-    // Only mirror *custom* pins into the footer field. Roster pins use the
-    // pinned player bar and must not lock/overwrite this text field.
-    final id = pinned.player.playerId?.trim();
-    if (id != null && id.isNotEmpty) return;
-    if (_customNameFocusNode.hasFocus || _customJerseyFocusNode.hasFocus) {
-      return;
-    }
-    final name = pinned.player.fullName;
-    final jersey = pinned.player.jerseyNumber ?? '';
-    if (_customNameController.text == name &&
-        _customJerseyController.text == jersey) {
-      return;
-    }
-    _customNameController.text = name;
-    _customJerseyController.text = jersey;
-  }
-
-  void _showCustomNameError(String? error) {
-    if (error == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
-    );
-  }
-
-  void _submitCustomName() {
-    final name = _customNameController.text.trim();
-    if (name.isEmpty) return;
-    final jersey = _customJerseyController.text.trim();
-    final error = widget.controller.commitCustomPlayer(
-      isHome: widget.isHome,
-      fullName: name,
-      jerseyNumber: jersey.isEmpty ? null : jersey,
-    );
-    _showCustomNameError(error);
-    setState(() {});
-  }
-
-  void _useLastCustomName() {
-    final c = widget.controller;
-    if (!c.canUseLastCustomPlayer) return;
-    _customNameController.text = c.lastCustomPlayerName;
-    _customJerseyController.text = c.lastCustomPlayerJersey;
-    setState(() {});
-    _customNameFocusNode.requestFocus();
-  }
-
-  void _toggleCustomNamePin() {
-    final name = _customNameController.text.trim();
-    if (name.isEmpty && widget.controller.canUseLastCustomPlayer) {
-      _customNameController.text = widget.controller.lastCustomPlayerName;
-      _customJerseyController.text = widget.controller.lastCustomPlayerJersey;
-    }
-    final error = widget.controller.toggleCustomPlayerPin(
-      isHome: widget.isHome,
-      fullName: _customNameController.text,
-      jerseyNumber: _customJerseyController.text.trim().isEmpty
-          ? null
-          : _customJerseyController.text.trim(),
-    );
-    _showCustomNameError(error);
     setState(() {});
   }
 
@@ -399,7 +306,7 @@ class _RosterColumnState extends State<RosterColumn> {
                     // Fit the complete roster whenever a readable row height can
                     // do so. Only retain scrolling on exceptionally short windows.
                     final isMobile = MediaQuery.sizeOf(context).width < 1100;
-                    final minRowHeight = isMobile ? 26.0 : 20.0;
+                    final minRowHeight = isMobile ? 28.0 : 24.0;
                     // When the roster fits, let each row use the leftover
                     // height so names can grow instead of sitting in a gap.
                     final maxRowHeight = isMobile ? 56.0 : 48.0;
@@ -534,18 +441,10 @@ class _RosterColumnState extends State<RosterColumn> {
               ),
             ),
             if (!firebarActive)
-              CustomNameField(
-                nameController: _customNameController,
-                jerseyController: _customJerseyController,
-                nameFocusNode: _customNameFocusNode,
-                jerseyFocusNode: _customJerseyFocusNode,
+              TeamPlayersButton(
+                controller: c,
+                isHome: widget.isHome,
                 tokens: t,
-                pinned: _customNamePinned,
-                canUseLast: c.canUseLastCustomPlayer,
-                onChanged: () => setState(() {}),
-                onSubmit: _submitCustomName,
-                onTogglePin: _toggleCustomNamePin,
-                onUseLast: _useLastCustomName,
               ),
           ],
         ),
@@ -1267,7 +1166,7 @@ class CaptionV2ColumnCard extends StatelessWidget {
   final bool focused;
   final bool showHeader;
 
-  /// When true, use the teal accent border even when not focused.
+  /// When true, use the grey panel border even when not focused.
   final bool accentOutline;
 
   @override
@@ -1279,10 +1178,10 @@ class CaptionV2ColumnCard extends StatelessWidget {
         color: t.surface,
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
         border: Border.all(
-          color: outlined ? t.accent : t.divider,
+          color: outlined ? FfTokens.panelOutline : t.divider,
           width: 1,
         ),
-        boxShadow: outlined ? FfTokens.accentButtonGlow(t.accent) : null,
+        boxShadow: outlined ? FfTokens.panelGlow() : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

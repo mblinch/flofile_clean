@@ -11,12 +11,19 @@ class QuietFilterField extends StatefulWidget {
     required this.tokens,
     this.onChanged,
     this.height = 26,
+    this.hint = 'Search',
+    this.leadingInset = 0,
   });
 
   final TextEditingController controller;
   final FfTokens tokens;
   final ValueChanged<String>? onChanged;
   final double height;
+  final String hint;
+
+  /// Empty width kept at the start of the field so a pinned jersey can sit
+  /// there without changing the field's size.
+  final double leadingInset;
 
   @override
   State<QuietFilterField> createState() => _QuietFilterFieldState();
@@ -50,11 +57,7 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    final fill = _focused
-        ? t.sunken
-        : (_hovered
-            ? t.sunken.withValues(alpha: 0.85)
-            : t.sunken.withValues(alpha: 0.65));
+    final fill = _focused || _hovered ? t.bg : t.bg;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -66,10 +69,14 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
         alignment: Alignment.centerLeft,
         decoration: BoxDecoration(
           color: fill,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(7),
+          border: _focused
+              ? Border.all(color: t.accent, width: 1)
+              : null,
         ),
         child: Row(
           children: [
+            if (widget.leadingInset > 0) SizedBox(width: widget.leadingInset),
             PhosphorIcon(
               PhosphorIconsRegular.magnifyingGlass,
               size: 14,
@@ -89,10 +96,16 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
                 ),
                 cursorColor: t.accent,
                 cursorHeight: 12,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   isCollapsed: true,
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.zero,
+                  hintText: widget.hint,
+                  hintStyle: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    color: t.textTertiary,
+                  ),
                 ),
                 onChanged: widget.onChanged,
               ),

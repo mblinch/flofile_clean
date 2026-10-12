@@ -177,27 +177,48 @@ class LocationLineOptions {
     required this.chips,
     this.autoSpacing = true,
     this.autoAdaptUsIntl = false,
+    this.usChips,
+    this.intlChips,
   });
 
   final bool uppercase;
   final List<LocationChip> chips;
   final bool autoSpacing;
 
-  /// When true, render City+State for the United States and City+Country
-  /// everywhere else (Getty wire style). Applies to each location occurrence.
+  /// When true, render [usChips] for a United States game and [intlChips]
+  /// everywhere else. Getty only. When a side is null, it is derived by
+  /// dropping country (US) or state (international) from [chips].
   final bool autoAdaptUsIntl;
+
+  /// American formula (city, state, …). Used when [autoAdaptUsIntl] is set.
+  final List<LocationChip>? usChips;
+
+  /// International formula (city, country, …). Used when [autoAdaptUsIntl] is set.
+  final List<LocationChip>? intlChips;
 
   LocationLineOptions copyWith({
     bool? uppercase,
     List<LocationChip>? chips,
     bool? autoSpacing,
     bool? autoAdaptUsIntl,
+    List<LocationChip>? usChips,
+    List<LocationChip>? intlChips,
   }) =>
       LocationLineOptions(
         uppercase: uppercase ?? this.uppercase,
         chips: chips ?? List<LocationChip>.from(this.chips),
         autoSpacing: autoSpacing ?? this.autoSpacing,
         autoAdaptUsIntl: autoAdaptUsIntl ?? this.autoAdaptUsIntl,
+        usChips: usChips != null
+            ? List<LocationChip>.from(usChips)
+            : (this.usChips == null
+                ? null
+                : List<LocationChip>.from(this.usChips!)),
+        intlChips: intlChips != null
+            ? List<LocationChip>.from(intlChips)
+            : (this.intlChips == null
+                ? null
+                : List<LocationChip>.from(this.intlChips!)),
       );
 
   /// Deep copy for per–geo-chip templates (duplicate Geographical segments).
@@ -206,17 +227,105 @@ class LocationLineOptions {
         chips: chips.map((c) => c.copyWith()).toList(),
         autoSpacing: autoSpacing,
         autoAdaptUsIntl: autoAdaptUsIntl,
+        usChips: usChips?.map((c) => c.copyWith()).toList(),
+        intlChips: intlChips?.map((c) => c.copyWith()).toList(),
       );
+
+  /// Chip list for a United States game, or for everywhere else.
+  ///
+  /// State is always on for the American list and country is always on for the
+  /// international list. Older Getty formulas left that chip disabled and the
+  /// caption still printed it.
+  List<LocationChip> chipsForTerritory({required bool unitedStates}) {
+    final kind =
+        unitedStates ? LocationChipKind.region : LocationChipKind.country;
+    final stored = unitedStates ? usChips : intlChips;
+    final base = stored ??
+        withoutGeoKind(
+          chips,
+          unitedStates ? LocationChipKind.country : LocationChipKind.region,
+        );
+    return ensureGeoKindEnabled(base, kind);
+  }
+
+  /// Returns [chips] with [kind] present and enabled. A missing chip is added
+  /// after a comma-space. An existing disabled chip is switched on.
+  static List<LocationChip> ensureGeoKindEnabled(
+    List<LocationChip> chips,
+    LocationChipKind kind,
+  ) {
+    final idx = chips.indexWhere((c) => c.kind == kind);
+    if (idx < 0) {
+      final out = List<LocationChip>.from(chips);
+      final hasGeo = out.any((c) => c.kind != LocationChipKind.literal);
+      if (hasGeo) {
+        out.add(LocationChip(
+          id: 'sep_${kind.name}',
+          kind: LocationChipKind.literal,
+          literal: ', ',
+        ));
+      }
+      out.add(LocationChip(
+        id: 'geo_${kind.name}',
+        kind: kind,
+        caps: true,
+      ));
+      return out;
+    }
+    if (chips[idx].enabled) return chips;
+    final out = List<LocationChip>.from(chips);
+    out[idx] = chips[idx].copyWith(enabled: true);
+    return out;
+  }
+
+  /// Drops [drop] plus the separator that belongs to it.
+  ///
+  /// A chip in the middle gives its following separator up. A chip at the end
+  /// also gives up the separator that introduced it, so the other territory
+  /// does not inherit a trailing comma.
+  static List<LocationChip> withoutGeoKind(
+    List<LocationChip> chips,
+    LocationChipKind drop,
+  ) {
+    final idx = chips.indexWhere((c) => c.kind == drop);
+    if (idx < 0) return List<LocationChip>.from(chips);
+    var end = idx + 1;
+    while (end < chips.length &&
+        chips[end].kind == LocationChipKind.literal) {
+      end++;
+    }
+    final hasGeoAfter = end < chips.length;
+    var start = idx;
+    if (!hasGeoAfter) {
+      while (start > 0 && chips[start - 1].kind == LocationChipKind.literal) {
+        start--;
+      }
+    }
+    return [...chips.sublist(0, start), ...chips.sublist(end)];
+  }
 
   Map<String, dynamic> toJson() => {
         'uppercase': uppercase,
         'locationChips': chips.map((e) => e.toJson()).toList(),
         if (!autoSpacing) 'autoSpacing': false,
         if (autoAdaptUsIntl) 'autoAdaptUsIntl': true,
+        if (usChips != null)
+          'usChips': usChips!.map((e) => e.toJson()).toList(),
+        if (intlChips != null)
+          'intlChips': intlChips!.map((e) => e.toJson()).toList(),
       };
+
+  static List<LocationChip>? _chipsFromJson(Object? raw) {
+    if (raw is! List) return null;
+    return raw
+        .map((e) => LocationChip.fromJson(Map<String, dynamic>.from(e as Map)))
+        .toList();
+  }
 
   factory LocationLineOptions.fromJson(Map<String, dynamic> j) {
     final autoAdaptUsIntl = j['autoAdaptUsIntl'] as bool? ?? false;
+    final usChips = _chipsFromJson(j['usChips']);
+    final intlChips = _chipsFromJson(j['intlChips']);
     if (j['locationChips'] is List) {
       final raw = j['locationChips'] as List<dynamic>;
       final parsed = raw
@@ -230,6 +339,8 @@ class LocationLineOptions {
           chips: LocationLineOptions.imagnDefault().chips,
           autoSpacing: j['autoSpacing'] as bool? ?? true,
           autoAdaptUsIntl: autoAdaptUsIntl,
+          usChips: usChips,
+          intlChips: intlChips,
         );
       }
       // Migrate legacy global uppercase → per-chip caps, so once migrated the
@@ -245,6 +356,8 @@ class LocationLineOptions {
           chips: migrated,
           autoSpacing: j['autoSpacing'] as bool? ?? true,
           autoAdaptUsIntl: autoAdaptUsIntl,
+          usChips: usChips,
+          intlChips: intlChips,
         );
       }
       // Legacy: uppercase + per-chip caps meant whole-line upper still ran and
@@ -255,6 +368,8 @@ class LocationLineOptions {
           chips: parsed,
           autoSpacing: j['autoSpacing'] as bool? ?? true,
           autoAdaptUsIntl: autoAdaptUsIntl,
+          usChips: usChips,
+          intlChips: intlChips,
         );
       }
       return LocationLineOptions(
@@ -262,6 +377,8 @@ class LocationLineOptions {
         chips: parsed,
         autoSpacing: j['autoSpacing'] as bool? ?? true,
         autoAdaptUsIntl: autoAdaptUsIntl,
+        usChips: usChips,
+        intlChips: intlChips,
       );
     }
     return LocationLineOptions._fromLegacyFlatJson(j);
@@ -313,41 +430,35 @@ class LocationLineOptions {
     }
   }
 
-  /// Getty: city + state + country chips; [autoAdaptUsIntl] picks state vs country
-  /// at render time from the game country.
-  static LocationLineOptions gettyDefault() => LocationLineOptions(
+  /// Getty stores two formulas. American is city + state. International is
+  /// city + country. [chips] keeps the combined list for older readers.
+  static LocationLineOptions _gettySplit(List<LocationChip> chips) =>
+      LocationLineOptions(
         uppercase: false,
         autoAdaptUsIntl: true,
-        chips: [
-          const LocationChip(
-              id: 'g_city', kind: LocationChipKind.city, caps: true),
-          const LocationChip(
-              id: 'g_lit1', kind: LocationChipKind.literal, literal: ', '),
-          const LocationChip(
-              id: 'g_reg', kind: LocationChipKind.region, caps: true),
-          const LocationChip(
-              id: 'g_lit2', kind: LocationChipKind.literal, literal: ', '),
-          const LocationChip(
-              id: 'g_ctr', kind: LocationChipKind.country, caps: true),
-        ],
+        chips: chips,
+        usChips: withoutGeoKind(chips, LocationChipKind.country),
+        intlChips: withoutGeoKind(chips, LocationChipKind.region),
       );
 
+  /// Getty: American city + state, international city + country.
+  static LocationLineOptions gettyDefault() => _gettySplit(const [
+        LocationChip(id: 'g_city', kind: LocationChipKind.city, caps: true),
+        LocationChip(id: 'g_lit1', kind: LocationChipKind.literal, literal: ', '),
+        LocationChip(id: 'g_reg', kind: LocationChipKind.region, caps: true),
+        LocationChip(id: 'g_lit2', kind: LocationChipKind.literal, literal: ', '),
+        LocationChip(id: 'g_ctr', kind: LocationChipKind.country, caps: true),
+      ]);
+
   /// Sentence-case Getty location (second occurrence / “in City, …” line).
-  static LocationLineOptions gettyDefaultSentenceCase() => LocationLineOptions(
-        uppercase: false,
-        autoAdaptUsIntl: true,
-        chips: [
-          const LocationChip(
-              id: 'g2_in', kind: LocationChipKind.literal, literal: 'in '),
-          const LocationChip(id: 'g2_city', kind: LocationChipKind.city),
-          const LocationChip(
-              id: 'g2_lit1', kind: LocationChipKind.literal, literal: ', '),
-          const LocationChip(id: 'g2_reg', kind: LocationChipKind.region),
-          const LocationChip(
-              id: 'g2_lit2', kind: LocationChipKind.literal, literal: ', '),
-          const LocationChip(id: 'g2_ctr', kind: LocationChipKind.country),
-        ],
-      );
+  static LocationLineOptions gettyDefaultSentenceCase() => _gettySplit(const [
+        LocationChip(id: 'g2_in', kind: LocationChipKind.literal, literal: 'in '),
+        LocationChip(id: 'g2_city', kind: LocationChipKind.city),
+        LocationChip(id: 'g2_lit1', kind: LocationChipKind.literal, literal: ', '),
+        LocationChip(id: 'g2_reg', kind: LocationChipKind.region),
+        LocationChip(id: 'g2_lit2', kind: LocationChipKind.literal, literal: ', '),
+        LocationChip(id: 'g2_ctr', kind: LocationChipKind.country),
+      ]);
 
   static LocationLineOptions imagnDefault() => LocationLineOptions(
         uppercase: false,
@@ -712,6 +823,7 @@ class CaptionTemplate {
     this.dateFormulasByOccurrence,
     this.layoutPrefix = '',
     this.layoutSuffix = '',
+    this.basketballUserNote = '',
   });
 
   final String id;
@@ -797,6 +909,10 @@ class CaptionTemplate {
   /// caption layout builder so there is never hidden punctuation at the edges.
   final String layoutPrefix;
   final String layoutSuffix;
+
+  /// Sentence typed after the byline for basketball and WNBA. Empty means
+  /// nothing is added. Not inserted by the renderer on its own.
+  final String basketballUserNote;
 
   /// Text between consecutive [segmentOrder] entries. When set, length must be
   /// [segmentOrder.length - 1]. When null or wrong length, rendering falls
@@ -1140,6 +1256,7 @@ class CaptionTemplate {
     Object? dateFormulasByOccurrence = _unset,
     String? layoutPrefix,
     String? layoutSuffix,
+    String? basketballUserNote,
   }) =>
       CaptionTemplate(
         id: id ?? this.id,
@@ -1195,6 +1312,7 @@ class CaptionTemplate {
             : dateFormulasByOccurrence as List<DateFormula>?,
         layoutPrefix: layoutPrefix ?? this.layoutPrefix,
         layoutSuffix: layoutSuffix ?? this.layoutSuffix,
+        basketballUserNote: basketballUserNote ?? this.basketballUserNote,
       );
 
   /// Older Getty prefs only had one date + one location (ending `at VENUE.`).
@@ -1419,6 +1537,8 @@ class CaptionTemplate {
         if (venueSuffix.isNotEmpty) 'venueSuffix': venueSuffix,
         if (layoutPrefix.isNotEmpty) 'layoutPrefix': layoutPrefix,
         if (layoutSuffix.isNotEmpty) 'layoutSuffix': layoutSuffix,
+        if (basketballUserNote.isNotEmpty)
+          'basketballUserNote': basketballUserNote,
         if (locationOptionsByOccurrence != null)
           'locationOptionsByOccurrence': locationOptionsByOccurrence!
               .map((e) => e.toJson())
@@ -1518,6 +1638,7 @@ class CaptionTemplate {
       venueSuffix: json['venueSuffix'] as String? ?? '',
       layoutPrefix: json['layoutPrefix'] as String? ?? '',
       layoutSuffix: json['layoutSuffix'] as String? ?? '',
+      basketballUserNote: json['basketballUserNote'] as String? ?? '',
       locationOptionsByOccurrence:
           (json['locationOptionsByOccurrence'] as List<dynamic>?)
               ?.map((e) => LocationLineOptions.fromJson(

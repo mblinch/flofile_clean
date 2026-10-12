@@ -432,7 +432,7 @@ class VerbDefaultsBundle {
     String category,
     String sport,
   ) {
-    final singular = VerbCaptionWording.defaultWording(key);
+    final singular = VerbCaptionWording.defaultWording(key, sport: sport);
     final subOptions = VerbSubOptions.defaultsFor(key, sport: sport);
     final authoring = VerbAuthoringData.fromRecord(
       const {},
@@ -447,8 +447,8 @@ class VerbDefaultsBundle {
       'category': category,
       'verbPhrase': singular,
       'pluralPhrase':
-          VerbCaptionWording.defaultPluralWording(key, singular),
-      'ingPhrase': VerbCaptionWording.defaultIngWording(key, singular),
+          VerbCaptionWording.defaultPluralWording(key, singular, sport: sport),
+      'ingPhrase': VerbCaptionWording.defaultIngWording(key, singular, sport: sport),
       'usePluralPhrase': true,
       'keywords': defaultKeywordsForVerbLabel(key),
       'wantsOpponent': key != 'Post Game Win' && key != 'Post Game Loss',

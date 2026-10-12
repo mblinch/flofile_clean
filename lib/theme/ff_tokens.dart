@@ -49,6 +49,27 @@ class FfTokens extends ThemeExtension<FfTokens> {
   static const gold = Color(0xFFE8C547); // admin / status badge
   static const inkOnGold = Color(0xFF1A1606);
 
+  /// New Session screen palette (New Session v2.html `:root`).
+  /// Kept separate from Nocturne so the captioning workspace is unchanged.
+  static const sessionBg = Color(0xFF0C1016);
+  static const sessionPanel = Color(0xFF131820);
+  static const sessionEl = Color(0xFF1A2029);
+  static const sessionHv = Color(0xFF232A35);
+  static const sessionLn = Color(0x14E2E8F0); // rgba(226,232,240,.08)
+  static const sessionLn2 = Color(0x29E2E8F0); // rgba(226,232,240,.16)
+  static const sessionTx = Color(0xFFE6EAF0);
+  static const sessionT2 = Color(0xFFA3ADBB);
+  static const sessionT3 = Color(0xFF6F7B8C);
+  static const sessionAc = Color(0xFF95A2B3);
+  static const sessionOn = Color(0xFF7FB3E8);
+  static const sessionOk = Color(0xFF7FD6A0);
+  static const sessionOkSoft = Color(0x247FD6A0); // rgba(127,214,160,.14)
+  static const sessionOkIcon = Color(0x1F7FD6A0); // rgba(127,214,160,.12)
+  static const sessionHot = Color(0x247FB3E8); // rgba(127,179,232,.14)
+  static const sessionGoHover = Color(0xFFFFFFFF);
+  static const sessionKbd = Color(0x1F0C1016); // rgba(12,16,22,.12)
+  static const sessionMenuShadow = Color(0x8C000000); // rgba(0,0,0,.55)
+
   /// Soft heading spotlight (accent @ 0.18).
   static const glow = Color(0x2E4A7A96);
 
@@ -192,6 +213,17 @@ class FfTokens extends ThemeExtension<FfTokens> {
   /// Input / button border (--divider-ish / ln2).
   Color get inputBorder => nocturneLn2;
 
+  /// Soft teal wash behind preference panels and the app ground.
+  /// Top is accent blended toward [bg]; the bottom is [bg].
+  LinearGradient get groundWash => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color.lerp(accent, bg, 0.88)!,
+          bg,
+        ],
+      );
+
   /// Selected row/tile fill (--accent-soft).
   Color get selectedFill => selected;
 
@@ -240,7 +272,7 @@ class FfTokens extends ThemeExtension<FfTokens> {
   static const double radiusRow = 5;
   static const double radiusTile = 11;
   /// Panel / card corner radius (caption, viewer, roster, verbs, thumbs).
-  static const double radiusCard = 8;
+  static const double radiusCard = 12;
   static const double radiusWindow = 14;
 
   // ---------------------------------------------------------------------------

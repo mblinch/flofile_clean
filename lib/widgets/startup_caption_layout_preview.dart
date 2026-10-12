@@ -46,6 +46,7 @@ class _StartupCaptionLayoutPreviewState
   String? _favoriteCaptionStyleToken;
   CaptionPreviewSnapshot? _preview;
   bool _loading = true;
+  bool _gettyNoteIsNbae = false;
 
   /// DropdownFlutter calls [onChanged] when its selection notifier updates
   /// (including programmatic remounts). Ignore those writes during load /
@@ -134,11 +135,13 @@ class _StartupCaptionLayoutPreviewState
     // Use the active template that Done / Save wrote. Do not resolve a favorite
     // over it or write prefs on load (that was wiping edits after Done).
     final template = await prefs.getCaptionTemplate();
+    final nbae = await prefs.getGettyNoteIsNbae();
     if (!mounted) return;
     setState(() {
       _catalog = catalog;
       _selectedToken = catalog.activeToken;
       _favoriteCaptionStyleToken = favoriteToken;
+      _gettyNoteIsNbae = nbae;
       _template = template;
       _preview = preview;
       _loading = false;
@@ -211,6 +214,54 @@ class _StartupCaptionLayoutPreviewState
     }
   }
 
+  bool get _templateIsGetty {
+    final wire = _template?.wireStyle;
+    final getty =
+        wire == WireStyle.getty || wire == WireStyle.gettyInternational;
+    return getty && (widget.sport ?? '').toLowerCase() == 'basketball';
+  }
+
+  Widget _nbaeToggle(FfTokens t) {
+    final on = _gettyNoteIsNbae;
+    return Padding(
+      padding: const EdgeInsets.only(left: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'NBAE',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: on ? t.accent : t.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 4),
+          SizedBox(
+            width: 40,
+            height: 24,
+            child: FittedBox(
+              fit: BoxFit.contain,
+              child: Switch(
+                value: on,
+                activeTrackColor: t.accent,
+                activeThumbColor: Colors.white,
+                inactiveTrackColor: t.sunken,
+                inactiveThumbColor: Colors.white,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: (next) async {
+                  setState(() => _gettyNoteIsNbae = next);
+                  final prefs = await PreferencesService.getInstance();
+                  await prefs.saveGettyNoteIsNbae(next);
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String? _fullCaptionPreview(CaptionTemplate template) {
     final snap = _preview;
     if (snap == null) return null;
@@ -223,6 +274,8 @@ class _StartupCaptionLayoutPreviewState
       previewActions: snap.actions,
     );
     return CaptionFormulaRenderer.render(
+      applyGettyNoteVariant: true,
+      gettyNbaeNote: _gettyNoteIsNbae && _templateIsGetty,
       template: template,
       game: _effectiveGameInfo(snap.gameInfo),
       sampleAgency: _agencyFor(template.wireStyle),
@@ -358,6 +411,7 @@ class _StartupCaptionLayoutPreviewState
                 width: 200,
                 child: _styleDropdown(catalog),
               ),
+              if (_templateIsGetty) _nbaeToggle(t),
               const SizedBox(width: 6),
               Material(
                 type: MaterialType.transparency,
@@ -385,9 +439,15 @@ class _StartupCaptionLayoutPreviewState
         else
           Align(
             alignment: Alignment.centerLeft,
-            child: SizedBox(
-              width: 240,
-              child: _styleDropdown(catalog),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 240,
+                  child: _styleDropdown(catalog),
+                ),
+                if (_templateIsGetty) _nbaeToggle(t),
+              ],
             ),
           ),
         if (preview != null && preview.isNotEmpty) ...[

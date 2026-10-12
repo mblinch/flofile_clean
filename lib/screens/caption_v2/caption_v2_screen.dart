@@ -9,6 +9,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../../photo_edit/photo_edit_panel.dart';
+import '../../photo_edit/photo_edit_session.dart';
 import '../../services/admin_service.dart';
 import '../../services/verb_admin_choice.dart';
 import '../../services/auth_service.dart';
@@ -17,7 +19,6 @@ import '../../theme/ff_tokens.dart';
 import '../../widgets/admin_screen.dart';
 import '../../widgets/app_styled_dialogs.dart';
 import '../../widgets/caption_layout_builder_dialog.dart';
-import '../../widgets/ff_dropdown.dart';
 import '../../widgets/flo_chrome_header.dart';
 import '../../widgets/oriented_file_preview.dart';
 import '../../utils/oriented_image_bytes.dart';
@@ -28,6 +29,7 @@ import 'caption_v2_flag.dart';
 import 'caption_v2_shortcuts.dart';
 import 'data/caption_transfer_payload.dart';
 import 'data/caption_v2_controller.dart';
+import 'data/team_abbrev.dart';
 import 'layout/duplicate_jersey_dialog.dart';
 import 'layout/caption_v2_search.dart';
 import 'layout/caption_v2_startup_screen.dart';
@@ -39,6 +41,7 @@ import 'layout/roster_import_dialog.dart';
 import 'layout/verbs_column.dart';
 import 'widgets/caption_strip.dart';
 import 'widgets/ftp_history_dialog.dart';
+import 'widgets/mobile_photo_filmstrip.dart';
 import 'widgets/transmit_dock.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -52,6 +55,9 @@ class CaptionV2Screen extends StatefulWidget {
 
 class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   final _controller = CaptionV2Controller();
+  late final PhotoEditSession _photoEdit = PhotoEditSession(
+    onReplaced: _controller.noteImageFileReplaced,
+  );
   final _searchFocus = FocusNode();
   final _searchText = TextEditingController();
   final _rootFocus = FocusNode();
@@ -60,6 +66,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   PageController? _pageController;
   String? _lastObservedStatus;
   double? _photoWidth;
+  double? _captionBoxHeight;
+  final _captionMeasureKey = GlobalKey();
   Timer? _jerseyBufferTimer;
   String _jerseyBuffer = '';
   bool? _jerseyBufferIsHome;
@@ -77,7 +85,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   _PendingBurstOffer? _pendingBurst;
 
   static const double _desktopBreakpoint = 1100;
-  static double get _gap => 8;
+  static double get _gap => 10;
 
   @override
   void initState() {
@@ -94,8 +102,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         context: context,
         title: 'Already uploaded',
         message: single
-            ? 'You have already uploaded this, do you want to upload it again?'
-            : 'You have already uploaded ${alreadySent.length} of these. Upload them again?',
+            ? 'This photo was already FTP’d. Send it again?'
+            : '${alreadySent.length} of these were already FTP’d. Send them again?',
         cancelLabel: 'Cancel',
         confirmLabel: 'Upload again',
       );
@@ -368,6 +376,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     _controller.confirmRetransmit = null;
     _controller.removeListener(_onController);
     _controller.dispose();
+    _photoEdit.dispose();
     _searchFocus.dispose();
     _searchText.dispose();
     _rootFocus.dispose();
@@ -406,6 +415,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   bool _handleHardwareKey(KeyEvent event) {
+    if (_finishCropOnEnter(event)) return true;
     if (_handleSaveShortcut(event)) return true;
     if (_handleBurstReviewShortcut(event)) return true;
 
@@ -421,6 +431,25 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         key == LogicalKeyboardKey.altGraph;
     if (modifierReleased) _flushJerseyBuffer();
     return false;
+  }
+
+  /// Enter while the crop frame is up shows that crop and leaves the tool.
+  bool _finishCropOnEnter(KeyEvent event) {
+    if (event is! KeyDownEvent || !_photoEdit.cropping) return false;
+    final key = event.logicalKey;
+    if (key != LogicalKeyboardKey.enter &&
+        key != LogicalKeyboardKey.numpadEnter) {
+      return false;
+    }
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed ||
+        keys.isControlPressed ||
+        keys.isAltPressed ||
+        keys.isShiftPressed) {
+      return false;
+    }
+    _photoEdit.finishCropping();
+    return true;
   }
 
   /// B opens the pending burst review when the alert is showing.
@@ -631,6 +660,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           data: Theme.of(context),
           child: FrameReviewRoute(
             controller: _controller,
+            editSession: _photoEdit,
             onSavePrevious: _saveAndPrevious,
             onSaveNext: _saveAndNext,
           ),
@@ -691,9 +721,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     await _saveInDirection(next: true, transmit: true);
   }
 
-  /// Save current (with burst UI if needed) and FTP, without changing frames.
+  /// Save current (with burst UI if needed), FTP, then move to the next frame.
   Future<void> _saveAndFtpCurrent() async {
-    await _saveInDirection(next: true, transmit: true, advance: false);
+    await _saveInDirection(next: true, transmit: true);
   }
 
   Future<void> _transmitSaved(CaptionSaveResult result) async {
@@ -742,6 +772,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           chain: burstGroup,
           initiallySelected: selected.toSet(),
         );
+      }
+      if (result.anySucceeded && advance && mounted) {
+        next
+            ? _controller.nextFrame(keepSearchOpen: keepFirebar)
+            : _controller.prevFrame(keepSearchOpen: keepFirebar);
       }
       restoreFirebarFocus();
       return;
@@ -1134,6 +1169,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     Widget body, {
     bool sessionActive = false,
     String? title,
+    bool sessionChrome = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1142,6 +1178,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           controller: sessionActive ? _controller : null,
           onResetSession: sessionActive ? _controller.resetToStartup : null,
           title: title,
+          sessionChrome: sessionChrome,
         ),
         Expanded(child: body),
       ],
@@ -1154,30 +1191,39 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     final c = _controller;
 
     if (c.sessionLoading) {
+      final startupChrome = !c.sessionReady;
+      final loading = _withChrome(
+        c.awaitingJerseyColors
+            ? _JerseyColorGate(controller: c, tokens: t)
+            : _SessionLoadingPane(
+                tokens: t,
+                label: c.sessionLoadingLabel ?? 'Loading…',
+                onStop: (c.sessionLoadingLabel ?? '')
+                        .startsWith('Text recognition')
+                    ? c.stopJerseyOcrPrescan
+                    : null,
+              ),
+        title: c.sessionReady ? 'Loading folder' : 'New session',
+        sessionChrome: startupChrome,
+      );
       return Scaffold(
-        backgroundColor: t.bg,
-        body: _withChrome(
-          c.awaitingJerseyColors
-              ? _JerseyColorGate(controller: c, tokens: t)
-              : _SessionLoadingPane(
-                  tokens: t,
-                  label: c.sessionLoadingLabel ?? 'Loading…',
-                  onStop: (c.sessionLoadingLabel ?? '')
-                          .startsWith('Text recognition')
-                      ? c.stopJerseyOcrPrescan
-                      : null,
-                ),
-          title: c.sessionReady ? 'Loading folder' : 'New Session',
-        ),
+        backgroundColor: startupChrome ? FfTokens.nocturneBg : t.bg,
+        body: startupChrome
+            ? ColoredBox(color: FfTokens.nocturneBg, child: loading)
+            : _onGround(t, loading),
       );
     }
 
     if (!c.sessionReady) {
       return Scaffold(
-        backgroundColor: t.bg,
-        body: _withChrome(
-          CaptionV2StartupScreen(onComplete: _onStartupComplete),
-          title: 'New Session',
+        backgroundColor: FfTokens.nocturneBg,
+        body: ColoredBox(
+          color: FfTokens.nocturneBg,
+          child: _withChrome(
+            CaptionV2StartupScreen(onComplete: _onStartupComplete),
+            title: 'New session',
+            sessionChrome: true,
+          ),
         ),
       );
     }
@@ -1285,24 +1331,40 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
           autofocus: true,
           child: Scaffold(
             backgroundColor: t.bg,
-            body: LayoutBuilder(
+            body: _onGround(
+              t,
+              LayoutBuilder(
               builder: (context, constraints) {
                 final useMobile = kCaptionV2MobilePreview ||
                     constraints.maxWidth < _desktopBreakpoint;
-                if (!useMobile) {
-                  return _withChrome(
-                    _buildDesktopWorkspace(c, t, constraints.maxWidth),
-                    sessionActive: true,
-                  );
-                }
-                final mobile = _withChrome(
-                  _buildMobileWorkspace(c, t),
-                  sessionActive: true,
+                final workspace = AnimatedBuilder(
+                  animation: _photoEdit,
+                  builder: (context, _) {
+                    if (_photoEdit.editing &&
+                        AdminService.isCurrentUserAdminSync()) {
+                      return PhotoEditWorkspace(
+                        session: _photoEdit,
+                        controller: c,
+                      );
+                    }
+                    if (!useMobile) {
+                      return _buildDesktopWorkspace(
+                        c,
+                        t,
+                        constraints.maxWidth,
+                      );
+                    }
+                    return _buildMobileWorkspace(c, t);
+                  },
                 );
+                if (!useMobile) {
+                  return _withChrome(workspace, sessionActive: true);
+                }
+                final mobile = _withChrome(workspace, sessionActive: true);
                 if (!kCaptionV2MobilePreview) return mobile;
                 // Phone-width frame so desktop can preview the swipe layout.
-                return ColoredBox(
-                  color: t.bg,
+                return DecoratedBox(
+                  decoration: BoxDecoration(gradient: t.groundWash),
                   child: Center(
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(
@@ -1324,10 +1386,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                 );
               },
             ),
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _onGround(FfTokens t, Widget child) {
+    return ColoredBox(color: t.bg, child: child);
   }
 
   Widget _buildDesktopWorkspace(
@@ -1335,24 +1402,44 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     FfTokens t,
     double workspaceWidth,
   ) {
-    final defaultPhotoWidth = (workspaceWidth * 0.33).clamp(460.0, 760.0);
-    final minPhotoWidth = workspaceWidth * 0.34;
-    final maxPhotoWidth = workspaceWidth * 0.45;
+    const pad = 10.0;
+    final inner = math.max(0.0, workspaceWidth - pad * 2 - _gap);
+    final maxPhotoWidth = inner * 0.40;
+    final minPhotoWidth = math.min(300.0, maxPhotoWidth);
+    final defaultPhotoWidth =
+        (inner * 0.30).clamp(minPhotoWidth, maxPhotoWidth);
     final photoWidth =
         (_photoWidth ?? defaultPhotoWidth).clamp(minPhotoWidth, maxPhotoWidth);
     return Padding(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.fromLTRB(pad, 0, pad, pad),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
             width: photoWidth,
-            child: PhotoColumn(
-              key: const ValueKey('photo-column-preview-60'),
-              controller: c,
-              focused: c.columnFocus == 3,
-              onSavePrevious: _saveAndPrevious,
-              onSaveNext: _saveAndNext,
+            child: Stack(
+              children: [
+                PhotoColumn(
+                  key: const ValueKey('photo-column-preview-60'),
+                  controller: c,
+                  editSession: _photoEdit,
+                  focused: c.columnFocus == 3,
+                  onSavePrevious: _saveAndPrevious,
+                  onSaveNext: _saveAndNext,
+                ),
+                if (_pendingBurst != null)
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    top: 8,
+                    child: _BurstAvailableBanner(
+                      frameCount: _pendingBurst!.chain.length,
+                      tokens: t,
+                      onReview: () => unawaited(_reviewPendingBurst()),
+                      onDismiss: () => setState(_clearPendingBurst),
+                    ),
+                  ),
+              ],
             ),
           ),
           _WorkspaceResizeHandle(
@@ -1374,19 +1461,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   ),
                   const SizedBox(height: 6),
                 ],
-                if (_pendingBurst != null) ...[
-                  _BurstAvailableBanner(
-                    frameCount: _pendingBurst!.chain.length,
-                    tokens: t,
-                    onReview: () => unawaited(_reviewPendingBurst()),
-                    onDismiss: () => setState(_clearPendingBurst),
-                  ),
-                  const SizedBox(height: 6),
-                ],
-                _buildCaptionStrip(c),
-                const SizedBox(height: 8),
+                _resizableCaption(c),
+                const SizedBox(height: 2),
                 _buildSearchBlock(c),
-                SizedBox(height: _gap),
+                const SizedBox(height: 6),
                 Expanded(
                   child: _DesktopBody(
                     controller: c,
@@ -1405,51 +1483,71 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   Widget _buildMobileWorkspace(CaptionV2Controller c, FfTokens t) {
     return Padding(
       padding: const EdgeInsets.all(8),
-      child: Column(
+      child: Stack(
+        children: [
+          Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           MobileFrameBanner(
             controller: c,
+            editSession: _photoEdit,
             onOpen: _openFrameReview,
           ),
-          if (c.missingCaptionIptcLabels.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            _MissingCaptionIptcBanner(
-              labels: c.missingCaptionIptcLabels,
-              tokens: t,
-            ),
-          ],
-          if (_pendingBurst != null) ...[
-            const SizedBox(height: 6),
-            _BurstAvailableBanner(
-              frameCount: _pendingBurst!.chain.length,
-              tokens: t,
-              onReview: () => unawaited(_reviewPendingBurst()),
-              onDismiss: () => setState(_clearPendingBurst),
-            ),
-          ],
           const SizedBox(height: 8),
-          _buildCaptionStrip(c, inningStepperOnly: true),
-          const SizedBox(height: 8),
-          _buildSearchBlock(c),
-          SizedBox(height: _gap),
           Expanded(
-            child: _MobileBody(
+            child: PhotoEditCover(
+              session: _photoEdit,
               controller: c,
-              pageController: _pageController!,
-              onPageChanged: (i) => c.setColumnFocus(i),
-              onEditRosters: _editRosters,
+              sheetOnly: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  MobilePhotoFilmstrip(controller: c),
+                  if (c.missingCaptionIptcLabels.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    _MissingCaptionIptcBanner(
+                      labels: c.missingCaptionIptcLabels,
+                      tokens: t,
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  _resizableCaption(c, inningStepperOnly: true),
+                  const SizedBox(height: 8),
+                  _buildSearchBlock(c),
+                  SizedBox(height: _gap),
+                  Expanded(
+                    child: _MobileBody(
+                      controller: c,
+                      pageController: _pageController!,
+                      onPageChanged: (i) => c.setColumnFocus(i),
+                      onEditRosters: _editRosters,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+        ],
+          ),
+          if (_pendingBurst != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: _BurstAvailableBanner(
+                frameCount: _pendingBurst!.chain.length,
+                tokens: t,
+                onReview: () => unawaited(_reviewPendingBurst()),
+                onDismiss: () => setState(_clearPendingBurst),
+              ),
+            ),
         ],
       ),
     );
   }
 
   Widget _buildSearchBlock(CaptionV2Controller c) {
-    return SizedBox(
-      height: 32,
-      child: CaptionV2ActionRow(
+    return CaptionV2ActionRow(
         onSavePrevious: _saveAndPrevious,
         onCopy: _copySelection,
         onPaste: _pasteSelection,
@@ -1461,20 +1559,61 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         transmitEnabled: !c.transmitting &&
             (c.savedNotSentCount > 0 || c.currentPath != null),
         showTransmit: c.ftpModeEnabled,
+        ftpActive: c.transmitting,
+        ftpProgress: c.transmitProgress,
+        ftpThumbPath: c.transmittingPath,
         onFtpHistory: c.ftpModeEnabled
             ? () => showFtpHistoryDialog(context, c)
             : null,
-      ),
+      );
+  }
+
+  Widget _resizableCaption(
+    CaptionV2Controller c, {
+    bool inningStepperOnly = false,
+  }) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final height = _captionBoxHeight;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        KeyedSubtree(
+          key: _captionMeasureKey,
+          child: height == null
+              ? _buildCaptionStrip(c, inningStepperOnly: inningStepperOnly)
+              : SizedBox(
+                  height: height,
+                  child: _buildCaptionStrip(
+                    c,
+                    inningStepperOnly: inningStepperOnly,
+                    fillHeight: true,
+                  ),
+                ),
+        ),
+        _CaptionResizeHandle(
+          tokens: t,
+          onDrag: (delta) {
+            final measured = _captionMeasureKey.currentContext?.size?.height ??
+                _captionBoxHeight ??
+                160;
+            setState(() {
+              _captionBoxHeight = (measured + delta).clamp(120.0, 640.0);
+            });
+          },
+          onReset: () => setState(() => _captionBoxHeight = null),
+        ),
+      ],
     );
   }
 
   Widget _buildCaptionStrip(
     CaptionV2Controller c, {
     bool inningStepperOnly = false,
+    bool fillHeight = false,
   }) {
     final isBaseball = c.sport.toLowerCase() == 'baseball';
     final hasLiveCaption = c.manualCaptionOverride != null ||
-        c.selectedPlayer != null ||
+        c.hasCaptionSubject ||
         (c.hasVerbSelection && !c.pinDefersCaptionUntilPlayer) ||
         c.originalCaption.trim().isNotEmpty;
     final captionText = c.displayedCaption;
@@ -1482,6 +1621,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       leading: '',
       chips: const [],
       trailing: '',
+      fillHeight: fillHeight,
       fullCaption: captionText,
       highlightPhrases: c.firebarInsertedHighlights,
       provenanceSpans: c.captionProvenanceSpans,
@@ -1496,7 +1636,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       keywords: c.keywords,
       onKeywordsChanged: c.showKeywordsField ? c.setKeywords : null,
       onEditTap: () => _openCaptionStyleEditor(c),
-      footer: SizedBox(
+      footer: c.hideFirebar
+          ? null
+          : SizedBox(
         height: c.searchOpen ? 72 : 32,
         child: CaptionV2SearchBar(
           controller: c,
@@ -1513,6 +1655,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       maxInning: c.timingMaxInning,
       segmentPrefix: c.supportsTimingHalves ? 'Q' : null,
       selectedHalf: c.timingHalf,
+      quarterMode: c.timingByQuarter,
+      onQuarterModeChanged: inningStepperOnly || !c.supportsTimingHalves
+          ? null
+          : c.setTimingByQuarter,
       onHalfSelected:
           inningStepperOnly || !c.supportsTimingHalves ? null : c.setTimingHalf,
       extraLabel: c.sport.toLowerCase() == 'soccer'
@@ -1635,9 +1781,16 @@ class _BurstAvailableBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: tokens.accent.withValues(alpha: 0.12),
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: tokens.accent.withValues(alpha: 0.55)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.28),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -1716,6 +1869,47 @@ class _BurstSaveDecision {
   final List<String> paths;
 }
 
+class _CaptionResizeHandle extends StatelessWidget {
+  const _CaptionResizeHandle({
+    required this.tokens,
+    required this.onDrag,
+    required this.onReset,
+  });
+
+  final FfTokens tokens;
+  final ValueChanged<double> onDrag;
+  final VoidCallback onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeUpDown,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onVerticalDragUpdate: (details) => onDrag(details.delta.dy),
+        onDoubleTap: onReset,
+        child: Tooltip(
+          message: 'Drag to resize the caption. Double-click to reset.',
+          waitDuration: const Duration(milliseconds: 400),
+          child: SizedBox(
+            height: 8,
+            child: Center(
+              child: Container(
+                width: 42,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: tokens.text.withValues(alpha: 0.28),
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _WorkspaceResizeHandle extends StatelessWidget {
   const _WorkspaceResizeHandle({
     required this.tokens,
@@ -1735,19 +1929,7 @@ class _WorkspaceResizeHandle extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
         onDoubleTap: onReset,
-        child: SizedBox(
-          width: 14,
-          child: Center(
-            child: Container(
-              width: 4,
-              height: 54,
-              decoration: BoxDecoration(
-                color: tokens.text.withValues(alpha: 0.28),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-        ),
+        child: const SizedBox(width: 10),
       ),
     );
   }
@@ -1758,11 +1940,13 @@ class _TopChrome extends StatelessWidget {
     this.controller,
     this.onResetSession,
     this.title,
+    this.sessionChrome = false,
   });
 
   final CaptionV2Controller? controller;
   final VoidCallback? onResetSession;
   final String? title;
+  final bool sessionChrome;
 
   @override
   Widget build(BuildContext context) {
@@ -1770,53 +1954,61 @@ class _TopChrome extends StatelessWidget {
     final c = controller;
     final headerTitle = title?.trim();
 
+    if (sessionChrome) {
+      return _buildSessionChrome(context, headerTitle);
+    }
+
     return Container(
-      height: 52,
-      padding: const EdgeInsets.fromLTRB(10, 4, 8, 4),
-      decoration: BoxDecoration(
-        color: Colors.transparent,
-        border: Border(bottom: BorderSide(color: t.divider)),
-      ),
+      height: 36,
+      padding: const EdgeInsets.fromLTRB(10, 0, 8, 0),
+      color: Colors.transparent,
       child: Row(
         children: [
           if (onResetSession != null)
-            Tooltip(
-              message: 'Start a new caption session',
-              waitDuration: const Duration(milliseconds: 400),
-              child: Material(
-                color: t.elevated,
-                borderRadius: BorderRadius.circular(999),
-                child: InkWell(
-                  onTap: onResetSession,
-                  borderRadius: BorderRadius.circular(999),
-                  child: Container(
-                    height: 28,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: t.accentEdge),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PhosphorIcon(PhosphorIconsRegular.arrowClockwise,
-                          size: 15,
+            Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(9),
+              child: InkWell(
+                onTap: () async {
+                  final startNew = await showAppConfirmDialog(
+                    context: context,
+                    title: 'New session',
+                    message:
+                        'Leave this caption session and start a new one?',
+                    cancelLabel: 'Cancel',
+                    confirmLabel: 'New session',
+                  );
+                  if (startNew == true) onResetSession!();
+                },
+                borderRadius: BorderRadius.circular(9),
+                hoverColor: t.hover,
+                child: Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: t.surface,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        PhosphorIconsRegular.plusCircle,
+                        size: 16,
+                        color: t.textSecondary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'New session',
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1,
                           color: t.text,
                         ),
-                        const SizedBox(width: 7),
-                        Text(
-                          'Start New Session',
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            letterSpacing: 0,
-                            height: 1,
-                            color: t.text,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1836,19 +2028,14 @@ class _TopChrome extends StatelessWidget {
                 ),
               ),
             ),
-          const Expanded(child: SizedBox.shrink()),
-          if (c != null)
-            _GameGoogleSearchButton(
+          if (c != null) ...[
+            const SizedBox(width: 8),
+            _GameChip(
               controller: c,
               tokens: t,
             ),
-          const Expanded(child: SizedBox.shrink()),
-          if (c != null &&
-              AdminService.isCurrentUserAdminSync() &&
-              defaultTargetPlatform == TargetPlatform.macOS) ...[
-            _AdminWindowSizeDropdown(tokens: t),
-            const SizedBox(width: 8),
           ],
+          const Spacer(),
           if (c?.rostersLoading == true) ...[
             SizedBox(
               width: 14,
@@ -1860,17 +2047,18 @@ class _TopChrome extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
-          if (AuthService.instance.isSignedIn) ...[
-            const SizedBox(width: 4),
-            FloHeaderSignedInAs(
-              foreground: t.text,
-              foregroundMuted: t.textSecondary,
+          if (c != null) ...[
+            _ModesMenu(
+              controller: c,
+              tokens: t,
             ),
+            const SizedBox(width: 8),
           ],
-          if (AdminService.isCurrentUserAdminSync()) ...[
-            const SizedBox(width: 4),
-            AdminBadgeButton(
-              onClosed: () async {
+          if (AuthService.instance.isSignedIn)
+            _SessionAvatar(
+              tokens: t,
+              admin: AdminService.isCurrentUserAdminSync(),
+              onAdminClosed: () async {
                 final sport = c?.sport;
                 if (sport != null &&
                     sport.trim().isNotEmpty &&
@@ -1881,29 +2069,88 @@ class _TopChrome extends StatelessWidget {
                   );
                 }
                 await c?.reloadVerbCatalog();
+                await c?.reloadCaptionStyle();
               },
-              child: const _TopAdminBadge(),
             ),
-          ],
-          if (c != null) ...[
-            const SizedBox(width: 8),
-            _ActiveModesStatus(
-              controller: c,
-              tokens: t,
-              onOpenPreferences: () => _openPreferences(context, c),
-            ),
-          ],
           const SizedBox(width: 4),
-          IconButton(
-            onPressed: () => _openPreferences(context, c),
-            icon: PhosphorIcon(PhosphorIconsRegular.gear,
-              size: 17,
-              color: t.textSecondary,
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            child: InkWell(
+              onTap: () => _openPreferences(context, c),
+              borderRadius: BorderRadius.circular(9),
+              hoverColor: t.hover,
+              child: Tooltip(
+                message: 'Options',
+                child: SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: Icon(
+                    PhosphorIconsRegular.gearSix,
+                    size: 18,
+                    color: t.textSecondary,
+                  ),
+                ),
+              ),
             ),
-            tooltip: 'Options',
-            visualDensity: VisualDensity.compact,
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSessionChrome(BuildContext context, String? headerTitle) {
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.fromLTRB(20, 0, 14, 0),
+      decoration: const BoxDecoration(
+        color: FfTokens.nocturneBg,
+        border: Border(bottom: BorderSide(color: FfTokens.nocturneLn)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              headerTitle ?? 'New session',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                height: 1,
+                color: FfTokens.sessionTx,
+              ),
+            ),
+          ),
+          if (AuthService.instance.isSignedIn)
+            _SessionAvatar(
+              tokens: Theme.of(context).extension<FfTokens>() ?? FfTokens.dark,
+              admin: AdminService.isCurrentUserAdminSync(),
+              sessionChrome: true,
+              onAdminClosed: () async {},
+            ),
+          const SizedBox(width: 10),
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            child: InkWell(
+              onTap: () => _openPreferences(context, null),
+              borderRadius: BorderRadius.circular(9),
+              hoverColor: FfTokens.sessionHv,
+              child: const Tooltip(
+                message: 'Settings',
+                child: SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Icon(
+                    PhosphorIconsRegular.gearSix,
+                    size: 18,
+                    color: FfTokens.sessionT2,
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -1934,6 +2181,7 @@ class _TopChrome extends StatelessWidget {
       ),
     );
     await controller?.reloadVerbCatalog();
+    await controller?.reloadCaptionStyle();
     await controller?.reloadApplicationModes();
   }
 }
@@ -1963,9 +2211,17 @@ String _teamSearchNickname(String teamName) {
   return parts.last;
 }
 
-String _gameGoogleSearchQuery(CaptionV2Controller controller) {
+String _gameMatchupLabel(CaptionV2Controller controller) {
   final away = _teamSearchNickname(controller.awayTeam);
   final home = _teamSearchNickname(controller.homeTeam);
+  if (away.isNotEmpty && home.isNotEmpty) return '$away @ $home';
+  if (home.isNotEmpty) return home;
+  if (away.isNotEmpty) return away;
+  return '';
+}
+
+String _gameGoogleSearchQuery(CaptionV2Controller controller) {
+  final matchup = _gameMatchupLabel(controller);
   final date = controller.currentGameInfoForCaption().gameDate ?? DateTime.now();
   const months = <String>[
     'Jan',
@@ -1981,13 +2237,9 @@ String _gameGoogleSearchQuery(CaptionV2Controller controller) {
     'Nov',
     'Dec',
   ];
+  if (matchup.isEmpty) return '';
   final dateBit = '${months[date.month - 1]} ${date.day} ${date.year}';
-  if (away.isNotEmpty && home.isNotEmpty) {
-    return '$away @ $home $dateBit';
-  }
-  if (home.isNotEmpty) return '$home $dateBit';
-  if (away.isNotEmpty) return '$away $dateBit';
-  return '';
+  return '$matchup $dateBit';
 }
 
 Future<void> _openGameGoogleSearch(CaptionV2Controller controller) async {
@@ -2007,9 +2259,9 @@ Future<void> _openGameGoogleSearch(CaptionV2Controller controller) async {
   }
 }
 
-/// Opens a Google search for the current game (score / updates).
-class _GameGoogleSearchButton extends StatelessWidget {
-  const _GameGoogleSearchButton({
+/// Game identity on the left of the session bar. Opens a Google search.
+class _GameChip extends StatelessWidget {
+  const _GameChip({
     required this.controller,
     required this.tokens,
   });
@@ -2017,19 +2269,26 @@ class _GameGoogleSearchButton extends StatelessWidget {
   final CaptionV2Controller controller;
   final FfTokens tokens;
 
-  static const double _width = 108;
-
   @override
   Widget build(BuildContext context) {
     final query = _gameGoogleSearchQuery(controller);
     final enabled = query.isNotEmpty;
-    final color = enabled ? tokens.textSecondary : tokens.textSecondary.withValues(alpha: 0.45);
-    final fill = tokens.elevated;
-    final border = tokens.divider;
+    final away = mlbTeamAbbreviation(controller.awayTeam);
+    final home = mlbTeamAbbreviation(controller.homeTeam);
+    final date = controller.currentGameInfoForCaption().gameDate ?? DateTime.now();
+    final venue = controller.venue.trim();
+    final detail = [
+      _shortMonthDay(date),
+      if (venue.isNotEmpty) venue,
+    ].join(' · ');
+    final color = enabled ? tokens.text : tokens.textSecondary;
+    final muted = tokens.textSecondary;
+    final showMeta = MediaQuery.sizeOf(context).width >= 1300;
+
     return Tooltip(
       message: enabled
-          ? 'Google game: $query'
-          : 'Pick teams to Google this game',
+          ? 'Search for game info: $query'
+          : 'Pick teams to search for game info',
       waitDuration: const Duration(milliseconds: 350),
       child: Material(
         color: Colors.transparent,
@@ -2037,36 +2296,75 @@ class _GameGoogleSearchButton extends StatelessWidget {
           onTap: enabled
               ? () => unawaited(_openGameGoogleSearch(controller))
               : null,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           child: Container(
-            width: _width,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            height: 32,
+            padding: const EdgeInsets.fromLTRB(6, 0, 10, 0),
             decoration: BoxDecoration(
-              color: fill,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: border),
+              color: tokens.surface,
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Column(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (away.isNotEmpty && home.isNotEmpty) ...[
+                  _AbbrChip(label: away, tokens: tokens),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Text(
+                      '@',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: tokens.textTertiary,
+                      ),
+                    ),
+                  ),
+                  _AbbrChip(label: home, tokens: tokens),
+                  if (showMeta) ...[
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 220),
+                      child: Text(
+                        detail,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          height: 1,
+                          color: muted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ] else
+                  Text(
+                    'Game',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: muted,
+                    ),
+                  ),
+                const SizedBox(width: 8),
                 PhosphorIcon(
                   PhosphorIconsRegular.magnifyingGlass,
-                  size: 15,
-                  color: color,
+                  size: 14,
+                  color: enabled ? tokens.text : tokens.textTertiary,
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(width: 4),
                 Text(
-                  'Google Game Info',
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  'Google',
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 8.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    height: 1.05,
-                    letterSpacing: 0,
-                    color: color,
+                    height: 1,
+                    color: enabled ? tokens.text : tokens.textTertiary,
                   ),
                 ),
               ],
@@ -2078,106 +2376,518 @@ class _GameGoogleSearchButton extends StatelessWidget {
   }
 }
 
-/// Compact "Modes" chip. Each mode shows On or Off beside its name.
-/// Tap opens Preferences → Application to change them.
-class _ActiveModesStatus extends StatelessWidget {
-  const _ActiveModesStatus({
+String _shortMonthDay(DateTime date) {
+  const months = <String>[
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${months[date.month - 1]} ${date.day}';
+}
+
+/// Modes and window size in one menu. The bar only shows the summary.
+class _ModesMenu extends StatefulWidget {
+  const _ModesMenu({
     required this.controller,
     required this.tokens,
-    required this.onOpenPreferences,
   });
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
-  final VoidCallback onOpenPreferences;
+
+  @override
+  State<_ModesMenu> createState() => _ModesMenuState();
+}
+
+class _ModesMenuState extends State<_ModesMenu> {
+  final MenuController _menu = MenuController();
+  bool _sizesOpen = false;
+
+  bool get _showSize =>
+      AdminService.isCurrentUserAdminSync() &&
+      defaultTargetPlatform == TargetPlatform.macOS;
 
   @override
   Widget build(BuildContext context) {
+    final t = widget.tokens;
+    final c = widget.controller;
     final showOcr = defaultTargetPlatform == TargetPlatform.macOS;
-    final modes = <(String, bool)>[
-      ('FTP', controller.ftpModeEnabled),
-      ('Burst', controller.burstDetectionEnabled),
-      if (showOcr) ('Text', controller.jerseyOcrPreferenceEnabled),
-      ('Serial', controller.serialBylinesEnabled),
+    final modes = <_ModeRow>[
+      _ModeRow(
+        icon: PhosphorIconsRegular.cloudArrowUp,
+        label: 'FTP upload',
+        on: c.ftpModeEnabled,
+        onChanged: c.setFtpModeEnabled,
+      ),
+      _ModeRow(
+        icon: PhosphorIconsRegular.stack,
+        label: 'Burst',
+        on: c.burstDetectionEnabled,
+        onChanged: c.setBurstDetectionEnabled,
+      ),
+      if (showOcr)
+        _ModeRow(
+          icon: PhosphorIconsRegular.textAa,
+          label: 'Text',
+          on: c.jerseyOcrPreferenceEnabled,
+          onChanged: c.setJerseyOcrPreferenceEnabled,
+        ),
+      _ModeRow(
+        icon: PhosphorIconsRegular.hash,
+        label: 'Serial',
+        on: c.serialBylinesEnabled,
+        onChanged: c.setSerialBylinesEnabled,
+      ),
+      _ModeRow(
+        icon: PhosphorIconsRegular.eyeSlash,
+        label: 'Hide Firebar',
+        on: c.hideFirebar,
+        onChanged: c.setHideFirebar,
+      ),
     ];
-    final tooltip = modes
-        .map((mode) => '${mode.$1} ${mode.$2 ? 'On' : 'Off'}')
-        .join(', ');
+    final sizeLabel = _windowSizeLabel(MediaQuery.sizeOf(context));
 
-    TextStyle stateStyle(bool on) => TextStyle(
-          fontFamily: FfTokens.fontFamily,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          height: 1.1,
-          color: on ? tokens.accent : tokens.textSecondary.withValues(alpha: 0.7),
-        );
-
-    return Tooltip(
-      message: '$tooltip — open Preferences to change',
-      waitDuration: const Duration(milliseconds: 350),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onOpenPreferences,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: tokens.elevated,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: tokens.divider),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'MODES',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 8,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.6,
-                    height: 1.1,
-                    color: tokens.textSecondary,
+    return MenuAnchor(
+      controller: _menu,
+      alignmentOffset: const Offset(0, 6),
+      style: MenuStyle(
+        backgroundColor: WidgetStatePropertyAll(t.surface),
+        surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(8),
+        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(vertical: 6)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: t.divider),
+          ),
+        ),
+      ),
+      builder: (context, controller, child) {
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              if (controller.isOpen) {
+                controller.close();
+              } else {
+                setState(() => _sizesOpen = false);
+                controller.open();
+              }
+            },
+            borderRadius: BorderRadius.circular(9),
+            child: Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: t.surface,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PhosphorIcon(
+                    PhosphorIconsRegular.slidersHorizontal,
+                    size: 16,
+                    color: t.textSecondary,
                   ),
-                ),
-                for (var i = 0; i < modes.length; i++) ...[
-                  SizedBox(width: i == 0 ? 8 : 6),
-                  if (i > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: Text(
-                        '·',
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 11,
-                          height: 1.1,
-                          color: tokens.textSecondary.withValues(alpha: 0.55),
-                        ),
-                      ),
-                    ),
+                  const SizedBox(width: 8),
                   Text(
-                    modes[i].$1,
+                    'Modes',
                     style: TextStyle(
                       fontFamily: FfTokens.fontFamily,
-                      fontSize: 11,
+                      fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      height: 1.1,
-                      color: tokens.text,
+                      height: 1,
+                      color: t.text,
                     ),
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    modes[i].$2 ? 'On' : 'Off',
-                    style: stateStyle(modes[i].$2),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF7FB3E8),
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      '${modes.where((mode) => mode.on).length} on',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                        color: t.bg,
+                      ),
+                    ),
+                  ),
+                  if (_showSize) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      sizeLabel.replaceAll(' ', ''),
+                      style: TextStyle(
+                        fontFamily: FfTokens.monoFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        height: 1,
+                        color: t.textTertiary,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(width: 6),
+                  PhosphorIcon(
+                    PhosphorIconsRegular.caretDown,
+                    size: 11,
+                    color: t.textSecondary,
                   ),
                 ],
-              ],
+              ),
             ),
+          ),
+        );
+      },
+      menuChildren: [
+        for (final mode in modes)
+          _ModeToggleTile(
+            tokens: t,
+            icon: mode.icon,
+            label: mode.label,
+            value: mode.on,
+            onChanged: (value) => unawaited(mode.onChanged(value)),
+          ),
+        if (_showSize) ...[
+          Divider(height: 1, thickness: 1, color: t.divider),
+          _ExportSizeTile(
+            tokens: t,
+            label: sizeLabel,
+            expanded: _sizesOpen,
+            onToggle: () => setState(() => _sizesOpen = !_sizesOpen),
+          ),
+          if (_sizesOpen)
+            for (final option in _windowSizeOptions)
+              _ExportSizeOption(
+                tokens: t,
+                label: option.$2,
+                selected: option.$2 == sizeLabel,
+                onPick: () => unawaited(_resizeWindow(context, option.$1)),
+              ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ModeRow {
+  const _ModeRow({
+    required this.icon,
+    required this.label,
+    required this.on,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool on;
+  final Future<void> Function(bool) onChanged;
+}
+
+class _ModeToggleTile extends StatelessWidget {
+  const _ModeToggleTile({
+    required this.tokens,
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final FfTokens tokens;
+  final IconData icon;
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 248,
+      height: 36,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          children: [
+            PhosphorIcon(icon, size: 16, color: tokens.textSecondary),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: tokens.text,
+                ),
+              ),
+            ),
+            Transform.scale(
+              scale: 0.62,
+              alignment: Alignment.centerRight,
+              child: Switch(
+                value: value,
+                onChanged: onChanged,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                // Material 3 draws a smaller thumb when off. A blank icon
+                // keeps the off knob the same diameter as the on knob.
+                thumbIcon: const WidgetStatePropertyAll(
+                  Icon(Icons.circle, size: 0, color: Colors.transparent),
+                ),
+                thumbColor: const WidgetStatePropertyAll(Colors.white),
+                trackColor: WidgetStateProperty.resolveWith((states) {
+                  if (states.contains(WidgetState.selected)) {
+                    return tokens.accent;
+                  }
+                  return tokens.sunken;
+                }),
+                trackOutlineColor: const WidgetStatePropertyAll(
+                  Colors.transparent,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ExportSizeTile extends StatelessWidget {
+  const _ExportSizeTile({
+    required this.tokens,
+    required this.label,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  final FfTokens tokens;
+  final String label;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 248,
+      height: 36,
+      child: InkWell(
+        onTap: onToggle,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Row(
+            children: [
+              PhosphorIcon(
+                PhosphorIconsRegular.crop,
+                size: 16,
+                color: tokens.textSecondary,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Export size',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: tokens.text,
+                  ),
+                ),
+              ),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  color: tokens.textSecondary,
+                ),
+              ),
+              PhosphorIcon(
+                expanded
+                    ? PhosphorIconsRegular.caretUp
+                    : PhosphorIconsRegular.caretRight,
+                size: 12,
+                color: tokens.textSecondary,
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+}
+
+class _ExportSizeOption extends StatelessWidget {
+  const _ExportSizeOption({
+    required this.tokens,
+    required this.label,
+    required this.selected,
+    required this.onPick,
+  });
+
+  final FfTokens tokens;
+  final String label;
+  final bool selected;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 248,
+      height: 32,
+      child: InkWell(
+        onTap: onPick,
+        child: Padding(
+          padding: const EdgeInsets.only(left: 38, right: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: selected ? tokens.accent : tokens.text,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const _windowSizeOptions = <(String, String)>[
+  ('1280x800', '1280 × 800'),
+  ('1400x900', '1400 × 900'),
+  ('1600x1000', '1600 × 1000'),
+];
+
+String _windowSizeLabel(Size size) {
+  if (size.width >= 1500 && size.height >= 950) return '1600 × 1000';
+  if (size.width < 1340 || size.height < 850) return '1280 × 800';
+  return '1400 × 900';
+}
+
+Future<void> _resizeWindow(BuildContext context, String value) async {
+  final parts = value.split('x');
+  if (parts.length != 2) return;
+  try {
+    await const MethodChannel('window_control').invokeMethod<void>(
+      'setContentSize',
+      {
+        'width': int.parse(parts[0]),
+        'height': int.parse(parts[1]),
+      },
+    );
+  } on PlatformException catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not resize window: ${error.message}')),
+    );
+  }
+}
+
+class _AbbrChip extends StatelessWidget {
+  const _AbbrChip({required this.label, required this.tokens});
+
+  final String label;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: tokens.sunken,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.4,
+          height: 1,
+          color: tokens.text,
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionAvatar extends StatelessWidget {
+  const _SessionAvatar({
+    required this.tokens,
+    required this.admin,
+    required this.onAdminClosed,
+    this.sessionChrome = false,
+  });
+
+  final FfTokens tokens;
+  final bool admin;
+  final Future<void> Function() onAdminClosed;
+  final bool sessionChrome;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatar = FloHeaderSignedInAs(
+      foreground: sessionChrome ? FfTokens.sessionTx : tokens.text,
+      foregroundMuted: sessionChrome ? FfTokens.sessionT2 : tokens.textSecondary,
+      initials: true,
+      showStatusDot: false,
+      avatarFill: sessionChrome ? FfTokens.sessionHv : null,
+      initialsDiameter: sessionChrome ? 34 : 32,
+      initialsBorder: !sessionChrome,
+    );
+    if (!admin) return avatar;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        avatar,
+        Positioned(
+          right: -2,
+          bottom: -2,
+          child: AdminBadgeButton(
+              onClosed: onAdminClosed,
+              child: Tooltip(
+                message: 'Admin',
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: FfTokens.gold,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: sessionChrome ? FfTokens.nocturneBg : tokens.bg,
+                      width: 2,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
   }
 }
 
@@ -2186,90 +2896,26 @@ class _TopAdminBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: FfTokens.gold,
+        color: t.elevated,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: t.divider),
       ),
       child: const Text(
         'Admin',
         style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w600,
-          color: FfTokens.inkOnGold,
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
           height: 1,
+          color: FfTokens.gold,
         ),
       ),
-    );
-  }
-}
-
-class _AdminWindowSizeDropdown extends StatelessWidget {
-  const _AdminWindowSizeDropdown({required this.tokens});
-
-  static const MethodChannel _windowChannel = MethodChannel('window_control');
-  static const _compact = '1280x800';
-  static const _standard = '1400x900';
-  static const _large = '1600x1000';
-
-  final FfTokens tokens;
-
-  Future<void> _resize(BuildContext context, String value) async {
-    final parts = value.split('x');
-    if (parts.length != 2) return;
-    try {
-      await _windowChannel.invokeMethod<void>('setContentSize', {
-        'width': int.parse(parts[0]),
-        'height': int.parse(parts[1]),
-      });
-    } on PlatformException catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not resize window: ${error.message}')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    final value = size.width >= 1500 && size.height >= 950
-        ? _large
-        : size.width < 1340 || size.height < 850
-            ? _compact
-            : _standard;
-    return Container(
-      width: 124,
-      height: 22,
-      padding: const EdgeInsets.only(left: 6, right: 2),
-      decoration: BoxDecoration(
-        color: tokens.elevated,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: tokens.divider),
-      ),
-      child: FfDropdownButton<String>(
-          value: value,
-          isExpanded: true,
-          menuColor: tokens.surface,
-          icon: PhosphorIcon(PhosphorIconsRegular.caretDown,
-            size: 16,
-            color: tokens.textSecondary,
-          ),
-          style: tokens.monoMetaStyle.copyWith(
-            color: tokens.text,
-            fontSize: tokens.textSizeMicro,
-          ),
-          padding: EdgeInsets.zero,
-          items: const [
-            DropdownMenuItem(value: _compact, child: Text('1280 × 800')),
-            DropdownMenuItem(value: _standard, child: Text('1400 × 900')),
-            DropdownMenuItem(value: _large, child: Text('1600 × 1000')),
-          ],
-          onChanged: (next) {
-            if (next != null) _resize(context, next);
-          },
-        ),
     );
   }
 }
@@ -2307,52 +2953,75 @@ class _DesktopBodyState extends State<_DesktopBody> {
       );
     }
 
-    final laneRow = Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          flex: controller.searchOpen ? 4 : 1,
-          child: RosterColumn(
-            controller: controller,
-            isHome: true,
-            focused: controller.columnFocus == 0,
-            onEditRosters: widget.onEditRosters,
-            onDrumRequested: () =>
-                setState(() => _drumMode = DrumPickerMode.scroll),
-            onInfiniteRequested: () =>
-                setState(() => _drumMode = DrumPickerMode.infinite),
-          ),
-        ),
-        SizedBox(width: widget.gap),
-        Expanded(
-          flex: controller.searchOpen ? 5 : 1,
-          child: VerbsColumn(
-            controller: controller,
-            focused: controller.columnFocus == 1,
-            onDrumRequested: () =>
-                setState(() => _drumMode = DrumPickerMode.scroll),
-            onInfiniteRequested: () =>
-                setState(() => _drumMode = DrumPickerMode.infinite),
-          ),
-        ),
-        if (!controller.singleTeamMode) ...[
-          SizedBox(width: widget.gap),
+    final narrow = MediaQuery.sizeOf(context).width < 1100;
+    final home = RosterColumn(
+      controller: controller,
+      isHome: true,
+      focused: controller.columnFocus == 0,
+      onEditRosters: widget.onEditRosters,
+      onDrumRequested: () => setState(() => _drumMode = DrumPickerMode.scroll),
+      onInfiniteRequested: () =>
+          setState(() => _drumMode = DrumPickerMode.infinite),
+    );
+    final verbs = VerbsColumn(
+      controller: controller,
+      focused: controller.columnFocus == 1,
+      onDrumRequested: () => setState(() => _drumMode = DrumPickerMode.scroll),
+      onInfiniteRequested: () =>
+          setState(() => _drumMode = DrumPickerMode.infinite),
+    );
+    final away = RosterColumn(
+      controller: controller,
+      isHome: false,
+      focused: controller.columnFocus == 2,
+      onEditRosters: widget.onEditRosters,
+      onDrumRequested: () => setState(() => _drumMode = DrumPickerMode.scroll),
+      onInfiniteRequested: () =>
+          setState(() => _drumMode = DrumPickerMode.infinite),
+    );
+
+    final Widget laneRow;
+    if (narrow && !controller.singleTeamMode && !controller.searchOpen) {
+      laneRow = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
           Expanded(
-            flex: controller.searchOpen ? 4 : 1,
-            child: RosterColumn(
-              controller: controller,
-              isHome: false,
-              focused: controller.columnFocus == 2,
-              onEditRosters: widget.onEditRosters,
-              onDrumRequested: () =>
-                  setState(() => _drumMode = DrumPickerMode.scroll),
-              onInfiniteRequested: () =>
-                  setState(() => _drumMode = DrumPickerMode.infinite),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(child: home),
+                SizedBox(width: widget.gap),
+                Expanded(child: away),
+              ],
             ),
           ),
+          SizedBox(height: widget.gap),
+          SizedBox(height: 280, child: verbs),
         ],
-      ],
-    );
+      );
+    } else {
+      laneRow = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: controller.searchOpen ? 4 : 5,
+            child: home,
+          ),
+          SizedBox(width: widget.gap),
+          Expanded(
+            flex: controller.searchOpen ? 5 : 4,
+            child: verbs,
+          ),
+          if (!controller.singleTeamMode) ...[
+            SizedBox(width: widget.gap),
+            Expanded(
+              flex: controller.searchOpen ? 4 : 5,
+              child: away,
+            ),
+          ],
+        ],
+      );
+    }
     if (!controller.searchOpen) return laneRow;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

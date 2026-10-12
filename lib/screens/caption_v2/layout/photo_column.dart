@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -9,14 +8,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../photo_edit/graded_memory_image.dart';
+import '../../../photo_edit/photo_crop.dart';
+import '../../../photo_edit/photo_crop_overlay.dart';
+import '../../../photo_edit/photo_edit_panel.dart';
+import '../../../photo_edit/photo_edit_session.dart';
 import '../../../services/jersey_ocr_channel.dart';
 import '../../../theme/ff_glow.dart';
 import '../../../theme/ff_icons.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/ff_menu.dart';
 import '../../../utils/oriented_image_bytes.dart';
 import '../../../widgets/oriented_file_preview.dart';
 import '../data/caption_v2_controller.dart';
 import '../widgets/frame_status_dot.dart';
+import '../widgets/photo_preview_bar.dart';
 import '../widgets/transmit_progress_overlay.dart';
 import 'caption_v2_photo_actions.dart';
 import 'caption_v2_thumbnail_overview.dart';
@@ -66,9 +72,11 @@ class PhotoColumn extends StatefulWidget {
     required this.focused,
     required this.onSavePrevious,
     required this.onSaveNext,
+    required this.editSession,
   });
 
   final CaptionV2Controller controller;
+  final PhotoEditSession editSession;
   final bool focused;
   final VoidCallback onSavePrevious;
   final VoidCallback onSaveNext;
@@ -83,24 +91,6 @@ String _twelveHourTime(DateTime value) {
   final second = value.second.toString().padLeft(2, '0');
   final suffix = value.hour >= 12 ? 'PM' : 'AM';
   return '$hour:$minute:$second $suffix';
-}
-
-/// EXIF `YYYY:MM:DD HH:MM:SS` → short numeric date + 12-hour time.
-String _formatExifDateTime(String raw) {
-  final match = RegExp(
-    r'^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})',
-  ).firstMatch(raw);
-  if (match == null) return raw;
-  final year = int.tryParse(match.group(1)!) ?? 0;
-  final month = int.tryParse(match.group(2)!) ?? 0;
-  final day = int.tryParse(match.group(3)!) ?? 0;
-  final hour24 = int.tryParse(match.group(4)!) ?? 0;
-  final minute = match.group(5)!;
-  final second = match.group(6)!;
-  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
-  final suffix = hour24 >= 12 ? 'PM' : 'AM';
-  final yy = (year % 100).toString().padLeft(2, '0');
-  return '$month/$day/$yy $hour12:$minute:$second $suffix';
 }
 
 String _formatShutter(String raw) {
@@ -173,6 +163,7 @@ class _PhotoColumnState extends State<PhotoColumn> {
                 ocrHover: _ocrHover,
                 onSavePrevious: widget.onSavePrevious,
                 onSaveNext: widget.onSaveNext,
+                editSession: widget.editSession,
               ),
             ),
             _PhotoThumbnailResizeHandle(
@@ -190,11 +181,15 @@ class _PhotoColumnState extends State<PhotoColumn> {
               onReset: () => setState(() => _previewFraction = 0.6),
             ),
             Expanded(
-              child: _ThumbnailGrid(
+              child: PhotoEditCover(
+                session: widget.editSession,
                 controller: widget.controller,
-                tokens: t,
-                maxColumns: maxThumbnailColumns,
-                focused: widget.focused,
+                child: _ThumbnailGrid(
+                  controller: widget.controller,
+                  tokens: t,
+                  maxColumns: maxThumbnailColumns,
+                  focused: widget.focused,
+                ),
               ),
             ),
           ],
@@ -323,6 +318,16 @@ class _PhotoInfoHeader extends StatelessWidget {
   }
 }
 
+String? _playerTag(CaptionV2Controller controller) {
+  if (controller.selectedPlayers.isEmpty) return null;
+  final player = controller.selectedPlayers.first.player;
+  final jersey = player.jerseyNumber?.trim();
+  final name = player.fullName.trim();
+  if (name.isEmpty && (jersey == null || jersey.isEmpty)) return null;
+  if (jersey != null && jersey.isNotEmpty) return '#$jersey $name'.trim();
+  return name;
+}
+
 class _LowResolutionWarning extends StatelessWidget {
   const _LowResolutionWarning({
     required this.threshold,
@@ -378,6 +383,7 @@ class _PhotoCard extends StatelessWidget {
     required this.ocrHover,
     required this.onSavePrevious,
     required this.onSaveNext,
+    required this.editSession,
   });
 
   static const double metaBarHeight = 30;
@@ -389,6 +395,7 @@ class _PhotoCard extends StatelessWidget {
   final ValueNotifier<JerseyOcrSuggestion?> ocrHover;
   final VoidCallback onSavePrevious;
   final VoidCallback onSaveNext;
+  final PhotoEditSession editSession;
 
   String _meta(List<String> keys) {
     for (final key in keys) {
@@ -401,66 +408,46 @@ class _PhotoCard extends StatelessWidget {
   bool _isLowResolution(String width, String height) {
     final threshold = controller.resolutionWarningThreshold;
     if (threshold <= 0) return false;
-    final w = int.tryParse(width);
-    final h = int.tryParse(height);
-    if (w == null || h == null || w <= 0 || h <= 0) return false;
+    final w = _largestPixel(width);
+    final h = _largestPixel(height);
+    if (w == null || h == null) return false;
     final longest = w > h ? w : h;
     return longest < threshold;
   }
 
-  String _formatFileSize(String imagePath) {
-    try {
-      final bytes = File(imagePath).lengthSync();
-      if (bytes >= 1024 * 1024 * 1024) {
-        return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(1)} GB';
-      }
-      if (bytes >= 1024 * 1024) {
-        return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-      }
-      if (bytes >= 1024) {
-        return '${(bytes / 1024).toStringAsFixed(1)} KB';
-      }
-      return '$bytes B';
-    } catch (_) {
-      return '';
+  int? _largestPixel(String raw) {
+    int? best;
+    for (final match in RegExp(r'\d+').allMatches(raw)) {
+      final n = int.tryParse(match.group(0)!);
+      if (n == null || n <= 0) continue;
+      if (best == null || n > best) best = n;
     }
+    return best;
   }
 
   @override
   Widget build(BuildContext context) {
     final width = _meta(const ['ImageWidth', 'ExifImageWidth']);
     final height = _meta(const ['ImageHeight', 'ExifImageHeight']);
-    final fileSize = path == null ? '' : _formatFileSize(path!);
-    final fileName = path == null ? '' : p.basename(path!);
-    final dateRaw = _meta(const [
-      'DateTimeOriginal',
-      'CreateDate',
-      'ModifyDate',
-    ]);
-    final dateLabel = dateRaw.isEmpty ? '' : _formatExifDateTime(dateRaw);
-    final fileMeta = [
-      if (width.isNotEmpty && height.isNotEmpty) '$width×$height',
-      if (fileSize.isNotEmpty) fileSize,
-      if (dateLabel.isNotEmpty) dateLabel,
-    ].join(' · ');
 
     return Container(
       decoration: BoxDecoration(
         color: tokens.surface,
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-        border: Border.all(color: tokens.accent.withValues(alpha: 0.85)),
-        boxShadow: FfTokens.accentButtonGlow(tokens.accent),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
         child: Column(
           children: [
-            if (path != null)
-              _PhotoInfoHeader(controller: controller, tokens: tokens),
             if (path != null && _isLowResolution(width, height))
               _LowResolutionWarning(
                 threshold: controller.resolutionWarningThreshold,
                 tokens: tokens,
+              ),
+            if (path != null)
+              PhotoPreviewInfoBar(
+                controller: controller,
+                showExposure: MediaQuery.sizeOf(context).width >= 1100,
               ),
             Expanded(
               child: Stack(
@@ -485,6 +472,7 @@ class _PhotoCard extends StatelessWidget {
                             version: controller.imageContentStamp(path!),
                             tokens: tokens,
                             controller: controller,
+                            editSession: editSession,
                             ocrHover: ocrHover,
                             onOpenZoom: () =>
                                 showCaptionV2Zoom(context, path!),
@@ -498,14 +486,30 @@ class _PhotoCard extends StatelessWidget {
                           ),
                   ),
                 if (path != null) ...[
-                  Positioned(
-                    top: 10,
-                    left: 10,
-                    child: _PhotoPreviewStatusIcons(
-                      state: controller.frameStateFor(path!),
-                      tokens: tokens,
+                  if (_playerTag(controller) != null)
+                    Positioned(
+                      top: 10,
+                      left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: tokens.bg.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _playerTag(controller)!,
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: tokens.text,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
                   if (controller.jerseyOcrEnabled)
                     Positioned(
                       top: 10,
@@ -582,37 +586,12 @@ class _PhotoCard extends StatelessWidget {
               ],
             ),
           ),
-          if (path != null)
-            Container(
-              width: double.infinity,
-              height: metaBarHeight,
-              padding: metaBarPadding,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: FfTokens.photoHeader,
-                border: Border(top: BorderSide(color: tokens.divider)),
+            if (path != null)
+              PhotoPreviewActionBar(
+                controller: controller,
+                editSession: editSession,
+                path: path!,
               ),
-              child: Builder(
-                builder: (context) {
-                  final barStyle = tokens.metaStyle.copyWith(
-                    fontSize: tokens.textSizeMicro,
-                    height: 1.2,
-                    color: tokens.textSecondary,
-                  );
-                  final line = [
-                    fileName,
-                    if (fileMeta.isNotEmpty) fileMeta,
-                  ].join('  ·  ');
-                  return Text(
-                    line,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.center,
-                    style: barStyle,
-                  );
-                },
-              ),
-            ),
           ],
         ),
       ),
@@ -626,6 +605,7 @@ class _PhotoLoupePreview extends StatefulWidget {
     required this.version,
     required this.tokens,
     required this.controller,
+    required this.editSession,
     required this.ocrHover,
     required this.onOpenZoom,
     required this.onSecondaryTapDown,
@@ -635,6 +615,7 @@ class _PhotoLoupePreview extends StatefulWidget {
   final int version;
   final FfTokens tokens;
   final CaptionV2Controller controller;
+  final PhotoEditSession editSession;
   final ValueNotifier<JerseyOcrSuggestion?> ocrHover;
   final VoidCallback onOpenZoom;
   final GestureTapDownCallback onSecondaryTapDown;
@@ -709,6 +690,10 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   }
 
   void _onPointerDown(PointerDownEvent event) {
+    if (widget.editSession.cropping ||
+        !widget.editSession.cropFor(widget.path).isFull) {
+      return;
+    }
     if (event.buttons != kPrimaryButton) return;
     _pointerDown = true;
     _setCursor(event.localPosition);
@@ -721,6 +706,10 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   }
 
   void _onPointerMove(PointerMoveEvent event) {
+    if (widget.editSession.cropping ||
+        !widget.editSession.cropFor(widget.path).isFull) {
+      return;
+    }
     // MouseRegion.onHover often stops while a button is held; keep tracking.
     _setCursor(event.localPosition);
     if (_pointerDown && _holdAnim.value > 0) {
@@ -916,12 +905,44 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                       ),
                     )
                   else
-                    Image.memory(
-                      bytes,
-                      fit: BoxFit.contain,
-                      filterQuality: FilterQuality.high,
-                      gaplessPlayback: true,
+                    AnimatedBuilder(
+                      animation: widget.editSession,
+                      builder: (context, _) {
+                        final grade =
+                            widget.editSession.adjustmentsFor(widget.path);
+                        final crop = widget.editSession.cropping
+                            ? PhotoCrop.full
+                            : widget.editSession.cropFor(widget.path);
+                        if (grade.isNeutral && crop.isFull) {
+                          return Image.memory(
+                            bytes,
+                            fit: BoxFit.contain,
+                            filterQuality: FilterQuality.high,
+                            gaplessPlayback: true,
+                          );
+                        }
+                        return GradedMemoryImage(
+                          bytes: bytes,
+                          adjustments: grade,
+                          crop: crop,
+                          fit: BoxFit.contain,
+                        );
+                      },
                     ),
+                  AnimatedBuilder(
+                    animation: widget.editSession,
+                    builder: (context, _) {
+                      if (!widget.editSession.cropping) {
+                        return const SizedBox.shrink();
+                      }
+                      return PhotoCropOverlay(
+                        session: widget.editSession,
+                        path: widget.path,
+                        version: widget.version,
+                        fit: BoxFit.contain,
+                      );
+                    },
+                  ),
                   if (!imageRect.isEmpty)
                     _OcrNumberMarks(
                       imageRect: imageRect,
@@ -1052,11 +1073,25 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
                     top: loupeSize / 2 - localY * magnification,
                     width: magnifiedW,
                     height: magnifiedH,
-                    child: Image.memory(
-                      paintBytes,
-                      fit: BoxFit.fill,
-                      filterQuality: FilterQuality.high,
-                      gaplessPlayback: true,
+                    child: AnimatedBuilder(
+                      animation: widget.editSession,
+                      builder: (context, _) {
+                        final grade =
+                            widget.editSession.adjustmentsFor(widget.path);
+                        if (grade.isNeutral) {
+                          return Image.memory(
+                            paintBytes,
+                            fit: BoxFit.fill,
+                            filterQuality: FilterQuality.high,
+                            gaplessPlayback: true,
+                          );
+                        }
+                        return GradedMemoryImage(
+                          bytes: paintBytes,
+                          adjustments: grade,
+                          fit: BoxFit.fill,
+                        );
+                      },
                     ),
                   ),
                   Positioned.fill(
@@ -1889,57 +1924,6 @@ Future<void> _showOcrScanDialog({
   );
 }
 
-class _PhotoPreviewStatusIcons extends StatelessWidget {
-  const _PhotoPreviewStatusIcons({
-    required this.state,
-    required this.tokens,
-  });
-
-  final FrameState state;
-  final FfTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    final saved = state != FrameState.todo;
-    final sent = state == FrameState.sent;
-    return Material(
-      color: FfTokens.viewerChrome,
-      borderRadius: BorderRadius.circular(7),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(7),
-          border: Border.all(color: tokens.divider),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Tooltip(
-              message: saved ? 'Saved' : 'Not saved',
-              child: PhosphorIcon(PhosphorIconsRegular.floppyDisk,
-                size: 15,
-                color: saved
-                    ? FrameStatusColors.saved
-                    : tokens.text.withValues(alpha: 0.28),
-              ),
-            ),
-            const SizedBox(width: 7),
-            Tooltip(
-              message: sent ? "FTP'd" : 'Not sent',
-              child: PhosphorIcon(PhosphorIconsRegular.cloudArrowUp,
-                size: 15,
-                color: sent
-                    ? FrameStatusColors.sent
-                    : tokens.text.withValues(alpha: 0.28),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class PhotoSaveArrow extends StatelessWidget {
   const PhotoSaveArrow({
     super.key,
@@ -1957,15 +1941,16 @@ class PhotoSaveArrow extends StatelessWidget {
     return Tooltip(
       message: previous ? 'Save & previous' : 'Save & next (⌘S)',
       child: Material(
-        color: t.surface.withValues(alpha: 0.82),
-        elevation: 3,
-        shadowColor: Colors.black.withValues(alpha: 0.35),
-        shape: CircleBorder(side: BorderSide(color: t.divider)),
+        color: t.bg.withValues(alpha: 0.65),
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        shape: const CircleBorder(),
         child: InkWell(
           onTap: onPressed,
           customBorder: const CircleBorder(),
+          hoverColor: t.bg.withValues(alpha: 0.9),
           child: SizedBox.square(
-            dimension: 34,
+            dimension: 40,
             child: Icon(
               previous
                   ? PhosphorIconsRegular.caretLeft
@@ -2005,6 +1990,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
   Offset? _marqueeCurrent;
   bool _marqueeDragging = false;
   int _columnCount = 3;
+  double _thumbAspect = 1;
   _BrowseScope _scope = _BrowseScope.all;
   _BrowseSort _sort = _BrowseSort.captureAscending;
   int _lastSessionGeneration = -1;
@@ -2197,7 +2183,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     if (controller.columnFocus != 3) controller.setColumnFocus(3);
     final current = event.localPosition;
     final marquee = Rect.fromPoints(start, current);
-    final itemHeight = itemWidth / 0.88;
+    final itemHeight = itemWidth / _thumbAspect;
     final scrollOffset =
         _scrollController.hasClients ? _scrollController.offset : 0.0;
     final hits = <String>{};
@@ -2341,7 +2327,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     if (_visibilitySignature == signature) return;
     _visibilitySignature = signature;
 
-    final itemHeight = itemWidth / 0.88;
+    final itemHeight = itemWidth / _thumbAspect;
     final row = selectedIndex ~/ columns;
     final itemTop = 8 + row * (itemHeight + spacing);
     final itemBottom = itemTop + itemHeight;
@@ -2394,8 +2380,6 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
         decoration: BoxDecoration(
           color: tokens.surface,
           borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-          border: Border.all(color: tokens.accent.withValues(alpha: 0.85)),
-          boxShadow: FfTokens.accentButtonGlow(tokens.accent),
         ),
         child: FfGlow(
           glowW: 260,
@@ -2418,15 +2402,10 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
       focusNode: _focusNode,
       onKeyEvent: _handleKeyEvent,
       child: Container(
-        decoration: BoxDecoration(
-          color: tokens.surface,
-          borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-          border: Border.all(
-            color: tokens.accent.withValues(alpha: widget.focused ? 1 : 0.85),
-            width: 1,
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            borderRadius: BorderRadius.circular(FfTokens.radiusCard),
           ),
-          boxShadow: FfTokens.accentButtonGlow(tokens.accent),
-        ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(FfTokens.radiusCard),
           child: Column(
@@ -2434,10 +2413,16 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
             _ThumbnailToolbar(
               tokens: tokens,
               sort: _sort,
+              scope: _scope,
+              visibleCount: paths.length,
+              totalCount: allPaths.length,
+              captionedCount: captionedCount,
+              sentCount: sentCount,
               columnCount: columnCount,
               maxColumns: maxColumns,
               refreshing: controller.refreshingFolder,
               onSortChanged: _setSort,
+              onScopeChanged: _setScope,
               onRefresh: controller.refreshOpenFolder,
               onOpenOverview: () =>
                   showCaptionV2ThumbnailOverview(context, controller),
@@ -2462,14 +2447,22 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                     )
                   : LayoutBuilder(
                       builder: (context, constraints) {
-                        final spacing =
-                            (constraints.maxWidth * 0.015).clamp(6.0, 14.0);
-                        final columns = columnCount;
-                        final contentWidth = (constraints.maxWidth - 16)
+                        const spacing = 8.0;
+                        final contentWidth = (constraints.maxWidth - 20)
                             .clamp(1.0, double.infinity);
+                        final minCell =
+                            (110 - (columnCount - 3) * 28).clamp(72.0, 180.0);
+                        final rawColumns =
+                            ((contentWidth + spacing) / (minCell + spacing))
+                                .floor();
+                        final columns = rawColumns < 1
+                            ? 1
+                            : (rawColumns > maxColumns ? maxColumns : rawColumns);
                         final itemWidth =
                             ((contentWidth - spacing * (columns - 1)) / columns)
                                 .clamp(1.0, contentWidth);
+                        final aspect = itemWidth / (itemWidth * 0.75 + 34);
+                        _thumbAspect = aspect;
                         _keepCurrentThumbnailVisible(
                           paths: paths,
                           columns: columns,
@@ -2499,7 +2492,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                   crossAxisCount: columns,
                                   mainAxisSpacing: spacing,
                                   crossAxisSpacing: spacing,
-                                  childAspectRatio: 0.88,
+                                  childAspectRatio: aspect,
                                 ),
                                 itemCount: paths.length,
                                 itemBuilder: (context, i) {
@@ -2513,9 +2506,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                       controller.captionedImages.contains(path);
                                   final ftp =
                                       controller.sentImages.contains(path);
-                                  final borderColor = selected
-                                      ? tokens.accent
-                                      : Colors.white;
+                                  final borderColor = tokens.accent;
                                   return GestureDetector(
                                     key: ValueKey(path),
                                     onTap: () => _selectThumbnail(paths, i),
@@ -2530,28 +2521,14 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                       child: Container(
                                         padding: const EdgeInsets.all(6),
                                         decoration: BoxDecoration(
-                                          color: selected
-                                              ? tokens.hover
-                                              : FfTokens.card,
-                                          borderRadius:
-                                              BorderRadius.circular(7),
-                                          border: Border.all(
-                                            color: borderColor,
-                                            width: selected ? 0.8 : 0.5,
-                                          ),
-                                          boxShadow: selected
-                                              ? FfTokens.selectionGlow(
-                                                  tokens.accent,
+                                          color: tokens.sunken,
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: selected
+                                              ? Border.all(
+                                                  color: borderColor,
+                                                  width: 2,
                                                 )
-                                              : [
-                                                  BoxShadow(
-                                                    color: Colors.black
-                                                        .withValues(
-                                                            alpha: 0.22),
-                                                    blurRadius: 8,
-                                                    spreadRadius: 0,
-                                                  ),
-                                                ],
+                                              : null,
                                         ),
                                         child: ClipRRect(
                                           borderRadius:
@@ -2594,10 +2571,25 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                                     Positioned(
                                                       top: 4,
                                                       right: 4,
-                                                      child: FrameStatusBadges(
-                                                        saved: captioned,
-                                                        sent: ftp,
-                                                      ),
+                                                      child: captioned
+                                                          ? const PhosphorIcon(
+                                                              PhosphorIconsFill
+                                                                  .checkCircle,
+                                                              size: 14,
+                                                              color: FfTokens
+                                                                  .statusSaved,
+                                                            )
+                                                          : Container(
+                                                              width: 8,
+                                                              height: 8,
+                                                              decoration:
+                                                                  const BoxDecoration(
+                                                                color: FfTokens
+                                                                    .gold,
+                                                                shape: BoxShape
+                                                                    .circle,
+                                                              ),
+                                                            ),
                                                     ),
                                                   ],
                                                 ),
@@ -2654,15 +2646,6 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                       },
                     ),
             ),
-            _ThumbnailScopeFooter(
-              tokens: tokens,
-              scope: _scope,
-              visibleCount: paths.length,
-              totalCount: allPaths.length,
-              captionedCount: captionedCount,
-              sentCount: sentCount,
-              onScopeChanged: _setScope,
-            ),
           ],
           ),
         ),
@@ -2700,10 +2683,16 @@ class _ThumbnailToolbar extends StatelessWidget {
   const _ThumbnailToolbar({
     required this.tokens,
     required this.sort,
+    required this.scope,
+    required this.visibleCount,
+    required this.totalCount,
+    required this.captionedCount,
+    required this.sentCount,
     required this.columnCount,
     required this.maxColumns,
     required this.refreshing,
     required this.onSortChanged,
+    required this.onScopeChanged,
     required this.onRefresh,
     required this.onOpenOverview,
     required this.onSmaller,
@@ -2712,10 +2701,16 @@ class _ThumbnailToolbar extends StatelessWidget {
 
   final FfTokens tokens;
   final _BrowseSort sort;
+  final _BrowseScope scope;
+  final int visibleCount;
+  final int totalCount;
+  final int captionedCount;
+  final int sentCount;
   final int columnCount;
   final int maxColumns;
   final bool refreshing;
   final ValueChanged<_BrowseSort> onSortChanged;
+  final ValueChanged<_BrowseScope> onScopeChanged;
   final VoidCallback onRefresh;
   final VoidCallback onOpenOverview;
   final VoidCallback? onSmaller;
@@ -2723,49 +2718,45 @@ class _ThumbnailToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final sizeProgress = (maxColumns - columnCount) / (maxColumns - 2);
+    final iconOnly = MediaQuery.sizeOf(context).width < 1100;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      decoration: BoxDecoration(
-        color: FfTokens.photoHeader,
-        border: Border(
-          bottom: BorderSide(color: tokens.divider, width: 1),
-        ),
-      ),
+      padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
       child: Row(
         children: [
-          Text(
-            'SORT',
-            softWrap: false,
-            style: FfTokens.panelLabel(color: tokens.textSecondary),
-          ),
-          const SizedBox(width: 4),
           _ThumbnailSortDropdown(
             tokens: tokens,
             sort: sort,
+            iconOnly: iconOnly,
             onChanged: onSortChanged,
           ),
-          const SizedBox(width: 4),
-          _ThumbnailRefreshButton(
+          const SizedBox(width: 6),
+          _ThumbnailScopeDropdown(
             tokens: tokens,
-            refreshing: refreshing,
-            onTap: onRefresh,
+            scope: scope,
+            totalCount: totalCount,
+            captionedCount: captionedCount,
+            sentCount: sentCount,
+            iconOnly: iconOnly,
+            onChanged: onScopeChanged,
           ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Center(
-              child: _ThumbnailOverviewButton(
-                tokens: tokens,
-                onTap: onOpenOverview,
-              ),
-            ),
-          ),
-          const SizedBox(width: 4),
-          _ThumbnailZoomStepper(
+          const Spacer(),
+          _ThumbnailSizeButton(
+            icon: PhosphorIconsRegular.minus,
+            tooltip: 'Smaller',
             tokens: tokens,
-            sizeProgress: sizeProgress,
-            onSmaller: onSmaller,
-            onLarger: onLarger,
+            onTap: onSmaller,
+          ),
+          _ThumbnailSizeButton(
+            icon: PhosphorIconsRegular.plus,
+            tooltip: 'Larger',
+            tokens: tokens,
+            onTap: onLarger,
+          ),
+          _ThumbnailSizeButton(
+            icon: PhosphorIconsRegular.arrowsOutSimple,
+            tooltip: 'Open larger thumbnails',
+            tokens: tokens,
+            onTap: onOpenOverview,
           ),
         ],
       ),
@@ -2778,11 +2769,13 @@ class _ThumbnailSortDropdown extends StatelessWidget {
     required this.tokens,
     required this.sort,
     required this.onChanged,
+    this.iconOnly = false,
   });
 
   final FfTokens tokens;
   final _BrowseSort sort;
   final ValueChanged<_BrowseSort> onChanged;
+  final bool iconOnly;
 
   String _label(_BrowseSort value) {
     switch (value) {
@@ -2814,13 +2807,12 @@ class _ThumbnailSortDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     return PopupMenuButton<_BrowseSort>(
       tooltip: 'Sort thumbnails',
-      color: tokens.surface,
-      surfaceTintColor: tokens.surface,
+      color: FfTokens.sessionEl,
+      surfaceTintColor: Colors.transparent,
       position: PopupMenuPosition.under,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: tokens.divider),
-      ),
+      elevation: 16,
+      shadowColor: FfTokens.sessionMenuShadow,
+      shape: FfMenuSurface.shape,
       onSelected: onChanged,
       itemBuilder: (context) => [
         for (final value in _BrowseSort.values)
@@ -2867,33 +2859,40 @@ class _ThumbnailSortDropdown extends StatelessWidget {
           ),
       ],
       child: Container(
-        width: 104,
-        height: 22,
-        padding: const EdgeInsets.symmetric(horizontal: 6),
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: tokens.bg,
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: tokens.divider),
+          color: tokens.sunken,
+          borderRadius: BorderRadius.circular(7),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Text(
-                _label(sort),
-                softWrap: false,
-                style: TextStyle(
-                  color: tokens.text,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w400,
-                  height: 1.1,
-                ),
-              ),
-            ),
-            PhosphorIcon(PhosphorIconsRegular.caretDown,
+            PhosphorIcon(
+              PhosphorIconsRegular.sortAscending,
               size: 14,
               color: tokens.textSecondary,
             ),
+            if (!iconOnly) ...[
+              const SizedBox(width: 6),
+              Text(
+                _label(sort),
+                softWrap: false,
+                style: TextStyle(
+                  color: tokens.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(width: 4),
+              PhosphorIcon(
+                PhosphorIconsRegular.caretDown,
+                size: 12,
+                color: tokens.textSecondary,
+              ),
+            ],
           ],
         ),
       ),
@@ -2909,6 +2908,7 @@ class _ThumbnailScopeDropdown extends StatefulWidget {
     required this.captionedCount,
     required this.sentCount,
     required this.onChanged,
+    this.iconOnly = false,
   });
 
   final FfTokens tokens;
@@ -2917,6 +2917,7 @@ class _ThumbnailScopeDropdown extends StatefulWidget {
   final int captionedCount;
   final int sentCount;
   final ValueChanged<_BrowseScope> onChanged;
+  final bool iconOnly;
 
   @override
   State<_ThumbnailScopeDropdown> createState() =>
@@ -2987,13 +2988,12 @@ class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
       onFocusChange: (value) => setState(() => _focused = value),
       child: PopupMenuButton<_BrowseScope>(
         tooltip: 'Choose thumbnail scope',
-        color: tokens.surface,
-        surfaceTintColor: tokens.surface,
+        color: FfTokens.sessionEl,
+        surfaceTintColor: Colors.transparent,
         position: PopupMenuPosition.under,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: tokens.divider),
-        ),
+        elevation: 16,
+        shadowColor: FfTokens.sessionMenuShadow,
+        shape: FfMenuSurface.shape,
         onOpened: _focusNode.requestFocus,
         onSelected: widget.onChanged,
         itemBuilder: (context) => [
@@ -3141,7 +3141,9 @@ class _ThumbnailScopeControlState extends State<_ThumbnailScopeControl> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => _retiredScopeChrome(context);
+
+  Widget _retiredScopeChrome(BuildContext context) {
     final tokens = widget.tokens;
     return Focus(
       focusNode: _focusNode,
@@ -3675,69 +3677,101 @@ class MobileFrameBanner extends StatelessWidget {
   const MobileFrameBanner({
     super.key,
     required this.controller,
+    required this.editSession,
     required this.onOpen,
   });
 
   final CaptionV2Controller controller;
+  final PhotoEditSession editSession;
   final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: controller,
+      animation: Listenable.merge([controller, editSession]),
       builder: (context, _) {
         final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
         final paths = controller.imagePaths;
         final path = paths.isEmpty
             ? null
             : paths[controller.currentIndex.clamp(0, paths.length - 1)];
-        return GestureDetector(
-          onTap: onOpen,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AspectRatio(
-                aspectRatio: 16 / 10,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: t.sunken,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: t.divider),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: path == null
-                        ? Center(
-                            child: PhosphorIcon(PhosphorIconsRegular.image,
-                              color: t.textSecondary,
-                              size: 36,
-                            ),
-                          )
-                        : OrientedFilePreview(
-                            key: ValueKey(
-                              'mobile-banner-$path-${controller.imageContentStamp(path)}',
-                            ),
-                            path: path,
-                            version: controller.imageContentStamp(path),
-                            fit: BoxFit.cover,
-                            cacheWidth: 780,
-                          ),
+        final grade = editSession.adjustmentsFor(path);
+        final cropping = editSession.cropping;
+        final viewCrop = path == null || cropping
+            ? null
+            : editSession.cropFor(path);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            AspectRatio(
+              aspectRatio: 16 / 10,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: t.sunken,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: t.divider),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      GestureDetector(
+                        onTap: cropping ? null : onOpen,
+                        child: path == null
+                            ? Center(
+                                child: PhosphorIcon(
+                                  PhosphorIconsRegular.image,
+                                  color: t.textSecondary,
+                                  size: 36,
+                                ),
+                              )
+                            : OrientedFilePreview(
+                                key: ValueKey(
+                                  'mobile-banner-$path-${controller.imageContentStamp(path)}',
+                                ),
+                                path: path,
+                                version: controller.imageContentStamp(path),
+                                fit: cropping ? BoxFit.contain : BoxFit.cover,
+                                cacheWidth: 780,
+                                adjustments: grade.isNeutral ? null : grade,
+                                viewCrop: viewCrop != null && !viewCrop.isFull
+                                    ? viewCrop
+                                    : null,
+                              ),
+                      ),
+                      if (cropping && path != null)
+                        PhotoCropOverlay(
+                          session: editSession,
+                          path: path,
+                          version: controller.imageContentStamp(path),
+                          fit: BoxFit.contain,
+                        ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: PhotoEditModeButton(
+                          session: editSession,
+                          controller: controller,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 6),
-              Text(
-                path == null
-                    ? (controller.sessionReady
-                        ? 'No images in folder'
-                        : 'Tap to open folder')
-                    : '${controller.currentFileName} · ${_mobileFrameStateLabel(controller.currentFrameState)} · ${controller.currentIndex + 1}/${paths.length}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: t.metaStyle,
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              path == null
+                  ? (controller.sessionReady
+                      ? 'No images in folder'
+                      : 'Tap to open folder')
+                  : '${controller.currentFileName} · ${_mobileFrameStateLabel(controller.currentFrameState)} · ${controller.currentIndex + 1}/${paths.length}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: t.metaStyle,
+            ),
+          ],
         );
       },
     );

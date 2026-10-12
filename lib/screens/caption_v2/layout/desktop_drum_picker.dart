@@ -5,12 +5,14 @@ import 'package:flutter/services.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/ff_menu.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
 import '../widgets/base_row.dart';
 import '../widgets/celebration_dropdown.dart';
 import '../widgets/custom_name_entry.dart';
 import '../widgets/pinned_player_bar.dart';
+import '../widgets/team_players_button.dart';
 import '../widgets/quiet_filter_field.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/verb_tile.dart';
@@ -68,16 +70,9 @@ class _DrumPickerState extends State<DrumPicker> {
   bool _verbAccordionCollapsed = false;
   final _homeFilter = TextEditingController();
   final _awayFilter = TextEditingController();
+  final _verbFilter = TextEditingController();
   final _customVerbController = TextEditingController();
   final _customVerbFocusNode = FocusNode(debugLabel: 'Drum custom verb');
-  final _homeCustomNameController = TextEditingController();
-  final _homeCustomJerseyController = TextEditingController();
-  final _homeCustomNameFocus = FocusNode(debugLabel: 'Home custom name');
-  final _homeCustomJerseyFocus = FocusNode(debugLabel: 'Home custom jersey');
-  final _awayCustomNameController = TextEditingController();
-  final _awayCustomJerseyController = TextEditingController();
-  final _awayCustomNameFocus = FocusNode(debugLabel: 'Away custom name');
-  final _awayCustomJerseyFocus = FocusNode(debugLabel: 'Away custom jersey');
   int _seenPlayerSearchClearGeneration = -1;
 
   CaptionV2Controller get controller => widget.controller;
@@ -98,11 +93,17 @@ class _DrumPickerState extends State<DrumPicker> {
   List<EffectiveVerb> _verbsForCategory(String category) {
     final verbs = controller.verbDefinitionsByCategory[category] ??
         const <EffectiveVerb>[];
+    final query = _verbFilter.text.trim().toLowerCase();
+    final filtered = query.isEmpty
+        ? verbs
+        : verbs
+            .where((verb) => verb.label.toLowerCase().contains(query))
+            .toList(growable: false);
     // All stays A–Z. Other categories still float favorites to the top.
-    if (category == 'All') return verbs;
+    if (category == 'All') return filtered;
     return [
-      ...verbs.where((verb) => verb.isFavorite),
-      ...verbs.where((verb) => !verb.isFavorite),
+      ...filtered.where((verb) => verb.isFavorite),
+      ...filtered.where((verb) => !verb.isFavorite),
     ];
   }
 
@@ -123,23 +124,14 @@ class _DrumPickerState extends State<DrumPicker> {
     _homeFilter.dispose();
     _awayFilter.dispose();
     _customVerbController.dispose();
+    _verbFilter.dispose();
     _customVerbFocusNode.dispose();
-    _homeCustomNameController.dispose();
-    _homeCustomJerseyController.dispose();
-    _homeCustomNameFocus.dispose();
-    _homeCustomJerseyFocus.dispose();
-    _awayCustomNameController.dispose();
-    _awayCustomJerseyController.dispose();
-    _awayCustomNameFocus.dispose();
-    _awayCustomJerseyFocus.dispose();
     super.dispose();
   }
 
   void _onController() {
     if (!mounted) return;
     _syncCustomVerbField();
-    _syncCustomNameFromPin(isHome: true);
-    _syncCustomNameFromPin(isHome: false);
     final generation = controller.playerSearchClearGeneration;
     if (generation != _seenPlayerSearchClearGeneration) {
       _seenPlayerSearchClearGeneration = generation;
@@ -541,7 +533,31 @@ class _DrumPickerState extends State<DrumPicker> {
             },
             children: lanes,
           )
-        : Row(
+        : LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = MediaQuery.sizeOf(context).width < 1100 &&
+                  lanes.length > 2;
+              if (narrow) {
+                return Column(
+                  key: const ValueKey('desktop-drum-picker-stacked'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(child: lanes.first),
+                          const SizedBox(width: 10),
+                          Expanded(child: lanes.last),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(height: 280, child: lanes[1]),
+                  ],
+                );
+              }
+              return Row(
             key: ValueKey(
               controller.singleTeamMode
                   ? 'desktop-drum-picker-single'
@@ -550,14 +566,15 @@ class _DrumPickerState extends State<DrumPicker> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               for (var i = 0; i < lanes.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                // Player / verbs / player → 35 / 30 / 35.
+                if (i > 0) const SizedBox(width: 10),
                 Expanded(
-                  flex: i == 1 ? 30 : 35,
+                  flex: i == 1 ? 4 : 5,
                   child: lanes[i],
                 ),
               ],
             ],
+          );
+            },
           );
     return Focus(
       autofocus: widget.layout == DrumLayout.sideBySide,
@@ -573,17 +590,13 @@ class _DrumPickerState extends State<DrumPicker> {
     bool accentOutline = false,
     bool whiteOutline = false,
   }) {
-    final outlined = accentOutline || whiteOutline || armed;
-    // Don't clip the outer shell — that would cut off the glow.
     return Container(
       decoration: BoxDecoration(
         color: tokens.surface,
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-        border: Border.all(
-          color: outlined ? tokens.accent : tokens.divider,
-          width: 1,
-        ),
-        boxShadow: outlined ? FfTokens.accentButtonGlow(tokens.accent) : null,
+        border: armed
+            ? Border.all(color: tokens.accent, width: FfTokens.focusOutlineWidth)
+            : null,
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
@@ -598,22 +611,30 @@ class _DrumPickerState extends State<DrumPicker> {
     String title,
   ) {
     final isRoster = lane != DrumLane.verbs;
-    const headerHeight = 32.0;
+    const headerHeight = 28.0;
     return Container(
       height: headerHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.fromLTRB(14, 0, 8, 0),
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: tokens.divider)),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             title.toUpperCase(),
             style: isRoster
-                ? FfTokens.teamAbbrLabel(color: tokens.text)
-                : FfTokens.panelLabel(color: tokens.text),
+                ? TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                    letterSpacing: 0.6,
+                    height: 1,
+                    color: tokens.text,
+                  )
+                : FfTokens.panelLabel(color: tokens.text).copyWith(
+                    fontSize: 15,
+                    letterSpacing: 0.6,
+                    fontWeight: FontWeight.w800,
+                  ),
             textHeightBehavior: const TextHeightBehavior(
               applyHeightToFirstAscent: false,
               applyHeightToLastDescent: false,
@@ -621,38 +642,6 @@ class _DrumPickerState extends State<DrumPicker> {
           ),
           if (isRoster) ...[
             const Spacer(),
-            _GhostHeaderIcon(
-              key: ValueKey('drum-number-mode-${lane.name}'),
-              tooltip: 'Grid view',
-              icon: PhosphorIconsRegular.squaresFour,
-              active: _numberMode,
-              tokens: tokens,
-              onTap: () => setState(() {
-                _numberMode = !_numberMode;
-                if (_numberMode) {
-                  _homeLetterFilter = null;
-                  _awayLetterFilter = null;
-                }
-              }),
-            ),
-            if (!_numberMode) ...[
-              _GhostHeaderIcon(
-                key: ValueKey('drum-sort-${lane.name}'),
-                tooltip: 'Sort by number',
-                label: controller.rosterSortFieldLabel(),
-                tokens: tokens,
-                onTap: controller.cycleRosterSortField,
-              ),
-              _GhostHeaderIcon(
-                key: ValueKey('drum-sort-dir-${lane.name}'),
-                tooltip: controller.rosterSortAscending
-                    ? 'Ascending'
-                    : 'Descending',
-                label: controller.rosterSortDirectionLabel(),
-                tokens: tokens,
-                onTap: controller.toggleRosterSortDirection,
-              ),
-            ],
             if (widget.onEditRosters != null)
               _GhostHeaderIcon(
                 tooltip: 'Rename team',
@@ -660,6 +649,18 @@ class _DrumPickerState extends State<DrumPicker> {
                 tokens: tokens,
                 onTap: widget.onEditRosters!,
               ),
+          ] else ...[
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 120,
+              child: QuietFilterField(
+                controller: _verbFilter,
+                tokens: tokens,
+                height: 22,
+                hint: 'Search',
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
           ],
         ],
       ),
@@ -717,8 +718,22 @@ class _DrumPickerState extends State<DrumPicker> {
                     // disappear on only one side when rosters differ.
                     columns: numberMetrics!.columnCount,
                     layoutRowCount: numberMetrics.rowCount,
-                    includeOtherRow: numberMetrics.needsOtherRow,
+                    includeOtherRow: true,
                     tokens: tokens,
+                    playersSubjectSelected: controller.teamPlayersIsHome ==
+                            isHome &&
+                        controller.teamSubjectAsPlayers,
+                    teamNameSubjectSelected: controller.teamPlayersIsHome ==
+                            isHome &&
+                        !controller.teamSubjectAsPlayers,
+                    onPlayersSubject: () => controller.toggleTeamSubject(
+                      isHome: isHome,
+                      asPlayers: true,
+                    ),
+                    onTeamNameSubject: () => controller.toggleTeamSubject(
+                      isHome: isHome,
+                      asPlayers: false,
+                    ),
                     isSelected: (player) => controller.isPlayerSelected(
                       player,
                       isHome: lane == DrumLane.home,
@@ -868,18 +883,61 @@ class _DrumPickerState extends State<DrumPicker> {
 
     return Column(
       children: [
-        _header(tokens, lane, title),
         PinnedPlayerBar(
           controller: controller,
           isHome: isHome,
           tokens: tokens,
-          filter: QuietFilterField(
-            key: ValueKey('drum-search-${lane.name}'),
-            controller: _filterFor(lane),
-            tokens: tokens,
-            height: 24,
-            onChanged: (_) => _onRosterFilterChanged(lane),
+          height: 36,
+          leading: Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontWeight: FontWeight.w800,
+              fontSize: 15,
+              letterSpacing: 0.6,
+              height: 1,
+              color: tokens.text,
+            ),
           ),
+          filter: Row(
+            children: [
+              Expanded(
+                child: QuietFilterField(
+                  key: ValueKey('drum-search-${lane.name}'),
+                  controller: _filterFor(lane),
+                  tokens: tokens,
+                  height: 26,
+                  leadingInset: 26,
+                  onChanged: (_) => _onRosterFilterChanged(lane),
+                ),
+              ),
+              const SizedBox(width: 2),
+              _RosterViewButton(
+                tokens: tokens,
+                numberMode: _numberMode,
+                sortLabel: controller.rosterSortFieldLabel(),
+                ascending: controller.rosterSortAscending,
+                drumMode: widget.onModeChanged == null ? null : widget.mode,
+                onNumbers: () => setState(() {
+                  _numberMode = true;
+                  _homeLetterFilter = null;
+                  _awayLetterFilter = null;
+                }),
+                onNames: () => setState(() => _numberMode = false),
+                onCycleSort: controller.cycleRosterSortField,
+                onToggleDirection: controller.toggleRosterSortDirection,
+                onDrumMode: widget.onModeChanged,
+              ),
+            ],
+          ),
+          trailing: widget.onEditRosters == null
+              ? null
+              : _GhostHeaderIcon(
+                  tooltip: 'Rename team',
+                  icon: PhosphorIconsRegular.pencilSimple,
+                  tokens: tokens,
+                  onTap: widget.onEditRosters!,
+                ),
         ),
         Expanded(
           child: Row(
@@ -889,129 +947,14 @@ class _DrumPickerState extends State<DrumPicker> {
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-          child: CustomNameField(
-            nameController: isHome
-                ? _homeCustomNameController
-                : _awayCustomNameController,
-            jerseyController: isHome
-                ? _homeCustomJerseyController
-                : _awayCustomJerseyController,
-            nameFocusNode:
-                isHome ? _homeCustomNameFocus : _awayCustomNameFocus,
-            jerseyFocusNode:
-                isHome ? _homeCustomJerseyFocus : _awayCustomJerseyFocus,
+        if (!_numberMode)
+          TeamPlayersButton(
+            controller: controller,
+            isHome: isHome,
             tokens: tokens,
-            pinned: _customNamePinned(isHome: isHome),
-            canUseLast: controller.canUseLastCustomPlayer,
-            onChanged: () => setState(() {}),
-            onSubmit: () => _submitCustomName(isHome: isHome),
-            onTogglePin: () => _toggleCustomNamePin(isHome: isHome),
-            onUseLast: () => _useLastCustomName(isHome: isHome),
           ),
-        ),
       ],
     );
-  }
-
-  bool _customNamePinned({required bool isHome}) {
-    final pinned = controller.pinnedPlayer;
-    if (pinned == null || pinned.isHome != isHome) return false;
-    final id = pinned.player.playerId?.trim();
-    if (id != null && id.isNotEmpty) return false;
-    final nameController =
-        isHome ? _homeCustomNameController : _awayCustomNameController;
-    final jerseyController =
-        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
-    final name = nameController.text.trim();
-    if (name.isEmpty) return false;
-    final jersey = jerseyController.text.trim();
-    final player = controller.findRosterPlayer(
-      isHome: isHome,
-      fullName: name,
-      jerseyNumber: jersey.isEmpty ? null : jersey,
-    );
-    if (player == null) return false;
-    return controller.isPlayerPinned(player, isHome: isHome);
-  }
-
-  void _syncCustomNameFromPin({required bool isHome}) {
-    final pinned = controller.pinnedPlayer;
-    if (pinned == null || pinned.isHome != isHome) return;
-    // Only mirror custom pins (no league playerId) into the footer field.
-    final id = pinned.player.playerId?.trim();
-    if (id != null && id.isNotEmpty) return;
-    final nameFocus = isHome ? _homeCustomNameFocus : _awayCustomNameFocus;
-    final jerseyFocus =
-        isHome ? _homeCustomJerseyFocus : _awayCustomJerseyFocus;
-    if (nameFocus.hasFocus || jerseyFocus.hasFocus) return;
-    final nameController =
-        isHome ? _homeCustomNameController : _awayCustomNameController;
-    final jerseyController =
-        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
-    final name = pinned.player.fullName;
-    final jersey = pinned.player.jerseyNumber ?? '';
-    if (nameController.text == name && jerseyController.text == jersey) return;
-    nameController.text = name;
-    jerseyController.text = jersey;
-  }
-
-  void _showCustomNameError(String? error) {
-    if (error == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(error), duration: const Duration(seconds: 2)),
-    );
-  }
-
-  void _submitCustomName({required bool isHome}) {
-    final nameController =
-        isHome ? _homeCustomNameController : _awayCustomNameController;
-    final jerseyController =
-        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
-    final name = nameController.text.trim();
-    if (name.isEmpty) return;
-    final jersey = jerseyController.text.trim();
-    final error = controller.commitCustomPlayer(
-      isHome: isHome,
-      fullName: name,
-      jerseyNumber: jersey.isEmpty ? null : jersey,
-    );
-    _showCustomNameError(error);
-    setState(() {});
-  }
-
-  void _useLastCustomName({required bool isHome}) {
-    if (!controller.canUseLastCustomPlayer) return;
-    final nameController =
-        isHome ? _homeCustomNameController : _awayCustomNameController;
-    final jerseyController =
-        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
-    final nameFocus = isHome ? _homeCustomNameFocus : _awayCustomNameFocus;
-    nameController.text = controller.lastCustomPlayerName;
-    jerseyController.text = controller.lastCustomPlayerJersey;
-    setState(() {});
-    nameFocus.requestFocus();
-  }
-
-  void _toggleCustomNamePin({required bool isHome}) {
-    final nameController =
-        isHome ? _homeCustomNameController : _awayCustomNameController;
-    final jerseyController =
-        isHome ? _homeCustomJerseyController : _awayCustomJerseyController;
-    if (nameController.text.trim().isEmpty &&
-        controller.canUseLastCustomPlayer) {
-      nameController.text = controller.lastCustomPlayerName;
-      jerseyController.text = controller.lastCustomPlayerJersey;
-    }
-    final jersey = jerseyController.text.trim();
-    final error = controller.toggleCustomPlayerPin(
-      isHome: isHome,
-      fullName: nameController.text,
-      jerseyNumber: jersey.isEmpty ? null : jersey,
-    );
-    _showCustomNameError(error);
-    setState(() {});
   }
 
   Future<void> _reportRosterPlayer({
@@ -1186,13 +1129,10 @@ class _DrumCustomVerbField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 28,
+      height: 38,
       decoration: BoxDecoration(
-        color: tokens.sunken,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: pinned ? FfTokens.pinned : tokens.divider,
-        ),
+        color: tokens.bg,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         children: [
@@ -1298,21 +1238,23 @@ class _VerbAccordion extends StatelessWidget {
     required this.onToggleFavorite,
   });
 
-  static const preferredHeaderHeight = 34.0;
-  static const minHeaderHeight = 28.0;
+  static const preferredHeaderHeight = 26.0;
+  static const minHeaderHeight = 26.0;
   /// Must match [_PinnedHintBar] fixed height (padding + label + bottom border).
   static const pinnedBarHeight = 26.0;
   static const rowHeight = 24.0;
-  /// Vertical padding around an unselected row (1px top + 1px bottom).
-  static const rowOuterPadding = 2.0;
-  static const selectedRowHeight = 36.0;
-  /// Vertical padding around a selected row (2px top + 2px bottom).
-  static const selectedRowOuterPadding = 4.0;
-  static const rbiExtrasHeight = 32.0;
-  static const baseExtrasHeight = 32.0;
-  static const celebrationExtrasHeight = 32.0;
-  static const actionExtrasHeight = 36.0;
-  static const extrasDividerHeight = 8.0;
+  static const selectedRowHeight = 24.0;
+  /// Vertical padding around an unselected row.
+  static const rowOuterPadding = 0.0;
+  /// Vertical padding around a selected row.
+  static const selectedRowOuterPadding = 0.0;
+  /// Inset from the lane so a selected verb is narrower than its category bar.
+  static const verbHighlightInset = 10.0;
+  static const rbiExtrasHeight = 26.0;
+  static const baseExtrasHeight = 26.0;
+  static const celebrationExtrasHeight = 28.0;
+  static const actionExtrasHeight = 28.0;
+  static const extrasDividerHeight = 4.0;
 
   final CaptionV2Controller controller;
   final List<String> categories;
@@ -1416,8 +1358,8 @@ class _VerbAccordion extends StatelessWidget {
             bounded && resolvedHeight > constraints.maxHeight + 0.5;
 
         if (needsScroll || stillOverflows) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          return ListView(
+            padding: const EdgeInsets.only(bottom: 8),
             children: [
               _PinnedVerbSlot(
                 height: pinnedBarHeight,
@@ -1449,41 +1391,23 @@ class _VerbAccordion extends StatelessWidget {
                 onCelebrationChanged: controller.setCelebrationType,
               ),
               for (final category in categories)
-                if (collapsed || category != selectedCategory)
-                  _VerbAccordionSection(
-                    controller: controller,
-                    category: category,
-                    displayCategory: _displayCategory(category),
-                    verbs: const <EffectiveVerb>[],
-                    headerHeight: headerHeight,
-                    open: false,
-                    selectedIndex: selectedIndex,
-                    selectedVerbKey: selectedVerbKey,
-                    armed: armed,
-                    tokens: tokens,
-                    onOpen: () => onCategorySelected(category),
-                    onVerbArmed: onVerbArmed,
-                    onToggleFavorite: onToggleFavorite,
-                  )
-                else
-                  Expanded(
-                    child: _VerbAccordionSection(
-                      controller: controller,
-                      category: category,
-                      displayCategory: _displayCategory(category),
-                      verbs: openVerbs,
-                      headerHeight: headerHeight,
-                      open: true,
-                      scrollable: true,
-                      selectedIndex: selectedIndex,
-                      selectedVerbKey: selectedVerbKey,
-                      armed: armed,
-                      tokens: tokens,
-                      onOpen: () => onCategorySelected(category),
-                      onVerbArmed: onVerbArmed,
-                      onToggleFavorite: onToggleFavorite,
-                    ),
-                  ),
+                _VerbAccordionSection(
+                  controller: controller,
+                  category: category,
+                  displayCategory: _displayCategory(category),
+                  verbs: !collapsed && category == selectedCategory
+                      ? openVerbs
+                      : const <EffectiveVerb>[],
+                  headerHeight: headerHeight,
+                  open: !collapsed && category == selectedCategory,
+                  selectedIndex: selectedIndex,
+                  selectedVerbKey: selectedVerbKey,
+                  armed: armed,
+                  tokens: tokens,
+                  onOpen: () => onCategorySelected(category),
+                  onVerbArmed: onVerbArmed,
+                  onToggleFavorite: onToggleFavorite,
+                ),
             ],
           );
         }
@@ -1583,68 +1507,61 @@ class _VerbAccordionSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isFavorites = category == 'Favorites';
-    final labelColor = isFavorites
-        ? FfTokens.favorites
-        : (open ? tokens.text : tokens.textSecondary);
-    final divider = isFavorites
-        ? FfTokens.favoritesBorder
-        : tokens.divider;
+    final labelColor = open ? tokens.text : tokens.textTertiary;
     return Column(
       children: [
         VerbCategoryDropTarget(
           category: category,
           controller: controller,
-          child: Material(
-          color: isFavorites ? FfTokens.favoritesFill : Colors.transparent,
-          child: InkWell(
-            key: ValueKey('verb-accordion-$category'),
+          child: _VerbCategoryButton(
+            height: headerHeight,
+            tokens: tokens,
             onTap: onOpen,
-            hoverColor: tokens.hover,
-            child: Container(
-              height: headerHeight,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              decoration: BoxDecoration(
-                color: open && !isFavorites
-                    ? tokens.selected.withValues(alpha: 0.55)
-                    : null,
-                borderRadius: open
-                    ? BorderRadius.circular(FfTokens.radiusRow)
-                    : null,
-                boxShadow: open && !isFavorites
-                    ? FfTokens.selectionGlow(tokens.accent)
-                    : isFavorites && open
-                        ? FfTokens.selectionGlow(FfTokens.favorites)
-                        : null,
-                border: Border(bottom: BorderSide(color: divider)),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    open
-                        ? PhosphorIconsRegular.caretDown
-                        : PhosphorIconsRegular.caretRight,
-                    size: 14,
+            child: Row(
+              children: [
+                Transform.rotate(
+                  angle: open ? 1.5708 : 0,
+                  child: Icon(
+                    PhosphorIconsRegular.caretRight,
+                    size: 12,
                     color: labelColor,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      displayCategory.toUpperCase(),
-                      maxLines: 1,
-                      softWrap: false,
-                      overflow: TextOverflow.ellipsis,
-                      style: FfTokens.categoryLabel(color: labelColor),
+                ),
+                const SizedBox(width: 6),
+                if (isFavorites) ...[
+                  const PhosphorIcon(
+                    PhosphorIconsFill.star,
+                    size: 11,
+                    color: FfTokens.gold,
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                Expanded(
+                  child: Text(
+                    displayCategory.toUpperCase(),
+                    maxLines: 1,
+                    softWrap: false,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                      height: 1,
+                      color: labelColor,
                     ),
                   ),
-                  VerbCategoryDragHandle(
+                ),
+                const SizedBox(width: 4),
+                _HoverOnly(
+                  child: VerbCategoryDragHandle(
                     category: category,
-                    color: labelColor,
+                    color: tokens.textTertiary,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-        ),
         ),
         if (open && scrollable)
           Expanded(
@@ -1655,8 +1572,8 @@ class _VerbAccordionSection extends StatelessWidget {
               selectedVerbKey: selectedVerbKey,
               armed: armed,
               tokens: tokens,
-              leadingPadding: 30,
-              fontSize: 13.5,
+              leadingPadding: 18,
+              fontSize: 12.5,
               scrollable: true,
               onVerbArmed: onVerbArmed,
               onToggleFavorite: onToggleFavorite,
@@ -1675,14 +1592,73 @@ class _VerbAccordionSection extends StatelessWidget {
                     selectedVerbKey: selectedVerbKey,
                     armed: armed,
                     tokens: tokens,
-                    leadingPadding: 30,
-                    fontSize: 13.5,
+                    leadingPadding: 18,
+                    fontSize: 12.5,
                     onVerbArmed: onVerbArmed,
                     onToggleFavorite: onToggleFavorite,
                   )
                 : const SizedBox.shrink(),
           ),
       ],
+    );
+  }
+}
+
+class _VerbCategoryButton extends StatelessWidget {
+  const _VerbCategoryButton({
+    required this.height,
+    required this.tokens,
+    required this.onTap,
+    required this.child,
+  });
+
+  final double height;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(7),
+        hoverColor: tokens.hover,
+        child: SizedBox(
+          height: height,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HoverOnly extends StatefulWidget {
+  const _HoverOnly({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_HoverOnly> createState() => _HoverOnlyState();
+}
+
+class _HoverOnlyState extends State<_HoverOnly> {
+  bool _on = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _on = true),
+      onExit: (_) => setState(() => _on = false),
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 80),
+        opacity: _on ? 1 : 0,
+        child: widget.child,
+      ),
     );
   }
 }
@@ -2080,9 +2056,11 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
         (!hasOptionRows || optionsComplete);
 
     final boxed = widget.selected;
-    // The highlight box sits 6px in from the lane, so inner left insets
-    // stay aligned with unselected rows (leadingPadding from the lane edge).
-    final insetLeft = boxed ? widget.leadingPadding - 6 : widget.leadingPadding;
+    // The highlight sits in from the lane. Inner left insets stay aligned
+    // with unselected rows (leadingPadding from the lane edge).
+    final highlightInset = _VerbAccordion.verbHighlightInset;
+    final insetLeft =
+        boxed ? widget.leadingPadding - highlightInset : widget.leadingPadding;
     final column = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -2144,9 +2122,9 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
             Padding(
               padding: EdgeInsets.fromLTRB(
                 insetLeft,
-                hasOptionRows ? 10 : 8,
+                hasOptionRows ? 4 : 2,
                 8,
-                6,
+                2,
               ),
               child: Row(
                 children: [
@@ -2162,7 +2140,7 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _DrumVerbActionButton(
-                        label: 'FTP',
+                        label: widget.controller.ftpButtonLabel,
                         tokens: widget.tokens,
                         onTap: () => widget.controller
                             .saveOrTransmitFromVerbMenu(transmit: true),
@@ -2183,17 +2161,13 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
       child: boxed
           ? Padding(
               padding: const EdgeInsets.symmetric(
-                horizontal: 6,
+                horizontal: _VerbAccordion.verbHighlightInset,
                 vertical: _VerbAccordion.selectedRowOuterPadding / 2,
               ),
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: FfTokens.nocturneHv,
+                  color: const Color(0xFF2C333A),
                   borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-                  border: Border.all(
-                    color: FfTokens.panelOutline,
-                    width: 1.5,
-                  ),
                 ),
                 child: column,
               ),
@@ -2223,7 +2197,7 @@ class _DrumVerbActionButton extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(6),
         child: Ink(
-          height: 26,
+          height: 22,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(6),
             gradient: const LinearGradient(
@@ -2287,11 +2261,9 @@ class _VerbAccordionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = boxed
-        ? null
-        : selected
-            ? tokens.selected
-            : (hovered ? tokens.hover : null);
+    final fill = selected
+        ? tokens.hover
+        : (hovered ? tokens.sunken : null);
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       child: CmdClick(
@@ -2318,9 +2290,9 @@ class _VerbAccordionRow extends StatelessWidget {
             padding: EdgeInsets.only(left: leadingPadding - 6, right: 4),
             decoration: BoxDecoration(
               color: fill,
-              borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-              border: selected && !boxed
-                  ? Border.all(color: tokens.accent, width: 1.5)
+              borderRadius: BorderRadius.circular(7),
+              border: selected
+                  ? Border(left: BorderSide(color: tokens.accent, width: 2))
                   : null,
             ),
             child: Row(
@@ -2343,7 +2315,7 @@ class _VerbAccordionRow extends StatelessWidget {
                     style: FfTokens.rosterName(
                       color: tokens.text,
                       selected: selected,
-                    ),
+                    ).copyWith(fontSize: fontSize, height: 1.05),
                   ),
                 ),
                 if (committed) ...[
@@ -2509,6 +2481,10 @@ class _NumberRoster extends StatelessWidget {
     required this.layoutRowCount,
     required this.includeOtherRow,
     required this.tokens,
+    this.playersSubjectSelected = false,
+    this.teamNameSubjectSelected = false,
+    this.onPlayersSubject,
+    this.onTeamNameSubject,
     required this.isSelected,
     required this.onCommit,
     this.onPin,
@@ -2520,17 +2496,20 @@ class _NumberRoster extends StatelessWidget {
   final int layoutRowCount;
   final bool includeOtherRow;
   final FfTokens tokens;
+  final bool playersSubjectSelected;
+  final bool teamNameSubjectSelected;
+  final VoidCallback? onPlayersSubject;
+  final VoidCallback? onTeamNameSubject;
   final bool Function(Player player) isSelected;
   final ValueChanged<Player> onCommit;
   final ValueChanged<Player>? onPin;
   final void Function(Player player, Offset globalPosition)? onSecondaryTap;
 
-  /// Always 4 across. Small screens: slight rectangle; larger: square.
+  /// Always 4 across, with a tight gap between separate cells.
   static const int minColumns = 4;
   static const int maxColumns = 4;
   static const double minCell = 44.0;
   static const double maxCell = 140.0;
-  static const double maxJerseyFont = 28.0;
   /// Wider-than-tall aspect used at small sizes (W/H).
   static const double smallAspect = 1.28;
   /// Below this width → full rectangle; above → full square.
@@ -2559,36 +2538,50 @@ class _NumberRoster extends StatelessWidget {
     return out;
   }
 
-  /// Band key for 0–19, 20–39, … 80–99.
-  static int _bandKey(int number) => (number ~/ 20) * 20;
+  static bool _isNumbered(Player player) {
+    final number = _jersey(player);
+    return number != null && number >= 0 && number <= 99;
+  }
 
-  /// Double-decade bands (0–19 … 80–99) plus an optional catch-all.
+  static int _compareNumbered(Player a, Player b) {
+    final byNumber = _jersey(a)!.compareTo(_jersey(b)!);
+    if (byNumber != 0) return byNumber;
+    return a.fullName.compareTo(b.fullName);
+  }
+
+  /// Label a full row from the jerseys actually in it, e.g. "3–22".
+  static String _rangeLabel(List<Player> group) {
+    var min = _jersey(group.first)!;
+    var max = min;
+    for (final player in group) {
+      final number = _jersey(player)!;
+      if (number < min) min = number;
+      if (number > max) max = number;
+    }
+    if (min == max) return '$min';
+    return '$min–$max';
+  }
+
+  /// Numbered players, lowest jersey first.
+  static List<Player> _sortedNumbered(List<Player> players) {
+    final numbered = [for (final player in players) if (_isNumbered(player)) player];
+    numbered.sort(_compareNumbered);
+    return numbered;
+  }
+
+  /// Full rows of [minColumns], labeled by the numbers present. No fixed
+  /// 0–19 bands, so a short range does not leave empty squares.
   static _NumberGridMetrics gridMetrics(List<Player> players) {
-    final bands = <int, int>{};
-    var other = 0;
-    for (final player in players) {
-      final number = _jersey(player);
-      if (number == null || number < 0 || number > 99) {
-        other++;
-        continue;
-      }
-      final key = _bandKey(number);
-      bands[key] = (bands[key] ?? 0) + 1;
-    }
-    var columnCount = 1;
-    for (final count in bands.values) {
-      if (count > columnCount) columnCount = count;
-    }
-    if (other > columnCount) columnCount = other;
-    // Estimate with minColumns; LayoutBuilder may use more when wide.
+    final numbered = _sortedNumbered(players).length;
+    final other = players.length - numbered;
     const perRow = minColumns;
-    var visualRows = 0;
-    for (final count in bands.values) {
-      visualRows += _wrappedRows(count, perRow);
-    }
+    var visualRows = _wrappedRows(numbered, perRow);
     if (other > 0) visualRows += _wrappedRows(other, perRow);
+    final widest = numbered == 0 && other == 0
+        ? 1
+        : (numbered > other ? numbered : other);
     return _NumberGridMetrics(
-      columnCount: columnCount.clamp(1, maxColumns),
+      columnCount: widest.clamp(1, maxColumns),
       rowCount: visualRows.clamp(1, 40),
       needsOtherRow: other > 0,
     );
@@ -2596,255 +2589,203 @@ class _NumberRoster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final byBand = <int, List<Player>>{};
-    final other = <Player>[];
-    for (final player in players) {
-      final number = _jersey(player);
-      if (number == null || number < 0 || number > 99) {
-        other.add(player);
-        continue;
-      }
-      byBand.putIfAbsent(_bandKey(number), () => []).add(player);
-    }
-    for (final group in byBand.values) {
-      group.sort((a, b) {
-        final byNumber = _jersey(a)!.compareTo(_jersey(b)!);
-        if (byNumber != 0) return byNumber;
-        return a.fullName.compareTo(b.fullName);
-      });
-    }
-    other.sort((a, b) => a.fullName.compareTo(b.fullName));
+    final numbered = _sortedNumbered(players);
+    final other = [for (final player in players) if (!_isNumbered(player)) player]
+      ..sort((a, b) => a.fullName.compareTo(b.fullName));
 
-    // Unchunked band groups — wrap count decided from available width.
-    final bandTitles = <String>[];
-    final bandGroups = <List<Player>>[];
-    for (var band = 0; band <= 80; band += 20) {
-      final group = byBand[band];
-      if (group == null || group.isEmpty) continue;
-      bandTitles.add('$band–${band + 19}');
-      bandGroups.add(group);
-    }
-    if (includeOtherRow && other.isNotEmpty) {
-      bandTitles.add('Other');
-      bandGroups.add(other);
+    final bands = <(String, List<Player>)>[
+      for (final group in _chunk(numbered, minColumns))
+        (_rangeLabel(group), group),
+    ];
+    final showSubjects = onPlayersSubject != null;
+    if ((includeOtherRow && other.isNotEmpty) || showSubjects) {
+      bands.add(('Other', other));
     }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const pad = 10.0;
-        const gapX = 4.0;
-        const gapY = 4.0;
-        const dividerH = 1.0;
-        const dividerPad = 6.0;
-        const titleW = 20.0;
-        const titleGap = 4.0;
-        final maxW = constraints.maxWidth;
-        final maxH = constraints.maxHeight;
-        if (!maxW.isFinite || !maxH.isFinite || maxW <= 0 || maxH <= 0) {
-          return const SizedBox.shrink();
-        }
+    final shortest = MediaQuery.sizeOf(context).shortestSide;
+    final scale = (shortest / 1000.0).clamp(0.62, 1.0);
+    final numberSize = 26.0 * scale;
+    final nameSize = 13.0 * scale;
+    const nameNumberGap = 4.0;
+    final cellH =
+        (nameSize * 1.15 + numberSize * 1.05 + 12.5 + nameNumberGap)
+            .clamp(48.0, 68.0);
 
-        final availW = (maxW - pad * 2).clamp(1.0, 10000.0);
-        // Tiny safety so rounding/padding can't push past the viewport.
-        final availH = (maxH - pad * 2 - 2.0).clamp(1.0, 10000.0);
-        final gridW = (availW - titleW - titleGap).clamp(1.0, 10000.0);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+      children: [
+        for (var i = 0; i < bands.length; i++) ...[
+          Padding(
+            padding: EdgeInsets.only(top: i == 0 ? 0 : 6, bottom: 6),
+            child: Row(
+              children: [
+                Text(
+                  bands[i].$1,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.6,
+                    color: tokens.textTertiary,
+                    height: 1,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Container(height: 1, color: tokens.divider),
+                ),
+              ],
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const cols = 4;
+              const gap = 2.0;
+              const comfortableCell = 72.0;
+              final cellW = cols <= 1
+                  ? constraints.maxWidth
+                  : (constraints.maxWidth - gap * (cols - 1)) / cols;
+              final fit = (cellW / comfortableCell).clamp(0.72, 1.0);
+              final jerseySize = numberSize * fit;
+              final fittedName = nameSize * fit;
+              final fittedH = (cellH * fit).clamp(40.0, cellH);
+              final band = bands[i];
+              final isOther = band.$1 == 'Other';
+              final subjectCount = isOther && showSubjects ? 2 : 0;
+              final count = band.$2.length + subjectCount;
+              Widget cellAt(int index) {
+                if (index >= band.$2.length) {
+                  final playersButton = index == band.$2.length;
+                  return _TeamSubjectCell(
+                    label: playersButton ? 'Players' : 'Team\nName',
+                    selected: playersButton
+                        ? playersSubjectSelected
+                        : teamNameSubjectSelected,
+                    tokens: tokens,
+                    height: fittedH,
+                    fontSize: fittedName + 6,
+                    onTap: playersButton
+                        ? onPlayersSubject!
+                        : onTeamNameSubject!,
+                  );
+                }
+                final player = band.$2[index];
+                return _NumberCell(
+                  player: player,
+                  lastName: _lastName(player),
+                  selected: isSelected(player),
+                  tokens: tokens,
+                  width: double.infinity,
+                  height: fittedH,
+                  nameSize: fittedName,
+                  jerseySize: jerseySize,
+                  onTap: () => onCommit(player),
+                  onPin: onPin == null ? null : () => onPin!(player),
+                  onSecondaryTap: onSecondaryTap == null
+                      ? null
+                      : (position) => onSecondaryTap!(player, position),
+                );
+              }
 
-        // Always 4 across — slight rectangles when small, squares when large.
-        final dividerCount =
-            bandGroups.length > 1 ? bandGroups.length - 1 : 0;
-        final dividerSpace = dividerCount * (dividerH + dividerPad * 2);
-        const perRow = maxColumns;
-        final bands = [
-          for (final group in bandGroups) _chunk(group, perRow),
-        ];
-
-        var actualRows = 0;
-        for (final band in bands) {
-          actualRows += band.length;
-        }
-        final rows =
-            layoutRowCount > actualRows ? layoutRowCount : actualRows;
-        final rowGaps = gapY * (rows > 1 ? rows - 1 : 0);
-        final colGaps = gapX * (perRow > 1 ? perRow - 1 : 0);
-        final sideW = ((gridW - colGaps) / perRow).clamp(1.0, maxCell);
-        final sideH =
-            ((availH - rowGaps - dividerSpace) / rows).clamp(1.0, maxCell);
-
-        // Rectangle: fill width, a bit shorter. Square: equal side.
-        final rectW = sideW;
-        final rectH = (sideH < sideW / smallAspect)
-            ? sideH
-            : (sideW / smallAspect).clamp(minCell, maxCell);
-        final squareSide =
-            (sideW < sideH ? sideW : sideH).clamp(minCell, maxCell);
-
-        // 0 = small/rect, 1 = large/square.
-        final blend = ((squareSide - rectBlendStart) /
-                (squareBlendEnd - rectBlendStart))
-            .clamp(0.0, 1.0);
-        final cellW = rectW + (squareSide - rectW) * blend;
-        final cellH = rectH + (squareSide - rectH) * blend;
-        final showNames = cellH >= 20;
-        // Bump type a bit once the window is wide enough (~1350+).
-        final windowW = MediaQuery.sizeOf(context).width;
-        final wideBoost = ((windowW - 1200) / (1350 - 1200)).clamp(0.0, 1.0);
-        final nameScale = 0.16 + 0.04 * wideBoost;
-        final jerseyScale = showNames
-            ? 0.38 + 0.06 * wideBoost
-            : 0.52 + 0.06 * wideBoost;
-        final nameSize =
-            (cellH * nameScale).clamp(8.0, 14.0 + 3.0 * wideBoost);
-        // One shared size for every tile (no per-number FittedBox scaling).
-        final jerseySize = (cellH * jerseyScale)
-            .clamp(10.0, maxJerseyFont + 4.0 * wideBoost);
-
-        if (bands.isEmpty) {
-          return const SizedBox.expand();
-        }
-
-        Widget bandTitle(String title, double bandHeight) {
-          // Rotated label must fit inside bandHeight or short bands overlap.
-          return SizedBox(
-            width: titleW,
-            height: bandHeight,
-            child: ClipRect(
-              child: Center(
-                // quarterTurns: 1 → reads top→bottom so lower number is on top.
-                child: RotatedBox(
-                  quarterTurns: 1,
-                  child: SizedBox(
-                    width: bandHeight,
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.center,
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        softWrap: false,
-                        textAlign: TextAlign.center,
-                        style: tokens.microStyle.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.6,
-                          height: 1,
-                          fontSize: 13,
-                          shadows: [
-                            Shadow(
-                              color: Colors.white.withValues(alpha: 0.45),
-                              blurRadius: 7,
-                            ),
-                            Shadow(
-                              color: Colors.white.withValues(alpha: 0.2),
-                              blurRadius: 12,
+              final rowCount = (count / cols).ceil();
+              return Column(
+                children: [
+                  for (var row = 0; row < rowCount; row++) ...[
+                    if (row > 0) const SizedBox(height: gap),
+                    SizedBox(
+                      height: fittedH,
+                      child: Row(
+                        children: [
+                          for (var col = 0; col < cols; col++) ...[
+                            if (col > 0) const SizedBox(width: gap),
+                            Expanded(
+                              child: row * cols + col < count
+                                  ? cellAt(row * cols + col)
+                                  : const SizedBox.shrink(),
                             ),
                           ],
-                        ),
+                        ],
                       ),
                     ),
-                  ),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _TeamSubjectCell extends StatefulWidget {
+  const _TeamSubjectCell({
+    required this.label,
+    required this.selected,
+    required this.tokens,
+    required this.height,
+    required this.fontSize,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final FfTokens tokens;
+  final double height;
+  final double fontSize;
+  final VoidCallback onTap;
+
+  @override
+  State<_TeamSubjectCell> createState() => _TeamSubjectCellState();
+}
+
+class _TeamSubjectCellState extends State<_TeamSubjectCell> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = widget.tokens;
+    final selected = widget.selected;
+    final fill = selected
+        ? tokens.text
+        : (_hovered ? tokens.hover : tokens.sunken);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: SizedBox(
+          height: widget.height,
+          width: double.infinity,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                widget.label,
+                maxLines: 2,
+                softWrap: false,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: FfTokens.labelFamily,
+                  fontSize: widget.fontSize,
+                  height: 1.05,
+                  letterSpacing: 0.2,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? tokens.bg : tokens.text,
                 ),
               ),
             ),
-          );
-        }
-
-        return Padding(
-          padding: const EdgeInsets.all(pad),
-          child: Column(
-            children: [
-              for (var b = 0; b < bands.length; b++) ...[
-                if (b > 0)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: dividerPad),
-                    child: Container(
-                      height: dividerH,
-                      width: double.infinity,
-                      color: tokens.accent.withValues(alpha: 0.75),
-                    ),
-                  ),
-                Builder(
-                  builder: (context) {
-                    final bandRows = bands[b].length;
-                    final bandHeight = cellH * bandRows +
-                        gapY * (bandRows > 1 ? bandRows - 1 : 0);
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        bandTitle(bandTitles[b], bandHeight),
-                        const SizedBox(width: titleGap),
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (var r = 0; r < bands[b].length; r++)
-                                Padding(
-                                  padding: EdgeInsets.only(
-                                    top: r == 0 ? 0 : gapY / 2,
-                                    bottom: r == bands[b].length - 1
-                                        ? 0
-                                        : gapY / 2,
-                                  ),
-                                  child: SizedBox(
-                                    height: cellH,
-                                    child: Row(
-                                      children: [
-                                        for (var slot = 0;
-                                            slot < bands[b][r].length;
-                                            slot++) ...[
-                                          if (slot > 0) SizedBox(width: gapX),
-                                          SizedBox(
-                                            width: cellW,
-                                            height: cellH,
-                                            child: _NumberCell(
-                                              player: bands[b][r][slot],
-                                              lastName: _lastName(
-                                                bands[b][r][slot],
-                                              ),
-                                              selected: isSelected(
-                                                bands[b][r][slot],
-                                              ),
-                                              tokens: tokens,
-                                              width: cellW,
-                                              height: cellH,
-                                              nameSize: nameSize,
-                                              jerseySize: jerseySize,
-                                              showName: showNames,
-                                              onTap: () => onCommit(
-                                                bands[b][r][slot],
-                                              ),
-                                              onPin: onPin == null
-                                                  ? null
-                                                  : () => onPin!(
-                                                        bands[b][r][slot],
-                                                      ),
-                                              onSecondaryTap:
-                                                  onSecondaryTap == null
-                                                      ? null
-                                                      : (position) =>
-                                                          onSecondaryTap!(
-                                                            bands[b][r]
-                                                                [slot],
-                                                            position,
-                                                          ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
@@ -2859,7 +2800,6 @@ class _NumberCell extends StatefulWidget {
     required this.height,
     required this.nameSize,
     required this.jerseySize,
-    required this.showName,
     required this.onTap,
     this.onPin,
     this.onSecondaryTap,
@@ -2873,7 +2813,6 @@ class _NumberCell extends StatefulWidget {
   final double height;
   final double nameSize;
   final double jerseySize;
-  final bool showName;
   final VoidCallback onTap;
   final VoidCallback? onPin;
   final ValueChanged<Offset>? onSecondaryTap;
@@ -2889,147 +2828,81 @@ class _NumberCellState extends State<_NumberCell> {
   Widget build(BuildContext context) {
     final tokens = widget.tokens;
     final selected = widget.selected;
-    final width = widget.width;
-    final height = widget.height;
-    final showName = widget.showName;
-    final nameSize = widget.nameSize;
-    final jerseySize = widget.jerseySize;
     final hovering = _hovered;
-    final glowColor = hovering ? Colors.white : FfTokens.panelOutline;
-    final numberGlow = selected
-        ? Color.lerp(tokens.accent, Colors.white, hovering ? 0.28 : 0.1)!
-        : (hovering ? Colors.white : const Color(0xFFD5DEE6));
-    final borderColor = hovering
-        ? Colors.white.withValues(alpha: 0.92)
-        : FfTokens.panelOutline;
+    final fill = selected
+        ? tokens.text
+        : (hovering ? tokens.hover : tokens.sunken);
+    final nameColor = selected
+        ? tokens.bg.withValues(alpha: 0.7)
+        : tokens.textSecondary;
+    final numberColor = selected ? tokens.bg : tokens.text;
+    final name = widget.lastName.toUpperCase();
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
-          boxShadow: FfTokens.accentButtonGlow(glowColor),
-        ),
-        child: Material(
-          color: selected
-              ? tokens.accent.withValues(alpha: 0.18)
-              : tokens.elevated,
-          borderRadius: BorderRadius.circular(4),
-          child: CmdClick(
-            onTap: widget.onTap,
-            onCmdTap: widget.onPin,
-            onSecondaryTapDown: widget.onSecondaryTap == null
-                ? null
-                : (details) =>
-                    widget.onSecondaryTap!(details.globalPosition),
-            child: SizedBox(
-              height: height,
-              width: width,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  child: LayoutBuilder(
-                    builder: (context, cell) {
-                      const nameGap = 1.0;
-                      final nameH = showName ? nameSize : 0.0;
-                      // Keep a little inset so numbers don't fill the whole band.
-                      final numberH = ((cell.maxHeight -
-                                  nameH -
-                                  (showName ? nameGap : 0.0)) *
-                              0.88 -
-                              5.0)
-                          .clamp(1.0, cell.maxHeight);
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            height: numberH,
-                            width: cell.maxWidth,
-                            child: Center(
-                              child: Text(
-                                widget.player.jerseyNumber ?? '—',
-                                maxLines: 1,
-                                softWrap: false,
-                                textAlign: TextAlign.center,
-                                style: tokens.jerseyStyle.copyWith(
-                                  fontSize: jerseySize,
-                                  height: 1,
-                                  fontFeatures: const [
-                                    FontFeature.tabularFigures(),
-                                  ],
-                                  color: selected
-                                      ? tokens.accent
-                                      : tokens.text,
-                                  shadows: [
-                                    Shadow(
-                                      color: numberGlow.withValues(
-                                        alpha: hovering ? 0.8 : 0.62,
-                                      ),
-                                      blurRadius: 6,
-                                    ),
-                                    Shadow(
-                                      color: numberGlow.withValues(
-                                        alpha: hovering ? 0.5 : 0.36,
-                                      ),
-                                      blurRadius: 14,
-                                    ),
-                                    Shadow(
-                                      color: numberGlow.withValues(
-                                        alpha: hovering ? 0.28 : 0.18,
-                                      ),
-                                      blurRadius: 22,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (showName) ...[
-                            const SizedBox(height: nameGap),
-                            SizedBox(
-                              height: nameH,
-                              width: cell.maxWidth,
-                              child: Center(
-                                child: Text(
-                                  widget.lastName,
-                                  maxLines: 1,
-                                  softWrap: false,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontFamily: FfTokens.labelFamily,
-                                    fontSize: nameSize,
-                                    height: 1,
-                                    fontWeight: FontWeight.w500,
-                                    color: selected
-                                        ? tokens.text
-                                        : tokens.textSecondary,
-                                    shadows: [
-                                      Shadow(
-                                        color:
-                                            glowColor.withValues(alpha: 0.45),
-                                        blurRadius: 6,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      );
-                    },
+      child: CmdClick(
+        onTap: widget.onTap,
+        onCmdTap: widget.onPin,
+        onSecondaryTapDown: widget.onSecondaryTap == null
+            ? null
+            : (details) => widget.onSecondaryTap!(details.globalPosition),
+        child: SizedBox(
+          height: widget.height,
+          width: widget.width,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+            decoration: BoxDecoration(
+              color: fill,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FfTokens.labelFamily,
+                    fontSize: widget.nameSize - 0.5,
+                    height: 1.05,
+                    letterSpacing: 0.2,
+                    fontWeight: FontWeight.w700,
+                    color: nameColor,
                   ),
                 ),
-              ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.player.jerseyNumber ?? '—',
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: widget.jerseySize,
+                    fontWeight: FontWeight.w800,
+                    height: 1.0,
+                    letterSpacing: -1.2,
+                    color: numberColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    shadows: [
+                      Shadow(
+                        color: numberColor.withValues(alpha: 0.75),
+                        blurRadius: 6,
+                      ),
+                      Shadow(
+                        color: numberColor.withValues(alpha: 0.4),
+                        blurRadius: 16,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -3076,7 +2949,7 @@ class _HoverPlayerList extends StatefulWidget {
 }
 
 class _HoverPlayerListState extends State<_HoverPlayerList> {
-  static const _itemExtent = 22.0;
+  static const _itemExtent = 26.0;
   static const _magDuration = Duration(milliseconds: 40);
   final ScrollController _scrollController = ScrollController();
   double? _pointerY;
@@ -3181,7 +3054,7 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 20,
+                      width: 28,
                       child: Text(
                         player.jerseyNumber ?? '—',
                         textAlign: TextAlign.right,
@@ -3189,7 +3062,7 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
                         softWrap: false,
                         style: FfTokens.rosterJersey(
                           color: widget.tokens.textTertiary,
-                        ),
+                        ).copyWith(fontSize: 14),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -3202,7 +3075,7 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
                         style: FfTokens.rosterName(
                           color: widget.tokens.text,
                           selected: selected,
-                        ),
+                        ).copyWith(fontSize: 15),
                       ),
                     ),
                     if (showActions) ...[
@@ -3305,7 +3178,7 @@ class _HoverablePlayerActionsRowState
             child: Row(
               children: [
                 SizedBox(
-                  width: 20,
+                  width: 28,
                   child: Text(
                     widget.jersey,
                     textAlign: TextAlign.right,
@@ -3313,7 +3186,7 @@ class _HoverablePlayerActionsRowState
                     softWrap: false,
                     style: FfTokens.rosterJersey(
                       color: widget.tokens.textTertiary,
-                    ),
+                    ).copyWith(fontSize: 14),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -3326,7 +3199,7 @@ class _HoverablePlayerActionsRowState
                     style: FfTokens.rosterName(
                       color: widget.tokens.text,
                       selected: false,
-                    ),
+                    ).copyWith(fontSize: 15),
                   ),
                 ),
                 if (showActions) ...[
@@ -4040,6 +3913,105 @@ class _PinnedHintBarState extends State<_PinnedHintBar> {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RosterViewButton extends StatelessWidget {
+  const _RosterViewButton({
+    required this.tokens,
+    required this.numberMode,
+    required this.sortLabel,
+    required this.ascending,
+    required this.drumMode,
+    required this.onNumbers,
+    required this.onNames,
+    required this.onCycleSort,
+    required this.onToggleDirection,
+    required this.onDrumMode,
+  });
+
+  final FfTokens tokens;
+  final bool numberMode;
+  final String sortLabel;
+  final bool ascending;
+  final DrumPickerMode? drumMode;
+  final VoidCallback onNumbers;
+  final VoidCallback onNames;
+  final VoidCallback onCycleSort;
+  final VoidCallback onToggleDirection;
+  final ValueChanged<DrumPickerMode>? onDrumMode;
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'View',
+      padding: EdgeInsets.zero,
+      color: FfTokens.sessionEl,
+      surfaceTintColor: Colors.transparent,
+      elevation: 16,
+      shadowColor: FfTokens.sessionMenuShadow,
+      shape: FfMenuSurface.shape,
+      onSelected: (value) {
+        switch (value) {
+          case 'numbers':
+            onNumbers();
+          case 'names':
+            onNames();
+          case 'sort':
+            onCycleSort();
+          case 'direction':
+            onToggleDirection();
+          case 'scroll':
+            onDrumMode?.call(DrumPickerMode.scroll);
+          case 'loop':
+            onDrumMode?.call(DrumPickerMode.infinite);
+        }
+      },
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem(
+          value: 'numbers',
+          checked: numberMode,
+          child: const Text('Numbers'),
+        ),
+        CheckedPopupMenuItem(
+          value: 'names',
+          checked: !numberMode,
+          child: const Text('Names'),
+        ),
+        if (!numberMode) ...[
+          PopupMenuItem(
+            value: 'sort',
+            child: Text('Sort by $sortLabel'),
+          ),
+          PopupMenuItem(
+            value: 'direction',
+            child: Text(ascending ? 'Ascending' : 'Descending'),
+          ),
+        ],
+        if (drumMode != null) ...[
+          const PopupMenuDivider(),
+          CheckedPopupMenuItem(
+            value: 'scroll',
+            checked: drumMode == DrumPickerMode.scroll,
+            child: const Text('Scroll'),
+          ),
+          CheckedPopupMenuItem(
+            value: 'loop',
+            checked: drumMode == DrumPickerMode.infinite,
+            child: const Text('Loop'),
+          ),
+        ],
+      ],
+      child: SizedBox(
+        width: 26,
+        height: 26,
+        child: Icon(
+          PhosphorIconsRegular.gearSix,
+          size: 14,
+          color: tokens.textSecondary,
         ),
       ),
     );

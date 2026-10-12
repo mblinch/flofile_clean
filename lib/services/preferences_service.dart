@@ -95,6 +95,7 @@ class PreferencesService {
   static const String _keyJerseyOcrEnabled = 'jersey_ocr_enabled';
   /// When false, caption V2 hides FTP buttons/shortcuts for the session.
   static const String _keyFtpModeEnabled = 'ftp_mode_enabled';
+  static const String _keyHideFirebar = 'hide_firebar';
   /// JSON list of recent `{away,home}` matchups per sport (startup screen).
   static const String _keyRecentMatchupsPrefix = 'startup_recent_matchups_';
   /// Last home/away team picks on the V2 startup screen (per sport).
@@ -114,6 +115,9 @@ class PreferencesService {
   /// `getty` or `imagn` — legacy; superseded by [CaptionTemplate] JSON.
   static const String _keyCaptionLayoutFlavor = 'caption_layout_flavor';
   static const String _keyCaptionTemplateJson = 'caption_template_json';
+  static const String _keyBasketballUserNote = 'basketball_user_note';
+  /// `getty` or `nbae`. NBAE keeps the Getty structure and adds the copyright line.
+  static const String _keyGettyNoteVariant = 'getty_note_variant';
   /// Optional per-wire layout baselines (Getty USA / Imagn / AP) for [CaptionLayoutBuilderDialog].
   static const String _keyCaptionTemplateDefaultGettyJson =
       'caption_template_default_getty_json';
@@ -327,6 +331,19 @@ class PreferencesService {
   Future<void> saveFtpModeEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyFtpModeEnabled, enabled);
+    applicationModesRevision.value = applicationModesRevision.value + 1;
+    _afterLocalPreferencesChanged();
+  }
+
+  /// When true, the caption Firebar is hidden.
+  Future<bool> getHideFirebar() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyHideFirebar) ?? false;
+  }
+
+  Future<void> saveHideFirebar(bool hidden) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyHideFirebar, hidden);
     applicationModesRevision.value = applicationModesRevision.value + 1;
     _afterLocalPreferencesChanged();
   }
@@ -1040,6 +1057,7 @@ class PreferencesService {
   Future<void> saveResolutionWarningThreshold(int threshold) async {
     final prefs = await _getPrefs();
     await prefs.setInt(_keyResolutionWarningThreshold, threshold);
+    applicationModesRevision.value = applicationModesRevision.value + 1;
     _afterLocalPreferencesChanged();
   }
 
@@ -1889,6 +1907,7 @@ class PreferencesService {
       'burstDetectionEnabled': await getBurstDetectionEnabled(),
       'serialNumberBylines': await getSerialNumberBylines(),
       'ftpModeEnabled': await getFtpModeEnabled(),
+      'hideFirebar': await getHideFirebar(),
       'jerseyOcrEnabled': await getJerseyOcrEnabled(),
       'resolutionWarningThreshold': await getResolutionWarningThreshold(),
       'photoshopPath': await getPhotoshopPath(),
@@ -1921,6 +1940,7 @@ class PreferencesService {
       'captionCreditSampleAgency': await getCaptionCreditSampleAgency(),
       'captionWireLabels': await _exportCaptionWireLabels(),
       'favoriteCaptionStyleBySport': await _exportFavoriteCaptionStyleBySport(),
+      'recentMatchupsBySport': await _exportRecentMatchupsBySport(),
       'cameraSerialMappings': CameraSerialService.instance.exportMappings(),
     };
   }
@@ -2136,6 +2156,9 @@ class PreferencesService {
     if (preferences.containsKey('ftpModeEnabled')) {
       await saveFtpModeEnabled(preferences['ftpModeEnabled'] as bool);
     }
+    if (preferences.containsKey('hideFirebar')) {
+      await saveHideFirebar(preferences['hideFirebar'] as bool);
+    }
     if (preferences.containsKey('jerseyOcrEnabled')) {
       await saveJerseyOcrEnabled(preferences['jerseyOcrEnabled'] as bool);
     }
@@ -2256,6 +2279,17 @@ class PreferencesService {
         }
       }
     }
+    if (preferences.containsKey('recentMatchupsBySport')) {
+      final raw = preferences['recentMatchupsBySport'];
+      if (raw is Map) {
+        for (final entry in raw.entries) {
+          await _writeRecentMatchups(
+            sport: entry.key.toString(),
+            matchups: _decodeRecentMatchups(entry.value),
+          );
+        }
+      }
+    }
     if (!_suppressCloudSync) {
       _afterLocalPreferencesChanged();
     }
@@ -2323,7 +2357,28 @@ class PreferencesService {
   /// named library styles keep their authored [CaptionTemplate.gameIdentifierText].
   Future<CaptionTemplate> getCaptionTemplate() async {
     final sport = await getCurrentSport();
-    final template = await getCaptionTemplateRaw();
+    var template = await getCaptionTemplateRaw();
+    // Getty, Imagn, AP, and CP stay the published admin originals. A user's
+    // edits live on a saved style or Custom, never on the built-in wire.
+    if (!template.isUserAuthoredCaptionStyle &&
+        template.wireStyle != WireStyle.custom) {
+      final admin = AppDefaultsFirestoreService.mergedCaptionWireDefaults(
+        sport: sport,
+      )[template.wireStyle];
+      if (admin != null) {
+        template = admin.copyWith(
+          wireStyle: template.wireStyle,
+          includeTimingPhrase: template.includeTimingPhrase,
+          showKeywordsField: template.showKeywordsField,
+          showPersonalityField: template.showPersonalityField,
+          basketballUserNote: admin.basketballUserNote,
+        );
+      }
+    }
+    final noteOverride = (await _getPrefs()).getString(_keyBasketballUserNote);
+    if (noteOverride != null) {
+      template = template.copyWith(basketballUserNote: noteOverride);
+    }
     return await applyGameIdentifierForSport(
       template,
       template.wireStyle,
@@ -2343,6 +2398,31 @@ class PreferencesService {
       return flavor == 'imagn' ? CaptionTemplate.imagn() : CaptionTemplate.getty();
     }
     return CaptionTemplate.fromLegacySegmentOrder(order, flavor);
+  }
+
+  /// Text typed after the byline for basketball and WNBA. Null when the user
+  /// has not set one, so the published caption structure's note is used.
+  Future<String?> getBasketballUserNote() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keyBasketballUserNote);
+  }
+
+  Future<void> saveBasketballUserNote(String note) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyBasketballUserNote, note);
+    _afterLocalPreferencesChanged();
+  }
+
+  /// True when Getty captions should include the NBAE copyright line.
+  Future<bool> getGettyNoteIsNbae() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_keyGettyNoteVariant) == 'nbae';
+  }
+
+  Future<void> saveGettyNoteIsNbae(bool nbae) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_keyGettyNoteVariant, nbae ? 'nbae' : 'getty');
+    _afterLocalPreferencesChanged();
   }
 
   Future<void> saveCaptionTemplate(CaptionTemplate template) async {
@@ -2717,20 +2797,55 @@ class PreferencesService {
         prefs.getString('$_keyRecentMatchupsPrefix${sport.toLowerCase().trim()}');
     if (raw == null || raw.isEmpty) return const [];
     try {
-      final decoded = json.decode(raw);
-      if (decoded is! List) return const [];
-      final out = <MapEntry<String, String>>[];
-      for (final item in decoded) {
-        if (item is! Map) continue;
-        final away = item['away']?.toString().trim() ?? '';
-        final home = item['home']?.toString().trim() ?? '';
-        if (away.isEmpty || home.isEmpty) continue;
-        out.add(MapEntry(away, home));
-      }
-      return out;
+      return _decodeRecentMatchups(json.decode(raw));
     } catch (_) {
       return const [];
     }
+  }
+
+  List<MapEntry<String, String>> _decodeRecentMatchups(Object? raw) {
+    if (raw is! List) return const [];
+    final out = <MapEntry<String, String>>[];
+    for (final item in raw) {
+      if (item is! Map) continue;
+      final away = item['away']?.toString().trim() ?? '';
+      final home = item['home']?.toString().trim() ?? '';
+      if (away.isEmpty || home.isEmpty || away == home) continue;
+      out.add(MapEntry(away, home));
+      if (out.length == 4) break;
+    }
+    return out;
+  }
+
+  Future<Map<String, List<Map<String, String>>>> _exportRecentMatchupsBySport() async {
+    final out = <String, List<Map<String, String>>>{};
+    for (final sport in AppDefaultsFirestoreService.catalogSports) {
+      final matchups = await getRecentMatchups(sport: sport);
+      out[sport] = [
+        for (final e in matchups) {'away': e.key, 'home': e.value},
+      ];
+    }
+    return out;
+  }
+
+  Future<void> _writeRecentMatchups({
+    required String sport,
+    required List<MapEntry<String, String>> matchups,
+  }) async {
+    final s = sport.toLowerCase().trim();
+    if (s.isEmpty) return;
+    final prefs = await _getPrefs();
+    final key = '$_keyRecentMatchupsPrefix$s';
+    if (matchups.isEmpty) {
+      await prefs.remove(key);
+      return;
+    }
+    await prefs.setString(
+      key,
+      json.encode([
+        for (final e in matchups.take(4)) {'away': e.key, 'home': e.value},
+      ]),
+    );
   }
 
   /// Prepends [away] @ [home] for [sport], keeping at most four unique matchups.
@@ -2749,13 +2864,8 @@ class PreferencesService {
       ...existing.where((e) => !(e.key == a && e.value == h)),
     ];
     if (next.length > 4) next.removeRange(4, next.length);
-    final prefs = await _getPrefs();
-    await prefs.setString(
-      '$_keyRecentMatchupsPrefix$s',
-      json.encode([
-        for (final e in next) {'away': e.key, 'home': e.value},
-      ]),
-    );
+    await _writeRecentMatchups(sport: s, matchups: next);
+    _afterLocalPreferencesChanged();
   }
 
   /// Menu token for the user's favorite caption layout style (per sport).

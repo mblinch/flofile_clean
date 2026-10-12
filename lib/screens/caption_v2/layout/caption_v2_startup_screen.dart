@@ -25,8 +25,9 @@ import '../../../services/verb_admin_choice.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
 import '../../../widgets/app_styled_dialogs.dart';
-import '../../../widgets/ff_dropdown.dart';
+import '../../../widgets/ff_menu.dart';
 import '../../../widgets/caption_layout_builder_dialog.dart';
+import '../data/team_abbrev.dart';
 import 'caption_v2_iptc_dialog.dart';
 import 'roster_import_dialog.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
@@ -122,13 +123,24 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool _scanningIptc = false;
   int _iptcScanGen = 0;
   bool _ftpModeEnabled = true;
+  String? _ftpProfileName;
+  List<String> _ftpProfileNames = const [];
+  /// When true, the caption Firebar is hidden. Same pref as the session menu.
+  bool _hideFirebar = false;
   /// On-device jersey/name OCR + folder pre-scan (macOS). Same pref as the
   /// session header toggle.
   bool _jerseyOcrEnabled = false;
+  bool _serialBylinesEnabled = false;
+  List<MapEntry<String, String>> _recentMatchups = const [];
+  StreamSubscription<void>? _cloudPrefsSub;
+  int? _openMenuId;
 
   CaptionStyleCatalog? _styleCatalog;
   CaptionTemplate? _captionTemplate;
   String? _selectedStyleToken;
+  /// Null follows the selected style. A tap pins Wire defaults or Custom.
+  bool? _styleTabCustom;
+  bool _gettyNoteIsNbae = false;
   bool _loadingStyles = true;
 
   static const _sports = <String>[
@@ -199,10 +211,22 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   String get _outputLabel {
-    if (_writeIptc && _ftpModeEnabled) return 'IPTC + FTP';
-    if (_writeIptc) return 'IPTC';
-    if (_ftpModeEnabled) return 'FTP';
-    return 'Captions only';
+    final parts = <String>[
+      if (_writeIptc) 'IPTC',
+      if (_ftpModeEnabled) 'FTP',
+      if (_jerseyOcrEnabled) 'Text',
+    ];
+    if (parts.isEmpty) return 'Captions only';
+    return 'Captions + ${parts.join(', ')}';
+  }
+
+  String get _teamsReadyValue {
+    if (_awayFilled && _homeFilled) {
+      return '${mlbTeamAbbreviation(_awayTeam!)} @ ${mlbTeamAbbreviation(_homeTeam!)}';
+    }
+    if (_awayFilled) return mlbTeamAbbreviation(_awayTeam!);
+    if (_homeFilled) return mlbTeamAbbreviation(_homeTeam!);
+    return 'Not chosen';
   }
 
   String get _goHint {
@@ -241,6 +265,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   @override
   void dispose() {
+    _cloudPrefsSub?.cancel();
     _rootFocus.dispose();
     _awayFocus.dispose();
     _homeFocus.dispose();
@@ -250,6 +275,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   Future<void> _bootstrap() async {
     try {
       _prefs = await PreferencesService.getInstance();
+      _cloudPrefsSub ??=
+          _prefs!.cloudPreferencesAppliedController.stream.listen((_) {
+        unawaited(_reloadRecentMatchups());
+      });
       // Match legacy StartupDialog: fetch public appDefaults so skip-sign-in
       // users get Firebase verbs, caption styles, IPTC catalog, game IDs.
       await _prefs!.ensureAppDefaultsHydrated();
@@ -261,8 +290,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       }
       _iptcStatus = await _iptcStatusFromPrefs();
       _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
+      await _loadFtpProfiles();
+      _hideFirebar = await _prefs!.getHideFirebar();
       _jerseyOcrEnabled = JerseyOcrChannel.supported &&
           await _prefs!.getJerseyOcrEnabled();
+      _serialBylinesEnabled = await _prefs!.getSerialNumberBylines();
       await _loadCaptionStyles();
       await _refreshIptcCaptionWarning();
       if (!mounted) return;
@@ -299,6 +331,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       final catalog =
           await CaptionStyleCatalog.load(prefs, sport: _sport);
       final template = await prefs.getCaptionTemplate();
+      final nbae = await prefs.getGettyNoteIsNbae();
       // Overlay sport-correct game ID for built-in wires so the side preview
       // never shows a stale league (e.g. NHL during baseball).
       final sportAware = _sportChosen
@@ -313,6 +346,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _styleCatalog = catalog;
         _captionTemplate = sportAware;
         _selectedStyleToken = catalog.activeToken;
+        _gettyNoteIsNbae = nbae;
         _loadingStyles = false;
       });
     } catch (e) {
@@ -450,6 +484,14 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       away = null;
     }
 
+    final recent = _sport == null
+        ? const <MapEntry<String, String>>[]
+        : (await _prefs?.getRecentMatchups(sport: _sport!) ??
+            const <MapEntry<String, String>>[]);
+    final visibleRecent = recent
+        .where((e) => names.contains(e.key) && names.contains(e.value))
+        .toList();
+
     if (!mounted) return;
     setState(() {
       _offline = offline;
@@ -457,6 +499,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _loadingTeams = false;
       _homeTeam = home;
       _awayTeam = away;
+      _recentMatchups = visibleRecent;
       _error = error;
     });
   }
@@ -533,16 +576,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     unawaited(_setFolder(folder));
   }
 
-  Future<void> _toggleFavorite({required bool isHome}) async {
-    final team = isHome ? _homeTeam : _awayTeam;
-    if (team == null || _sport == null || _prefs == null) return;
+  Future<void> _toggleFavoriteTeam(
+    String team, {
+    required bool isHome,
+  }) async {
+    if (_sport == null || _prefs == null) return;
     final favs = await _prefs!.getFavoriteTeams(sport: _sport!);
-    final key = isHome ? 'HOME:$team' : 'AWAY:$team';
     final prefix = isHome ? 'HOME:' : 'AWAY:';
-    favs.removeWhere((e) => e.startsWith(prefix));
     final currently = isHome ? _favoriteHome == team : _favoriteAway == team;
+    favs.removeWhere((e) => e.startsWith(prefix));
     if (!currently) {
-      favs.add(key);
+      favs.add('$prefix$team');
       if (isHome) {
         _favoriteHome = team;
       } else {
@@ -557,6 +601,19 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
     await _prefs!.saveFavoriteTeams(favs, sport: _sport!);
     if (mounted) setState(() {});
+  }
+
+  void _applyRecentMatchup(String away, String home) {
+    if (!_teams.contains(away) || !_teams.contains(home) || away == home) {
+      return;
+    }
+    setState(() {
+      _usingCustomRosters = false;
+      _awayTeam = away;
+      _homeTeam = home;
+      _homeRoster = null;
+      _awayRoster = null;
+    });
   }
 
   Future<void> _setUseOfficialLeagueApis(bool enabled) async {
@@ -684,6 +741,45 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
+  Future<void> _loadFtpProfiles() async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    final profiles = await prefs.getFtpProfiles();
+    final current = await prefs.getCurrentFtpProfile();
+    final names = profiles.keys.toList()..sort();
+    if (!mounted) return;
+    setState(() {
+      _ftpProfileNames = names;
+      _ftpProfileName =
+          current != null && names.contains(current) ? current : null;
+    });
+  }
+
+  Future<void> _pickFtpProfile(BuildContext anchorContext) async {
+    if (_ftpProfileNames.isEmpty) return;
+    final box = anchorContext.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final picked = await showFfMenu<String>(
+      context: anchorContext,
+      anchorGlobal: origin & box.size,
+      width: 220,
+      choices: [
+        for (final name in _ftpProfileNames)
+          FfMenuChoice<String>(
+            value: name,
+            selected: name == _ftpProfileName,
+            child: Text(name),
+          ),
+      ],
+    );
+    final name = picked?.value;
+    if (name == null || name == _ftpProfileName) return;
+    await _prefs?.saveCurrentFtpProfile(name);
+    if (!mounted) return;
+    setState(() => _ftpProfileName = name);
+  }
+
   Future<void> _setFtpMode(bool enabled) async {
     if (enabled == _ftpModeEnabled) return;
     await _prefs?.saveFtpModeEnabled(enabled);
@@ -691,11 +787,26 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     setState(() => _ftpModeEnabled = enabled);
   }
 
+  Future<void> _setFirebarShown(bool shown) async {
+    final hidden = !shown;
+    if (hidden == _hideFirebar) return;
+    await _prefs?.saveHideFirebar(hidden);
+    if (!mounted) return;
+    setState(() => _hideFirebar = hidden);
+  }
+
   Future<void> _setJerseyOcr(bool enabled) async {
     if (enabled == _jerseyOcrEnabled) return;
     await _prefs?.saveJerseyOcrEnabled(enabled);
     if (!mounted) return;
     setState(() => _jerseyOcrEnabled = enabled);
+  }
+
+  Future<void> _setSerialBylines(bool enabled) async {
+    if (enabled == _serialBylinesEnabled) return;
+    await _prefs?.saveSerialNumberBylines(enabled);
+    if (!mounted) return;
+    setState(() => _serialBylinesEnabled = enabled);
   }
 
   Future<void> _openIptc() async {
@@ -789,19 +900,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     await _refreshIptcCaptionWarning();
   }
 
-  void _swapTeams() {
-    setState(() {
-      final tmp = _homeTeam;
-      _homeTeam = _awayTeam;
-      _awayTeam = tmp;
-      final tmpRoster = _homeRoster;
-      _homeRoster = _awayRoster;
-      _awayRoster = tmpRoster;
-      // Favorites stay side-specific; only swap selections.
-      _usingCustomRosters = false;
-    });
-  }
-
   Future<void> _goTime() async {
     if (!_canGo) return;
 
@@ -854,6 +952,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         homeTeam: home,
         awayTeam: away,
       );
+      await _prefs?.pushRecentMatchup(
+        sport: _sport!,
+        away: away,
+        home: home,
+      );
     }
 
     widget.onComplete(
@@ -876,7 +979,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         event.logicalKey != LogicalKeyboardKey.numpadEnter) {
       return KeyEventResult.ignored;
     }
-    if (_awayFocus.hasFocus || _homeFocus.hasFocus) {
+    if (_awayFocus.hasFocus || _homeFocus.hasFocus || _openMenuId != null) {
       return KeyEventResult.ignored;
     }
     if (!_canGo) return KeyEventResult.ignored;
@@ -932,20 +1035,34 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       autofocus: true,
       onKeyEvent: _onKey,
       child: ColoredBox(
-        color: t.bg,
+        color: FfTokens.nocturneBg,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 900;
-            final width = constraints.maxWidth.clamp(0.0, 1200.0);
-            final height = constraints.maxHeight.clamp(0.0, 780.0);
-            return Align(
-              alignment: Alignment.center,
-              child: SizedBox(
-                width: width,
-                height: height,
-                child: wide
-                    ? _buildWideLayout(t)
-                    : _buildNarrowLayout(t),
+            final width = constraints.maxWidth;
+            final twoColumn = width >= 880;
+            final styleColumns = width <= 640 ? 1 : (twoColumn ? 3 : 2);
+            final stackTeams = width <= 640;
+            final contentWidth =
+                width > 1340 ? 1300.0 : (width - 20).clamp(0.0, 1300.0);
+            return Padding(
+              padding: const EdgeInsets.all(10),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  width: contentWidth,
+                  child: twoColumn
+                      ? _buildWideLayout(
+                          t,
+                          styleColumns: styleColumns,
+                          stackTeams: stackTeams,
+                        )
+                      : _buildNarrowLayout(
+                          t,
+                          styleColumns: styleColumns,
+                          stackTeams: stackTeams,
+                        ),
+                ),
               ),
             );
           },
@@ -954,41 +1071,37 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
-  Widget _buildWideLayout(FfTokens t) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-      child: Column(
+  Widget _buildWideLayout(
+    FfTokens t, {
+    required int styleColumns,
+    required bool stackTeams,
+  }) {
+    return SizedBox(
+      height: 750,
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(flex: 60, child: _buildSteps(t)),
-                const SizedBox(width: 16),
-                Expanded(flex: 40, child: _buildSidePanel(t)),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: constraints.maxWidth,
+                    child: _buildSteps(
+                      t,
+                      styleColumns: styleColumns,
+                      stackTeams: stackTeams,
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNarrowLayout(FfTokens t) {
-    // Still no page scroll — stack and let columns share height.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            flex: 3,
-            child: _buildSteps(t),
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            flex: 2,
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 400,
             child: _buildSidePanel(t),
           ),
         ],
@@ -996,78 +1109,76 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     );
   }
 
-  Widget _buildSteps(FfTokens t) {
+  Widget _buildNarrowLayout(
+    FfTokens t, {
+    required int styleColumns,
+    required bool stackTeams,
+  }) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildSteps(
+          t,
+          styleColumns: styleColumns,
+          stackTeams: stackTeams,
+        ),
+        const SizedBox(height: 10),
+        _buildSidePanel(t),
+      ],
+    );
+  }
+
+  Widget _buildSteps(
+    FfTokens t, {
+    required int styleColumns,
+    required bool stackTeams,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Flexible(
-          flex: 2,
-          child: _StepCard(
-            number: 1,
-            title: 'Images folder',
-            complete: _folderChosen,
-            child: _buildFolderStep(t),
+        _buildFolderStep(t),
+        const SizedBox(height: 10),
+        _buildSportStep(t),
+        const SizedBox(height: 10),
+        _StepCard(
+          number: 3,
+          title: 'Teams',
+          complete: _bothTeamsChosen,
+          headerControl: _recentMatchupRow(),
+          expandHeader: _recentMatchups.isNotEmpty,
+          trailing: _LinkButton(
+            label: 'Refresh rosters',
+            icon: PhosphorIconsRegular.arrowClockwise,
+            onPressed: _sportChosen && !_loadingTeams ? _loadTeams : null,
           ),
+          child: _buildTeamsStep(t, stack: stackTeams),
         ),
-        const SizedBox(height: 6),
-        Flexible(
-          flex: 2,
-          child: _StepCard(
-            number: 2,
-            title: 'Sport',
-            complete: _sportChosen,
-            child: _buildSportStep(t),
+        const SizedBox(height: 10),
+        _StepCard(
+          number: 4,
+          title: 'Caption style',
+          complete: _selectedStyleToken != null,
+          headerControl: _styleTabs(),
+          trailing: _LinkButton(
+            label: 'Edit styles',
+            icon: PhosphorIconsRegular.pencilSimple,
+            onPressed: _editStyles,
           ),
+          child: _buildStyleStep(t, columns: styleColumns),
         ),
-        const SizedBox(height: 6),
-        Flexible(
-          flex: 3,
-          child: _StepCard(
-            number: 3,
-            title: 'Teams',
-            complete: _bothTeamsChosen,
-            trailing: _GhostButton(
-              label: 'Refresh rosters',
-              icon: PhosphorIconsRegular.arrowClockwise,
-              onPressed: _sportChosen && !_loadingTeams ? _loadTeams : null,
-            ),
-            child: _buildTeamsStep(t),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Flexible(
-          flex: 3,
-          child: _StepCard(
-            number: 4,
-            title: 'Caption style',
-            complete: _selectedStyleToken != null,
-            trailing: _GhostButton(
-              label: 'Edit styles',
-              onPressed: _editStyles,
-            ),
-            child: _buildStyleStep(t),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Flexible(
-          flex: 3,
-          child: _StepCard(
-            number: 5,
-            title: 'Session options',
-            complete: true,
-            child: _buildSessionStep(t),
-          ),
-        ),
+        const SizedBox(height: 10),
+        _buildSessionStep(t),
         if (_error != null) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
             _error!,
-            maxLines: 1,
+            maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: const TextStyle(
               fontFamily: FfTokens.fontFamily,
-              fontSize: 11.5,
-              color: t.accent,
+              fontSize: 12,
+              color: FfTokens.danger,
             ),
           ),
         ],
@@ -1077,261 +1188,165 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   Widget _buildFolderStep(FfTokens t) {
     final chosen = _folderChosen;
-    final borderColor = _folderDragOver
-        ? t.accent
-        : chosen
-            ? t.divider
-            : const Color(0x38E4EAF2); // rgba(228,234,242,.22)
-    final bg = _folderDragOver ? t.selected : t.sunken;
-
-    final useDashed = !chosen && !_folderDragOver;
-
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: DropTarget(
+    final prompt = chosen
+        ? '${p.basename(_folderPath!)} · ${_imageCount == 1 ? '1 image' : '$_imageCount images'}'
+        : 'Drop a folder here';
+    return DropTarget(
       onDragEntered: (_) => setState(() => _folderDragOver = true),
       onDragExited: (_) => setState(() => _folderDragOver = false),
       onDragDone: _onFolderDropped,
-      child: CustomPaint(
-        painter: useDashed
-            ? _DashedRRectPainter(
-                color: borderColor,
-                radius: 8,
-              )
-            : null,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(8),
-            border: useDashed
-                ? null
-                : Border.all(color: borderColor, width: 1),
+      child: _StepCard(
+        number: 1,
+        title: 'Images folder',
+        complete: chosen,
+        inline: true,
+        highlighted: _folderDragOver,
+        trailing: _RaisedButton(
+          label: _pickingFolder
+              ? 'Opening…'
+              : (chosen ? 'Change' : 'Choose folder'),
+          onPressed: _pickingFolder ? null : _pickFolder,
+        ),
+        child: _DropSlot(
+          emphasized: _folderDragOver,
+          child: Text(
+            prompt,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: chosen ? FfTokens.sessionTx : FfTokens.sessionT2,
+            ),
           ),
-          child: Row(
-          children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: t.elevated,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: t.divider),
-              ),
-              child: PhosphorIcon(PhosphorIconsRegular.folder,
-                size: 16,
-                color: chosen ? FfTokens.statusSaved : t.textSecondary,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: chosen
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          p.basename(_folderPath!),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: t.text,
-                          ),
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          _imageCount == 1
-                              ? '1 image'
-                              : '$_imageCount images',
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 11,
-                            color: t.textTertiary,
-                          ),
-                        ),
-                      ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Drop a folder here',
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w600,
-                            color: t.text,
-                          ),
-                        ),
-                        const SizedBox(height: 1),
-                        Text(
-                          'or choose one from your computer',
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 11,
-                            color: t.textTertiary,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-            const SizedBox(width: 10),
-            _OutlinedAction(
-              label: _pickingFolder
-                  ? 'Opening…'
-                  : (chosen ? 'Change' : 'Choose folder'),
-              onPressed: _pickingFolder ? null : _pickFolder,
-            ),
-          ],
         ),
-        ),
-      ),
       ),
     );
   }
 
   Widget _buildSportStep(FfTokens t) {
-    return Align(
-      alignment: Alignment.topLeft,
-      child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final s in _sports)
-              _SportChip(
-                label: _sportLabel(s),
-                selected: _sport == s,
-                onTap: () => _selectSport(s),
-              ),
-          ],
-        ),
-        if (_sport == 'soccer') ...[
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: Checkbox(
-                  value: true,
-                  onChanged: null,
-                  activeColor: t.accent,
-                  checkColor: t.inkOnAccent,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Always use ESPN MLS rosters for soccer',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 11.5,
-                    color: t.textSecondary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ] else if (_isAdmin) ...[
-          const SizedBox(height: 6),
-          _OptionRow(
-            title: 'Official league APIs',
-            description: _tank01Supported
-                ? 'On: sports/… APIs · Off: Tank01 Firebase (default)'
-                : _apiLabel,
-            value: _useOfficialLeagueApis && _tank01Supported,
+    final soccerNote = _sport == 'soccer'
+        ? const Text(
+            'Always use ESPN MLS rosters for soccer',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 12,
+              color: FfTokens.sessionT3,
+            ),
+          )
+        : null;
+    final apiChoice = _isAdmin && soccerNote == null
+        ? _AttachedChoice(
             enabled: _sportChosen && _tank01Supported,
-            onChanged: _setUseOfficialLeagueApis,
-          ),
-        ],
-      ],
+            selected: (!_tank01Supported || _useOfficialLeagueApis) ? 1 : 0,
+            options: const ['Tank01 APIs', 'Official league APIs'],
+            onSelected: (index) => _setUseOfficialLeagueApis(index == 1),
+          )
+        : null;
+    return _StepCard(
+      number: 2,
+      title: 'Sport',
+      complete: _sportChosen,
+      inline: true,
+      headerControl: SizedBox(
+        width: 180,
+        child: _SessionSelect(
+          value: _sport,
+          hint: 'Select sport…',
+          options: [
+            for (final sport in _sports) (sport, _sportLabel(sport)),
+          ],
+          onChanged: _selectSport,
+        ),
       ),
+      child: apiChoice ?? soccerNote,
     );
   }
 
-  Widget _buildTeamsStep(FfTokens t) {
+  Widget _buildTeamsStep(FfTokens t, {required bool stack}) {
+    final away = _TeamDropdown(
+      menuId: 0,
+      openMenuId: _openMenuId,
+      label: 'Away',
+      value: _awayTeam,
+      teams: _sortedTeams(exclude: _homeTeam),
+      enabled: _sportChosen && !_loadingTeams,
+      sideFavorite: _favoriteAway,
+      favoriteNames: _favoriteTeamNames,
+      focusNode: _awayFocus,
+      hintText: _sportChosen ? 'Select away…' : 'Pick a sport first',
+      onChanged: _setAwayTeam,
+      onToggleFavorite: (team) =>
+          unawaited(_toggleFavoriteTeam(team, isHome: false)),
+      onMenuOpenChanged: (open) => setState(() {
+        _openMenuId = open ? 0 : (_openMenuId == 0 ? null : _openMenuId);
+      }),
+    );
+    final home = _TeamDropdown(
+      menuId: 1,
+      openMenuId: _openMenuId,
+      label: 'Home',
+      value: _homeTeam,
+      teams: _sortedTeams(exclude: _awayTeam),
+      enabled: _sportChosen && !_loadingTeams,
+      sideFavorite: _favoriteHome,
+      favoriteNames: _favoriteTeamNames,
+      focusNode: _homeFocus,
+      hintText: _sportChosen ? 'Select home…' : 'Pick a sport first',
+      onChanged: _setHomeTeam,
+      onToggleFavorite: (team) =>
+          unawaited(_toggleFavoriteTeam(team, isHome: true)),
+      onMenuOpenChanged: (open) => setState(() {
+        _openMenuId = open ? 1 : (_openMenuId == 1 ? null : _openMenuId);
+      }),
+    );
     return Column(
-      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Expanded(
-              child: _TeamDropdown(
-                label: 'Away',
-                value: _awayTeam,
-                teams: _sortedTeams(exclude: _homeTeam),
-                excludeTeam: _homeTeam,
-                enabled: _sportChosen && !_loadingTeams,
-                favorited:
-                    _awayTeam != null && _favoriteAway == _awayTeam,
-                favoriteNames: _favoriteTeamNames,
-                focusNode: _awayFocus,
-                hintText:
-                    _sportChosen ? 'Select away…' : 'Pick a sport first',
-                onChanged: _setAwayTeam,
-                onToggleFavorite: () => _toggleFavorite(isHome: false),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 8, right: 8, bottom: 2),
-              child: _SwapButton(
-                enabled: _sportChosen,
-                onPressed: _swapTeams,
-              ),
-            ),
-            Expanded(
-              child: _TeamDropdown(
-                label: 'Home',
-                value: _homeTeam,
-                teams: _sortedTeams(exclude: _awayTeam),
-                excludeTeam: _awayTeam,
-                enabled: _sportChosen && !_loadingTeams,
-                favorited:
-                    _homeTeam != null && _favoriteHome == _homeTeam,
-                favoriteNames: _favoriteTeamNames,
-                focusNode: _homeFocus,
-                hintText:
-                    _sportChosen ? 'Select home…' : 'Pick a sport first',
-                onChanged: _setHomeTeam,
-                onToggleFavorite: () => _toggleFavorite(isHome: true),
-              ),
-            ),
-          ],
-        ),
+        if (stack)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              away,
+              const SizedBox(height: 8),
+              home,
+            ],
+          )
+        else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(child: away),
+              const SizedBox(width: 10),
+              Expanded(child: home),
+            ],
+          ),
         if (_loadingTeams && availableTeamsEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
+          const SizedBox(height: 8),
+          const Text(
             'Loading team list…',
             style: TextStyle(
               fontFamily: FfTokens.fontFamily,
-              fontSize: 11,
-              color: t.textTertiary,
+              fontSize: 12,
+              color: FfTokens.sessionT3,
             ),
           ),
         ],
         if (_offline && _sportChosen) ...[
-          const SizedBox(height: 6),
-          Text(
+          const SizedBox(height: 8),
+          const Text(
             'Offline list',
             style: TextStyle(
               fontFamily: FfTokens.fontFamily,
-              fontSize: 11,
-              color: t.textTertiary,
+              fontSize: 12,
+              color: FfTokens.sessionT3,
             ),
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         _PasteRosterButton(
           enabled: _sportChosen,
           pastedCount: _usingCustomRosters
@@ -1345,174 +1360,285 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   bool get availableTeamsEmpty => _teams.isEmpty;
 
-  Widget _buildStyleStep(FfTokens t) {
+  Future<void> _reloadRecentMatchups() async {
+    final sport = _sport;
+    final prefs = _prefs;
+    if (sport == null || prefs == null) return;
+    final names = _teams.toSet();
+    final recent = await prefs.getRecentMatchups(sport: sport);
+    final visible = recent
+        .where((e) => names.contains(e.key) && names.contains(e.value))
+        .toList();
+    if (!mounted) return;
+    setState(() => _recentMatchups = visible);
+  }
+
+  Widget? _recentMatchupRow() {
+    if (_recentMatchups.isEmpty) return null;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text(
+          'Recent',
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 12,
+            color: FfTokens.sessionT3,
+          ),
+        ),
+        const SizedBox(width: 8),
+        for (var i = 0; i < _recentMatchups.length; i++) ...[
+          if (i > 0) const SizedBox(width: 6),
+          _MatchupChip(
+            label:
+                '${mlbTeamAbbreviation(_recentMatchups[i].key)} @ ${mlbTeamAbbreviation(_recentMatchups[i].value)}',
+            onPressed: () => _applyRecentMatchup(
+              _recentMatchups[i].key,
+              _recentMatchups[i].value,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _setNbae(bool next) async {
+    setState(() => _gettyNoteIsNbae = next);
+    final prefs = _prefs ?? await PreferencesService.getInstance();
+    await prefs.saveGettyNoteIsNbae(next);
+  }
+
+  String _styleSubtitle(String token) {
+    switch (token) {
+      case CaptionStyleCatalog.tokGetty:
+      case CaptionStyleCatalog.tokGettyIntl:
+      case CaptionStyleCatalog.tokNbae:
+        return 'Getty Images';
+      case CaptionStyleCatalog.tokAp:
+        return 'Associated Press';
+      case CaptionStyleCatalog.tokImagn:
+        return 'Imagn';
+      case CaptionStyleCatalog.tokCp:
+        return 'The Canadian Press';
+      case CaptionStyleCatalog.tokCustom:
+        return 'My layout';
+      default:
+        return 'Saved layout';
+    }
+  }
+
+  Widget _styleTabs() {
+    final token = _selectedStyleToken;
+    final onCustom = _styleTabCustom ??
+        (token != null && CaptionStyleCatalog.isCustomMenuToken(token));
+    return _AttachedChoice(
+      expand: false,
+      selected: onCustom ? 1 : 0,
+      options: const ['Wire Style Defaults', 'Custom'],
+      onSelected: (index) => setState(() => _styleTabCustom = index == 1),
+    );
+  }
+
+  Widget _buildStyleStep(FfTokens t, {required int columns}) {
     if (_loadingStyles) {
       return const Center(
         child: SizedBox(
           width: 16,
           height: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: FfTokens.sessionT3,
+          ),
         ),
       );
     }
     final catalog = _styleCatalog;
     if (catalog == null) return const SizedBox.shrink();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Align(
-          alignment: Alignment.topLeft,
-          child: Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final opt in catalog.options)
-                SizedBox(
-                  width: _styleCardWidth(constraints.maxWidth),
-                  child: _StyleCard(
-                    name: opt.label,
-                    description: _styleDescription(opt.token, opt.label),
-                    selected: _selectedStyleToken == opt.token,
-                    onTap: () => _selectStyle(opt.token),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+    final gettyBasketball = (_sport ?? '').toLowerCase() == 'basketball' &&
+        (_selectedStyleToken == CaptionStyleCatalog.tokGetty ||
+            _selectedStyleToken == CaptionStyleCatalog.tokGettyIntl);
+    final tokens = catalog.options.map((option) => option.token).toList();
+    if (tokens.isEmpty) return const SizedBox.shrink();
+    final current = tokens.contains(_selectedStyleToken)
+        ? _selectedStyleToken!
+        : tokens.first;
+    final onCustom =
+        _styleTabCustom ?? CaptionStyleCatalog.isCustomMenuToken(current);
+    final visible = [
+      for (final token in tokens)
+        if (CaptionStyleCatalog.isCustomMenuToken(token) == onCustom) token,
+    ];
 
-  double _styleCardWidth(double maxWidth) {
-    // Approximate CSS: repeat(auto-fill, minmax(150px, 1fr))
-    const gap = 8.0;
-    const min = 150.0;
-    final cols = ((maxWidth + gap) / (min + gap)).floor().clamp(1, 4);
-    return (maxWidth - gap * (cols - 1)) / cols;
-  }
-
-  String _styleDescription(String token, String label) {
-    final lower = label.toLowerCase();
-    if (token == CaptionStyleCatalog.tokGetty ||
-        token == CaptionStyleCatalog.tokGettyIntl) {
-      return 'Dateline, full sentence, credit';
-    }
-    if (token == CaptionStyleCatalog.tokAp ||
-        token == CaptionStyleCatalog.tokCp) {
-      return 'City (STATE) — shorter form';
-    }
-    if (lower.contains('short')) {
-      return 'Name and action only';
-    }
-    if (token == CaptionStyleCatalog.tokImagn) {
-      return 'Agency wire style';
-    }
-    if (token.startsWith('saved:')) {
-      return 'Custom saved layout';
-    }
-    return 'Custom caption layout';
-  }
-
-  Widget _buildSessionStep(FfTokens t) {
-    return Align(
-      alignment: Alignment.topCenter,
-      child: Column(
-      mainAxisSize: MainAxisSize.min,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _OptionRow(
-          title: 'Write IPTC',
-          description: (_missingCaptionIptc.isNotEmpty && !_scanningIptc)
-              ? (_iptcWarningText ??
-                  "Embed the caption in each image's metadata")
-              : "Embed the caption in each image's metadata",
-          value: _writeIptc,
-          onChanged: _setWriteIptc,
-          trailing: _GhostButton(
-            label: 'Edit IPTC',
-            onPressed: _folderChosen || _writeIptc ? _openIptc : null,
+        if (visible.isEmpty)
+          const Text(
+            'No styles in this tab.',
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 12,
+              color: FfTokens.sessionT3,
+            ),
+          )
+        else
+          LayoutBuilder(
+            builder: (context, constraints) {
+              const gap = 8.0;
+              final cols = columns.clamp(1, visible.length);
+              final tileWidth =
+                  (constraints.maxWidth - gap * (cols - 1)) / cols;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  for (final token in visible)
+                    SizedBox(
+                      width: tileWidth,
+                      child: _StyleCard(
+                        token: token,
+                        title: catalog.labelFor(token),
+                        subtitle: _styleSubtitle(token),
+                        selected: token == current,
+                        onPressed: () => unawaited(_selectStyle(token)),
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
-          warning: _missingCaptionIptc.isNotEmpty && !_scanningIptc,
-        ),
-        const SizedBox(height: 6),
-        _OptionRow(
-          title: 'FTP Mode',
-          description: 'Adds an FTP button to send images as you go',
-          value: _ftpModeEnabled,
-          onChanged: _setFtpMode,
-        ),
-        if (JerseyOcrChannel.supported) ...[
-          const SizedBox(height: 6),
+        if (gettyBasketball) ...[
+          const SizedBox(height: 12),
           _OptionRow(
-            title: 'Text Recognition',
-            description:
-                'Reads jersey numbers and names, and pre-loads the folder '
-                'in the background so each frame is ready',
-            value: _jerseyOcrEnabled,
-            onChanged: _setJerseyOcr,
+            title: 'NBAE credit',
+            description: 'Uses the NBAE copyright line on the note to user',
+            value: _gettyNoteIsNbae,
+            onChanged: (next) => unawaited(_setNbae(next)),
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildSessionStep(FfTokens t) {
+    final iptcWarning = _missingCaptionIptc.isNotEmpty && !_scanningIptc;
+    final cards = <Widget>[
+      _SessionOptionCard(
+        icon: PhosphorIconsRegular.uploadSimple,
+        title: (_ftpProfileName == null || _ftpProfileName!.isEmpty)
+            ? 'No FTP profile'
+            : 'FTP: $_ftpProfileName',
+        description: 'Sends images with this profile',
+        value: _ftpModeEnabled,
+        onChanged: (next) => unawaited(_setFtpMode(next)),
+        onTitleTap: _ftpProfileNames.isEmpty ? null : _pickFtpProfile,
+      ),
+      if (JerseyOcrChannel.supported)
+        _SessionOptionCard(
+          icon: PhosphorIconsRegular.scan,
+          title: 'Text recognition',
+          description: 'Reads jersey numbers and names in the background',
+          value: _jerseyOcrEnabled,
+          onChanged: (next) => unawaited(_setJerseyOcr(next)),
+        ),
+      _SessionOptionCard(
+        icon: PhosphorIconsRegular.lightning,
+        title: 'Firebar',
+        description: 'Keeps the quick-caption bar pinned while you work',
+        value: !_hideFirebar,
+        onChanged: (next) => unawaited(_setFirebarShown(next)),
+      ),
+      _SessionOptionCard(
+        icon: PhosphorIconsRegular.hash,
+        title: 'Serial numbers',
+        description: 'Writes the byline according to serial numbers from cameras',
+        value: _serialBylinesEnabled,
+        onChanged: (next) => unawaited(_setSerialBylines(next)),
+      ),
+    ];
+    return _StepCard(
+      number: 5,
+      title: 'Session options',
+      complete: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _SessionLeadOption(
+            icon: PhosphorIconsRegular.pencilSimple,
+            title: 'Write IPTC',
+            description: iptcWarning
+                ? (_iptcWarningText ??
+                    "Embed the caption in each image's metadata")
+                : "Embed the caption in each image's metadata",
+            warn: iptcWarning,
+            value: _writeIptc,
+            onChanged: (next) => unawaited(_setWriteIptc(next)),
+            trailing: _writeIptc
+                ? _LinkButton(
+                    label: 'Edit IPTC',
+                    onPressed: _openIptc,
+                  )
+                : null,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                Expanded(child: cards[i]),
+              ],
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildSidePanel(FfTokens t) {
+    final note = _iptcWarningText;
+    final noteIsWarning = note != null &&
+        _missingCaptionIptc.isNotEmpty &&
+        !_scanningIptc;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Expanded(
           child: _SideCard(
+            expand: true,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
+                const Text(
                   'CAPTION PREVIEW',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 1.1,
-                    color: t.textTertiary,
-                  ),
+                  style: _kSectionLabel,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 12),
                 Expanded(
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: _CaptionPreviewLive(
-                      sport: _sport,
-                      awayTeam: _awayTeam,
-                      homeTeam: _homeTeam,
-                      template: _captionTemplate,
-                    ),
+                  child: _CaptionPreviewLive(
+                    sport: _sport,
+                    awayTeam: _awayTeam,
+                    homeTeam: _homeTeam,
+                    template: _captionTemplate,
+                    gettyNbaeNote: _gettyNoteIsNbae &&
+                        (_sport ?? '').toLowerCase() == 'basketball',
                   ),
                 ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         _SideCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'READY CHECK',
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 1.1,
-                  color: t.textTertiary,
-                ),
-              ),
-              const SizedBox(height: 6),
+              const Text('READY CHECK', style: _kSectionLabel),
+              const SizedBox(height: 12),
               _ReadyRow(
                 label: 'Folder',
-                value: _folderChosen
-                    ? p.basename(_folderPath!)
-                    : 'Not chosen',
+                value: _folderChosen ? p.basename(_folderPath!) : 'Not chosen',
                 done: _folderChosen,
               ),
               _ReadyRow(
@@ -1521,14 +1647,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 done: _sportChosen,
               ),
               _ReadyRow(
-                label: 'Away',
-                value: _awayTeam ?? 'Not chosen',
-                done: _awayTeam != null && _awayTeam!.trim().isNotEmpty,
-              ),
-              _ReadyRow(
-                label: 'Home',
-                value: _homeTeam ?? 'Not chosen',
-                done: _homeTeam != null && _homeTeam!.trim().isNotEmpty,
+                label: 'Teams',
+                value: _teamsReadyValue,
+                done: _bothTeamsChosen,
               ),
               _ReadyRow(
                 label: 'Style',
@@ -1542,37 +1663,22 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 value: _outputLabel,
                 done: true,
               ),
-              if (_folderChosen)
-                _ReadyRow(
-                  label: 'IPTC',
-                  value: _scanningIptc
-                      ? 'Scanning folder…'
-                      : (_missingCaptionIptc.isEmpty
-                          ? 'Caption fields ready'
-                          : 'Missing ${_missingCaptionIptc.join(', ')}'),
-                  done: !_scanningIptc && _missingCaptionIptc.isEmpty,
-                  warning: !_scanningIptc && _missingCaptionIptc.isNotEmpty,
-                ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               _GoTimeButton(
                 enabled: _canGo,
                 loading: _going,
                 onPressed: _goTime,
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
               Text(
-                _iptcWarningText ?? _goHint,
+                note ??
+                    (_canGo ? 'Opens the captioning screen' : _goHint),
                 textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
-                  fontSize: 11,
-                  color: (_iptcWarningText != null &&
-                          _missingCaptionIptc.isNotEmpty &&
-                          !_scanningIptc)
-                      ? FfTokens.danger
-                      : t.textTertiary,
+                  fontSize: 12,
+                  height: 1.4,
+                  color: noteIsWarning ? FfTokens.danger : FfTokens.sessionT3,
                 ),
               ),
             ],
@@ -1759,12 +1865,14 @@ class _CaptionPreviewLive extends StatelessWidget {
     required this.awayTeam,
     required this.homeTeam,
     required this.template,
+    required this.gettyNbaeNote,
   });
 
   final String? sport;
   final String? awayTeam;
   final String? homeTeam;
   final CaptionTemplate? template;
+  final bool gettyNbaeNote;
 
   static const _awayPlaceholder = 'Away team';
   static const _homePlaceholder = 'Home team';
@@ -1773,7 +1881,6 @@ class _CaptionPreviewLive extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final tpl = template ?? CaptionTemplate.getty();
     final sportKey = (sport ?? '').toLowerCase().trim();
     final hasSport = sportKey.isNotEmpty;
@@ -1826,6 +1933,8 @@ class _CaptionPreviewLive extends StatelessWidget {
         captionOverride:
             '$away #00 Heater Ace $action against the $home $timing',
         sport: hasSport ? sportKey : null,
+        applyGettyNoteVariant: true,
+        gettyNbaeNote: gettyNbaeNote,
       );
     } catch (_) {
       caption =
@@ -1863,23 +1972,25 @@ class _CaptionPreviewLive extends StatelessWidget {
       if (!hasSport) _leaguePlaceholder,
     ];
 
-    return Text.rich(
-      TextSpan(
-        children: _spanCaption(
-          caption,
-          filled: filled,
-          missing: missing,
-          text: t.text,
-          filledColor: t.text,
-          missingColor: t.textTertiary,
-          filledUnderline: t.accentEdge,
-          missingUnderline: const Color(0x6BE4EAF2), // --text-3-ish for dashed
+    return SingleChildScrollView(
+      child: Text.rich(
+        TextSpan(
+          children: _spanCaption(
+            caption,
+            filled: filled,
+            missing: missing,
+            text: FfTokens.sessionTx,
+            hot: FfTokens.sessionHot,
+            missingColor: FfTokens.sessionT3,
+            rule: FfTokens.sessionLn2,
+          ),
         ),
-      ),
-      style: const TextStyle(
-        fontFamily: FfTokens.fontFamily,
-        fontSize: 13.5,
-        height: 1.55,
+        style: const TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 15,
+          height: 1.6,
+          color: FfTokens.sessionTx,
+        ),
       ),
     );
   }
@@ -1932,10 +2043,9 @@ class _CaptionPreviewLive extends StatelessWidget {
     required List<String> filled,
     required List<String> missing,
     required Color text,
-    required Color filledColor,
+    required Color hot,
     required Color missingColor,
-    required Color filledUnderline,
-    required Color missingUnderline,
+    required Color rule,
   }) {
     final markers = <_Mark>[];
     for (final f in filled) {
@@ -1980,14 +2090,19 @@ class _CaptionPreviewLive extends StatelessWidget {
       }
       spans.add(TextSpan(
         text: caption.substring(m.start, m.end),
-        style: TextStyle(
-          color: m.filled ? filledColor : missingColor,
-          fontWeight: m.filled ? FontWeight.w600 : FontWeight.w400,
-          decoration: TextDecoration.underline,
-          decorationStyle: TextDecorationStyle.dashed,
-          decorationColor: m.filled ? filledUnderline : missingUnderline,
-          decorationThickness: 1.25,
-        ),
+        style: m.filled
+            ? TextStyle(
+                color: text,
+                fontWeight: FontWeight.w600,
+                backgroundColor: hot,
+              )
+            : TextStyle(
+                color: missingColor,
+                fontWeight: FontWeight.w400,
+                decoration: TextDecoration.underline,
+                decorationColor: rule,
+                decorationThickness: 1,
+              ),
       ));
       i = m.end;
     }
@@ -2001,46 +2116,6 @@ class _CaptionPreviewLive extends StatelessWidget {
   }
 }
 
-class _DashedRRectPainter extends CustomPainter {
-  const _DashedRRectPainter({
-    required this.color,
-    required this.radius,
-  });
-
-  final Color color;
-  final double radius;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    final rrect = RRect.fromRectAndRadius(
-      Offset.zero & size,
-      Radius.circular(radius),
-    );
-    final path = Path()..addRRect(rrect);
-    for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      const dash = 5.0;
-      const gap = 4.0;
-      while (distance < metric.length) {
-        final next = distance + dash;
-        canvas.drawPath(
-          metric.extractPath(distance, next.clamp(0, metric.length)),
-          paint,
-        );
-        distance = next + gap;
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DashedRRectPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.radius != radius;
-}
-
 class _Mark {
   const _Mark(this.start, this.end, {required this.filled});
   final int start;
@@ -2048,76 +2123,118 @@ class _Mark {
   final bool filled;
 }
 
-// ---------------------------------------------------------------------------
-// Shared chrome widgets
-// ---------------------------------------------------------------------------
+const _kSectionLabel = TextStyle(
+  fontFamily: FfTokens.fontFamily,
+  fontSize: 11,
+  fontWeight: FontWeight.w600,
+  letterSpacing: 0.88,
+  color: FfTokens.sessionT3,
+);
+
+const _kBody = TextStyle(
+  fontFamily: FfTokens.fontFamily,
+  color: FfTokens.sessionTx,
+);
 
 class _StepCard extends StatelessWidget {
   const _StepCard({
     required this.number,
     required this.title,
     required this.complete,
-    required this.child,
+    this.child,
     this.trailing,
+    this.headerControl,
+    this.expandHeader = false,
+    this.inline = false,
+    this.highlighted = false,
   });
 
   final int number;
   final String title;
   final bool complete;
-  final Widget child;
+  final Widget? child;
   final Widget? trailing;
+  final Widget? headerControl;
+  final bool expandHeader;
+  final bool inline;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+    final titleStyle = _kBody.copyWith(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+    );
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      padding: EdgeInsets.fromLTRB(14, inline ? 8 : 14, 14, inline ? 8 : 14),
       decoration: BoxDecoration(
-        color: t.elevated,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: t.accent.withValues(alpha: 0.85)),
-        boxShadow: FfTokens.accentButtonGlow(t.accent),
+        color: highlighted ? FfTokens.nocturneSunken : FfTokens.nocturneEl,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: highlighted ? FfTokens.sessionAc : Colors.transparent,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              _StepBadge(number: number, complete: complete),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: t.text,
-                    shadows: [
-                      Shadow(
-                        color: (complete ? t.accent : t.text)
-                            .withValues(alpha: 0.35),
-                        blurRadius: 6,
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: inline ? 36 : 28),
+            child: SizedBox(
+              height: expandHeader ? 30 : null,
+              child: Row(
+                children: [
+                  _StepBadge(number: number, complete: complete),
+                  const SizedBox(width: 10),
+                  if (inline || expandHeader || headerControl != null)
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: titleStyle,
+                    )
+                  else
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: titleStyle,
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              if (trailing != null) trailing!,
-            ],
-          ),
-          const SizedBox(height: 6),
-          Expanded(
-            child: ClipRect(
-              child: SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: child,
-                ),
+                    ),
+                  if (inline) ...[
+                    const SizedBox(width: 14),
+                    Expanded(child: child ?? const SizedBox.shrink()),
+                  ],
+                  if (expandHeader && headerControl != null) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: headerControl,
+                        ),
+                      ),
+                    ),
+                  ] else if (headerControl != null) ...[
+                    const SizedBox(width: 12),
+                    headerControl!,
+                    if (!inline) const Spacer(),
+                  ],
+                  if (trailing != null) ...[
+                    const SizedBox(width: 10),
+                    trailing!,
+                  ],
+                ],
               ),
             ),
           ),
+          if (!inline && child != null) ...[
+            const SizedBox(height: 10),
+            child!,
+          ],
         ],
       ),
     );
@@ -2132,32 +2249,28 @@ class _StepBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return Container(
-      width: 16,
-      height: 16,
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: complete ? t.selected : Colors.transparent,
-        border: Border.all(
-          color: complete ? t.accent : t.accentEdge,
-        ),
-        boxShadow: complete ? FfTokens.accentButtonGlow(t.accent) : null,
+        color: complete ? FfTokens.sessionOkSoft : FfTokens.nocturneSunken,
       ),
-      alignment: Alignment.center,
       child: complete
-          ? PhosphorIcon(
-              PhosphorIconsRegular.check,
-              size: 8,
-              color: t.accent,
+          ? const PhosphorIcon(
+              PhosphorIconsBold.check,
+              size: 13,
+              color: FfTokens.sessionOk,
             )
           : Text(
               '$number',
-              style: TextStyle(
+              style: const TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: t.textSecondary,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: FfTokens.sessionT2,
+                height: 1,
               ),
             ),
     );
@@ -2165,151 +2278,454 @@ class _StepBadge extends StatelessWidget {
 }
 
 class _SideCard extends StatelessWidget {
-  const _SideCard({required this.child});
+  const _SideCard({required this.child, this.expand = false});
+
   final Widget child;
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      width: double.infinity,
+      height: expand ? double.infinity : null,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       decoration: BoxDecoration(
-        color: t.elevated,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: t.accent.withValues(alpha: 0.85)),
-        boxShadow: FfTokens.accentButtonGlow(t.accent),
+        color: FfTokens.nocturneEl,
+        borderRadius: BorderRadius.circular(12),
       ),
       child: child,
     );
   }
 }
 
-class _SportChip extends StatelessWidget {
-  const _SportChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
+class _DropSlot extends StatelessWidget {
+  const _DropSlot({
+    required this.child,
+    required this.emphasized,
   });
 
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final Widget child;
+  final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: selected ? null : onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          height: 28,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: selected ? t.selected : t.sunken,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: selected ? t.accent : t.divider),
-            boxShadow:
-                selected ? FfTokens.accentButtonGlow(t.accent) : null,
-          ),
-          child: Center(
-            widthFactor: 1,
+    return CustomPaint(
+      painter: _DottedRRectPainter(
+        color: emphasized ? FfTokens.sessionAc : FfTokens.sessionT3,
+        radius: 8,
+      ),
+      child: Container(
+        height: 32,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _DottedRRectPainter extends CustomPainter {
+  const _DottedRRectPainter({
+    required this.color,
+    required this.radius,
+  });
+
+  final Color color;
+  final double radius;
+
+  static const double _dash = 3;
+  static const double _gap = 3;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1
+      ..strokeCap = StrokeCap.round;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(radius),
+        ),
+      );
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final next = distance + _dash;
+        canvas.drawPath(
+          metric.extractPath(distance, next.clamp(0, metric.length)),
+          paint,
+        );
+        distance = next + _gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DottedRRectPainter oldDelegate) {
+    return oldDelegate.color != color || oldDelegate.radius != radius;
+  }
+}
+
+class _SessionSelect extends StatelessWidget {
+  const _SessionSelect({
+    required this.value,
+    required this.hint,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String? value;
+  final String hint;
+  final List<(String, String)> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = value;
+    final label = current == null
+        ? hint
+        : options
+            .where((option) => option.$1 == current)
+            .map((option) => option.$2)
+            .firstOrNull;
+    final hasValue = label != null && current != null;
+    return _Pressable(
+      height: 36,
+      radius: 10,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      color: FfTokens.nocturneSunken,
+      hoverColor: FfTokens.nocturneHv,
+      onPressed: () => _open(context),
+      child: Row(
+        children: [
+          Expanded(
             child: Text(
-              label,
+              hasValue ? label : hint,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.left,
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                color: selected ? t.text : t.textSecondary,
-                shadows: selected
-                    ? [
-                        Shadow(
-                          color: t.accent.withValues(alpha: 0.45),
-                          blurRadius: 6,
-                        ),
-                      ]
-                    : null,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: hasValue ? FfTokens.sessionTx : FfTokens.sessionT3,
               ),
             ),
           ),
+          const SizedBox(width: 8),
+          const PhosphorIcon(
+            PhosphorIconsRegular.caretDown,
+            size: 12,
+            color: FfTokens.sessionT3,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final picked = await showFfMenu<String>(
+      context: context,
+      anchorGlobal: origin & box.size,
+      width: box.size.width < 180 ? 180 : box.size.width,
+      choices: [
+        for (final option in options)
+          FfMenuChoice<String>(
+            value: option.$1,
+            selected: option.$1 == value,
+            child: Text(option.$2),
+          ),
+      ],
+    );
+    if (picked == null) return;
+    final next = picked.value;
+    if (next == null || next == value) return;
+    onChanged(next);
+  }
+}
+
+class _SessionSwitch extends StatelessWidget {
+  const _SessionSwitch({
+    required this.value,
+    required this.onChanged,
+    this.alignment = Alignment.centerRight,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final Alignment alignment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.scale(
+      scale: 0.72,
+      alignment: alignment,
+      child: Switch(
+        value: value,
+        onChanged: onChanged,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        thumbIcon: const WidgetStatePropertyAll(
+          Icon(Icons.circle, size: 0, color: Colors.transparent),
+        ),
+        thumbColor: const WidgetStatePropertyAll(Colors.white),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return FfTokens.nocturneAc;
+          }
+          return FfTokens.nocturneEl;
+        }),
+        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
+      ),
+    );
+  }
+}
+
+class _SessionLeadOption extends StatelessWidget {
+  const _SessionLeadOption({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+    this.warn = false,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool warn;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(2, 2, 2, 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          PhosphorIcon(icon, size: 16, color: FfTokens.sessionT2),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: warn ? FfTokens.danger : FfTokens.sessionTx,
+                      ),
+                    ),
+                    _SessionSwitch(
+                      value: value,
+                      onChanged: onChanged,
+                      alignment: Alignment.centerLeft,
+                    ),
+                    if (trailing != null) trailing!,
+                  ],
+                ),
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    height: 1.3,
+                    color: warn ? FfTokens.danger : FfTokens.sessionT3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SessionOptionCard extends StatelessWidget {
+  const _SessionOptionCard({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+    this.onTitleTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final void Function(BuildContext anchor)? onTitleTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneSunken,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: value ? FfTokens.nocturneAc : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(10, 8, 4, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                PhosphorIcon(
+                  icon,
+                  size: 15,
+                  color: value ? FfTokens.sessionTx : FfTokens.sessionT2,
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Builder(
+                    builder: (context) {
+                      final tappable = onTitleTap != null;
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: tappable ? () => onTitleTap!(context) : null,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontFamily: FfTokens.fontFamily,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: FfTokens.sessionTx,
+                                ),
+                              ),
+                            ),
+                            if (tappable) ...[
+                              const SizedBox(width: 4),
+                              const PhosphorIcon(
+                                PhosphorIconsRegular.caretDown,
+                                size: 12,
+                                color: FfTokens.sessionT3,
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                _SessionSwitch(value: value, onChanged: onChanged),
+              ],
+            ),
+            Text(
+              description,
+              style: const TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                height: 1.3,
+                color: FfTokens.sessionT3,
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _StyleCard extends StatelessWidget {
-  const _StyleCard({
-    required this.name,
-    required this.description,
+class _AttachedChoice extends StatelessWidget {
+  const _AttachedChoice({
+    required this.options,
     required this.selected,
-    required this.onTap,
+    required this.onSelected,
+    this.enabled = true,
+    this.expand = true,
   });
 
-  final String name;
-  final String description;
-  final bool selected;
-  final VoidCallback onTap;
+  final List<String> options;
+  final int selected;
+  final ValueChanged<int> onSelected;
+  final bool enabled;
+  final bool expand;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          decoration: BoxDecoration(
-            color: selected ? t.selected : t.sunken,
-            borderRadius: BorderRadius.circular(7),
-            border: Border.all(color: selected ? t.accent : t.divider),
-            boxShadow:
-                selected ? FfTokens.accentButtonGlow(t.accent) : null,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: t.text,
-                  shadows: selected
-                      ? [
-                          Shadow(
-                            color: t.accent.withValues(alpha: 0.45),
-                            blurRadius: 6,
-                          ),
-                        ]
-                      : null,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                description,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 11,
-                  color: t.textTertiary,
-                ),
-              ),
-            ],
-          ),
-        ),
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: Row(
+        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          for (var i = 0; i < options.length; i++)
+            _choiceSegment(i),
+        ],
       ),
     );
+  }
+
+  Widget _choiceSegment(int i) {
+    final label = Text(
+      options[i],
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        fontFamily: FfTokens.fontFamily,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+      ),
+    );
+    final button = _Pressable(
+      height: 32,
+      radius: 0,
+      padding: expand
+          ? EdgeInsets.zero
+          : const EdgeInsets.symmetric(horizontal: 12),
+      borderRadius: BorderRadius.horizontal(
+        left: i == 0 ? const Radius.circular(10) : Radius.zero,
+        right: i == options.length - 1 ? const Radius.circular(10) : Radius.zero,
+      ),
+      borderColor: i == selected ? FfTokens.nocturneLn2 : Colors.transparent,
+      borderWidth: i == selected ? 1 : 0,
+      color: i == selected ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+      hoverColor: i == selected ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+      hoverForeground: enabled && i != selected,
+      foreground: i == selected ? FfTokens.sessionTx : FfTokens.sessionT2,
+      onPressed: !enabled || i == selected ? null : () => onSelected(i),
+      child: Row(
+        mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (i == selected) ...[
+            const PhosphorIcon(PhosphorIconsBold.check, size: 14),
+            const SizedBox(width: 6),
+          ],
+          if (expand) Flexible(child: label) else label,
+        ],
+      ),
+    );
+    if (!expand) return button;
+    return Expanded(child: button);
   }
 }
 
@@ -2322,6 +2738,8 @@ class _OptionRow extends StatelessWidget {
     this.enabled = true,
     this.trailing,
     this.warning = false,
+    this.padded = false,
+    this.divider = false,
   });
 
   final String title;
@@ -2331,61 +2749,68 @@ class _OptionRow extends StatelessWidget {
   final bool enabled;
   final Widget? trailing;
   final bool warning;
+  final bool padded;
+  final bool divider;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final titleColor = enabled ? t.text : t.textSecondary;
-    final descColor = warning
-        ? FfTokens.danger
-        : (enabled ? t.textTertiary : t.textTertiary);
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                  height: 1.15,
-                  color: titleColor,
+    return Container(
+      padding: padded ? const EdgeInsets.symmetric(vertical: 10) : null,
+      decoration: divider
+          ? const BoxDecoration(
+              border: Border(top: BorderSide(color: FfTokens.sessionLn)),
+            )
+          : null,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    height: 1.2,
+                    color: enabled ? FfTokens.sessionTx : FfTokens.sessionT3,
+                  ),
                 ),
-              ),
-              Text(
-                description,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 11,
-                  height: 1.2,
-                  color: descColor,
+                Text(
+                  description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    height: 1.3,
+                    color: warning ? FfTokens.danger : FfTokens.sessionT3,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        if (trailing != null) ...[
-          trailing!,
-          const SizedBox(width: 8),
+          if (trailing != null) ...[
+            const SizedBox(width: 12),
+            trailing!,
+          ],
+          const SizedBox(width: 12),
+          _Switch36(
+            value: value,
+            enabled: enabled,
+            onChanged: onChanged,
+          ),
         ],
-        _Switch38(
-          value: value,
-          enabled: enabled,
-          onChanged: onChanged,
-        ),
-      ],
+      ),
     );
   }
 }
 
-class _Switch38 extends StatelessWidget {
-  const _Switch38({
+class _Switch36 extends StatelessWidget {
+  const _Switch36({
     required this.value,
     required this.onChanged,
     this.enabled = true,
@@ -2397,23 +2822,20 @@ class _Switch38 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return Opacity(
       opacity: enabled ? 1 : 0.45,
       child: MouseRegion(
-        cursor:
-            enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
         child: GestureDetector(
           onTap: enabled ? () => onChanged(!value) : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            width: 38,
+            width: 36,
             height: 22,
-            padding: const EdgeInsets.all(2),
+            padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              // Off = --hv track; on = --ac track.
-              color: value ? t.accent : t.hover,
-              borderRadius: BorderRadius.circular(11),
+              color: value ? FfTokens.sessionOn : FfTokens.nocturneHv,
+              borderRadius: BorderRadius.circular(99),
             ),
             alignment: value ? Alignment.centerRight : Alignment.centerLeft,
             child: Container(
@@ -2421,8 +2843,7 @@ class _Switch38 extends StatelessWidget {
               height: 16,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                // On = --bg knob; off = muted knob.
-                color: value ? t.bg : t.textTertiary,
+                color: value ? FfTokens.nocturneBg : FfTokens.sessionT3,
               ),
             ),
           ),
@@ -2432,150 +2853,304 @@ class _Switch38 extends StatelessWidget {
   }
 }
 
-class _TeamDropdown extends StatelessWidget {
+class _TeamDropdown extends StatefulWidget {
   const _TeamDropdown({
+    required this.menuId,
+    required this.openMenuId,
     required this.label,
     required this.value,
     required this.teams,
-    this.excludeTeam,
     required this.enabled,
-    required this.favorited,
+    required this.sideFavorite,
     required this.favoriteNames,
     required this.hintText,
     required this.onChanged,
     required this.onToggleFavorite,
+    required this.onMenuOpenChanged,
     required this.focusNode,
   });
 
+  final int menuId;
+  final int? openMenuId;
   final String label;
   final String? value;
   final List<String> teams;
-  final String? excludeTeam;
   final bool enabled;
-  final bool favorited;
+  final String? sideFavorite;
   final Set<String> favoriteNames;
   final String hintText;
   final ValueChanged<String?> onChanged;
-  final VoidCallback onToggleFavorite;
+  final ValueChanged<String> onToggleFavorite;
+  final ValueChanged<bool> onMenuOpenChanged;
   final FocusNode focusNode;
 
   @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final effective =
-        (value != null && teams.contains(value)) ? value : null;
+  State<_TeamDropdown> createState() => _TeamDropdownState();
+}
 
+class _TeamDropdownState extends State<_TeamDropdown> {
+  final _link = LayerLink();
+  OverlayEntry? _entry;
+  bool _open = false;
+
+  @override
+  void didUpdateWidget(covariant _TeamDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_entry == null) return;
+    final shouldClose = _open && widget.openMenuId != widget.menuId;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _entry == null) return;
+      if (shouldClose) {
+        _remove(notify: false);
+      } else {
+        _entry?.markNeedsBuild();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _remove(notify: false);
+    super.dispose();
+  }
+
+  void _toggle() {
+    if (!widget.enabled) return;
+    if (_open) {
+      _remove(notify: true);
+    } else {
+      _show();
+    }
+  }
+
+  void _show() {
+    final box = context.findRenderObject() as RenderBox?;
+    final width = box?.size.width ?? 240;
+    _entry = OverlayEntry(
+      builder: (context) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () => _remove(notify: true),
+              ),
+            ),
+            CompositedTransformFollower(
+              link: _link,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomLeft,
+              followerAnchor: Alignment.topLeft,
+              offset: const Offset(0, 4),
+              child: SizedBox(
+                width: width,
+                child: _menu(),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    Overlay.of(context).insert(_entry!);
+    _open = true;
+    widget.onMenuOpenChanged(true);
+  }
+
+  void _remove({required bool notify}) {
+    _entry?.remove();
+    _entry = null;
+    final wasOpen = _open;
+    _open = false;
+    if (notify && wasOpen) widget.onMenuOpenChanged(false);
+  }
+
+  Widget _menu() {
+    final favorites =
+        widget.teams.where(widget.favoriteNames.contains).toList();
+    final rest =
+        widget.teams.where((t) => !widget.favoriteNames.contains(t)).toList();
+    return FfMenuSurface(
+      child: ListView(
+          padding: const EdgeInsets.all(6),
+          shrinkWrap: true,
+          primary: false,
+          children: [
+            if (favorites.isNotEmpty) ...[
+              const _MenuHeader('Favorites'),
+              for (final name in favorites) _menuRow(name),
+            ],
+            const _MenuHeader('All teams'),
+            for (final name in rest) _menuRow(name),
+            if (widget.teams.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(10, 8, 10, 8),
+                child: Text(
+                  'No teams yet',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    color: FfTokens.sessionT3,
+                  ),
+                ),
+              ),
+          ],
+        ),
+    );
+  }
+
+  Widget _menuRow(String name) {
+    final favorite = widget.sideFavorite == name;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 1),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: () {
+            widget.onChanged(name);
+            _remove(notify: true);
+          },
+          hoverColor: FfTokens.nocturneHv,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 8, 8),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 36,
+                  child: Text(
+                    mlbTeamAbbreviation(name),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: FfTokens.sessionT2,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _kBody.copyWith(fontSize: 13),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => widget.onToggleFavorite(name),
+                  child: Padding(
+                    padding: const EdgeInsets.all(2),
+                    child: PhosphorIcon(
+                      favorite
+                          ? PhosphorIconsFill.star
+                          : PhosphorIconsRegular.star,
+                      size: 14,
+                      color: favorite ? FfTokens.gold : FfTokens.sessionT3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = widget.value;
+    final hasValue = value != null && value.isNotEmpty;
+    final favorited = hasValue && widget.sideFavorite == value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          label,
-          style: TextStyle(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 12.5,
-            color: t.textSecondary,
-          ),
+          widget.label.toUpperCase(),
+          style: _kSectionLabel,
         ),
-        const SizedBox(height: 4),
-        SizedBox(
-          height: 34,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: t.sunken,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: FfTokens.panelOutline.withValues(alpha: 0.7),
-                    width: 0.5,
-                  ),
-                ),
-                child: Focus(
-                  focusNode: focusNode,
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: FfDropdownButton<String?>(
-                      value: effective,
-                      isExpanded: true,
-                      menuColor: t.elevated,
-                      padding: const EdgeInsets.only(left: 12, right: 4),
-                      hint: Padding(
-                        padding: const EdgeInsets.only(right: 22),
-                        child: Text(
-                          hintText,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 13,
-                            color: t.textTertiary,
-                          ),
+        const SizedBox(height: 6),
+        CompositedTransformTarget(
+          link: _link,
+          child: Focus(
+            focusNode: widget.focusNode,
+            onKeyEvent: (node, event) {
+              if (_open &&
+                  event is KeyDownEvent &&
+                  event.logicalKey == LogicalKeyboardKey.escape) {
+                _remove(notify: true);
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: _Pressable(
+              height: 48,
+              radius: 10,
+              padding: const EdgeInsets.fromLTRB(6, 0, 12, 0),
+              color: FfTokens.nocturneSunken,
+              hoverColor: FfTokens.nocturneHv,
+              onPressed: widget.enabled ? _toggle : null,
+              child: Row(
+                children: [
+                  if (hasValue) ...[
+                    Container(
+                      height: 34,
+                      constraints: const BoxConstraints(minWidth: 44, maxWidth: 72),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: FfTokens.nocturneEl,
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        mlbTeamAbbreviation(value),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.48,
+                          color: FfTokens.sessionTx,
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Expanded(
+                    child: Text(
+                      hasValue ? value : widget.hintText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontFamily: FfTokens.fontFamily,
-                        fontSize: 13,
-                        color: t.text,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: hasValue
+                            ? FfTokens.sessionTx
+                            : FfTokens.sessionT3,
                       ),
-                      items: [
-                        for (final name in teams)
-                          DropdownMenuItem<String?>(
-                            value: name,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 22),
-                          child: Text(
-                            favoriteNames.contains(name) ? '★ $name' : name,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontSize: 13,
-                              color: t.text,
-                            ),
-                          ),
-                        ),
-                          ),
-                      ],
-                      onChanged: enabled && teams.isNotEmpty
-                          ? (v) {
-                              if (v != null &&
-                                  excludeTeam != null &&
-                                  v == excludeTeam) {
-                                return;
-                              }
-                              onChanged(v);
-                            }
-                          : null,
                     ),
                   ),
-                ),
-              ),
-              Positioned(
-                right: 26,
-                top: 0,
-                bottom: 0,
-                child: IconButton(
-                  onPressed: effective == null || !enabled
-                      ? null
-                      : onToggleFavorite,
-                  icon: Text(
-                    favorited ? '★' : '☆',
-                    style: TextStyle(
-                      fontSize: 15,
-                      height: 1,
-                      color: favorited
-                          ? FfTokens.favorites
-                          : t.textTertiary,
+                  if (favorited) ...[
+                    const PhosphorIcon(
+                      PhosphorIconsFill.star,
+                      size: 14,
+                      color: FfTokens.gold,
                     ),
+                    const SizedBox(width: 8),
+                  ],
+                  const PhosphorIcon(
+                    PhosphorIconsRegular.caretDown,
+                    size: 12,
+                    color: FfTokens.sessionT3,
                   ),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                  tooltip: 'Favorite $label team',
-                ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ],
@@ -2583,38 +3158,52 @@ class _TeamDropdown extends StatelessWidget {
   }
 }
 
-class _SwapButton extends StatelessWidget {
-  const _SwapButton({required this.enabled, required this.onPressed});
+class _MenuHeader extends StatelessWidget {
+  const _MenuHeader(this.label);
 
-  final bool enabled;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+      child: Text(
+        label.toUpperCase(),
+        style: const TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+          color: FfTokens.sessionT3,
+        ),
+      ),
+    );
+  }
+}
+
+class _MatchupChip extends StatelessWidget {
+  const _MatchupChip({required this.label, required this.onPressed});
+
+  final String label;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return SizedBox(
-      width: 34,
-      height: 34,
-      child: Material(
-        color: t.sunken,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: t.divider),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '⇄',
-              style: TextStyle(
-                fontSize: 16,
-                color: enabled ? t.text : t.textTertiary,
-              ),
-            ),
-          ),
+    return _Pressable(
+      height: 28,
+      radius: 99,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      color: FfTokens.nocturneSunken,
+      hoverColor: FfTokens.nocturneHv,
+      hoverForeground: true,
+      foreground: FfTokens.sessionT2,
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
@@ -2634,73 +3223,60 @@ class _PasteRosterButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final pasted = pastedCount > 0;
-    final color = enabled ? t.accent : t.textTertiary;
-    return Material(
-      color: enabled ? t.accent.withValues(alpha: 0.12) : t.sunken,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: enabled ? t.accent.withValues(alpha: 0.85) : t.divider,
+    return _Pressable(
+      radius: 10,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      color: FfTokens.nocturneSunken,
+      hoverColor: enabled ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+      onPressed: onPressed,
+      child: Row(
+        children: [
+          PhosphorIcon(
+            PhosphorIconsRegular.clipboardText,
+            size: 18,
+            color: enabled ? FfTokens.sessionT2 : FfTokens.sessionT3,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Paste rosters',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: enabled ? FfTokens.sessionTx : FfTokens.sessionT3,
+                  ),
+                ),
+                Text(
+                  pasted
+                      ? '$pastedCount players pasted'
+                      : 'From a webpage or other source',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    color: pasted ? FfTokens.sessionOk : FfTokens.sessionT3,
+                  ),
+                ),
+              ],
             ),
           ),
-          child: Row(
-            children: [
-              PhosphorIcon(
-                PhosphorIconsRegular.clipboardText,
-                size: 18,
-                color: color,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Paste rosters',
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w600,
-                        color: enabled ? t.text : t.textTertiary,
-                      ),
-                    ),
-                    Text(
-                      pasted
-                          ? '$pastedCount players pasted'
-                          : 'From a webpage or other source',
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 11,
-                        color: pasted ? FfTokens.statusSaved : t.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              PhosphorIcon(
-                PhosphorIconsRegular.caretRight,
-                size: 14,
-                color: color,
-              ),
-            ],
+          const PhosphorIcon(
+            PhosphorIconsRegular.caretRight,
+            size: 14,
+            color: FfTokens.sessionT3,
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-class _GhostButton extends StatelessWidget {
-  const _GhostButton({
+class _LinkButton extends StatelessWidget {
+  const _LinkButton({
     required this.label,
     this.icon,
     this.onPressed,
@@ -2712,81 +3288,177 @@ class _GhostButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final enabled = onPressed != null;
-    return Material(
+    return _Pressable(
+      height: 30,
+      radius: 7,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                PhosphorIcon(
-                  icon!,
-                  size: 14,
-                  color: enabled ? t.textSecondary : t.textTertiary,
-                ),
-                const SizedBox(width: 5),
-              ],
-              Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w500,
-                    color: enabled ? t.textSecondary : t.textTertiary,
-                  ),
-                ),
-              ),
-            ],
+      hoverColor: enabled ? FfTokens.nocturneSunken : Colors.transparent,
+      hoverForeground: enabled,
+      foreground: enabled ? FfTokens.sessionT2 : FfTokens.sessionT3,
+      onPressed: onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            PhosphorIcon(icon!, size: 15),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            label,
+            style: const TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-class _OutlinedAction extends StatelessWidget {
-  const _OutlinedAction({required this.label, this.onPressed});
+class _RaisedButton extends StatelessWidget {
+  const _RaisedButton({required this.label, this.onPressed});
 
   final String label;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final enabled = onPressed != null;
-    return Material(
-      color: t.sunken,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(color: enabled ? t.accentEdge : t.divider),
-            ),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 11.5,
-                fontWeight: FontWeight.w500,
-                color: enabled ? t.text : t.textTertiary,
-              ),
-            ),
-          ),
+    return _Pressable(
+      height: 36,
+      radius: 9,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      color: FfTokens.nocturneSunken,
+      hoverColor: enabled ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: TextStyle(
+          fontFamily: FfTokens.fontFamily,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: enabled ? FfTokens.sessionTx : FfTokens.sessionT3,
+        ),
       ),
     );
+  }
+}
+
+class _StyleCard extends StatelessWidget {
+  const _StyleCard({
+    required this.token,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String token;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final mark = _wordmark(token, title);
+    return _Pressable(
+      radius: 10,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      color: selected ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+      hoverColor: FfTokens.nocturneHv,
+      borderColor: selected ? FfTokens.sessionTx : Colors.transparent,
+      borderWidth: 2,
+      onPressed: onPressed,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            mark.text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: mark.style,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11,
+              letterSpacing: 0.2,
+              color: FfTokens.sessionT3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static ({String text, TextStyle style}) _wordmark(String token, String title) {
+    const base = TextStyle(
+      color: FfTokens.sessionTx,
+      height: 1,
+    );
+    switch (token) {
+      case CaptionStyleCatalog.tokGetty:
+      case CaptionStyleCatalog.tokGettyIntl:
+      case CaptionStyleCatalog.tokNbae:
+        return (
+          text: 'GETTY',
+          style: base.copyWith(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 16,
+            fontWeight: FontWeight.w300,
+            letterSpacing: 4.4,
+          ),
+        );
+      case CaptionStyleCatalog.tokImagn:
+        return (
+          text: 'imagn',
+          style: base.copyWith(
+            fontFamily: 'InterTight',
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.8,
+          ),
+        );
+      case CaptionStyleCatalog.tokAp:
+        return (
+          text: 'AP',
+          style: base.copyWith(
+            fontFamily: 'InterTight',
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.6,
+          ),
+        );
+      case CaptionStyleCatalog.tokCp:
+        return (
+          text: 'CP',
+          style: base.copyWith(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 20,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 5,
+          ),
+        );
+      default:
+        return (
+          text: title,
+          style: base.copyWith(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0.3,
+          ),
+        );
+    }
   }
 }
 
@@ -2795,63 +3467,38 @@ class _ReadyRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.done,
-    this.warning = false,
   });
 
   final String label;
   final String value;
   final bool done;
-  final bool warning;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final markColor = warning
-        ? FfTokens.danger
-        : (done ? t.accent : t.divider);
-    final valueColor = warning
-        ? FfTokens.danger
-        : (done ? t.text : t.textTertiary);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+    return SizedBox(
+      height: 32,
       child: Row(
         children: [
-          Container(
-            width: 11,
-            height: 11,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: markColor),
-              color: done && !warning ? t.selected : Colors.transparent,
-            ),
-            alignment: Alignment.center,
-            child: done && !warning
-                ? PhosphorIcon(
-                    PhosphorIconsRegular.check,
-                    size: 7,
-                    color: t.accent,
-                  )
-                : (warning
-                    ? const PhosphorIcon(
-                        PhosphorIconsRegular.warning,
-                        size: 7,
-                        color: FfTokens.danger,
-                      )
-                    : null),
+          PhosphorIcon(
+            done ? PhosphorIconsFill.checkCircle : PhosphorIconsRegular.circle,
+            size: 16,
+            color: done ? FfTokens.sessionOk : FfTokens.sessionT3,
           ),
-          const SizedBox(width: 8),
-          SizedBox(
-            width: 52,
+          const SizedBox(width: 10),
+          Expanded(
             child: Text(
               label,
-              style: TextStyle(
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 12.5,
-                color: t.textSecondary,
+                fontSize: 13,
+                color: FfTokens.sessionT2,
               ),
             ),
           ),
-          Expanded(
+          const SizedBox(width: 10),
+          Flexible(
             child: Text(
               value,
               maxLines: 1,
@@ -2859,9 +3506,9 @@ class _ReadyRow extends StatelessWidget {
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
-                fontSize: 12.5,
-                fontWeight: done || warning ? FontWeight.w500 : FontWeight.w400,
-                color: valueColor,
+                fontSize: 13,
+                fontWeight: done ? FontWeight.w600 : FontWeight.w500,
+                color: done ? FfTokens.sessionTx : FfTokens.sessionT3,
               ),
             ),
           ),
@@ -2871,7 +3518,7 @@ class _ReadyRow extends StatelessWidget {
   }
 }
 
-class _GoTimeButton extends StatelessWidget {
+class _GoTimeButton extends StatefulWidget {
   const _GoTimeButton({
     required this.enabled,
     required this.loading,
@@ -2883,44 +3530,153 @@ class _GoTimeButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
+  State<_GoTimeButton> createState() => _GoTimeButtonState();
+}
+
+class _GoTimeButtonState extends State<_GoTimeButton> {
+  bool _hover = false;
+
+  @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: enabled ? FfTokens.accentButtonGlow(t.accent) : null,
+    final enabled = widget.enabled && !widget.loading;
+    final bg = !widget.enabled
+        ? FfTokens.nocturneSunken
+        : (_hover ? FfTokens.sessionGoHover : FfTokens.sessionTx);
+    final fg = widget.enabled ? FfTokens.nocturneBg : FfTokens.sessionT3;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: enabled ? widget.onPressed : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: 52,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                widget.loading ? 'Starting…' : 'Go time',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                ),
+              ),
+              if (!widget.loading) ...[
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: widget.enabled
+                        ? FfTokens.sessionKbd
+                        : FfTokens.nocturneHv,
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    '↵',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      height: 1,
+                      color: fg,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
-      child: Material(
-        color: enabled ? t.selected : t.elevated,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: enabled && !loading ? onPressed : null,
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: enabled ? t.accent : t.divider,
-              ),
+    );
+  }
+}
+
+class _Pressable extends StatefulWidget {
+  const _Pressable({
+    required this.child,
+    required this.onPressed,
+    required this.color,
+    required this.hoverColor,
+    this.radius = 9,
+    this.borderRadius,
+    this.height,
+    this.width,
+    this.padding = EdgeInsets.zero,
+    this.borderColor = Colors.transparent,
+    this.borderWidth = 0,
+    this.hoverForeground = false,
+    this.foreground = FfTokens.sessionTx,
+  });
+
+  final Widget child;
+  final VoidCallback? onPressed;
+  final Color color;
+  final Color hoverColor;
+  final double radius;
+  final BorderRadius? borderRadius;
+  final double? height;
+  final double? width;
+  final EdgeInsets padding;
+  final Color borderColor;
+  final double borderWidth;
+  final bool hoverForeground;
+  final Color foreground;
+
+  @override
+  State<_Pressable> createState() => _PressableState();
+}
+
+class _PressableState extends State<_Pressable> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.onPressed != null;
+    final hovering = _hover && enabled;
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: widget.width,
+          height: widget.height,
+          padding: widget.padding,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: hovering && !widget.hoverForeground
+                ? widget.hoverColor
+                : widget.color,
+            borderRadius:
+                widget.borderRadius ?? BorderRadius.circular(widget.radius),
+            border: Border.all(
+              color: widget.borderColor,
+              width: widget.borderWidth,
             ),
-            child: Text(
-              loading ? 'Loading…' : 'Go time ↵',
+          ),
+          child: IconTheme(
+            data: IconThemeData(
+              color: hovering && widget.hoverForeground
+                  ? FfTokens.sessionTx
+                  : widget.foreground,
+            ),
+            child: DefaultTextStyle.merge(
               style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: enabled ? t.text : t.textTertiary,
-                shadows: enabled
-                    ? [
-                        Shadow(
-                          color: t.accent.withValues(alpha: 0.5),
-                          blurRadius: 7,
-                        ),
-                      ]
-                    : null,
+                color: hovering && widget.hoverForeground
+                    ? FfTokens.sessionTx
+                    : widget.foreground,
               ),
+              child: widget.child,
             ),
           ),
         ),

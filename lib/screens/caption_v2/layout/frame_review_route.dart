@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../photo_edit/photo_edit_session.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/oriented_file_preview.dart';
 import '../data/caption_v2_controller.dart';
@@ -13,11 +14,13 @@ class FrameReviewRoute extends StatelessWidget {
   const FrameReviewRoute({
     super.key,
     required this.controller,
+    required this.editSession,
     required this.onSavePrevious,
     required this.onSaveNext,
   });
 
   final CaptionV2Controller controller;
+  final PhotoEditSession editSession;
   final VoidCallback onSavePrevious;
   final VoidCallback onSaveNext;
 
@@ -26,9 +29,10 @@ class FrameReviewRoute extends StatelessWidget {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
 
     return AnimatedBuilder(
-      animation: controller,
+      animation: Listenable.merge([controller, editSession]),
       builder: (context, _) {
         final path = controller.currentPath;
+        final grade = editSession.adjustmentsFor(path);
         return Scaffold(
           backgroundColor: t.bg,
           appBar: AppBar(
@@ -47,7 +51,9 @@ class FrameReviewRoute extends StatelessWidget {
               ),
             ],
           ),
-          body: Column(
+          body: DecoratedBox(
+            decoration: BoxDecoration(gradient: t.groundWash),
+            child: Column(
             children: [
               Expanded(
                 child: path == null
@@ -81,6 +87,10 @@ class FrameReviewRoute extends StatelessWidget {
                               version: controller.imageContentStamp(path),
                               fit: BoxFit.contain,
                               cacheWidth: 1400,
+                              adjustments: grade.isNeutral ? null : grade,
+                              viewCrop: editSession.cropFor(path).isFull
+                                  ? null
+                                  : editSession.cropFor(path),
                             ),
                           ),
                           Positioned(
@@ -145,6 +155,7 @@ class FrameReviewRoute extends StatelessWidget {
                 ),
               ),
             ],
+            ),
           ),
         );
       },

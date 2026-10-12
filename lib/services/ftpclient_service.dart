@@ -186,7 +186,7 @@ class FtpClientService {
     FtpProgressCallback? onProgress,
   }) async {
     Socket? controlSocket;
-    Socket? dataSocket;
+    RawSocket? dataSocket;
     _FtpControlSession? session;
 
     try {
@@ -283,7 +283,7 @@ class FtpClientService {
           _looksPrivate(pasvIp) && !_looksPrivate(host) ? host : pasvIp;
 
       print('FTP: Data connection to $dataHost:$dataPort');
-      dataSocket = await Socket.connect(
+      dataSocket = await RawSocket.connect(
         dataHost,
         dataPort,
         timeout: const Duration(seconds: 15),
@@ -305,24 +305,10 @@ class FtpClientService {
       onProgress?.call('Uploading file...', 0.0, null);
 
       final fileBytes = await localFile.readAsBytes();
-      final totalBytes = fileBytes.length;
-      print('FTP: Sending $totalBytes bytes...');
-
-      const chunkSize = 32768;
-      var uploadedBytes = 0;
-
-      for (var i = 0; i < fileBytes.length; i += chunkSize) {
-        final end = (i + chunkSize < fileBytes.length)
-            ? i + chunkSize
-            : fileBytes.length;
-        dataSocket.add(fileBytes.sublist(i, end));
-
-        uploadedBytes += end - i;
-        final progress = totalBytes == 0 ? 1.0 : uploadedBytes / totalBytes;
+      print('FTP: Sending ${fileBytes.length} bytes...');
+      await _writeFtpData(dataSocket, fileBytes, (progress) {
         onProgress?.call('Uploading file...', progress, null);
-      }
-
-      await dataSocket.flush();
+      });
       await dataSocket.close();
       dataSocket = null;
 
@@ -354,7 +340,7 @@ class FtpClientService {
       );
     } finally {
       await session?.close();
-      dataSocket?.destroy();
+      dataSocket?.close();
       if (controlSocket != null) {
         try {
           controlSocket.write('QUIT\r\n');
@@ -367,6 +353,67 @@ class FtpClientService {
         }
       }
     }
+  }
+}
+
+/// Writes [bytes] as the socket accepts them. Yields between steps so a fast
+/// send still paints the progress bar instead of jumping from empty to done
+/// in a single frame.
+Future<void> _writeFtpData(
+  RawSocket socket,
+  List<int> bytes,
+  void Function(double progress) onProgress,
+) async {
+  final total = bytes.length;
+  if (total == 0) {
+    onProgress(1);
+    return;
+  }
+  var sent = 0;
+  final events = StreamController<RawSocketEvent>();
+  final sub = socket.listen(
+    events.add,
+    onError: events.addError,
+    onDone: events.close,
+  );
+  socket.writeEventsEnabled = true;
+  try {
+    await for (final event in events.stream) {
+      if (event == RawSocketEvent.closed ||
+          event == RawSocketEvent.readClosed) {
+        throw StateError('FTP data connection closed');
+      }
+      if (event != RawSocketEvent.write) continue;
+      var stepSent = 0;
+      var blocked = false;
+      const step = 256 * 1024;
+      while (sent < total && stepSent < step) {
+        final wrote = socket.write(bytes, sent, total - sent);
+        if (wrote == 0) {
+          blocked = true;
+          break;
+        }
+        sent += wrote;
+        stepSent += wrote;
+      }
+      onProgress(sent / total);
+      if (sent >= total) {
+        socket.writeEventsEnabled = false;
+        break;
+      }
+      // A full step that did not block was buffered, not sent. Pause long
+      // enough for a frame so the bar can move.
+      if (!blocked) {
+        await Future<void>.delayed(const Duration(milliseconds: 32));
+      }
+      socket.writeEventsEnabled = true;
+    }
+  } finally {
+    await sub.cancel();
+    if (!events.isClosed) await events.close();
+  }
+  if (sent < total) {
+    throw StateError('FTP data connection closed');
   }
 }
 

@@ -473,6 +473,7 @@ class VerbEditorFooter extends StatelessWidget {
     required this.onDiscard,
     required this.onPublish,
     this.personalMode = false,
+    this.changedVerbs = const [],
   });
 
   final FfTokens tokens;
@@ -481,17 +482,21 @@ class VerbEditorFooter extends StatelessWidget {
   final VoidCallback? onDiscard;
   final VoidCallback? onPublish;
   final bool personalMode;
+  final List<String> changedVerbs;
 
   @override
   Widget build(BuildContext context) {
     final t = tokens;
+    final changed = changedVerbs.join(', ');
     final status = personalMode
         ? (pendingChanges <= 0
             ? 'Saved to your account only — app defaults are unchanged'
             : '$pendingChanges unsaved change${pendingChanges == 1 ? '' : 's'}')
         : (pendingChanges <= 0
             ? 'Everything is published'
-            : '$pendingChanges unpublished change${pendingChanges == 1 ? '' : 's'} — saved as draft, not live until published');
+            : changed.isEmpty
+                ? '$pendingChanges unpublished change${pendingChanges == 1 ? '' : 's'} — saved as draft, not live until published'
+                : 'Changed: $changed');
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -504,10 +509,11 @@ class VerbEditorFooter extends StatelessWidget {
           Expanded(
             child: Text(
               status,
-              softWrap: false,
+              maxLines: changed.isEmpty ? 1 : 2,
               overflow: TextOverflow.ellipsis,
               style: t.microStyle.copyWith(
                 fontSize: 11,
+                height: 1.25,
                 color: t.text.withValues(alpha: 0.55),
               ),
             ),

@@ -418,8 +418,8 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     final size = MediaQuery.sizeOf(context);
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
-      backgroundColor: const Color(0xFFF7F7F7),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      backgroundColor: FfTokens.nocturneBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: SizedBox(
         width: (size.width * 0.72).clamp(640.0, 980.0),
         height: (size.height * 0.82).clamp(480.0, 820.0),
@@ -427,12 +427,13 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
-              height: 42,
+              height: 48,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: const BoxDecoration(
-                color: Color(0xFFFEFEFE),
+                color: FfTokens.nocturneEl,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
                 border: Border(
-                  bottom: BorderSide(color: Color(0xFFE0E0E0)),
+                  bottom: BorderSide(color: FfTokens.sessionLn2),
                 ),
               ),
               child: Row(
@@ -440,28 +441,33 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                   const Text(
                     'IPTC TEMPLATE',
                     style: TextStyle(
-                      fontFamily: 'Inter',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF333333),
-                      letterSpacing: -0.3,
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: FfTokens.sessionT3,
+                      letterSpacing: 0.8,
                     ),
                   ),
                   const Spacer(),
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Cancel'),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        color: FfTokens.sessionT2,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 4),
                   FilledButton(
                     onPressed: _loading ? null : _done,
                     style: FilledButton.styleFrom(
-                      backgroundColor: FfTokens.gold,
-                      foregroundColor: FfTokens.inkOnGold,
+                      backgroundColor: FfTokens.nocturneAc,
+                      foregroundColor: Colors.white,
                       disabledBackgroundColor:
-                          FfTokens.gold.withValues(alpha: 0.4),
-                      disabledForegroundColor:
-                          FfTokens.inkOnGold.withValues(alpha: 0.4),
+                          FfTokens.nocturneAc.withValues(alpha: 0.4),
+                      disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
                     ),
                     child: const Text('Done'),
                   ),
@@ -473,7 +479,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                 width: double.infinity,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                color: const Color(0x14F07167),
+                color: FfTokens.danger.withValues(alpha: 0.12),
                 child: Row(
                   children: [
                     const PhosphorIcon(
@@ -486,8 +492,8 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                       child: Text(
                         'Missing for caption: ${_missingCaptionIptc.join(', ')}',
                         style: const TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 11.5,
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 12,
                           fontWeight: FontWeight.w500,
                           color: FfTokens.danger,
                         ),
@@ -518,6 +524,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                         visibleTemplates: _visibleTemplates,
                         selectedTemplateId: _selectedTemplateId,
                         onTemplateSelected: _onTemplateSelected,
+                        sessionStyle: true,
                         iptcApplyMode: _mode,
                         onIptcApplyModeChanged: _onModeChanged,
                         onLoadTemplate: _loadExternalTemplate,

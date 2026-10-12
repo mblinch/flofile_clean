@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../photo_edit/graded_memory_image.dart';
+import '../photo_edit/photo_adjustments.dart';
+import '../photo_edit/photo_crop.dart';
 import '../utils/oriented_image_bytes.dart';
 
 /// File preview that respects JPEG EXIF orientation (thumbnails, grids).
@@ -14,6 +17,8 @@ class OrientedFilePreview extends StatefulWidget {
     this.version = 0,
     this.filterQuality = FilterQuality.high,
     this.onLoaded,
+    this.adjustments,
+    this.viewCrop,
   });
 
   final String path;
@@ -24,6 +29,12 @@ class OrientedFilePreview extends StatefulWidget {
   final int version;
   final FilterQuality filterQuality;
   final VoidCallback? onLoaded;
+
+  /// Live grade. Null or neutral draws the file unchanged.
+  final PhotoAdjustments? adjustments;
+
+  /// Region of the oriented frame to show. Null is the full photo.
+  final PhotoCrop? viewCrop;
 
   @override
   State<OrientedFilePreview> createState() => _OrientedFilePreviewState();
@@ -103,6 +114,17 @@ class _OrientedFilePreviewState extends State<OrientedFilePreview> {
           height: 20,
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
+      );
+    }
+    final grade = widget.adjustments;
+    final crop = widget.viewCrop ?? PhotoCrop.full;
+    if ((grade != null && !grade.isNeutral) || !crop.isFull) {
+      return GradedMemoryImage(
+        bytes: _bytes!,
+        adjustments: grade ?? PhotoAdjustments.neutral,
+        crop: crop,
+        fit: widget.fit,
+        filterQuality: widget.filterQuality,
       );
     }
     return Image.memory(

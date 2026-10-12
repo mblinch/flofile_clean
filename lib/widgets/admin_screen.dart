@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dropdown_flutter/custom_dropdown.dart';
@@ -59,7 +60,7 @@ class AdminScreen extends StatefulWidget {
     }
     await showDialog<void>(
       context: context,
-      barrierDismissible: true,
+      barrierDismissible: false,
       barrierColor: Colors.black.withValues(alpha: 0.45),
       builder: (_) => AdminScreen(openRosterCompare: openRosterCompare),
     );
@@ -160,6 +161,7 @@ class _AdminScreenState extends State<AdminScreen> {
       _captionSport = sport;
       _compareSport = sport;
       _applyGameIdToCaptionDraft(_captionWire, _captionSport);
+      _captureCaptionBaseline();
       _captionDirty = false;
       _captionBuilderRevision++;
       if (_compareTeamNames.isEmpty) {
@@ -615,16 +617,66 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   bool _captionDirty = false;
+  final Map<WireStyle, String> _captionBaselineJson = {};
+  final Map<WireStyle, String> _gameIdBaselineJson = {};
+
+  String _captionStructureKey(CaptionTemplate template) {
+    final json = Map<String, dynamic>.from(template.toJson());
+    json.remove('gameIdentifierText');
+    return jsonEncode(json);
+  }
+
+  void _captureCaptionBaseline() {
+    _captionBaselineJson
+      ..clear()
+      ..addEntries(
+        _captionDrafts.entries.map(
+          (entry) => MapEntry(entry.key, _captionStructureKey(entry.value)),
+        ),
+      );
+    _gameIdBaselineJson
+      ..clear()
+      ..addEntries(
+        _gameIdDrafts.entries.map(
+          (entry) => MapEntry(entry.key, jsonEncode(entry.value)),
+        ),
+      );
+  }
+
+  int get _captionPendingCount {
+    var count = 0;
+    for (final entry in _captionDrafts.entries) {
+      final structureChanged =
+          _captionStructureKey(entry.value) != _captionBaselineJson[entry.key];
+      final gameIdsChanged = jsonEncode(_gameIdDrafts[entry.key] ?? const {}) !=
+          (_gameIdBaselineJson[entry.key] ?? '{}');
+      if (structureChanged) count++;
+      if (gameIdsChanged) count++;
+    }
+    return count;
+  }
+
+  void _discardCaptionEdits() {
+    _seedCaptionDraftsFromCatalog();
+    _captureCaptionBaseline();
+    setState(() {
+      _captionDirty = false;
+      _captionBuilderRevision++;
+    });
+  }
+  final Map<String, int> _verbPendingBySport = {};
+  bool _adminCloseConfirmed = false;
   Future<void> Function()? _setAllCaptionDefaults;
 
   void _onCaptionDraftChanged(WireStyle wire, CaptionTemplate template) {
     _captionDrafts[wire] = template.copyWith(wireStyle: wire);
     _stashGameIdFromTemplate(wire, template);
-    if (!_captionDirty && mounted) {
-      setState(() => _captionDirty = true);
-    } else {
-      _captionDirty = true;
+    final pending = _captionPendingCount > 0;
+    if (!mounted) {
+      _captionDirty = pending;
+      return;
     }
+    setState(() => _captionDirty = pending);
   }
 
   Future<void> _onCaptionSportChanged(String sport) async {
@@ -661,16 +713,18 @@ class _AdminScreenState extends State<AdminScreen> {
     _applyGameIdToCaptionDraft(_captionWire, _captionSport);
   }
 
-  void _discardCaptionDrafts() {
-    setState(() {
-      _seedCaptionDraftsFromCatalog();
-      _captionDirty = false;
-      _captionBuilderRevision++;
-    });
+  Future<void> _setCaptionStructuresAsDefaults() async {
+    await _publishCaptions(saveLocalDefaults: true);
   }
 
-  Future<void> _setCaptionStructuresAsDefaults() async {
-    await _publishCaptions(allWires: true, saveLocalDefaults: true);
+  Future<void> _saveCurrentCaptionWireDefault() async {
+    final template = _captionDrafts[_captionWire] ??
+        AppDefaultsFirestoreService.factoryCaptionForWire(_captionWire);
+    final prefs = await PreferencesService.getInstance();
+    await prefs.saveCaptionTemplateWireDefault(
+      _captionWire,
+      template.copyWith(wireStyle: _captionWire),
+    );
   }
 
   Map<String, Map<String, String>> _gameIdDraftsForFirestore() {
@@ -900,21 +954,27 @@ class _AdminScreenState extends State<AdminScreen> {
     bool allWires = false,
     bool saveLocalDefaults = false,
   }) async {
+    final wireLabel = WireIptcSpecs.factoryWireLabel(_captionWire);
     final ok = await _confirmAdminPublish(
       title: allWires
-          ? 'Publish all caption structures?'
-          : 'Publish caption structure?',
+          ? 'Publish caption defaults?'
+          : 'Publish caption default?',
       message: allWires
-          ? 'Updates every wire caption layout in Firebase app originals.'
-          : 'Updates ${WireIptcSpecs.factoryWireLabel(_captionWire)} in Firebase.',
+          ? 'Saves every wire caption layout to Firebase app originals.'
+          : 'Saves the $wireLabel caption structure to Firebase app originals.',
+      confirmLabel: 'Publish',
     );
     if (!ok) return;
     setState(() => _busy = true);
     try {
-      if (saveLocalDefaults) {
-        await _setAllCaptionDefaults?.call();
-      }
       await _flushCaptionBuilderDrafts();
+      if (saveLocalDefaults) {
+        if (allWires) {
+          await _setAllCaptionDefaults?.call();
+        } else {
+          await _saveCurrentCaptionWireDefault();
+        }
+      }
       final wires = allWires
           ? AppDefaultsFirestoreService.captionWireStyles
           : [_captionWire];
@@ -946,19 +1006,17 @@ class _AdminScreenState extends State<AdminScreen> {
               template.gameIdentifierText,
           gameIdentifierSport: _captionSport,
         );
-        await AppDefaultsFirestoreService.publishGameIdentifierByWireAndSport(
-          _gameIdDraftsForFirestore(),
-        );
       }
+      await _applyPublishedCaptionToWorkingTemplate();
       if (!mounted) return;
+      _captureCaptionBaseline();
       setState(() => _captionDirty = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             allWires
                 ? 'Published all caption structures.'
-                : 'Published caption structure for '
-                    '${WireIptcSpecs.factoryWireLabel(_captionWire)}.',
+                : 'Published the $wireLabel caption structure.',
           ),
           backgroundColor: kFloTealLight,
         ),
@@ -974,49 +1032,44 @@ class _AdminScreenState extends State<AdminScreen> {
     }
   }
 
-  Future<void> _publishCaptionStyleLibrary() async {
+  /// New captions read the active local template, not the Firebase wire
+  /// original. After a publish, copy that original onto the working template
+  /// when it is a built-in wire or an unnamed custom layout. Named library
+  /// styles stay as saved.
+  Future<void> _applyPublishedCaptionToWorkingTemplate() async {
     final prefs = await PreferencesService.getInstance();
-    final library = await prefs.getCaptionStyleLibrary();
-    if (library.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No saved caption styles to publish.'),
-        ),
-      );
+    final active = await prefs.getCaptionTemplateRaw();
+    if (active.id.startsWith('saved_') || active.id.startsWith('saved:')) {
       return;
     }
-    final ok = await _confirmAdminPublish(
-      title: 'Publish caption style library?',
-      message:
-          'Pushes ${library.length} saved style(s) to Firebase as the default '
-          'starter library for new users. Existing users who have never saved '
-          'a custom style will also receive these on next launch.',
-    );
-    if (!ok) return;
-    setState(() => _busy = true);
-    try {
-      await AppDefaultsFirestoreService.publishCaptionStyleLibrary(
-        library.map((e) => e.toJson()).toList(),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Published ${library.length} caption style(s).'),
-          backgroundColor: kFloTealLight,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Publish failed: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
+    final library = await prefs.getCaptionStyleLibrary();
+    for (final entry in library) {
+      if (entry.id == active.id) return;
     }
+
+    final sourceWire = active.wireStyle == WireStyle.custom
+        ? _captionWire
+        : active.wireStyle;
+    if (sourceWire != _captionWire) return;
+    final published = _captionDrafts[sourceWire];
+    if (published == null) return;
+
+    final keepCustom = active.wireStyle == WireStyle.custom;
+    final sport = await prefs.getCurrentSport();
+    var next = published.copyWith(
+      id: keepCustom ? active.id : published.id,
+      name: keepCustom ? active.name : published.name,
+      wireStyle: keepCustom ? WireStyle.custom : sourceWire,
+      includeTimingPhrase: active.includeTimingPhrase,
+      showKeywordsField: active.showKeywordsField,
+      showPersonalityField: active.showPersonalityField,
+    );
+    next = await prefs.applyGameIdentifierForSport(
+      next,
+      keepCustom ? next.wireStyle : sourceWire,
+      sport,
+    );
+    await prefs.saveCaptionTemplate(next);
   }
 
   List<String> _categoryOrder(Map<String, dynamic> bundle, String sport) {
@@ -1606,6 +1659,7 @@ class _AdminScreenState extends State<AdminScreen> {
       onBundleChanged: _onAdminVerbBundleChanged,
       onPublishCurrentVerb: _publishCurrentVerb,
       onWriteSportDefaults: _writeActiveVerbBundleAsDefaults,
+      onPendingChanges: _onVerbPendingChanges,
     );
   }
 
@@ -1634,15 +1688,17 @@ class _AdminScreenState extends State<AdminScreen> {
             onRegisterSetAllDefaults: (setAll) => _setAllCaptionDefaults = setAll,
           ),
         ),
+        _buildFooter(t),
       ],
     );
   }
 
   Widget _buildFooter(FfTokens t) {
-    if (_section != _AdminSection.captionStructures) {
-      return const SizedBox.shrink();
-    }
-    final canDiscard = _captionDirty && !_busy;
+    final count = _captionPendingCount;
+    final pending = count > 0 && !_busy;
+    final status = count <= 0
+        ? 'Everything is published'
+        : '$count unpublished change${count == 1 ? '' : 's'}, not live until published';
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1654,52 +1710,84 @@ class _AdminScreenState extends State<AdminScreen> {
         children: [
           Expanded(
             child: Text(
-              _captionDirty
-                  ? 'Unpublished changes — not live until you set them as defaults'
-                  : 'Everything is published',
-              softWrap: false,
+              status,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              softWrap: false,
               style: t.microStyle.copyWith(
                 fontSize: 11,
+                height: 1.25,
                 color: t.text.withValues(alpha: 0.55),
               ),
             ),
           ),
           TextButton(
-            onPressed: _busy ? null : _publishCaptionStyleLibrary,
-            child: Text(
-              'Style library',
-              style: t.metaStyle.copyWith(
-                color: t.text.withValues(alpha: _busy ? 0.28 : 0.7),
-              ),
-            ),
-          ),
-          TextButton(
-            onPressed: canDiscard ? _discardCaptionDrafts : null,
+            onPressed: pending ? _discardCaptionEdits : null,
             child: Text(
               'Discard',
+              softWrap: false,
               style: t.metaStyle.copyWith(
-                color: t.text.withValues(alpha: canDiscard ? 0.7 : 0.28),
+                color: pending
+                    ? t.text.withValues(alpha: 0.70)
+                    : t.text.withValues(alpha: 0.28),
               ),
             ),
           ),
           const SizedBox(width: 8),
           ElevatedGreyButton(
             label: _busy ? 'Publishing…' : 'Set all as defaults',
-            fontSize: 12,
+            fontSize: 11,
+            isPrimary: true,
             isAdmin: true,
-            onPressed: _busy ? null : _setCaptionStructuresAsDefaults,
+            onPressed: pending ? _setCaptionStructuresAsDefaults : null,
           ),
         ],
       ),
     );
   }
 
+  bool get _hasUnpublishedEdits =>
+      _captionDirty || _verbPendingBySport.values.any((count) => count > 0);
+
+  void _onVerbPendingChanges(String sport, int count) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final current = _verbPendingBySport[sport] ?? 0;
+      if (count <= 0) {
+        if (!_verbPendingBySport.containsKey(sport)) return;
+        setState(() => _verbPendingBySport.remove(sport));
+        return;
+      }
+      if (current == count) return;
+      setState(() => _verbPendingBySport[sport] = count);
+    });
+  }
+
+  Future<void> _requestClose() async {
+    if (_busy || _adminCloseConfirmed) return;
+    if (_hasUnpublishedEdits) {
+      final ok = await showAppConfirmDialog(
+        context: context,
+        title: 'Close without saving?',
+        message:
+            'You have changes that are not saved yet. Close and discard them?',
+        cancelLabel: 'Stay',
+        confirmLabel: 'Discard',
+      );
+      if (ok != true || !mounted) return;
+    }
+    if (!mounted) return;
+    setState(() => _adminCloseConfirmed = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
   Widget _buildHeaderActions(FfTokens t) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: _busy ? null : () => Navigator.pop(context),
+        onTap: _busy ? null : () => unawaited(_requestClose()),
         borderRadius: BorderRadius.circular(4),
         child: Padding(
           padding: const EdgeInsets.all(4),
@@ -1718,7 +1806,13 @@ class _AdminScreenState extends State<AdminScreen> {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     return AppDialogFfStyle(
       enabled: true,
-      child: Dialog(
+      child: PopScope(
+        canPop: _adminCloseConfirmed,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop || _adminCloseConfirmed) return;
+          unawaited(_requestClose());
+        },
+        child: Dialog(
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(24),
         child: Container(
@@ -1785,6 +1879,27 @@ class _AdminScreenState extends State<AdminScreen> {
                         ),
                       ),
                       const Spacer(),
+                      Tooltip(
+                        message: 'Reload app originals',
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: _busy || _loading
+                                ? null
+                                : () => unawaited(_bootstrap()),
+                            borderRadius: BorderRadius.circular(4),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: PhosphorIcon(
+                                PhosphorIconsRegular.arrowClockwise,
+                                size: 18,
+                                color: t.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
                       _buildHeaderActions(t),
                     ],
                   ),
@@ -1913,10 +2028,10 @@ class _AdminScreenState extends State<AdminScreen> {
                               ],
                             ),
                 ),
-                if (!_loading && _error == null) _buildFooter(t),
               ],
             ),
           ),
+        ),
         ),
       ),
     );

@@ -49,6 +49,7 @@ class AdminVerbAuthoringEditor extends StatefulWidget {
     this.onPublishCurrentVerb,
     this.onWriteSportDefaults,
     this.onPersistIdle,
+    this.onPendingChanges,
   });
 
   final String sport;
@@ -68,6 +69,8 @@ class AdminVerbAuthoringEditor extends StatefulWidget {
   final Future<void> Function({String? successLabel})? onWriteSportDefaults;
   /// Personal mode: wait until the latest bundle write has finished.
   final Future<void> Function()? onPersistIdle;
+  /// Unpublished edit count for [sport]. `0` means that sport is clean.
+  final void Function(String sport, int count)? onPendingChanges;
 
   @override
   State<AdminVerbAuthoringEditor> createState() =>
@@ -134,6 +137,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       _pendingBundle = null;
     }
     if (oldWidget.sport != widget.sport) {
+      widget.onPendingChanges?.call(oldWidget.sport, _pendingChanges);
       _pendingBundle = null;
       _publishedBaseline = _deepCopyMap(widget.bundle);
       _pendingChanges = 0;
@@ -147,6 +151,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
 
   @override
   void dispose() {
+    widget.onPendingChanges?.call(widget.sport, _pendingChanges);
     _saveDebounce?.cancel();
     _undoTimer?.cancel();
     _nameFocus.dispose();
@@ -164,12 +169,18 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     );
   }
 
+  void _reportPending([String? sport]) {
+    widget.onPendingChanges?.call(sport ?? widget.sport, _pendingChanges);
+  }
+
   void _markDraftChange() {
     if (!mounted) {
       _pendingChanges += 1;
+      _reportPending();
       return;
     }
     setState(() => _pendingChanges += 1);
+    _reportPending();
   }
 
   void _clearUndo() {
@@ -206,6 +217,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       _selectedKey = snap.selectedKey;
       _pendingChanges = snap.pendingChanges;
     });
+    _reportPending();
     widget.onBundleChanged(_deepCopyMap(snap.bundle));
     setState(_ensureSelection);
   }
@@ -216,8 +228,191 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     _flushSelectedVerb();
     _clearUndo();
     setState(() => _pendingChanges = 0);
+    _reportPending();
     widget.onBundleChanged(_deepCopyMap(baseline));
     setState(_ensureSelection);
+  }
+
+  List<String> _changedVerbLines() {
+    final baseline = _publishedBaseline;
+    if (baseline == null) return const [];
+    final before = _indexedVerbRecords(baseline);
+    final after = _indexedVerbRecords(_bundle);
+    final hiddenBefore = _deletedVerbKeys(baseline);
+    final hiddenAfter = _deletedVerbKeys(_bundle);
+    final keys = <String>{
+      ...before.keys,
+      ...after.keys,
+      ...hiddenBefore,
+      ...hiddenAfter,
+    };
+    final lines = <String>[];
+    for (final key in keys) {
+      final previous = before[key];
+      final next = after[key];
+      final wasHidden = hiddenBefore.contains(key);
+      final isHidden = hiddenAfter.contains(key);
+      final previousLabel = _verbRecordLabel(previous, key);
+      final nextLabel = _verbRecordLabel(next ?? previous, key);
+      if (previous == null && next != null) {
+        lines.add('Added $nextLabel');
+      } else if (previous != null && next == null) {
+        lines.add('Removed $previousLabel');
+      } else if (wasHidden != isHidden) {
+        lines.add(isHidden ? 'Hidden $nextLabel' : 'Restored $nextLabel');
+      } else if (previous != null &&
+          next != null &&
+          jsonEncode(_canonJson(previous)) != jsonEncode(_canonJson(next))) {
+        lines.add(
+          previousLabel.toLowerCase() == nextLabel.toLowerCase()
+              ? nextLabel
+              : '$previousLabel → $nextLabel',
+        );
+      }
+    }
+    lines.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return lines;
+  }
+
+  Map<String, Map<String, dynamic>> _indexedVerbRecords(
+    Map<String, dynamic> bundle,
+  ) {
+    final out = <String, Map<String, dynamic>>{};
+    final overrides = bundle['verbOverrides'];
+    if (overrides is Map) {
+      overrides.forEach((key, value) {
+        if (value is! Map) return;
+        final name = key.toString().trim();
+        if (name.isEmpty) return;
+        out[name.toLowerCase()] = Map<String, dynamic>.from(value);
+      });
+    }
+    for (final raw in (bundle['customVerbs'] as List?) ?? const []) {
+      if (raw is! Map) continue;
+      final record = Map<String, dynamic>.from(raw);
+      final name = (record['key'] ?? record['label'] ?? '').toString().trim();
+      if (name.isEmpty) continue;
+      out[name.toLowerCase()] = record;
+    }
+    return out;
+  }
+
+  Set<String> _deletedVerbKeys(Map<String, dynamic> bundle) {
+    return {
+      for (final value in (bundle['deletedVerbs'] as List?) ?? const [])
+        value.toString().trim().toLowerCase(),
+    }..removeWhere((value) => value.isEmpty);
+  }
+
+  String _verbRecordLabel(Map<String, dynamic>? record, String key) {
+    final label = (record?['label'] ?? '').toString().trim();
+    if (label.isNotEmpty) return label;
+    if (key.isEmpty) return 'Untitled verb';
+    return key;
+  }
+
+  Object? _canonJson(Object? value) {
+    if (value is Map) {
+      final keys = value.keys.map((key) => key.toString()).toList()..sort();
+      return {for (final key in keys) key: _canonJson(value[key])};
+    }
+    if (value is List) {
+      return [for (final item in value) _canonJson(item)];
+    }
+    return value;
+  }
+
+  Future<bool> _confirmPublishChangedVerbs(List<String> changed) async {
+    final t = _t;
+    final ok = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (ctx) {
+        return AppDialogFfStyle(
+          enabled: true,
+          child: Center(
+            child: Material(
+              color: Colors.transparent,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420, maxHeight: 480),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: t.surface,
+                    borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
+                    border: Border.all(color: t.divider),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          'Publish these verbs?',
+                          style: t.labelStyle.copyWith(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          changed.isEmpty
+                              ? 'No verb wording changed. Category or order changes will still publish.'
+                              : 'These verbs differ from the last published defaults:',
+                          style: t.metaStyle.copyWith(
+                            fontSize: 12,
+                            height: 1.35,
+                            color: t.text.withValues(alpha: 0.72),
+                          ),
+                        ),
+                        if (changed.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Flexible(
+                            child: ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: changed.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 4),
+                              itemBuilder: (_, index) => Text(
+                                changed[index],
+                                style: t.metaStyle.copyWith(
+                                  fontSize: 13,
+                                  color: t.text,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            ElevatedGreyButton(
+                              label: 'Cancel',
+                              fontSize: 11,
+                              onPressed: () => Navigator.pop(ctx, false),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedGreyButton(
+                              label: 'Publish',
+                              fontSize: 11,
+                              isPrimary: true,
+                              isAdmin: true,
+                              onPressed: () => Navigator.pop(ctx, true),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    return ok == true;
   }
 
   Future<void> _publishDrafts() async {
@@ -244,6 +439,9 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     _emit(_copyBundle(), countAsDraft: false);
     await widget.onPersistIdle?.call();
     if (!widget.personalMode) {
+      final changed = _changedVerbLines();
+      final ok = await _confirmPublishChangedVerbs(changed);
+      if (!ok || !mounted) return;
       final write = widget.onWriteSportDefaults;
       if (write != null) {
         await write(successLabel: 'Published');
@@ -257,6 +455,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       _pendingChanges = 0;
       _clearUndo();
     });
+    _reportPending();
   }
 
   FfTokens get _t => Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -492,6 +691,29 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     widget.onBundleChanged(bundle);
   }
 
+  /// Insert [key] among [keys] by label, case-insensitive. Existing order of
+  /// the other verbs is left alone.
+  void _insertVerbKeyAlphabetically(
+    List<String> keys,
+    String key,
+    String label,
+  ) {
+    keys.remove(key);
+    final name = label.trim().toLowerCase();
+    final labels = {
+      for (final verb in _allVerbs) verb.key: verb.label,
+    };
+    var index = keys.length;
+    for (var i = 0; i < keys.length; i++) {
+      final other = (labels[keys[i]] ?? keys[i]).trim().toLowerCase();
+      if (name.compareTo(other) < 0) {
+        index = i;
+        break;
+      }
+    }
+    keys.insert(index, key);
+  }
+
   void _placeInVerbOrder(Map<String, dynamic> bundle, _VerbDraft draft) {
     final order = Map<String, dynamic>.from(
       (bundle['verbOrder'] as Map?) ?? const {},
@@ -501,7 +723,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
         value.toString(),
     ];
     if (keys.contains(draft.key)) return;
-    keys.add(draft.key);
+    _insertVerbKeyAlphabetically(keys, draft.key, draft.label);
     order[draft.category] = keys;
     bundle['verbOrder'] = order;
   }
@@ -690,11 +912,16 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     final order = Map<String, dynamic>.from(
       (bundle['verbOrder'] as Map?) ?? const {},
     );
-    for (final value in order.values) {
-      if (value is! List) continue;
-      final i = value.indexOf(oldKey);
-      if (i >= 0) value[i] = newKey;
+    for (final entry in order.entries.toList()) {
+      if (entry.value is! List) continue;
+      final list = List<String>.from(entry.value as List)..remove(oldKey);
+      order[entry.key] = list;
     }
+    final renamedKeys = List<String>.from(
+      (order[updated.category] as List?) ?? const <String>[],
+    );
+    _insertVerbKeyAlphabetically(renamedKeys, newKey, trimmed);
+    order[updated.category] = renamedKeys;
     bundle['verbOrder'] = order;
     _undeleteKey(bundle, oldKey);
     _undeleteKey(bundle, newKey);
@@ -747,7 +974,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       order[entry.key] = list;
     }
     final dest = List<String>.from((order[next] as List?) ?? const <String>[]);
-    if (!dest.contains(updated.key)) dest.add(updated.key);
+    _insertVerbKeyAlphabetically(dest, updated.key, updated.label);
     order[next] = dest;
     bundle['verbOrder'] = order;
 
@@ -966,7 +1193,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
         _writeVerbRecord(bundle, updated);
         if (_pendingDraft?.key == verb.key) _pendingDraft = null;
         destList.remove(verb.key);
-        destList.add(verb.key);
+        _insertVerbKeyAlphabetically(destList, verb.key, updated.label);
       }
       bundle['verbOrder'] = order;
       setState(() => _selectedCategory = dest);
@@ -1210,7 +1437,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
         ? (_categories.isEmpty ? 'Other' : _categories.first)
         : verb.category;
     final list = List<String>.from((order[category] as List?) ?? const []);
-    if (!list.contains(verb.key)) list.add(verb.key);
+    _insertVerbKeyAlphabetically(list, verb.key, verb.label);
     order[category] = list;
     bundle['verbOrder'] = order;
 
@@ -1465,7 +1692,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     final inCategory = _verbsInSelectedCategory;
     final width = MediaQuery.sizeOf(context).width;
     final stackBoxes = width < 760;
-    final canvas = widget.personalMode ? t.surface : t.bg;
+    final canvas = widget.personalMode ? Colors.transparent : t.bg;
 
     final canRenameCategory = category != null &&
         category != 'Favorites' &&
@@ -2008,6 +2235,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
           busy: widget.busy,
           pendingChanges: _pendingChanges,
           personalMode: widget.personalMode,
+          changedVerbs: widget.personalMode ? const [] : _changedVerbLines(),
           onDiscard: _discardDrafts,
           onPublish: _publishDrafts,
         ),
@@ -4733,12 +4961,15 @@ class _VerbDraft {
     // when the field was never stored on the record.
     final hasSingular = record.containsKey('verbPhrase');
     final singular = (record['verbPhrase'] ?? '').toString().trim();
+    final baseballSingular = VerbCaptionWording.defaultWording(key);
+    final sportSingular = VerbCaptionWording.defaultWording(key, sport: sport);
     final effective = hasSingular
-        ? singular
-        : VerbCaptionWording.defaultWording(key);
-    final fallbackPhrase = effective.isEmpty
-        ? VerbCaptionWording.defaultWording(key)
-        : effective;
+        ? (singular == baseballSingular &&
+                !VerbSubOptions.isBaseballSport(sport)
+            ? sportSingular
+            : singular)
+        : sportSingular;
+    final fallbackPhrase = effective.isEmpty ? sportSingular : effective;
     final hasPlural = record.containsKey('pluralPhrase');
     final plural = (record['pluralPhrase'] ?? '').toString().trim();
     final hasIng = record.containsKey('ingPhrase');
@@ -4757,8 +4988,23 @@ class _VerbDraft {
       category: category,
       singular: effective,
       plural: hasPlural
-          ? plural
-          : VerbCaptionWording.defaultPluralWording(key, fallbackPhrase),
+          ? (plural ==
+                      VerbCaptionWording.defaultPluralWording(
+                        key,
+                        fallbackPhrase,
+                      ) &&
+                  !VerbSubOptions.isBaseballSport(sport)
+              ? VerbCaptionWording.defaultPluralWording(
+                  key,
+                  fallbackPhrase,
+                  sport: sport,
+                )
+              : plural)
+          : VerbCaptionWording.defaultPluralWording(
+              key,
+              fallbackPhrase,
+              sport: sport,
+            ),
       useSingularPhrase: record['useSingularPhrase'] != false,
       usePluralPhrase: record['usePluralPhrase'] != false,
       ing: hasIng

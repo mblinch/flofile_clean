@@ -68,13 +68,10 @@ class CustomNameField extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
       child: Container(
-        height: 28,
+        height: 38,
         decoration: BoxDecoration(
-          color: tokens.sunken,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: pinned ? FfTokens.pinned : tokens.divider,
-          ),
+          color: tokens.bg,
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Row(
           children: [

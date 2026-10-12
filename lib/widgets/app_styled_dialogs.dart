@@ -6,6 +6,7 @@ import '../flo_layout_constants.dart';
 import '../theme/app_tokens.dart';
 import '../theme/ff_tokens.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+import 'ff_menu.dart';
 
 /// When enabled, shared dialog controls use Caption V2 [FfTokens] instead of
 /// the classic white/teal chrome.
@@ -517,8 +518,6 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
   /// When set with [onDeleteItem], return false to hide trash for that value.
   final bool Function(T value)? canDeleteItem;
 
-  static const double _menuItemHeight = 26.0;
-
   Widget _selectedChild() {
     for (final item in items) {
       if (item.value == value) return item.child;
@@ -539,89 +538,50 @@ class AppDialogLabeledDropdown<T> extends StatelessWidget {
     if (box == null || !box.hasSize) return;
     final origin = box.localToGlobal(Offset.zero);
     final size = box.size;
-    final t = appDialogTokens(context);
     final textStyle = appDialogFieldTextStyleOf(context);
-    final selected = await showMenu<T>(
+    final selected = await showFfMenu<T>(
       context: context,
-      color: t?.surface ?? Colors.white,
-      surfaceTintColor: Colors.transparent,
-      elevation: t != null ? 12 : 4,
-      shadowColor: Colors.black.withValues(alpha: 0.18),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(
-          t != null ? FfTokens.radiusChip : 6,
-        ),
-        side: t != null ? BorderSide(color: t.divider) : BorderSide.none,
-      ),
-      constraints: BoxConstraints(
-        minWidth: size.width,
-        maxWidth: size.width,
-        maxHeight: 280,
-      ),
-      position: RelativeRect.fromLTRB(
-        origin.dx,
-        origin.dy + size.height + 2,
-        origin.dx + size.width,
-        origin.dy,
-      ),
-      items: [
+      anchorGlobal: origin & size,
+      width: size.width < 160 ? 220 : size.width,
+      choices: [
         for (final item in items)
-          PopupMenuItem<T>(
+          FfMenuChoice<T>(
             value: item.value,
             enabled: item.enabled,
-            height: _menuItemHeight,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: DefaultTextStyle(
-                    style: textStyle,
-                    child: item.child,
-                  ),
-                ),
-                if (item.value == value)
-                  PhosphorIcon(PhosphorIconsRegular.check,
-                    size: 16,
-                    color: t?.text ?? const Color(0xFF333333),
-                  ),
-                if (_deletable(item.value)) ...[
-                  const SizedBox(width: 4),
-                  Builder(
-                    builder: (itemContext) {
-                      return Tooltip(
-                        message: 'Delete category',
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () {
-                              final toDelete = item.value;
-                              Navigator.of(itemContext).pop();
-                              if (toDelete == null) return;
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                onDeleteItem!(toDelete);
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Padding(
-                              padding: const EdgeInsets.all(2),
-                              child: PhosphorIcon(PhosphorIconsRegular.trash,
-                                size: 15,
-                                color: const Color(0xFFF07167)
-                                    .withValues(alpha: 0.90),
-                              ),
-                            ),
+            selected: item.value == value,
+            trailingBuilder: _deletable(item.value)
+                ? (menuContext, close) {
+                    return Tooltip(
+                      message: 'Delete category',
+                      child: GestureDetector(
+                        onTap: () {
+                          final toDelete = item.value;
+                          close();
+                          if (toDelete == null) return;
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            onDeleteItem!(toDelete);
+                          });
+                        },
+                        child: const Padding(
+                          padding: EdgeInsets.all(2),
+                          child: PhosphorIcon(
+                            PhosphorIconsRegular.trash,
+                            size: 15,
+                            color: Color(0xFFF07167),
                           ),
                         ),
-                      );
-                    },
-                  ),
-                ],
-              ],
+                      ),
+                    );
+                  }
+                : null,
+            child: DefaultTextStyle(
+              style: textStyle.copyWith(color: FfTokens.sessionTx),
+              child: item.child,
             ),
           ),
       ],
     );
-    if (selected != null) onChanged!(selected);
+    if (selected != null) onChanged!(selected.value);
   }
 
   @override
@@ -921,7 +881,10 @@ class _AppContextMenuRoute<T> extends PopupRoute<T> {
   final CapturedThemes capturedThemes;
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 150);
+  Duration get transitionDuration => Duration.zero;
+
+  @override
+  Duration get reverseTransitionDuration => Duration.zero;
 
   @override
   bool get barrierDismissible => true;

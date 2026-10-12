@@ -81,6 +81,33 @@ void main() {
     expect(controller.lastCustomPlayerJersey, '99');
   });
 
+  test('team players button captions the side as a group', () {
+    final controller = CaptionV2Controller()
+      ..homeTeam = 'Toronto FC'
+      ..awayTeam = 'New York City FC';
+
+    expect(controller.teamPlayersLabel(isHome: true), 'Toronto FC players');
+    controller.toggleTeamSubject(isHome: true, asPlayers: true);
+    controller.selectVerb('Celebrates');
+
+    expect(controller.buildCaptionBody(), startsWith('Toronto FC players'));
+    expect(controller.displayedCaption, contains('Toronto FC players'));
+    expect(controller.buildCaptionBody(), contains('celebrate against'));
+    expect(
+      controller.buildCaptionBody(),
+      contains('against the New York City FC'),
+    );
+
+    controller.toggleTeamSubject(isHome: true, asPlayers: false);
+    expect(controller.buildCaptionBody(), contains('celebrates against'));
+    expect(controller.buildCaptionBody(), isNot(contains('players')));
+
+    controller.selectPlayer(player('Federico Bernardeschi', '10'), isHome: true);
+    expect(controller.hasTeamPlayersSubject, isFalse);
+    expect(controller.buildCaptionBody(), contains('Federico Bernardeschi'));
+    expect(controller.buildCaptionBody(), isNot(contains('Toronto FC players')));
+  });
+
   test('uses plural caption wording for multiple players', () {
     final controller = CaptionV2Controller()
       ..homeTeam = 'Toronto Blue Jays'

@@ -13,7 +13,9 @@ class PinnedPlayerBar extends StatefulWidget {
     required this.isHome,
     required this.tokens,
     this.height,
+    this.leading,
     this.filter,
+    this.trailing,
   });
 
   /// Compact pinned row height (padding is applied inside).
@@ -24,8 +26,14 @@ class PinnedPlayerBar extends StatefulWidget {
   final FfTokens tokens;
   final double? height;
 
+  /// Team code or other label shown at the start of the same row.
+  final Widget? leading;
+
   /// Optional filter field shown on the right of this bar.
   final Widget? filter;
+
+  /// Icon button after the filter, still on this row.
+  final Widget? trailing;
 
   @override
   State<PinnedPlayerBar> createState() => _PinnedPlayerBarState();
@@ -43,87 +51,72 @@ class _PinnedPlayerBarState extends State<PinnedPlayerBar> {
     final selected = hasPlayer &&
         widget.controller.isPlayerSelected(player, isHome: widget.isHome);
     final jersey = player?.jerseyNumber?.trim();
-    final label = player == null
-        ? ''
-        : [
-            if (jersey != null && jersey.isNotEmpty) jersey,
-            widget.controller.playerListName(player),
-          ].join(' ');
+    final label = jersey == null || jersey.isEmpty ? '—' : jersey;
 
     return Container(
       height: widget.height ?? PinnedPlayerBar.pinnedBarHeight,
-      padding: const EdgeInsets.fromLTRB(8, 4, 6, 4),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: hasPlayer ? FfTokens.pinnedDivider : tokens.divider,
-          ),
-        ),
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
-          Icon(
-            hasPlayer
-                ? PhosphorIconsFill.pushPin
-                : PhosphorIconsRegular.pushPin,
-            size: 11,
-            color: tokens.textTertiary,
-          ),
-          const SizedBox(width: 4),
-          if (player != null) ...[
-            Expanded(
-              flex: widget.filter == null ? 1 : 3,
-              child: CmdClick(
-                onTap: () => widget.controller
-                    .togglePlayerPin(player, isHome: widget.isHome),
-                onCmdTap: () => widget.controller
-                    .togglePlayerPin(player, isHome: widget.isHome),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 11.5,
-                      height: 1.0,
-                      color: selected
-                          ? tokens.text
-                          : tokens.text.withValues(alpha: 0.78),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ] else ...[
-            Text(
-              'No pinned player',
-              maxLines: 1,
-              softWrap: false,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontWeight: FontWeight.w600,
-                fontSize: 11.5,
-                height: 1.0,
-                color: tokens.textTertiary,
-              ),
-            ),
-            const Spacer(),
+          if (widget.leading != null) ...[
+            widget.leading!,
+            const SizedBox(width: 8),
           ],
+          Tooltip(
+            message: hasPlayer ? 'Unpin' : 'No pinned player',
+            waitDuration: const Duration(milliseconds: 400),
+            child: Icon(
+              hasPlayer
+                  ? PhosphorIconsFill.pushPin
+                  : PhosphorIconsRegular.pushPin,
+              size: 13,
+              color: hasPlayer ? tokens.textSecondary : tokens.textTertiary,
+            ),
+          ),
           if (widget.filter != null) ...[
             const SizedBox(width: 8),
             Expanded(
-              flex: 2,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: widget.filter!,
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  widget.filter!,
+                  if (hasPlayer)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8),
+                      child: CmdClick(
+                        onTap: () => widget.controller.togglePlayerPin(
+                          player,
+                          isHome: widget.isHome,
+                        ),
+                        onCmdTap: () => widget.controller.togglePlayerPin(
+                          player,
+                          isHome: widget.isHome,
+                        ),
+                        child: SizedBox(
+                          width: 22,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 12,
+                              height: 1.0,
+                              color: selected
+                                  ? tokens.text
+                                  : tokens.text.withValues(alpha: 0.78),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ],
+          if (widget.trailing != null) widget.trailing!,
         ],
       ),
     );

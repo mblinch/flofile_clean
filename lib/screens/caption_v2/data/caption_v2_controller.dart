@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../caption_style/caption_formula_renderer.dart';
 import '../../../caption_style/caption_session_context.dart';
 import '../../../caption_style/caption_style_catalog.dart';
+import '../../../caption_style/getty_note_variant.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/caption_text_normalize.dart';
 import '../../../caption_style/game_info.dart';
@@ -428,7 +429,7 @@ class CaptionV2Controller extends ChangeNotifier {
   bool applyPlayerNamesToKeywords = true;
 
   /// Longest-side pixel threshold for the low-resolution warning. `0` is off.
-  int resolutionWarningThreshold = 0;
+  int resolutionWarningThreshold = 3000;
   bool metadataDirty = false;
   final Set<String> _basePersonalityNames = {};
   final Set<String> _managedKeywordKeys = {};
@@ -446,6 +447,9 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Active caption style from prefs (Getty / Imagn / AP / …).
   CaptionTemplate captionTemplate = CaptionTemplate.getty();
+
+  /// Getty note to user includes the NBAE copyright line.
+  bool gettyNoteIsNbae = false;
   CaptionStyleCatalog? _captionStyleCatalog;
   String _activeCaptionStyleToken = CaptionStyleCatalog.tokGetty;
 
@@ -476,6 +480,12 @@ class CaptionV2Controller extends ChangeNotifier {
   final List<RosterHit> selectedPlayers = [];
   Player? selectedPlayer;
   bool selectedIsHome = true;
+
+  /// When set, the caption subject is the whole side instead of named athletes.
+  bool? teamPlayersIsHome;
+
+  /// True: "{team} players". False: the team name alone.
+  bool teamSubjectAsPlayers = true;
   String? selectedVerb;
   final Map<String, String?> verbModifierSelections = {};
   String customVerbPhrase = '';
@@ -501,6 +511,9 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Basketball/WNBA half selection (`1H` / `2H`); null = use quarter/OT via [inning].
   String? timingHalf;
+
+  /// Basketball/WNBA period bar. True shows quarters; false shows halves.
+  bool timingByQuarter = true;
 
   bool mlbTimestampAvailable = false;
   bool mlbTimestampEnabled = true;
@@ -680,6 +693,9 @@ class CaptionV2Controller extends ChangeNotifier {
   /// When false, FTP buttons/shortcuts/menu items are hidden.
   bool ftpModeEnabled = true;
 
+  /// When true, the caption Firebar search row is hidden.
+  bool hideFirebar = false;
+
   // --- Search / focus ---
   String searchQuery = '';
   bool searchOpen = false;
@@ -710,6 +726,7 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Screen asks before re-uploading paths already in [sentImages].
   /// Return true to upload those paths again.
   Future<bool> Function(List<String> alreadySent)? confirmRetransmit;
+  bool _retransmitPromptOpen = false;
 
   /// Screen-provided save path so verb-menu / Firebar Save/FTP can show burst alerts.
   Future<void> Function({required bool transmit})? onSaveTransmit;
@@ -1305,7 +1322,7 @@ class CaptionV2Controller extends ChangeNotifier {
   String get ftpButtonLabel {
     final name = ftpProfileName?.trim();
     if (name == null || name.isEmpty) return 'FTP';
-    return 'FTP · $name';
+    return 'FTP: $name';
   }
   int queuedCount = 0;
   String? lastSentLabel;
@@ -1465,11 +1482,73 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   String get playerChipLabel {
+    if (hasTeamPlayersSubject && selectedPlayers.isEmpty) {
+      return teamSubjectLabel(isHome: teamPlayersIsHome!);
+    }
     return selectedPlayers.map((row) {
       final j = row.player.jerseyNumber ?? '';
       final short = _shortName(row.player.fullName);
       return j.isEmpty ? short : '$j $short';
     }).join(' + ');
+  }
+
+  bool get hasTeamPlayersSubject => teamPlayersIsHome != null;
+
+  /// Players button, not the bare team name. Verbs use the plural form.
+  bool get _playersButtonIsGroup =>
+      hasTeamPlayersSubject && teamSubjectAsPlayers;
+
+  bool get hasCaptionSubject =>
+      selectedPlayer != null || hasTeamPlayersSubject;
+
+  /// Team name used as a caption subject, e.g. "Toronto FC".
+  String teamNameLabel({required bool isHome}) {
+    final team = (isHome ? homeTeam : awayTeam).trim();
+    final name = team.isEmpty ? (isHome ? homeAbbr : awayAbbr) : team;
+    return name.isEmpty ? 'Team' : name;
+  }
+
+  /// Group subject, e.g. "Toronto FC players".
+  String teamPlayersLabel({required bool isHome}) {
+    final name = teamNameLabel(isHome: isHome);
+    return '$name players';
+  }
+
+  String teamSubjectLabel({required bool isHome}) {
+    return teamSubjectAsPlayers
+        ? teamPlayersLabel(isHome: isHome)
+        : teamNameLabel(isHome: isHome);
+  }
+
+  bool get _captionSubjectIsHome {
+    if (teamPlayersIsHome != null) return teamPlayersIsHome!;
+    if (selectedPlayers.isNotEmpty) return selectedPlayers.first.isHome;
+    return selectedIsHome;
+  }
+
+  void toggleTeamSubject({
+    required bool isHome,
+    required bool asPlayers,
+  }) {
+    captionSelectionStarted = true;
+    manualCaptionOverride = null;
+    final same = hasTeamPlayersSubject &&
+        teamPlayersIsHome == isHome &&
+        teamSubjectAsPlayers == asPlayers;
+    if (same) {
+      teamPlayersIsHome = null;
+      captionSelectionStarted = selectedPlayers.isNotEmpty;
+    } else {
+      teamPlayersIsHome = isHome;
+      teamSubjectAsPlayers = asPlayers;
+      selectedPlayers.clear();
+      selectedPlayer = null;
+      selectedIsHome = isHome;
+      playerSearchClearGeneration++;
+    }
+    _syncPersonality();
+    _syncKeywords();
+    notifyListeners();
   }
 
   bool isPlayerSelected(Player player, {required bool isHome}) {
@@ -1519,7 +1598,7 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Pinned verb is armed for the next frame, but don't compose a caption
   /// until a player is chosen. Manual (unpinned) verb picks still preview.
   bool get pinDefersCaptionUntilPlayer {
-    if (selectedPlayer != null) return false;
+    if (hasCaptionSubject) return false;
     if (pinnedVerb != null && selectedVerb == pinnedVerb) return true;
     if (customVerbPinned &&
         selectedVerb == null &&
@@ -1570,6 +1649,7 @@ class CaptionV2Controller extends ChangeNotifier {
         return 'period';
       case 'basketball':
       case 'wnba':
+      case 'football':
         return 'quarter';
       case 'soccer':
         return 'half';
@@ -1698,28 +1778,19 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Chip-mode leading text (used when the full style caption isn't ready yet).
   String get captionLeading {
-    final team = selectedPlayers.isEmpty
-        ? (selectedIsHome ? homeTeam : awayTeam)
-        : (selectedPlayers.first.isHome ? homeTeam : awayTeam);
+    final team = _captionSubjectIsHome ? homeTeam : awayTeam;
     return '$team ';
   }
 
   String get captionTrailing {
     final venueText = venue.trim().isNotEmpty
         ? venue
-        : (_metaFirst(const [
-              'IPTC:SubLocation',
-              'Sub-location',
-              'SubLocation',
-              'XMP:Location',
-            ]) ??
-            '');
+        : (_metaFirst(CaptionFormulaRenderer.stadiumMetadataKeys) ?? '');
     final venueBit = venueText.isEmpty ? '' : ' at $venueText';
     if (!hasOpponentTeam) {
       return ' $timingCaptionClause$venueBit.'.replaceAll(RegExp(r'\s+'), ' ');
     }
-    final subjectIsHome =
-        selectedPlayers.isEmpty ? selectedIsHome : selectedPlayers.first.isHome;
+    final subjectIsHome = _captionSubjectIsHome;
     final opp = subjectIsHome ? awayTeam : homeTeam;
     return ' against the $opp $timingCaptionClause$venueBit.';
   }
@@ -1768,13 +1839,7 @@ class CaptionV2Controller extends ChangeNotifier {
             '');
     final gameVenue = venue.trim().isNotEmpty
         ? venue
-        : (_metaFirst(const [
-              'IPTC:SubLocation',
-              'Sub-location',
-              'SubLocation',
-              'XMP:Location',
-            ]) ??
-            '');
+        : (_metaFirst(CaptionFormulaRenderer.stadiumMetadataKeys) ?? '');
 
     return GameInfo(
       gameDate: gameDate,
@@ -1802,8 +1867,10 @@ class CaptionV2Controller extends ChangeNotifier {
   /// configured caption style can still wrap date / venue / byline around a
   /// partial body — matching V1.
   String buildCaptionBody() {
-    if (selectedPlayer == null) return '';
-    final lead = _playerLead(captionTemplate);
+    if (!hasCaptionSubject) return '';
+    final lead = hasTeamPlayersSubject
+        ? _teamPlayersLead(captionTemplate)
+        : _playerLead(captionTemplate);
     if (!hasVerbSelection) {
       return '$lead ${_incompleteContextPhrase()}'
           .replaceAll(RegExp(r'\s+'), ' ')
@@ -1864,10 +1931,7 @@ class CaptionV2Controller extends ChangeNotifier {
           ),
       ],
       previewActions: [
-        if (hasVerbSelection)
-          customVerbPhrase.trim().isNotEmpty
-              ? customVerbPhrase.trim()
-              : (selectedVerb ?? ''),
+        if (hasVerbSelection) _previewActionClause(),
       ],
     );
 
@@ -1882,6 +1946,12 @@ class CaptionV2Controller extends ChangeNotifier {
       sampleAgency: agency,
       captionOverride: body,
       sport: sport,
+      applyGettyNoteVariant: true,
+      gettyNbaeNote: GettyNoteVariant.applies(
+        enabled: gettyNoteIsNbae,
+        wire: captionTemplate.wireStyle,
+        sport: sport,
+      ),
     );
     if (captionTemplate.removeDiacritics) {
       caption = CaptionTextNormalize.stripDiacritics(caption);
@@ -1901,9 +1971,7 @@ class CaptionV2Controller extends ChangeNotifier {
       }
       return timingCaptionClause;
     }
-    final subjects = subjectPlayers;
-    final subjectIsHome =
-        subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
+    final subjectIsHome = _captionSubjectIsHome;
     final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
     final target = opposingPlayers.isEmpty
         ? 'the ${opponentTeam.trim()}'
@@ -1914,7 +1982,7 @@ class CaptionV2Controller extends ChangeNotifier {
     return 'against $target $timingCaptionClause';
   }
 
-  bool get hasCompleteCaption => selectedPlayer != null && hasVerbSelection;
+  bool get hasCompleteCaption => hasCaptionSubject && hasVerbSelection;
 
   Map<String, String> captionValues() {
     final caption = buildCaptionSentence();
@@ -1969,6 +2037,14 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
+  String _teamPlayersLead(CaptionTemplate template) {
+    var label = teamSubjectLabel(isHome: teamPlayersIsHome!);
+    if (template.removeDiacritics) {
+      label = CaptionTextNormalize.stripDiacritics(label);
+    }
+    return label;
+  }
+
   /// Verbs where the first same-team pick is the action subject and later
   /// same-team picks are named in a trailing "with …" clause.
   bool _verbUsesLeadWithTeammates(String? verb) {
@@ -1976,15 +2052,24 @@ class CaptionV2Controller extends ChangeNotifier {
     return verbDefinition(verb)?.withTeammates ?? verb == 'Celebrates a Goal';
   }
 
+  /// Action text for layout previews: the verb's written wording, not its title.
+  String _previewActionClause() {
+    if (customVerbPhrase.trim().isNotEmpty) return _customActionPhrase();
+    if (selectedVerb != null) return _actionPhrase();
+    return '';
+  }
+
   String _actionPhrase() {
     final verb = selectedVerb!;
     final definition = verbDefinition(verb);
     final subjects = subjectPlayers;
-    final subjectIsHome =
-        subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
+    final subjectIsHome = _captionSubjectIsHome;
     final opponentTeam = subjectIsHome ? awayTeam : homeTeam;
     final withTeammates = _verbUsesLeadWithTeammates(verb);
-    final plural = withTeammates ? false : subjects.length > 1;
+    // The Players button stands in for two or more athletes.
+    final plural = _playersButtonIsGroup
+        ? true
+        : (withTeammates ? false : subjects.length > 1);
     // Live captioning uses classic RBI / celebration controls. Authored
     // modifier phrases are edited in Admin → Verb authoring only for now.
     var action = CaptionV2CaptionDomain.actionCore(
@@ -2005,7 +2090,7 @@ class CaptionV2Controller extends ChangeNotifier {
       subOptions: definition?.subOptions,
     );
 
-    if (withTeammates && subjects.length > 1) {
+    if (withTeammates && !_playersButtonIsGroup && subjects.length > 1) {
       final teammates = subjects.skip(1).toList(growable: false);
       final names = _formatPlayerNamesOnly(teammates, captionTemplate);
       if (names.isNotEmpty) {
@@ -2046,9 +2131,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
   String _customActionPhrase() {
     var action = customVerbPhrase.trim();
-    final subjects = subjectPlayers;
-    final subjectIsHome =
-        subjects.isEmpty ? selectedIsHome : subjects.first.isHome;
+    final subjectIsHome = _captionSubjectIsHome;
     final opponentName =
         (subjectIsHome ? awayTeam : homeTeam).trim();
     if (opponentName.isNotEmpty) {
@@ -2203,6 +2286,7 @@ class CaptionV2Controller extends ChangeNotifier {
     _verbUsageCounts = await _prefs!.getVerbUsageCountsForSport(sport);
     await _loadVerbCatalog();
     captionTemplate = await _prefs!.getCaptionTemplate();
+    gettyNoteIsNbae = await _prefs!.getGettyNoteIsNbae();
     mlbTimestampEnabled = await _prefs!.getMlbInningFromClockEnabled();
     showKeywordsField = await _prefs!.getShowKeywordsField();
     showPersonalityField = await _prefs!.getShowPersonalityField();
@@ -2235,6 +2319,7 @@ class CaptionV2Controller extends ChangeNotifier {
     // copy before the startup Edit/Done path wrote Custom to prefs — without
     // this, Go Time kept the stale in-memory template.
     captionTemplate = await prefs.getCaptionTemplate();
+    gettyNoteIsNbae = await prefs.getGettyNoteIsNbae();
     final catalog = await CaptionStyleCatalog.load(prefs, sport: sport);
     _captionStyleCatalog = catalog;
     _activeCaptionStyleToken = catalog.activeToken;
@@ -2324,6 +2409,14 @@ class CaptionV2Controller extends ChangeNotifier {
     await _prefs?.saveFtpModeEnabled(enabled);
   }
 
+  Future<void> setHideFirebar(bool hidden) async {
+    if (hidden == hideFirebar) return;
+    hideFirebar = hidden;
+    if (hidden && searchOpen) setSearchOpen(false);
+    notifyListeners();
+    await _prefs?.saveHideFirebar(hidden);
+  }
+
   Future<void> setSerialBylinesEnabled(bool enabled) async {
     if (enabled == serialBylinesEnabled) return;
     serialBylinesEnabled = enabled;
@@ -2344,11 +2437,13 @@ class CaptionV2Controller extends ChangeNotifier {
     final prefs = _prefs ?? await PreferencesService.getInstance();
     _prefs = prefs;
     ftpModeEnabled = await prefs.getFtpModeEnabled();
+    hideFirebar = await prefs.getHideFirebar();
     serialBylinesEnabled = await prefs.getSerialNumberBylines();
     if (!serialBylinesEnabled) pendingSerialBylinesPrompt = null;
     burstDetectionEnabled = await prefs.getBurstDetectionEnabled();
     resolutionWarningThreshold = await prefs.getResolutionWarningThreshold();
     await _refreshJerseyOcrEnabled();
+    if (currentPath != null) unawaited(_refreshFrameIptc());
     notifyListeners();
   }
 
@@ -2391,6 +2486,7 @@ class CaptionV2Controller extends ChangeNotifier {
     captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
+    teamPlayersIsHome = null;
     selectedIsHome = true;
     selectedVerb = null;
     celebrationType = null;
@@ -2463,7 +2559,8 @@ class CaptionV2Controller extends ChangeNotifier {
     await _awaitJerseyColorsIfNeeded(generation);
     if (generation != sessionGeneration || !sessionLoading) return;
 
-    // 4) Text recognition pre-scan (same work as the background pre-scan).
+    // 4) Text recognition for the frame they'll see first. The rest of the
+    // folder keeps scanning after the session opens.
     if (jerseyOcrEnabled) {
       await _prescanJerseyOcrDuringLoad(generation);
     }
@@ -2540,73 +2637,69 @@ class CaptionV2Controller extends ChangeNotifier {
     }
   }
 
+  /// One frame on the loading screen. A stuck Vision pass must not hold the
+  /// session shut — the background pre-scan picks up anything left unread.
+  static const Duration _loadOcrTimeout = Duration(seconds: 12);
+
   Future<void> _prescanJerseyOcrDuringLoad(int generation) async {
     if (!jerseyOcrEnabled || imagePaths.isEmpty) return;
     if (_jerseyOcrPrescanRunning) return;
     _jerseyOcrPrescanRunning = true;
-    _resetJerseyOcrPrescan();
-    jerseyOcrPrescanTotal = imagePaths.length;
     final customWords = _ocrCustomWords();
     final sportKey = sport.trim().toLowerCase();
     try {
-      final paths = List<String>.from(imagePaths);
-      final index = currentIndex.clamp(0, paths.length - 1);
-      final ordered = <String>[
-        ...paths.sublist(index),
-        ...paths.sublist(0, index),
-      ];
-      for (var i = 0; i < ordered.length; i++) {
-        if (generation != sessionGeneration ||
-            !jerseyOcrEnabled ||
-            !sessionLoading ||
-            _jerseyOcrPrescanStop) {
-          break;
-        }
-        final path = ordered[i];
-        _setSessionLoadingLabel(
-          'Text recognition ${i + 1}/${ordered.length}…',
-        );
+      if (generation != sessionGeneration ||
+          !jerseyOcrEnabled ||
+          !sessionLoading ||
+          _jerseyOcrPrescanStop) {
+        return;
+      }
+      final path = currentPath;
+      if (path == null) return;
+      _setSessionLoadingLabel('Text recognition…');
 
-        int mtimeMs = 0;
+      int mtimeMs = 0;
+      try {
+        mtimeMs = (await File(path).lastModified()).millisecondsSinceEpoch;
+      } catch (_) {
+        return;
+      }
+
+      final key = _jerseyOcrCacheKey(
+        path: path,
+        mtimeMs: mtimeMs,
+        roiKey: 'full',
+        sportKey: sportKey,
+        customWords: customWords,
+      );
+      if (!_jerseyOcrCache.containsKey(key)) {
+        List<JerseyOcrHit> hits;
         try {
-          mtimeMs = (await File(path).lastModified()).millisecondsSinceEpoch;
-        } catch (_) {
-          _jerseyOcrPrescanned.add(path);
-          jerseyOcrPrescanDone = _jerseyOcrPrescanned.length;
-          continue;
-        }
-
-        final key = _jerseyOcrCacheKey(
-          path: path,
-          mtimeMs: mtimeMs,
-          roiKey: 'full',
-          sportKey: sportKey,
-          customWords: customWords,
-        );
-        if (!_jerseyOcrCache.containsKey(key)) {
-          final hits = await JerseyOcrChannel.recognize(
+          hits = await JerseyOcrChannel.recognize(
             path: path,
             customWords: customWords,
             sport: sportKey,
             prescan: true,
-          );
-          if (generation != sessionGeneration ||
-              !jerseyOcrEnabled ||
-              _jerseyOcrPrescanStop) {
-            break;
-          }
-          _putJerseyOcrCache(key, hits);
+          ).timeout(_loadOcrTimeout);
+        } on TimeoutException {
+          // Leave it unscanned so the background pass retries it.
+          unawaited(JerseyOcrChannel.cancelPrescan());
+          return;
         }
-        _jerseyOcrPrescanned.add(path);
-        jerseyOcrPrescanDone = _jerseyOcrPrescanned.length;
-        jerseyOcrPrescanTotal = imagePaths.length;
+        if (generation != sessionGeneration ||
+            !jerseyOcrEnabled ||
+            _jerseyOcrPrescanStop) {
+          return;
+        }
+        _putJerseyOcrCache(key, hits);
       }
+      _jerseyOcrPrescanned.add(path);
+      jerseyOcrPrescanDone = _jerseyOcrPrescanned.length;
+      jerseyOcrPrescanTotal = imagePaths.length;
 
-      // Surface the current frame's OCR result before the UI opens.
       if (generation == sessionGeneration &&
           jerseyOcrEnabled &&
-          !_jerseyOcrPrescanStop &&
-          currentPath != null) {
+          !_jerseyOcrPrescanStop) {
         await runOcrTestScan(force: false);
       }
     } finally {
@@ -2704,6 +2797,7 @@ class CaptionV2Controller extends ChangeNotifier {
     captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
+    teamPlayersIsHome = null;
     selectedVerb = null;
     pinnedVerb = null;
     pinnedPlayer = null;
@@ -2715,6 +2809,7 @@ class CaptionV2Controller extends ChangeNotifier {
     personality = '';
     manualCaptionOverride = null;
     notifyListeners();
+    unawaited(reloadCaptionStyle());
   }
 
   Future<void> loadRosters({
@@ -3558,6 +3653,15 @@ class CaptionV2Controller extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// A graded JPEG replaced [path]. Drop cached previews and don't re-ingest.
+  Future<void> noteImageFileReplaced(String path) async {
+    OrientedImageBytes.evict(path);
+    _imageContentStamp[path] = imageContentStamp(path) + 1;
+    await _syncFileSig(path);
+    notifyListeners();
+    if (path == currentPath) unawaited(_refreshFrameIptc());
+  }
+
   Future<void> _recordCaptureTime(String path) async {
     try {
       final proc = await ExiftoolHelper.run([
@@ -3651,6 +3755,7 @@ class CaptionV2Controller extends ChangeNotifier {
     String? recognitionDetail,
   }) {
     captionSelectionStarted = true;
+    teamPlayersIsHome = null;
     final existingIndex = selectedPlayers.indexWhere(
       (row) => row.isHome == isHome && _samePlayer(row.player, player),
     );
@@ -4026,6 +4131,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void setSelectedPlayers(Iterable<RosterHit> players) {
     captionSelectionStarted = true;
+    teamPlayersIsHome = null;
     selectedPlayers.clear();
     for (final row in players) {
       if (!isPlayerSelected(row.player, isHome: row.isHome)) {
@@ -4248,6 +4354,7 @@ class CaptionV2Controller extends ChangeNotifier {
     captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
+    teamPlayersIsHome = null;
     selectedVerb = null;
     customVerbPhrase = '';
     lastCustomVerbPhrase = '';
@@ -4462,7 +4569,7 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
     }
     // Pin alone should not start a caption — wait for a player.
-    if (selectedPlayer == null) {
+    if (!hasCaptionSubject) {
       captionSelectionStarted = false;
       notifyListeners();
     }
@@ -4506,14 +4613,10 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Caption text shown in the strip / used by Copy.
   String get displayedCaption {
     if (manualCaptionOverride != null) return manualCaptionOverride!;
-    if (selectedPlayer == null) {
-      // Never compose the "Team + verb" filler — wait for a player.
-      return originalCaption;
-    }
-    if (hasVerbSelection || selectedPlayer != null) {
-      return buildCaptionSentence();
-    }
-    return originalCaption;
+    // Team buttons ("All players" / the club name) count as a subject even
+    // though no individual athlete is selected.
+    if (!hasCaptionSubject) return originalCaption;
+    return buildCaptionSentence();
   }
 
   Future<void> toggleVerbFavorite(String verb) async {
@@ -4892,6 +4995,7 @@ class CaptionV2Controller extends ChangeNotifier {
   bool verbNeedsBase(String verb) => _verbNeedsBase(verb);
 
   bool verbNeedsCelebration(String verb) {
+    if (!VerbSubOptions.isBaseballSport(sport)) return false;
     final definition = verbDefinition(verb);
     final options = definition?.subOptions ??
         VerbSubOptions.defaultsFor(verb, sport: sport);
@@ -4941,7 +5045,8 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   bool _verbNeedsBase(String verb) {
-    return CaptionV2CaptionDomain.runningVerbs.contains(verb);
+    return VerbSubOptions.isBaseballSport(sport) &&
+        CaptionV2CaptionDomain.runningVerbs.contains(verb);
   }
 
   void setRbi(int value) {
@@ -4999,12 +5104,36 @@ class CaptionV2Controller extends ChangeNotifier {
     if (!supportsTimingHalves) return;
     final normalized = half.trim().toUpperCase();
     if (normalized != '1H' && normalized != '2H') return;
+    timingByQuarter = false;
     if (timingHalf == normalized && !preGame && !postGame) {
       notifyListeners();
       return;
     }
     timingHalf = normalized;
     inning = normalized == '1H' ? 1 : 2;
+    manualCaptionOverride = null;
+    preGame = false;
+    postGame = false;
+    mlbTimestampMatchedPath = null;
+    notifyListeners();
+  }
+
+  void setTimingByQuarter(bool quarters) {
+    if (!supportsTimingHalves) return;
+    timingByQuarter = quarters;
+    if (quarters) {
+      if (timingHalf == '1H') {
+        inning = 1;
+      } else if (timingHalf == '2H') {
+        inning = 3;
+      }
+      timingHalf = null;
+    } else if (inning > timingRegulationCount) {
+      timingHalf = null;
+    } else {
+      timingHalf = inning <= 2 ? '1H' : '2H';
+      inning = timingHalf == '1H' ? 1 : 2;
+    }
     manualCaptionOverride = null;
     preGame = false;
     postGame = false;
@@ -5242,6 +5371,7 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   void setSearchOpen(bool open) {
+    if (open && hideFirebar) return;
     if (open && !searchOpen) {
       searchQuery = '';
       guidedSearchPrompt = null;
@@ -5993,7 +6123,7 @@ class CaptionV2Controller extends ChangeNotifier {
     final combo = LastUsedCombo(
       verb: selectedVerb!,
       rbi: rbi,
-      playerLabel: selectedPlayer == null ? null : playerChipLabel,
+      playerLabel: hasCaptionSubject ? playerChipLabel : null,
       verbLabel: verbDefinition(selectedVerb!)?.label,
     );
     lastUsed.removeWhere((c) => c.verb == combo.verb && c.rbi == combo.rbi);
@@ -7384,6 +7514,83 @@ class CaptionV2Controller extends ChangeNotifier {
     return s.isEmpty ? null : s;
   }
 
+  /// Largest positive integer in a tag. Lists keep the full-size value
+  /// instead of a thumbnail that appears first.
+  static int? _largestPixelValue(dynamic value) {
+    if (value == null) return null;
+    if (value is num) {
+      final n = value.round();
+      return n > 0 ? n : null;
+    }
+    if (value is List) {
+      int? best;
+      for (final item in value) {
+        final n = _largestPixelValue(item);
+        if (n == null) continue;
+        if (best == null || n > best) best = n;
+      }
+      return best;
+    }
+    int? best;
+    for (final match in RegExp(r'\d+').allMatches(value.toString())) {
+      final n = int.tryParse(match.group(0)!);
+      if (n == null || n <= 0) continue;
+      if (best == null || n > best) best = n;
+    }
+    return best;
+  }
+
+  static void _applyLargestExifDimensions(
+    Map<String, dynamic> raw,
+    Map<String, String> meta,
+  ) {
+    int? width;
+    int? height;
+    void consider(dynamic w, dynamic h) {
+      final pw = _largestPixelValue(w);
+      final ph = _largestPixelValue(h);
+      if (pw == null || ph == null) return;
+      final longest = pw > ph ? pw : ph;
+      final current = width == null || height == null
+          ? 0
+          : (width! > height! ? width! : height!);
+      if (longest < current) return;
+      width = pw;
+      height = ph;
+    }
+
+    consider(raw['ImageWidth'], raw['ImageHeight']);
+    consider(raw['ExifImageWidth'], raw['ExifImageHeight']);
+    consider(raw['PixelXDimension'], raw['PixelYDimension']);
+    final size = _stringFromMeta(raw['ImageSize']);
+    if (size != null) {
+      final parts = size.split(RegExp(r'[xX×]'));
+      if (parts.length >= 2) consider(parts[0], parts[1]);
+    }
+    if (width == null || height == null) return;
+    meta['ImageWidth'] = '$width';
+    meta['ImageHeight'] = '$height';
+  }
+
+  /// Pixel size of the file itself, not the camera's original EXIF size.
+  Future<(int, int)?> _encodedPixelSize(String path) async {
+    ui.ImmutableBuffer? buffer;
+    ui.ImageDescriptor? descriptor;
+    try {
+      buffer = await ui.ImmutableBuffer.fromFilePath(path);
+      descriptor = await ui.ImageDescriptor.encoded(buffer);
+      final width = descriptor.width;
+      final height = descriptor.height;
+      if (width <= 0 || height <= 0) return null;
+      return (width, height);
+    } catch (_) {
+      return null;
+    } finally {
+      descriptor?.dispose();
+      buffer?.dispose();
+    }
+  }
+
   /// Load the current frame's header EXIF plus caption-related IPTC.
   Future<void> _refreshFrameIptc() async {
     final path = currentPath;
@@ -7418,6 +7625,9 @@ class CaptionV2Controller extends ChangeNotifier {
         '-ImageHeight',
         '-ExifImageWidth',
         '-ExifImageHeight',
+        '-PixelXDimension',
+        '-PixelYDimension',
+        '-ImageSize',
         '-ShutterSpeed',
         '-FNumber',
         '-ISO',
@@ -7455,9 +7665,13 @@ class CaptionV2Controller extends ChangeNotifier {
         '-CountryPrimaryLocationCode',
         '-CountryCode',
         '-IPTC:SubLocation',
+        '-IPTC:Sub-location',
         '-Sub-location',
         '-SubLocation',
+        '-Location',
+        '-IPTC:Location',
         '-XMP:Location',
+        '-XMP-iptcCore:Location',
         '-XMP-getty:Personality',
         '-Personality',
         '-IPTC:Headline',
@@ -7471,7 +7685,14 @@ class CaptionV2Controller extends ChangeNotifier {
       ]);
       if (gen != _iptcLoadGen) return;
       if (!proc.isSuccess) {
-        currentIptcMeta = {};
+        final pixels = await _encodedPixelSize(path);
+        if (gen != _iptcLoadGen) return;
+        currentIptcMeta = pixels == null
+            ? {}
+            : {
+                'ImageWidth': '${pixels.$1}',
+                'ImageHeight': '${pixels.$2}',
+              };
         photographerName = '';
         agencyName = '';
         _photographerProvenance = _BylineProvenance.none;
@@ -7497,6 +7718,16 @@ class CaptionV2Controller extends ChangeNotifier {
         if (s != null) meta[key.toString()] = s;
       });
       currentIptcMeta = meta;
+      final pixels = await _encodedPixelSize(path);
+      if (gen != _iptcLoadGen) return;
+      if (pixels != null) {
+        meta['ImageWidth'] = '${pixels.$1}';
+        meta['ImageHeight'] = '${pixels.$2}';
+        currentIptcMeta = meta;
+      } else {
+        _applyLargestExifDimensions(raw, meta);
+        currentIptcMeta = meta;
+      }
       photographerName = photographerNameFromMetadata(raw);
       _photographerSerialUsed = serialNumberFromMetadata(raw)?.trim();
       _photographerProvenance = photographerName.trim().isEmpty
@@ -7614,7 +7845,7 @@ class CaptionV2Controller extends ChangeNotifier {
       );
     }
 
-    final captionUnchanged = selectedPlayer == null &&
+    final captionUnchanged = !hasCaptionSubject &&
         (!hasVerbSelection || pinDefersCaptionUntilPlayer) &&
         manualCaptionOverride == null;
     if (captionUnchanged && !metadataDirty && originalCaption.trim().isEmpty) {
@@ -7626,7 +7857,7 @@ class CaptionV2Controller extends ChangeNotifier {
       );
     }
 
-    final generatedCaption = selectedPlayer != null && hasVerbSelection;
+    final generatedCaption = hasCaptionSubject && hasVerbSelection;
     if (generatedCaption && selectedVerb != null) rememberCombo();
     final manualCaption = manualCaptionOverride?.trim().isNotEmpty == true;
     final shouldWriteCaption = !captionUnchanged;
@@ -7828,6 +8059,7 @@ class CaptionV2Controller extends ChangeNotifier {
   void _clearCaptionSelection() {
     selectedPlayers.clear();
     selectedPlayer = null;
+    teamPlayersIsHome = null;
     playerSearchClearGeneration++;
     // Pinned catalog verb always comes back on the next frame, even if the
     // user picked a different verb for the frame they just saved.
@@ -7934,6 +8166,14 @@ class CaptionV2Controller extends ChangeNotifier {
     await _transmitPaths([path]);
   }
 
+  bool _wasAlreadyFtpd(String path) {
+    if (sentImages.contains(path)) return true;
+    for (final entry in ftpHistory) {
+      if (entry.success && entry.path == path) return true;
+    }
+    return false;
+  }
+
   Future<void> _transmitPaths(List<String> paths) async {
     if (!ftpModeEnabled) {
       statusMessage = 'FTP mode is off';
@@ -7945,29 +8185,26 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (transmitting) {
+    if (transmitting || _retransmitPromptOpen) {
       statusMessage = 'FTP already in progress';
       notifyListeners();
       return;
     }
-    // Claim the slot before any await so a second click cannot open
-    // another login while this one is still connecting.
-    transmitting = true;
-    transmitProgress = 0;
-    transmitStatus = 'Connecting…';
-    notifyListeners();
 
-    final alreadySent =
-        paths.where((path) => sentImages.contains(path)).toList();
-    var toSend = paths.where((path) => !sentImages.contains(path)).toList();
+    final alreadySent = paths.where(_wasAlreadyFtpd).toList();
+    var toSend = paths.where((path) => !_wasAlreadyFtpd(path)).toList();
     if (alreadySent.isNotEmpty) {
-      final allow = await confirmRetransmit?.call(alreadySent) ?? true;
+      _retransmitPromptOpen = true;
+      bool allow = false;
+      try {
+        allow = await confirmRetransmit?.call(alreadySent) ?? false;
+      } finally {
+        _retransmitPromptOpen = false;
+      }
       if (allow) toSend = [...toSend, ...alreadySent];
     }
     if (toSend.isEmpty) {
-      transmitting = false;
-      transmitStatus = null;
-      transmitProgress = 0;
+      statusMessage = alreadySent.isEmpty ? 'Nothing to FTP' : 'FTP cancelled';
       notifyListeners();
       return;
     }
@@ -8059,8 +8296,11 @@ class CaptionV2Controller extends ChangeNotifier {
         port: port,
         passiveMode: passive,
         onProgress: (status, progress, error) {
-          final next = progress.clamp(0.0, 1.0);
-          final bumped = (next - transmitProgress).abs() >= 0.02 ||
+          final fileProgress = progress.clamp(0.0, 1.0);
+          final next = toSend.length <= 1
+              ? fileProgress
+              : (i + fileProgress) / toSend.length;
+          final bumped = (next - transmitProgress).abs() >= 0.01 ||
               status != transmitStatus ||
               error != null;
           transmitStatus = status;
@@ -8478,6 +8718,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void _chooseCommandPlayer(RosterHit row, String verb) {
     captionSelectionStarted = true;
+    teamPlayersIsHome = null;
     selectedPlayers
       ..clear()
       ..add(row);
@@ -8715,7 +8956,7 @@ class CaptionV2Controller extends ChangeNotifier {
     preGame = pre;
     postGame = post;
     if (pre || post) timingHalf = null;
-    statusMessage = selectedPlayer == null || selectedVerb == null
+    statusMessage = !hasCaptionSubject || selectedVerb == null
         ? null
         : '$playerChipLabel · ${_verbChip(selectedVerb!)}';
     _promptForCommandDestination();

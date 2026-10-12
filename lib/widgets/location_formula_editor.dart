@@ -6,6 +6,7 @@ import '../caption_style/game_info.dart';
 import '../caption_style/region_abbrev.dart';
 import '../theme/ff_tokens.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+import 'space_token_text.dart';
 
 /// Matches the caption layout dialog's accent.
 const Color _editorBlue = FfTokens.nocturneAc;
@@ -19,8 +20,8 @@ const Color _mutedText = FfTokens.nocturneT3;
 /// Active state for the ALL CAPS (Aa) control only; chip fill stays neutral.
 const Color _capsButtonBg = FfTokens.nocturneAccentDeep;
 
-/// Separator text boxes.
-const Color _textBoxFill = Color(0xFF1B3344);
+/// Separator text boxes. Same fill as the field chips.
+const Color _textBoxFill = _chipSurface;
 
 /// All geo field kinds the editor exposes, in the canonical order they appear
 /// when an existing template hasn't placed them yet.
@@ -48,6 +49,7 @@ class LocationFormulaEditor extends StatefulWidget {
     required this.onChanged,
     this.sampleGameInfo,
     this.adaptsUsIntl = false,
+    this.includedKinds,
   });
 
   final LocationLineOptions options;
@@ -61,6 +63,11 @@ class LocationFormulaEditor extends StatefulWidget {
   /// Getty (and any layout with auto-adapt) writes City, State in the US and
   /// City, Country everywhere else, even though both chips stay in the editor.
   final bool adaptsUsIntl;
+
+  /// When set, only these geo kinds are offered. Getty uses this so the
+  /// American formula stays city + state and the international formula stays
+  /// city + country.
+  final Set<LocationChipKind>? includedKinds;
 
   @override
   State<LocationFormulaEditor> createState() => _LocationFormulaEditorState();
@@ -138,8 +145,10 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
 
     // Append disabled placeholders for any geo kinds not already present, so
     // the user can toggle them on without ever needing an "Add field" button.
+    final allowed = widget.includedKinds;
     final present = fields.map((f) => f.kind).toSet();
     for (final k in _allGeoKinds) {
+      if (allowed != null && !allowed.contains(k)) continue;
       if (!present.contains(k)) {
         if (fields.isEmpty) {
           seps.add('');
@@ -311,6 +320,13 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     for (final i in visible) {
       children.add(_fieldChip(i));
       children.add(_separatorInput(i + 1));
+    }
+    // The slot after the last field is the end of the location. When a later
+    // chip is turned off (Country, under International), that end box would
+    // otherwise sit after the hidden chip and never appear.
+    final trailingIndex = _fields.length;
+    if (visible.last + 1 != trailingIndex) {
+      children.add(_separatorInput(trailingIndex));
     }
     return Wrap(
       spacing: 0,
@@ -591,6 +607,8 @@ class _LocationFormulaEditorState extends State<LocationFormulaEditor> {
     final rendered = CaptionFormulaRenderer.formatLocationLine(
       sample,
       _currentOptions(),
+      forceAutoAdaptUsIntl:
+          widget.adaptsUsIntl || widget.options.autoAdaptUsIntl,
     );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -1103,20 +1121,7 @@ class _VisibleSpaceTextController extends TextEditingController {
     TextStyle? style,
     required bool withComposing,
   }) {
-    final spaceStyle = style?.copyWith(
-      fontSize: (style.fontSize ?? 15) * 0.75,
-      color: style.color,
-    );
-    return TextSpan(
-      style: style,
-      children: [
-        for (final ch in text.split(''))
-          TextSpan(
-            text: ch == ' ' ? '⎵' : ch,
-            style: ch == ' ' ? spaceStyle : null,
-          ),
-      ],
-    );
+    return spaceTokenSpan(text, style ?? const TextStyle());
   }
 }
 
@@ -1189,13 +1194,17 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
     final borderColor =
         _focused ? _editorBlue : const Color(0x29E8EEF4);
     final borderWidth = _focused ? 1.5 : 0.5;
-    final idle = _idleLabel(_ctrl.text);
-    final measureText = _focused
-        ? (_ctrl.text.isEmpty ? ' ' : _ctrl.text.replaceAll(' ', '⎵'))
-        : (idle.isEmpty ? ' ' : idle);
-    final fieldWidth = _fieldWidthFor(
-      measureText,
-      _focused ? _style : _idleStyle,
+    final visual = spaceTokenLabel(_ctrl.text);
+    final measureText = visual.isEmpty ? ' ' : visual;
+    final fieldStyle = _idleStyle.copyWith(
+      color: _focused ? _fieldText : _mutedText,
+      height: 1.25,
+    );
+    final fieldSize = GrowingTextBoxSize.measure(
+      text: measureText,
+      style: fieldStyle,
+      minWidth: 56,
+      horizontalPad: 18,
     );
 
     return Padding(
@@ -1206,73 +1215,43 @@ class _LocSeparatorInputState extends State<_LocSeparatorInput> {
           if (!_focus.hasFocus) _focus.requestFocus();
         },
         child: Container(
-          width: fieldWidth,
-          height: 32,
+          width: fieldSize.width,
+          height: fieldSize.height,
           decoration: BoxDecoration(
             color: _textBoxFill,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: borderColor, width: borderWidth),
           ),
           alignment: Alignment.center,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              TextField(
-                controller: _ctrl,
-                focusNode: _focus,
-                style: _style.copyWith(
-                  color: _focused ? _fieldText : Colors.transparent,
-                ),
-                textAlign: TextAlign.center,
-                cursorWidth: 1.2,
-                cursorColor: _editorBlue,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  isCollapsed: true,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 4),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                ),
-                onChanged: _handleChanged,
-              ),
-              if (!_focused && idle.isNotEmpty)
-                IgnorePointer(
-                  child: Text(idle, style: _idleStyle),
-                ),
-            ],
+          child: TextField(
+            controller: _ctrl,
+            focusNode: _focus,
+            style: fieldStyle,
+            textAlign: TextAlign.center,
+            textAlignVertical: TextAlignVertical.center,
+            maxLines: null,
+            cursorWidth: 1.2,
+            cursorColor: _editorBlue,
+            decoration: const InputDecoration(
+              isDense: true,
+              isCollapsed: true,
+              contentPadding: EdgeInsets.symmetric(horizontal: 4),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+            ),
+            onChanged: _handleChanged,
           ),
         ),
       ),
     );
   }
 
-  static String _idleLabel(String raw) {
-    if (raw.isEmpty) return '';
-    if (raw.trim().isEmpty) return '[space]';
-    return raw.replaceAll(' ', '[space]');
-  }
-
-  static const TextStyle _style = TextStyle(
-    fontSize: 15,
-    color: _fieldText,
-    height: 1.1,
-    fontFamily: 'monospace',
-  );
-
   static const TextStyle _idleStyle = TextStyle(
-    fontSize: 11,
+    fontFamily: FfTokens.fontFamily,
+    fontSize: 12,
     color: _mutedText,
     height: 1,
   );
 
-  static double _fieldWidthFor(String text, TextStyle style) {
-    final visible = text.isEmpty ? ' ' : text;
-    final painter = TextPainter(
-      text: TextSpan(text: visible, style: style),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-    )..layout();
-    return (painter.width + 18).clamp(56.0, 260.0);
-  }
 }

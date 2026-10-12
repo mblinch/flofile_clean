@@ -46,6 +46,7 @@ Future<T?> showCaptionV2PopupMenu<T>({
   return showMenu<T>(
     context: context,
     position: position,
+    popUpAnimationStyle: AnimationStyle.noAnimation,
     color: tokens.surface,
     surfaceTintColor: Colors.transparent,
     elevation: 12,
