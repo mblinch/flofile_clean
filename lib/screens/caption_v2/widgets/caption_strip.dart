@@ -987,31 +987,6 @@ class _InningCardState extends State<_InningCard> {
         widget.onInningSelected != null;
     final showQuarters = widget.onQuarterModeChanged == null || widget.quarterMode;
     final periodButtons = <Widget>[
-      if (widget.onQuarterModeChanged != null) ...[
-        SizedBox(
-          width: 52,
-          height: 24,
-          child: _ToggleChip(
-            label: 'Half',
-            selected: !widget.quarterMode,
-            tokens: t,
-            onTap: () => widget.onQuarterModeChanged!(false),
-          ),
-        ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 72,
-          height: 24,
-          child: _ToggleChip(
-            label: 'Quarter',
-            selected: widget.quarterMode,
-            tokens: t,
-            onTap: () => widget.onQuarterModeChanged!(true),
-          ),
-        ),
-        if (widget.onPreTap != null || canSquares || widget.inningLabel != null)
-          const SizedBox(width: 4),
-      ],
       if (widget.onPreTap != null) ...[
         SizedBox(
           width: 44,
@@ -1095,6 +1070,30 @@ class _InningCardState extends State<_InningCard> {
             selected: widget.postSelected,
             tokens: t,
             onTap: widget.onPostTap,
+          ),
+        ),
+      ],
+      if (widget.onQuarterModeChanged != null) ...[
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 52,
+          height: 24,
+          child: _ToggleChip(
+            label: 'Half',
+            selected: !widget.quarterMode,
+            tokens: t,
+            onTap: () => widget.onQuarterModeChanged!(false),
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 72,
+          height: 24,
+          child: _ToggleChip(
+            label: 'Quarter',
+            selected: widget.quarterMode,
+            tokens: t,
+            onTap: () => widget.onQuarterModeChanged!(true),
           ),
         ),
       ],
@@ -1309,50 +1308,43 @@ class _PersonalityBarState extends State<_PersonalityBar> {
       height: 1,
     );
     final labelStyle = FfTokens.panelLabel(color: t.textTertiary);
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
+    // Shared line box. Baseline alignment was pinning the smaller label to the
+    // field's reported baseline, which sits below the names.
+    return SizedBox(
+      height: 18,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
           Text(
             'PERSONALITY',
             softWrap: false,
-            textHeightBehavior: const TextHeightBehavior(
-              applyHeightToFirstAscent: false,
-              applyHeightToLastDescent: false,
-            ),
             style: labelStyle,
           ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: _controller,
-            focusNode: _focusNode,
-            maxLines: 1,
-            textAlignVertical: TextAlignVertical.center,
-            style: nameStyle,
-            strutStyle: StrutStyle(
-              fontFamily: nameStyle.fontFamily,
-              fontSize: nameStyle.fontSize,
-              height: 1,
-              leading: 0,
-              forceStrutHeight: true,
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              expands: true,
+              maxLines: null,
+              textAlignVertical: TextAlignVertical.center,
+              style: nameStyle,
+              cursorColor: t.accent,
+              cursorHeight: nameStyle.fontSize,
+              spellCheckConfiguration: floSpellCheckConfiguration(),
+              contextMenuBuilder: floSpellCheckContextMenuBuilder,
+              decoration: InputDecoration(
+                isCollapsed: true,
+                border: InputBorder.none,
+                hintText: '—',
+                hintStyle: nameStyle.copyWith(color: t.textTertiary),
+                contentPadding: EdgeInsets.zero,
+              ),
+              onChanged: widget.onChanged,
             ),
-            cursorColor: t.accent,
-            cursorHeight: nameStyle.fontSize,
-            spellCheckConfiguration: floSpellCheckConfiguration(),
-            contextMenuBuilder: floSpellCheckContextMenuBuilder,
-            decoration: InputDecoration(
-              isCollapsed: true,
-              isDense: true,
-              border: InputBorder.none,
-              hintText: '—',
-              hintStyle: nameStyle.copyWith(color: t.textTertiary),
-              contentPadding: EdgeInsets.zero,
-            ),
-            onChanged: widget.onChanged,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

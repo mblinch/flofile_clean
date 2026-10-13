@@ -589,9 +589,21 @@ class PreferencesService {
     final active =
         CaptionTemplate.tryDecode(prefs.getString(_keyCaptionTemplateJson));
     if (active != null && !active.isUserAuthoredCaptionStyle) {
-      final gid = await resolveGameIdentifierText(active.wireStyle, normalized);
-      final updated = CaptionTemplate.applyGameIdentifierText(active, gid);
-      if (updated.gameIdentifierText != active.gameIdentifierText) {
+      final admin = AppDefaultsFirestoreService.mergedCaptionWireDefaults(
+        sport: normalized,
+      )[active.wireStyle];
+      final updated = admin == null
+          ? CaptionTemplate.applyGameIdentifierText(
+              active,
+              await resolveGameIdentifierText(active.wireStyle, normalized),
+            )
+          : admin.copyWith(
+              wireStyle: active.wireStyle,
+              includeTimingPhrase: active.includeTimingPhrase,
+              showKeywordsField: active.showKeywordsField,
+              showPersonalityField: active.showPersonalityField,
+            );
+      if (updated.encode() != active.encode()) {
         await prefs.setString(_keyCaptionTemplateJson, updated.encode());
       }
     }

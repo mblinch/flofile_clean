@@ -1293,7 +1293,7 @@ class VerbExtrasPanel extends StatelessWidget {
   }
 }
 
-class _VerbActionButton extends StatelessWidget {
+class _VerbActionButton extends StatefulWidget {
   const _VerbActionButton({
     required this.label,
     required this.tokens,
@@ -1305,39 +1305,34 @@ class _VerbActionButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_VerbActionButton> createState() => _VerbActionButtonState();
+}
+
+class _VerbActionButtonState extends State<_VerbActionButton> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Ink(
-          height: 28,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF243848),
-                Color(0xFF15242E),
-                Color(0xFF0E181F),
-              ],
-              stops: [0.0, 0.45, 1.0],
-            ),
-            border: Border.all(
-              color: FfTokens.nocturneAc.withValues(alpha: 0.95),
-            ),
-            boxShadow: FfTokens.accentButtonGlow(FfTokens.nocturneAc),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: tokens.labelStyle.copyWith(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Material(
+        color: _hovered ? const Color(0xFF343C45) : const Color(0xFF272D34),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            height: 28,
+            child: Center(
+              child: Text(
+                widget.label,
+                style: widget.tokens.labelStyle.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),

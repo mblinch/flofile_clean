@@ -86,6 +86,7 @@ class AppDefaultsCatalog {
     this.verbSettingsBySport = const {},
     this.iptcTemplates = const [],
     this.captionTemplateWireDefaults = const {},
+    this.captionTemplateByWireAndSport = const {},
     this.gameIdentifierByWireAndSport = const {},
     this.captionStyleLibrary = const [],
   });
@@ -96,7 +97,11 @@ class AppDefaultsCatalog {
   final Map<String, Map<String, dynamic>> verbSettingsBySport;
   final List<IptcTemplateCatalogEntry> iptcTemplates;
   /// Per-wire [CaptionTemplate] JSON keyed by [WireStyle.name].
+  /// Used when a sport has no structure of its own.
   final Map<String, Map<String, dynamic>> captionTemplateWireDefaults;
+  /// Per-wire, per-sport caption structure (wire name → sport → template JSON).
+  final Map<String, Map<String, Map<String, dynamic>>>
+      captionTemplateByWireAndSport;
   /// Per-wire, per-sport game identifier phrase (wire name → sport → text).
   final Map<String, Map<String, String>> gameIdentifierByWireAndSport;
   /// Shared caption style library entries pushed by admin, stored as raw JSON
@@ -115,6 +120,18 @@ class AppDefaultsCatalog {
   CaptionTemplate? captionWireDefault(WireStyle wire) {
     final raw = captionTemplateWireDefaults[wire.name];
     if (raw == null || raw.isEmpty) return null;
+    return _templateFromRaw(raw);
+  }
+
+  /// Structure published for this wire and sport, if one has been set.
+  CaptionTemplate? captionForWireAndSport(WireStyle wire, String sport) {
+    final raw = captionTemplateByWireAndSport[wire.name]
+        ?[sport.toLowerCase().trim()];
+    if (raw == null || raw.isEmpty) return null;
+    return _templateFromRaw(raw);
+  }
+
+  static CaptionTemplate? _templateFromRaw(Map<String, dynamic> raw) {
     try {
       return CaptionTemplate.fromJson(Map<String, dynamic>.from(raw));
     } catch (_) {
@@ -344,8 +361,9 @@ class AppDefaultsFirestoreService {
     final catalog = _memoryCache;
     final out = <WireStyle, CaptionTemplate>{};
     for (final wire in captionWireStyles) {
-      final base =
-          catalog?.captionWireDefault(wire) ?? factoryCaptionForWire(wire);
+      final base = catalog?.captionForWireAndSport(wire, sport) ??
+          catalog?.captionWireDefault(wire) ??
+          factoryCaptionForWire(wire);
       final gid = catalog?.gameIdentifierText(wire, sport) ??
           defaultGameIdentifierText(sport);
       out[wire] = CaptionTemplate.applyGameIdentifierText(base, gid);
@@ -414,7 +432,8 @@ class AppDefaultsFirestoreService {
     await fetchAndCacheAppDefaults(forceNetwork: true);
   }
 
-  /// Admin: merge one wire's caption structure into app defaults.
+  /// Admin: save one sport's caption structure. Other sports on the same wire
+  /// keep the structures already published for them.
   static Future<void> publishCaptionWireDefault(
     WireStyle wire,
     CaptionTemplate template, {
@@ -422,33 +441,59 @@ class AppDefaultsFirestoreService {
     String? gameIdentifierSport,
   }) async {
     await _assertCanPublish();
+    final sportKey = gameIdentifierSport?.toLowerCase().trim();
+    if (sportKey == null || sportKey.isEmpty) {
+      throw StateError('A sport is required to publish a caption structure.');
+    }
     final snap = await _doc.get();
     final data = snap.data() ?? <String, dynamic>{};
-    final existing = <String, Map<String, dynamic>>{};
-    final raw = data['captionTemplateWireDefaults'];
-    if (raw is Map) {
-      raw.forEach((k, v) {
-        if (v is Map) {
-          existing[k.toString()] = Map<String, dynamic>.from(v);
-        }
-      });
-    }
-    existing[wire.name] = CaptionTemplate.wireMasterJsonFromTemplate(
+    final structures = _parseCaptionByWireAndSport(
+      data['captionTemplateByWireAndSport'],
+    );
+    final bySport = Map<String, Map<String, dynamic>>.from(
+      structures[wire.name] ?? const {},
+    );
+    bySport[sportKey] = CaptionTemplate.wireMasterJsonFromTemplate(
       template.copyWith(wireStyle: wire),
     );
+    structures[wire.name] = bySport;
 
-    Map<String, Map<String, String>>? gameIds;
-    if (gameIdentifierForSport != null &&
-        gameIdentifierSport != null &&
-        gameIdentifierForSport.trim().isNotEmpty) {
-      gameIds = _parseGameIdentifierMap(data['gameIdentifierByWireAndSport']);
-      final bySport = Map<String, String>.from(gameIds[wire.name] ?? {});
-      bySport[gameIdentifierSport.toLowerCase().trim()] =
-          gameIdentifierForSport.trim();
-      gameIds[wire.name] = bySport;
+    final gameIds = _parseGameIdentifierMap(data['gameIdentifierByWireAndSport']);
+    final gid = (gameIdentifierForSport ?? template.gameIdentifierText).trim();
+    if (gid.isNotEmpty) {
+      final ids = Map<String, String>.from(gameIds[wire.name] ?? const {});
+      ids[sportKey] = gid;
+      gameIds[wire.name] = ids;
     }
 
-    await publishCaptionWireDefaults(existing, gameIdentifierByWireAndSport: gameIds);
+    await _doc.set(
+      {
+        'schemaVersion': currentSchemaVersion,
+        'updatedAt': FieldValue.serverTimestamp(),
+        'updatedBy': FirebaseAuth.instance.currentUser?.uid,
+        'captionTemplateByWireAndSport': structures,
+        'gameIdentifierByWireAndSport': _gameIdentifierMapToFirestore(gameIds),
+      },
+      SetOptions(merge: true),
+    );
+    await fetchAndCacheAppDefaults(forceNetwork: true);
+  }
+
+  static Map<String, Map<String, Map<String, dynamic>>>
+      _parseCaptionByWireAndSport(dynamic raw) {
+    final out = <String, Map<String, Map<String, dynamic>>>{};
+    if (raw is! Map) return out;
+    raw.forEach((wireKey, sportMap) {
+      if (sportMap is! Map) return;
+      final bySport = <String, Map<String, dynamic>>{};
+      sportMap.forEach((sportKey, value) {
+        if (value is! Map) return;
+        bySport[sportKey.toString().toLowerCase().trim()] =
+            Map<String, dynamic>.from(value);
+      });
+      if (bySport.isNotEmpty) out[wireKey.toString()] = bySport;
+    });
+    return out;
   }
 
   /// Admin: push the caption style library so all users receive it on startup.
@@ -667,6 +712,9 @@ class AppDefaultsFirestoreService {
         }
       });
     }
+    final captionBySport = _parseCaptionByWireAndSport(
+      data['captionTemplateByWireAndSport'],
+    );
     final gameIds = _parseGameIdentifierMap(data['gameIdentifierByWireAndSport']);
     final styleLib = <Map<String, dynamic>>[];
     final styleLibRaw = data['captionStyleLibrary'];
@@ -697,6 +745,7 @@ class AppDefaultsFirestoreService {
       verbSettingsBySport: verbs,
       iptcTemplates: iptc,
       captionTemplateWireDefaults: captionDefaults,
+      captionTemplateByWireAndSport: captionBySport,
       gameIdentifierByWireAndSport: gameIds,
       captionStyleLibrary: styleLib,
     );
@@ -712,6 +761,7 @@ class AppDefaultsFirestoreService {
       'iptcTemplates':
           catalog.iptcTemplates.map((e) => e.toFirestore()).toList(),
       'captionTemplateWireDefaults': catalog.captionTemplateWireDefaults,
+      'captionTemplateByWireAndSport': catalog.captionTemplateByWireAndSport,
       'gameIdentifierByWireAndSport':
           _gameIdentifierMapToFirestore(catalog.gameIdentifierByWireAndSport),
       if (catalog.captionStyleLibrary.isNotEmpty)

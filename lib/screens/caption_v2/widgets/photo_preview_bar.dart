@@ -7,15 +7,17 @@ import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import 'frame_status_dot.dart';
 
-/// Filename and exposure. Sits on the top of the photo.
+/// Filename, exposure, and the admin edit button. Sits on the top of the photo.
 class PhotoPreviewInfoBar extends StatelessWidget {
   const PhotoPreviewInfoBar({
     super.key,
     required this.controller,
+    required this.editSession,
     this.showExposure = true,
   });
 
   final CaptionV2Controller controller;
+  final PhotoEditSession editSession;
   final bool showExposure;
 
   String _meta(List<String> keys) {
@@ -84,6 +86,11 @@ class PhotoPreviewInfoBar extends StatelessWidget {
                 ),
               ] else
                 const Spacer(),
+              PhotoEditModeButton(
+                session: editSession,
+                controller: controller,
+                compact: true,
+              ),
             ],
           );
         },
@@ -101,17 +108,15 @@ String _formatShutter(String raw) {
       : '${value.toStringAsFixed(1)}s';
 }
 
-/// Edit, saved, and uploaded marks. Sits on the bottom of the photo.
+/// Saved and uploaded marks. Sits on the bottom of the photo.
 class PhotoPreviewActionBar extends StatelessWidget {
   const PhotoPreviewActionBar({
     super.key,
     required this.controller,
-    required this.editSession,
     required this.path,
   });
 
   final CaptionV2Controller controller;
-  final PhotoEditSession editSession;
   final String path;
 
   @override
@@ -127,12 +132,6 @@ class PhotoPreviewActionBar extends StatelessWidget {
       child: Row(
         children: [
           const Spacer(),
-          PhotoEditModeButton(
-            session: editSession,
-            controller: controller,
-            compact: true,
-          ),
-          const SizedBox(width: 10),
           PhotoPreviewStatusIcons(
             state: controller.frameStateFor(path),
             tokens: tokens,

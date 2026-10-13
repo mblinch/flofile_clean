@@ -535,7 +535,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
 
     final sportChanged = widget.initialSport != null &&
         widget.initialSport != oldWidget.initialSport;
-    if (sportChanged || widget.gameIdDraftsSeed != oldWidget.gameIdDraftsSeed) {
+    if (sportChanged) {
       unawaited(_applyAdminSportChange());
     }
   }
@@ -544,20 +544,33 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     _sessionSport = widget.initialSport ?? _sessionSport;
     await _loadGameIdByWire();
     if (!mounted) return;
-    final gid = _gameIdByWire[_selectedWire] ??
-        defaultGameIdentifierText(_sessionSport);
+    final seed = widget.wireDraftsSeed;
+    if (seed != null) {
+      for (final entry in seed.entries) {
+        final copy = _deepCopyCaptionTemplate(entry.value)
+            .copyWith(wireStyle: entry.key);
+        _wireDrafts[entry.key] = copy;
+        _seedWireDefaultFromDraft(entry.key, copy);
+      }
+    }
+    final seeded = widget.initialTemplate ?? _draftOrBaseline(_selectedWire);
+    final next = _withSessionSportGameId(
+      _deepCopyCaptionTemplate(seeded).copyWith(wireStyle: _selectedWire),
+    );
     setState(() {
       _template = GettyNoteVariant.applyToTemplate(
-        _template.copyWith(gameIdentifierText: gid),
+        next,
         nbae: GettyNoteVariant.applies(
           enabled: _gettyNoteIsNbae,
           wire: _selectedWire,
           sport: _sessionSport,
         ),
       );
+      _lastPreset = _clonePreset(_template);
       _initGapControllers(_template);
     });
     _syncBylineControllersFromTemplate();
+    _syncDateUiFromTemplate();
   }
 
   void _syncBylineControllersFromTemplate() {
@@ -4940,6 +4953,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           wire: _selectedWire,
           sport: _sessionSport,
         ),
+        insertIfMissing: on,
       );
       _initGapControllers(_template);
     });
@@ -5042,7 +5056,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           const SizedBox(width: 4),
           Tooltip(
             message:
-                'Layout is shared by every sport on this wire. The game identifier phrase is set per sport — switch sport to edit it.',
+                'Each sport has its own caption structure on this wire. Switch sport to edit another one.',
             waitDuration: const Duration(milliseconds: 300),
             child: PhosphorIcon(
               PhosphorIconsRegular.info,
@@ -5908,6 +5922,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   }
 
   void _beginSepEdit(String key, String value) {
+    final previous = _editingSepKey;
+    if (previous != null && previous != key) {
+      _applySepEdit(previous, _sepEditCtrl.text);
+    }
     _sepEditCtrl.value = TextEditingValue(
       text: value,
       selection: TextSelection(baseOffset: 0, extentOffset: value.length),
@@ -5920,11 +5938,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     setState(() => _editingSepKey = null);
   }
 
-  void _commitSepEdit() {
-    final key = _editingSepKey;
-    if (key == null) return;
-    final value = _sepEditCtrl.text;
-    setState(() => _editingSepKey = null);
+  void _applySepEdit(String key, String value) {
     if (key == 'prefix') {
       _layoutPrefixCtrl.text = value;
     } else if (key == 'suffix') {
@@ -5935,6 +5949,14 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         _glueSnippetControllers[index]?.text = value;
       }
     }
+  }
+
+  void _commitSepEdit() {
+    final key = _editingSepKey;
+    if (key == null) return;
+    final value = _sepEditCtrl.text;
+    setState(() => _editingSepKey = null);
+    _applySepEdit(key, value);
   }
 
   void _removeSegmentWithUndo(int index) {
@@ -6180,7 +6202,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         const SizedBox(width: 8),
         Tooltip(
           message:
-              'Layout is shared by every sport on this wire. The game identifier phrase is set per sport — switch sport to edit it.',
+              'Each sport has its own caption structure on this wire. Switch sport to edit another one.',
           waitDuration: const Duration(milliseconds: 300),
           child: PhosphorIcon(
             PhosphorIconsRegular.info,
@@ -6198,86 +6220,112 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     );
   }
 
+  /// A joiner with more than one word (the Getty note) wraps in its own box.
+  /// ` at ` and ` - ` stay single-line marks.
+  bool _sepIsParagraph(String value) => value.trim().contains(' ');
+
+  /// Box hugs the text. A long note wraps once it hits [maxWidth], then grows
+  /// taller so every line stays visible.
+  GrowingTextBoxSize _sepBoxSize(
+    String visual,
+    TextStyle style,
+    double maxWidth, {
+    required bool paragraph,
+  }) {
+    final cap = maxWidth.isFinite && maxWidth > 32 ? maxWidth : 360.0;
+    return GrowingTextBoxSize.measure(
+      text: visual,
+      style: style,
+      minWidth: 28,
+      maxWidth: cap,
+      minHeight: 34,
+      horizontalPad: 16,
+      verticalPad: paragraph ? 16 : 0,
+    );
+  }
+
   Widget _adminSepButton({required String keyId, required String value}) {
+    final paragraph = _sepIsParagraph(value);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final cap = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+            ? constraints.maxWidth
+            : 360.0;
+        if (_editingSepKey == keyId) {
+          return _adminSepEditor(
+            keyId: keyId,
+            maxWidth: cap,
+          );
+        }
+        return _adminSepFace(
+          keyId: keyId,
+          value: value,
+          paragraph: paragraph,
+          maxWidth: cap,
+        );
+      },
+    );
+  }
+
+  Widget _adminSepFace({
+    required String keyId,
+    required String value,
+    required bool paragraph,
+    required double maxWidth,
+  }) {
     final t = _ffOf(context);
-    final editing = _editingSepKey == keyId;
-    if (editing) {
-      return SizedBox(
-        width: 88,
-        height: 34,
-        child: Focus(
-          onKeyEvent: (node, event) {
-            if (event is! KeyDownEvent) return KeyEventResult.ignored;
-            if (event.logicalKey == LogicalKeyboardKey.escape) {
-              _cancelSepEdit();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: TextField(
-            controller: _sepEditCtrl,
-            autofocus: true,
-            style: TextStyle(
-              fontFamily: FfTokens.monoFamily,
-              fontSize: 13,
-              height: 1,
-              color: t.text,
-            ),
-            textAlign: TextAlign.center,
-            decoration: InputDecoration(
-              isDense: true,
-              isCollapsed: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              filled: true,
-              fillColor: t.sunken,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: t.accent),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(6),
-                borderSide: BorderSide(color: t.accent),
-              ),
-            ),
-            onSubmitted: (_) => _commitSepEdit(),
-          ),
-        ),
-      );
-    }
     final empty = value.isEmpty;
-    final labelStyle = TextStyle(
+    final visual = empty ? '·' : (paragraph ? value : spaceTokenLabel(value));
+    final style = TextStyle(
       fontFamily: FfTokens.fontFamily,
-      fontSize: 13,
-      height: 1,
+      fontSize: paragraph ? 12.5 : 13,
+      height: paragraph ? 1.35 : 1,
       color: empty
           ? t.text.withValues(alpha: 0.35)
-          : t.text.withValues(alpha: 0.82),
+          : t.text.withValues(alpha: 0.88),
     );
-    // widthFactor keeps the mark as wide as its text. A plain Center inside
-    // the wrap expands to the full row and drops every field onto its own line.
+    final box = _sepBoxSize(visual, style, maxWidth, paragraph: paragraph);
     return Material(
-      color: Colors.transparent,
+      color: _snippetFill,
+      borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: () => _beginSepEdit(keyId, value),
-        borderRadius: BorderRadius.circular(6),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 18, minHeight: 34),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Center(
-              widthFactor: 1,
-              heightFactor: 1,
-              child: empty
-                  ? Text('·', softWrap: false, style: labelStyle)
-                  : Text.rich(
-                      spaceTokenSpan(value, labelStyle),
-                      softWrap: false,
-                    ),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          width: box.width,
+          height: box.height,
+          padding: EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: paragraph ? 8 : 0,
+          ),
+          alignment: paragraph ? Alignment.centerLeft : Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: t.text.withValues(alpha: 0.16),
+              width: 0.5,
             ),
+          ),
+          child: Text(
+            visual,
+            style: style,
+            softWrap: paragraph,
           ),
         ),
       ),
+    );
+  }
+
+  Widget _adminSepEditor({
+    required String keyId,
+    required double maxWidth,
+  }) {
+    return _HugSepEditor(
+      key: ValueKey('sep-$keyId'),
+      controller: _sepEditCtrl,
+      maxWidth: maxWidth,
+      onCommit: _commitSepEdit,
+      onCancel: _cancelSepEdit,
     );
   }
 
@@ -7636,6 +7684,135 @@ class _StructureTextLimit extends InheritedWidget {
   @override
   bool updateShouldNotify(_StructureTextLimit oldWidget) =>
       oldWidget.maxWidth != maxWidth;
+}
+
+/// Separator editor that stays as wide as its text and as tall as a long note.
+class _HugSepEditor extends StatefulWidget {
+  const _HugSepEditor({
+    super.key,
+    required this.controller,
+    required this.maxWidth,
+    required this.onCommit,
+    required this.onCancel,
+  });
+
+  final TextEditingController controller;
+  final double maxWidth;
+  final VoidCallback onCommit;
+  final VoidCallback onCancel;
+
+  @override
+  State<_HugSepEditor> createState() => _HugSepEditorState();
+}
+
+class _HugSepEditorState extends State<_HugSepEditor> {
+  late final SpaceTokenEditingController _mirror;
+
+  @override
+  void initState() {
+    super.initState();
+    _mirror = SpaceTokenEditingController.mirror(widget.controller);
+    widget.controller.addListener(_onText);
+  }
+
+  @override
+  void didUpdateWidget(covariant _HugSepEditor oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_onText);
+    widget.controller.addListener(_onText);
+    _mirror.retarget(widget.controller);
+  }
+
+  void _onText() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onText);
+    _mirror.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = _ffOf(context);
+    final raw = widget.controller.text;
+    // Decide from the text being typed. The stored gap can still be a short
+    // mark, and that used to keep the field on one line while the note grew.
+    final paragraph = raw.contains('\n') || raw.trim().contains(' ');
+    final style = TextStyle(
+      fontFamily: FfTokens.fontFamily,
+      fontSize: paragraph ? 12.5 : 13,
+      height: paragraph ? 1.35 : 1,
+      color: t.text,
+    );
+    final visual = paragraph ? raw : spaceTokenLabel(raw);
+    final cap = widget.maxWidth.isFinite && widget.maxWidth > 32
+        ? widget.maxWidth
+        : 360.0;
+    final box = GrowingTextBoxSize.measure(
+      text: visual.isEmpty ? ' ' : visual,
+      style: style,
+      minWidth: 28,
+      maxWidth: cap,
+      minHeight: 34,
+      horizontalPad: 16,
+      verticalPad: paragraph ? 16 : 0,
+    );
+    return Focus(
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        if (event.logicalKey == LogicalKeyboardKey.escape) {
+          widget.onCancel();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: SizedBox(
+        width: box.width,
+        height: box.height,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: CaptionLayoutBuilderDialogState._snippetFill,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: t.accent, width: 1.5),
+          ),
+          // The border lives on this box. A TextField outline is only as tall
+          // as the text line, so focusing the gap used to shrink the chip.
+          child: TextField(
+            controller: _mirror,
+            autofocus: true,
+            maxLines: paragraph ? null : 1,
+            minLines: 1,
+            scrollPhysics: const NeverScrollableScrollPhysics(),
+            keyboardType:
+                paragraph ? TextInputType.multiline : TextInputType.text,
+            textAlign: paragraph ? TextAlign.left : TextAlign.center,
+            textAlignVertical:
+                paragraph ? TextAlignVertical.top : TextAlignVertical.center,
+            cursorColor: t.accent,
+            cursorWidth: 1.2,
+            style: style,
+            decoration: InputDecoration(
+              isDense: true,
+              isCollapsed: true,
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: paragraph ? 8 : 0,
+              ),
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+            ),
+            onSubmitted: paragraph ? null : (_) => widget.onCommit(),
+            onTapOutside: (_) => widget.onCommit(),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Narrow separator field used between caption-formula chips.

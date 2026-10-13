@@ -447,6 +447,7 @@ class _PhotoCard extends StatelessWidget {
             if (path != null)
               PhotoPreviewInfoBar(
                 controller: controller,
+                editSession: editSession,
                 showExposure: MediaQuery.sizeOf(context).width >= 1100,
               ),
             Expanded(
@@ -589,7 +590,6 @@ class _PhotoCard extends StatelessWidget {
             if (path != null)
               PhotoPreviewActionBar(
                 controller: controller,
-                editSession: editSession,
                 path: path!,
               ),
           ],

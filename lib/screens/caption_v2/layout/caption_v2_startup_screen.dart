@@ -330,17 +330,24 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       final prefs = _prefs ?? await PreferencesService.getInstance();
       final catalog =
           await CaptionStyleCatalog.load(prefs, sport: _sport);
-      final template = await prefs.getCaptionTemplate();
+      var template = await prefs.getCaptionTemplate();
       final nbae = await prefs.getGettyNoteIsNbae();
-      // Overlay sport-correct game ID for built-in wires so the side preview
-      // never shows a stale league (e.g. NHL during baseball).
-      final sportAware = _sportChosen
-          ? await prefs.applyGameIdentifierForSport(
-              template,
-              template.wireStyle,
-              _sport!,
-            )
-          : template;
+      // Each sport can have its own published structure. The working template
+      // may still be the previous sport until saveCurrentSport finishes.
+      if (_sportChosen && !template.isUserAuthoredCaptionStyle) {
+        final admin = AppDefaultsFirestoreService.mergedCaptionWireDefaults(
+          sport: _sport!,
+        )[template.wireStyle];
+        if (admin != null) {
+          template = admin.copyWith(
+            wireStyle: template.wireStyle,
+            includeTimingPhrase: template.includeTimingPhrase,
+            showKeywordsField: template.showKeywordsField,
+            showPersonalityField: template.showPersonalityField,
+          );
+        }
+      }
+      final sportAware = template;
       if (!mounted) return;
       setState(() {
         _styleCatalog = catalog;
@@ -1512,7 +1519,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
           const SizedBox(height: 12),
           _OptionRow(
             title: 'NBAE credit',
-            description: 'Uses the NBAE copyright line on the note to user',
+            description:
+                'Keeps the NBAE copyright line when the layout includes it',
             value: _gettyNoteIsNbae,
             onChanged: (next) => unawaited(_setNbae(next)),
           ),
@@ -1582,14 +1590,16 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                 : null,
           ),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (var i = 0; i < cards.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                Expanded(child: cards[i]),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < cards.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  Expanded(child: cards[i]),
+                ],
               ],
-            ],
+            ),
           ),
         ],
       ),

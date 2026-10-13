@@ -6039,7 +6039,7 @@ class CaptionV2Controller extends ChangeNotifier {
     final keepFirebar = searchOpen;
     final saved = await saveCurrent();
     if (!saved) return;
-    if (transmit) await transmitPath(path);
+    if (transmit) unawaited(transmitPath(path));
     if (currentPath == path) nextFrame(keepSearchOpen: keepFirebar);
   }
 
@@ -8996,7 +8996,7 @@ class CaptionV2Controller extends ChangeNotifier {
 
     final saved = await saveCurrent();
     if (!saved) return;
-    if (transmit) await transmitPath(path);
+    if (transmit) unawaited(transmitPath(path));
     if (currentPath == path) nextFrame(keepSearchOpen: keepFirebar);
   }
 

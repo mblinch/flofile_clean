@@ -203,7 +203,10 @@ class _EditStage extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (path != null)
-                    PhotoPreviewInfoBar(controller: controller),
+                    PhotoPreviewInfoBar(
+                      controller: controller,
+                      editSession: session,
+                    ),
                   Expanded(
                     child: path == null
                         ? Center(
@@ -240,7 +243,6 @@ class _EditStage extends StatelessWidget {
                   if (path != null)
                     PhotoPreviewActionBar(
                       controller: controller,
-                      editSession: session,
                       path: path,
                     ),
                 ],

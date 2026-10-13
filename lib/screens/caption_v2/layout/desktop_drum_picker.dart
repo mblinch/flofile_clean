@@ -2140,7 +2140,7 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: _DrumVerbActionButton(
-                        label: widget.controller.ftpButtonLabel,
+                        label: 'FTP',
                         tokens: widget.tokens,
                         onTap: () => widget.controller
                             .saveOrTransmitFromVerbMenu(transmit: true),
@@ -2164,12 +2164,23 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
                 horizontal: _VerbAccordion.verbHighlightInset,
                 vertical: _VerbAccordion.selectedRowOuterPadding / 2,
               ),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2C333A),
-                  borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(FfTokens.radiusRow),
+                child: Stack(
+                  children: [
+                    ColoredBox(
+                      color: const Color(0xFF2C333A),
+                      child: column,
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: 2,
+                      child: ColoredBox(color: widget.tokens.accent),
+                    ),
+                  ],
                 ),
-                child: column,
               ),
             )
           : column,
@@ -2177,7 +2188,7 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
   }
 }
 
-class _DrumVerbActionButton extends StatelessWidget {
+class _DrumVerbActionButton extends StatefulWidget {
   const _DrumVerbActionButton({
     required this.label,
     required this.tokens,
@@ -2189,39 +2200,34 @@ class _DrumVerbActionButton extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
+  State<_DrumVerbActionButton> createState() => _DrumVerbActionButtonState();
+}
+
+class _DrumVerbActionButtonState extends State<_DrumVerbActionButton> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(6),
-        child: Ink(
-          height: 22,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(6),
-            gradient: const LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF243848),
-                Color(0xFF15242E),
-                Color(0xFF0E181F),
-              ],
-              stops: [0.0, 0.45, 1.0],
-            ),
-            border: Border.all(
-              color: FfTokens.nocturneAc.withValues(alpha: 0.95),
-            ),
-            boxShadow: FfTokens.accentButtonGlow(FfTokens.nocturneAc),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: tokens.labelStyle.copyWith(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Colors.white,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Material(
+        color: _hovered ? const Color(0xFF343C45) : const Color(0xFF272D34),
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: SizedBox(
+            height: 28,
+            child: Center(
+              child: Text(
+                widget.label,
+                style: widget.tokens.labelStyle.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
@@ -2291,7 +2297,9 @@ class _VerbAccordionRow extends StatelessWidget {
             decoration: BoxDecoration(
               color: fill,
               borderRadius: BorderRadius.circular(7),
-              border: selected
+              // The selected box draws one accent bar for the verb and its
+              // actions. A border here would stop at the verb row.
+              border: selected && !boxed
                   ? Border(left: BorderSide(color: tokens.accent, width: 2))
                   : null,
             ),
@@ -2663,7 +2671,7 @@ class _NumberRoster extends StatelessWidget {
                         : teamNameSubjectSelected,
                     tokens: tokens,
                     height: fittedH,
-                    fontSize: fittedName + 6,
+                    fontSize: fittedName - 0.5,
                     onTap: playersButton
                         ? onPlayersSubject!
                         : onTeamNameSubject!,

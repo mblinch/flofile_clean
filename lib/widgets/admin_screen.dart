@@ -86,6 +86,8 @@ class _AdminScreenState extends State<AdminScreen> {
   WireStyle _captionWire = WireStyle.getty;
   String _captionSport = 'baseball';
   final Map<WireStyle, CaptionTemplate> _captionDrafts = {};
+  final Map<WireStyle, Map<String, CaptionTemplate>> _captionByWireAndSport =
+      {};
   final Map<WireStyle, Map<String, String>> _gameIdDrafts = {};
   int _captionBuilderRevision = 0;
   Future<void> Function()? _flushCaptionBuilder;
@@ -140,27 +142,13 @@ class _AdminScreenState extends State<AdminScreen> {
       for (final sport in _sports) {
         _verbBundles[sport] = await _sportBundleForAdmin(sport);
       }
-      _captionDrafts.clear();
-      _gameIdDrafts.clear();
-      for (final w in AppDefaultsFirestoreService.captionWireStyles) {
-        final fromCatalog = _catalog?.captionWireDefault(w);
-        _captionDrafts[w] = (fromCatalog ??
-                AppDefaultsFirestoreService.factoryCaptionForWire(w))
-            .copyWith(wireStyle: w);
-        final bySport = <String, String>{};
-        for (final sport in _sports) {
-          final fromMap = _catalog?.gameIdentifierText(w, sport);
-          bySport[sport] = fromMap ?? defaultGameIdentifierText(sport);
-        }
-        _gameIdDrafts[w] = bySport;
-      }
       final currentSport =
           (await _prefs.getCurrentSport()).toLowerCase().trim();
       final sport = _sports.contains(currentSport) ? currentSport : 'baseball';
       _verbSport = sport;
       _captionSport = sport;
       _compareSport = sport;
-      _applyGameIdToCaptionDraft(_captionWire, _captionSport);
+      _loadCaptionDraftsFromCatalog(_catalog);
       _captureCaptionBaseline();
       _captionDirty = false;
       _captionBuilderRevision++;
@@ -600,24 +588,53 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() => _setActiveVerbBundle(bundle));
   }
 
+  CaptionTemplate _cloneCaption(CaptionTemplate template) {
+    return CaptionTemplate.fromJson(Map<String, dynamic>.from(template.toJson()));
+  }
+
+  void _loadCaptionDraftsFromCatalog(AppDefaultsCatalog? catalog) {
+    _captionByWireAndSport.clear();
+    _gameIdDrafts.clear();
+    for (final wire in AppDefaultsFirestoreService.captionWireStyles) {
+      final bySportTemplate = <String, CaptionTemplate>{};
+      final bySportGid = <String, String>{};
+      for (final sport in _sports) {
+        final gid = catalog?.gameIdentifierText(wire, sport) ??
+            defaultGameIdentifierText(sport);
+        final base = catalog?.captionForWireAndSport(wire, sport) ??
+            catalog?.captionWireDefault(wire) ??
+            AppDefaultsFirestoreService.factoryCaptionForWire(wire);
+        bySportTemplate[sport] = _cloneCaption(base).copyWith(
+          wireStyle: wire,
+          gameIdentifierText: gid,
+        );
+        bySportGid[sport] = gid;
+      }
+      _captionByWireAndSport[wire] = bySportTemplate;
+      _gameIdDrafts[wire] = bySportGid;
+    }
+    _showCaptionSport(_captionSport);
+  }
+
+  void _showCaptionSport(String sport) {
+    for (final wire in AppDefaultsFirestoreService.captionWireStyles) {
+      final template = _captionByWireAndSport[wire]?[sport];
+      if (template == null) continue;
+      final gid = _gameIdDrafts[wire]?[sport] ?? template.gameIdentifierText;
+      _captionDrafts[wire] = _cloneCaption(template).copyWith(
+        wireStyle: wire,
+        gameIdentifierText: gid,
+      );
+    }
+  }
+
   void _stashGameIdFromTemplate(WireStyle wire, CaptionTemplate template) {
     _gameIdDrafts.putIfAbsent(wire, () => {});
     _gameIdDrafts[wire]![_captionSport] = template.gameIdentifierText.trim();
   }
 
-  void _applyGameIdToCaptionDraft(WireStyle wire, String sport) {
-    final draft = _captionDrafts[wire];
-    if (draft == null) return;
-    final text =
-        _gameIdDrafts[wire]?[sport] ?? defaultGameIdentifierText(sport);
-    _captionDrafts[wire] = draft.copyWith(
-      wireStyle: wire,
-      gameIdentifierText: text,
-    );
-  }
-
   bool _captionDirty = false;
-  final Map<WireStyle, String> _captionBaselineJson = {};
+  final Map<String, String> _captionBaselineJson = {};
   final Map<WireStyle, String> _gameIdBaselineJson = {};
 
   String _captionStructureKey(CaptionTemplate template) {
@@ -629,11 +646,14 @@ class _AdminScreenState extends State<AdminScreen> {
   void _captureCaptionBaseline() {
     _captionBaselineJson
       ..clear()
-      ..addEntries(
-        _captionDrafts.entries.map(
-          (entry) => MapEntry(entry.key, _captionStructureKey(entry.value)),
-        ),
-      );
+      ..addEntries([
+        for (final wireEntry in _captionByWireAndSport.entries)
+          for (final sportEntry in wireEntry.value.entries)
+            MapEntry(
+              _captionSlotKey(wireEntry.key, sportEntry.key),
+              _captionStructureKey(sportEntry.value),
+            ),
+      ]);
     _gameIdBaselineJson
       ..clear()
       ..addEntries(
@@ -643,17 +663,41 @@ class _AdminScreenState extends State<AdminScreen> {
       );
   }
 
+  String _captionSlotKey(WireStyle wire, String sport) =>
+      '${wire.name}|${sport.toLowerCase().trim()}';
+
+  bool _sportHasPending(WireStyle wire, String sport) {
+    final template = _captionByWireAndSport[wire]?[sport];
+    if (template == null) return false;
+    final structureChanged = _captionStructureKey(template) !=
+        _captionBaselineJson[_captionSlotKey(wire, sport)];
+    Map<String, dynamic> baselineGids = const {};
+    try {
+      final decoded = jsonDecode(_gameIdBaselineJson[wire] ?? '{}');
+      if (decoded is Map) baselineGids = Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    final gidChanged = (_gameIdDrafts[wire]?[sport] ?? '') !=
+        (baselineGids[sport]?.toString() ?? '');
+    return structureChanged || gidChanged;
+  }
+
   int get _captionPendingCount {
     var count = 0;
-    for (final entry in _captionDrafts.entries) {
-      final structureChanged =
-          _captionStructureKey(entry.value) != _captionBaselineJson[entry.key];
-      final gameIdsChanged = jsonEncode(_gameIdDrafts[entry.key] ?? const {}) !=
-          (_gameIdBaselineJson[entry.key] ?? '{}');
-      if (structureChanged) count++;
-      if (gameIdsChanged) count++;
+    for (final wire in _captionByWireAndSport.keys) {
+      for (final sport in _sports) {
+        if (_sportHasPending(wire, sport)) count++;
+      }
     }
     return count;
+  }
+
+  void _markSportPublished(WireStyle wire, String sport) {
+    final template = _captionByWireAndSport[wire]?[sport];
+    if (template != null) {
+      _captionBaselineJson[_captionSlotKey(wire, sport)] =
+          _captionStructureKey(template);
+    }
+    _gameIdBaselineJson[wire] = jsonEncode(_gameIdDrafts[wire] ?? const {});
   }
 
   void _discardCaptionEdits() {
@@ -669,8 +713,10 @@ class _AdminScreenState extends State<AdminScreen> {
   Future<void> Function()? _setAllCaptionDefaults;
 
   void _onCaptionDraftChanged(WireStyle wire, CaptionTemplate template) {
-    _captionDrafts[wire] = template.copyWith(wireStyle: wire);
-    _stashGameIdFromTemplate(wire, template);
+    final copy = _cloneCaption(template).copyWith(wireStyle: wire);
+    _captionDrafts[wire] = copy;
+    (_captionByWireAndSport[wire] ??= {})[_captionSport] = _cloneCaption(copy);
+    _stashGameIdFromTemplate(wire, copy);
     final pending = _captionPendingCount > 0;
     if (!mounted) {
       _captionDirty = pending;
@@ -685,7 +731,7 @@ class _AdminScreenState extends State<AdminScreen> {
     if (!mounted) return;
     setState(() {
       _captionSport = sport;
-      _applyGameIdToCaptionDraft(_captionWire, sport);
+      _showCaptionSport(sport);
     });
   }
 
@@ -695,36 +741,11 @@ class _AdminScreenState extends State<AdminScreen> {
   }
 
   void _seedCaptionDraftsFromCatalog() {
-    final catalog = _catalog;
-    _captionDrafts.clear();
-    _gameIdDrafts.clear();
-    for (final w in AppDefaultsFirestoreService.captionWireStyles) {
-      final fromCatalog = catalog?.captionWireDefault(w);
-      _captionDrafts[w] = (fromCatalog ??
-              AppDefaultsFirestoreService.factoryCaptionForWire(w))
-          .copyWith(wireStyle: w);
-      final bySport = <String, String>{};
-      for (final sport in _sports) {
-        final fromMap = catalog?.gameIdentifierText(w, sport);
-        bySport[sport] = fromMap ?? defaultGameIdentifierText(sport);
-      }
-      _gameIdDrafts[w] = bySport;
-    }
-    _applyGameIdToCaptionDraft(_captionWire, _captionSport);
+    _loadCaptionDraftsFromCatalog(_catalog);
   }
 
   Future<void> _setCaptionStructuresAsDefaults() async {
     await _publishCaptions(saveLocalDefaults: true);
-  }
-
-  Future<void> _saveCurrentCaptionWireDefault() async {
-    final template = _captionDrafts[_captionWire] ??
-        AppDefaultsFirestoreService.factoryCaptionForWire(_captionWire);
-    final prefs = await PreferencesService.getInstance();
-    await prefs.saveCaptionTemplateWireDefault(
-      _captionWire,
-      template.copyWith(wireStyle: _captionWire),
-    );
   }
 
   Map<String, Map<String, String>> _gameIdDraftsForFirestore() {
@@ -955,25 +976,23 @@ class _AdminScreenState extends State<AdminScreen> {
     bool saveLocalDefaults = false,
   }) async {
     final wireLabel = WireIptcSpecs.factoryWireLabel(_captionWire);
+    final sportLabel = SportVerbCategories.displayLabel(_captionSport);
     final ok = await _confirmAdminPublish(
       title: allWires
           ? 'Publish caption defaults?'
-          : 'Publish caption default?',
+          : 'Save this structure as default?',
       message: allWires
           ? 'Saves every wire caption layout to Firebase app originals.'
-          : 'Saves the $wireLabel caption structure to Firebase app originals.',
-      confirmLabel: 'Publish',
+          : 'Saves the caption structure you are editing as the default for '
+              '$sportLabel on $wireLabel.',
+      confirmLabel: allWires ? 'Publish' : 'Save',
     );
     if (!ok) return;
     setState(() => _busy = true);
     try {
       await _flushCaptionBuilderDrafts();
-      if (saveLocalDefaults) {
-        if (allWires) {
-          await _setAllCaptionDefaults?.call();
-        } else {
-          await _saveCurrentCaptionWireDefault();
-        }
+      if (saveLocalDefaults && allWires) {
+        await _setAllCaptionDefaults?.call();
       }
       final wires = allWires
           ? AppDefaultsFirestoreService.captionWireStyles
@@ -1009,14 +1028,19 @@ class _AdminScreenState extends State<AdminScreen> {
       }
       await _applyPublishedCaptionToWorkingTemplate();
       if (!mounted) return;
-      _captureCaptionBaseline();
-      setState(() => _captionDirty = false);
+      _catalog = AppDefaultsFirestoreService.getCachedCatalog();
+      if (allWires) {
+        _captureCaptionBaseline();
+      } else {
+        _markSportPublished(_captionWire, _captionSport);
+      }
+      setState(() => _captionDirty = _captionPendingCount > 0);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             allWires
                 ? 'Published all caption structures.'
-                : 'Published the $wireLabel caption structure.',
+                : 'Saved the $wireLabel caption structure for $sportLabel.',
           ),
           backgroundColor: kFloTealLight,
         ),
@@ -1056,6 +1080,9 @@ class _AdminScreenState extends State<AdminScreen> {
 
     final keepCustom = active.wireStyle == WireStyle.custom;
     final sport = await prefs.getCurrentSport();
+    if (sport.toLowerCase().trim() != _captionSport.toLowerCase().trim()) {
+      return;
+    }
     var next = published.copyWith(
       id: keepCustom ? active.id : published.id,
       name: keepCustom ? active.name : published.name,
@@ -1735,11 +1762,13 @@ class _AdminScreenState extends State<AdminScreen> {
           ),
           const SizedBox(width: 8),
           ElevatedGreyButton(
-            label: _busy ? 'Publishing…' : 'Set all as defaults',
+            label: _busy ? 'Saving…' : 'Save as default',
             fontSize: 11,
             isPrimary: true,
             isAdmin: true,
-            onPressed: pending ? _setCaptionStructuresAsDefaults : null,
+            onPressed: _sportHasPending(_captionWire, _captionSport) && !_busy
+                ? _setCaptionStructuresAsDefaults
+                : null,
           ),
         ],
       ),

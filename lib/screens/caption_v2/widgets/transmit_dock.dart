@@ -152,29 +152,8 @@ class _FtpTrailingSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.centerLeft,
-      children: [
-        Visibility(
-          visible: !active,
-          maintainSize: true,
-          maintainState: true,
-          maintainAnimation: true,
-          child: history,
-        ),
-        if (active)
-          Positioned.fill(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: bar,
-              ),
-            ),
-          ),
-      ],
-    );
+    if (active) return bar;
+    return history;
   }
 }
 
@@ -270,56 +249,53 @@ class _FtpProgressBarState extends State<_FtpProgressBar>
     final shown = _shown;
     final pct = (shown * 100).round();
     final thumb = _thumbPath;
-    return SizedBox(
-      height: 28,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (thumb != null && thumb.isNotEmpty) ...[
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: SizedBox(
-                width: 18,
-                height: 18,
-                child: OrientedFilePreview(
-                  path: thumb,
-                  fit: BoxFit.cover,
-                  cacheWidth: 54,
-                  filterQuality: FilterQuality.low,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (thumb != null && thumb.isNotEmpty) ...[
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: SizedBox(
-              width: 64,
-              height: 10,
-              child: LinearProgressIndicator(
-                value: shown,
-                backgroundColor: tokens.sunken,
-                color: tokens.accent,
+              width: 44,
+              height: 44,
+              child: OrientedFilePreview(
+                path: thumb,
+                fit: BoxFit.cover,
+                cacheWidth: 132,
+                filterQuality: FilterQuality.low,
               ),
             ),
           ),
-          const SizedBox(width: 4),
-          SizedBox(
-            width: 28,
-            child: Text(
-              widget.active || shown > 0 ? '$pct%' : '',
-              textAlign: TextAlign.left,
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: tokens.text,
-              ),
-            ),
-          ),
+          const SizedBox(width: 6),
         ],
-      ),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            width: 64,
+            height: 10,
+            child: LinearProgressIndicator(
+              value: shown,
+              backgroundColor: tokens.sunken,
+              color: tokens.accent,
+            ),
+          ),
+        ),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 28,
+          child: Text(
+            widget.active || shown > 0 ? '$pct%' : '',
+            textAlign: TextAlign.left,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              color: tokens.text,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

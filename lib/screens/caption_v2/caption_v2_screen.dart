@@ -721,7 +721,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     await _saveInDirection(next: true, transmit: true);
   }
 
-  /// Save current (with burst UI if needed), FTP, then move to the next frame.
+  /// Save current (with burst UI if needed), start FTP, and move on
+  /// without waiting for the upload to finish.
   Future<void> _saveAndFtpCurrent() async {
     await _saveInDirection(next: true, transmit: true);
   }
@@ -761,8 +762,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       final alreadySaved = selected.every(_controller.savedImages.contains);
       final result = await _controller.savePaths(selected);
       if (!mounted) return;
-      if (transmit) await _transmitSaved(result);
-      if (!mounted) return;
+      if (transmit) unawaited(_transmitSaved(result));
       _controller.setSelectedImagePaths(result.failedPaths);
       if (result.anySucceeded &&
           burstGroup != null &&
@@ -790,8 +790,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (chain.length > 1 && !anchorAlreadySaved) {
       final result = await _controller.savePaths([chain.first]);
       if (!mounted) return;
-      if (transmit) await _transmitSaved(result);
-      if (!mounted) return;
+      if (transmit) unawaited(_transmitSaved(result));
       if (result.anySucceeded) {
         _setPendingBurst(chain: chain);
         if (advance) {
@@ -810,7 +809,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       return;
     }
     final result = await _controller.savePaths([path]);
-    if (transmit) await _transmitSaved(result);
+    if (transmit) unawaited(_transmitSaved(result));
     if (result.anySucceeded && mounted && advance) {
       next
           ? _controller.nextFrame(keepSearchOpen: keepFirebar)
