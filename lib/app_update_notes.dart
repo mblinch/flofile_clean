@@ -12,9 +12,11 @@ const String kAppUpdateNotesTitle = 'What’s new';
 const String kAppUpdateNotesBody = '''
 Here is what changed in this version.
 
-On-device jersey OCR (macOS): photos auto-scan for jersey numbers and player names, matched against your loaded home/away rosters. Hold the loupe on a number or name for a focused scan. Tap a match chip to select that player.
+Numbers mode: set the squares to 4, 5, or 6 across with − and + beside the roster search. Plus makes the squares larger. The default is 4. Home and away share the same count.
 
-Caption V2 polish continues across photo preview, roster, and Firebar workflows.
+Caption text size − and + stay in the top caption bar.
+
+Player search text starts at the left once you type. The magnifying glass hides until the field is empty.
 
 This message shows one time after you update. Tap OK or outside the box to close it.
 ''';
