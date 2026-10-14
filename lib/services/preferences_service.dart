@@ -13,6 +13,48 @@ import 'camera_serial_service.dart';
 import 'iptc_template_apply_service.dart';
 import 'user_preferences_firestore_service.dart';
 
+bool _hockeySaysSkatesLikeAnAnimal(Object? value) {
+  const phrase = 'skates like an animal';
+  if (value is String) return value.toLowerCase().contains(phrase);
+  if (value is Map) {
+    for (final entry in value.entries) {
+      if (_hockeySaysSkatesLikeAnAnimal(entry.key) ||
+          _hockeySaysSkatesLikeAnAnimal(entry.value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (value is Iterable) {
+    for (final item in value) {
+      if (_hockeySaysSkatesLikeAnAnimal(item)) return true;
+    }
+  }
+  return false;
+}
+
+Map<String, String> _withoutHockeyAnimalWordings(
+  String sport,
+  Map<String, String> wordings,
+) {
+  if (sport.trim().toLowerCase() != 'hockey') return wordings;
+  wordings.removeWhere(
+    (key, value) =>
+        _hockeySaysSkatesLikeAnAnimal(key) ||
+        _hockeySaysSkatesLikeAnAnimal(value),
+  );
+  return wordings;
+}
+
+List<Map<String, dynamic>> _withoutHockeyAnimalVerbs(
+  String sport,
+  List<Map<String, dynamic>> verbs,
+) {
+  if (sport.trim().toLowerCase() != 'hockey') return verbs;
+  verbs.removeWhere(_hockeySaysSkatesLikeAnAnimal);
+  return verbs;
+}
+
 class PreferencesService {
   static const String _keyCategoryOrder = 'category_order';
   static const String _keyCategoryOrderBaseball = 'category_order_baseball';
@@ -983,7 +1025,10 @@ class PreferencesService {
     if (jsonString != null) {
       try {
         final Map<String, dynamic> decoded = json.decode(jsonString);
-        return decoded.map((k, v) => MapEntry(k, v.toString()));
+        return _withoutHockeyAnimalWordings(
+          sport,
+          decoded.map((k, v) => MapEntry(k, v.toString())),
+        );
       } catch (e) {
         print('Error parsing custom verb wordings for ' +
             sport +
@@ -995,7 +1040,10 @@ class PreferencesService {
     if (sportDefault != null && sportDefault['customVerbWordings'] != null) {
       try {
         final m = sportDefault['customVerbWordings'] as Map<String, dynamic>;
-        return m.map((k, v) => MapEntry(k, v.toString()));
+        return _withoutHockeyAnimalWordings(
+          sport,
+          m.map((k, v) => MapEntry(k, v.toString())),
+        );
       } catch (_) {}
     }
     return <String, String>{};
@@ -1131,7 +1179,10 @@ class PreferencesService {
     if (jsonString != null) {
       try {
         final List<dynamic> decoded = json.decode(jsonString);
-        return decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+        return _withoutHockeyAnimalVerbs(
+          sport,
+          decoded.map((e) => Map<String, dynamic>.from(e)).toList(),
+        );
       } catch (e) {
         print('Error parsing custom verbs for $sport: $e');
       }
@@ -1139,9 +1190,12 @@ class PreferencesService {
     final sportDefault = await getSportDefault(sport);
     if (sportDefault != null && sportDefault['customVerbs'] != null) {
       try {
-        return (sportDefault['customVerbs'] as List<dynamic>)
-            .map((e) => Map<String, dynamic>.from(e as Map<String, dynamic>))
-            .toList();
+        return _withoutHockeyAnimalVerbs(
+          sport,
+          (sportDefault['customVerbs'] as List<dynamic>)
+              .map((e) => Map<String, dynamic>.from(e as Map<String, dynamic>))
+              .toList(),
+        );
       } catch (_) {}
     }
     return [];

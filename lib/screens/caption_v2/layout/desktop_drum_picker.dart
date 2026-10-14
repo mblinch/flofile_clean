@@ -2757,6 +2757,7 @@ class _TeamSubjectCellState extends State<_TeamSubjectCell> {
     final fill = selected
         ? tokens.text
         : (_hovered ? tokens.hover : tokens.sunken);
+    final labelColor = selected ? tokens.bg : tokens.text;
     return MouseRegion(
       cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
@@ -2774,21 +2775,27 @@ class _TeamSubjectCellState extends State<_TeamSubjectCell> {
               color: fill,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                widget.label,
-                maxLines: 2,
-                softWrap: false,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontFamily: FfTokens.labelFamily,
-                  fontSize: widget.fontSize,
-                  height: 1.05,
-                  letterSpacing: 0.2,
-                  fontWeight: FontWeight.w700,
-                  color: selected ? tokens.bg : tokens.text,
-                ),
+            child: Text(
+              widget.label,
+              maxLines: 2,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: FfTokens.labelFamily,
+                fontSize: widget.fontSize,
+                height: 1.05,
+                letterSpacing: 0.2,
+                fontWeight: FontWeight.w700,
+                color: labelColor,
+                shadows: [
+                  Shadow(
+                    color: labelColor.withValues(alpha: 0.9),
+                    blurRadius: 8,
+                  ),
+                  Shadow(
+                    color: labelColor.withValues(alpha: 0.55),
+                    blurRadius: 18,
+                  ),
+                ],
               ),
             ),
           ),

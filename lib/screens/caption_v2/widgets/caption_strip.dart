@@ -43,7 +43,7 @@ class CaptionStrip extends StatelessWidget {
     this.extraLabel = 'X',
     this.segmentPrefix,
     this.selectedHalf,
-    this.quarterMode = true,
+    this.quarterMode = false,
     this.onQuarterModeChanged,
     this.onHalfSelected,
     this.onInningSelected,
@@ -1073,30 +1073,6 @@ class _InningCardState extends State<_InningCard> {
           ),
         ),
       ],
-      if (widget.onQuarterModeChanged != null) ...[
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 52,
-          height: 24,
-          child: _ToggleChip(
-            label: 'Half',
-            selected: !widget.quarterMode,
-            tokens: t,
-            onTap: () => widget.onQuarterModeChanged!(false),
-          ),
-        ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 72,
-          height: 24,
-          child: _ToggleChip(
-            label: 'Quarter',
-            selected: widget.quarterMode,
-            tokens: t,
-            onTap: () => widget.onQuarterModeChanged!(true),
-          ),
-        ),
-      ],
       if (widget.mlbTimestampVisible) ...[
         const SizedBox(width: 4),
         SizedBox(
@@ -1151,16 +1127,30 @@ class _InningCardState extends State<_InningCard> {
               ),
             ),
           ),
-          Opacity(
-            opacity: timingOn || widget.stepperOnly ? 1 : 0.4,
-            child: IgnorePointer(
-              ignoring: !(timingOn || widget.stepperOnly),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: periodButtons,
+          Expanded(
+            child: Opacity(
+              opacity: timingOn || widget.stepperOnly ? 1 : 0.4,
+              child: IgnorePointer(
+                ignoring: !(timingOn || widget.stepperOnly),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: periodButtons,
+                  ),
+                ),
               ),
             ),
           ),
+          if (widget.onQuarterModeChanged != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: _PeriodModeToggle(
+                quarterMode: widget.quarterMode,
+                tokens: t,
+                onChanged: widget.onQuarterModeChanged!,
+              ),
+            ),
         ],
       ),
     );
@@ -1308,43 +1298,53 @@ class _PersonalityBarState extends State<_PersonalityBar> {
       height: 1,
     );
     final labelStyle = FfTokens.panelLabel(color: t.textTertiary);
-    // Shared line box. Baseline alignment was pinning the smaller label to the
-    // field's reported baseline, which sits below the names.
-    return SizedBox(
-      height: 18,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Text(
-            'PERSONALITY',
-            softWrap: false,
-            style: labelStyle,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              focusNode: _focusNode,
-              expands: true,
-              maxLines: null,
-              textAlignVertical: TextAlignVertical.center,
-              style: nameStyle,
-              cursorColor: t.accent,
-              cursorHeight: nameStyle.fontSize,
-              spellCheckConfiguration: floSpellCheckConfiguration(),
-              contextMenuBuilder: floSpellCheckContextMenuBuilder,
-              decoration: InputDecoration(
-                isCollapsed: true,
-                border: InputBorder.none,
-                hintText: '—',
-                hintStyle: nameStyle.copyWith(color: t.textTertiary),
-                contentPadding: EdgeInsets.zero,
+    // EditableText, not TextField. The field decoration was placing the names
+    // below the label even when the row was centered.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          'PERSONALITY',
+          softWrap: false,
+          style: labelStyle,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _focusNode.requestFocus(),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              heightFactor: 1,
+              child: Stack(
+                alignment: Alignment.centerLeft,
+                children: [
+                  if (_controller.text.isEmpty)
+                    IgnorePointer(
+                      child: Text(
+                        '—',
+                        style: nameStyle.copyWith(color: t.textTertiary),
+                      ),
+                    ),
+                  EditableText(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    style: nameStyle,
+                    cursorColor: t.accent,
+                    backgroundCursorColor: t.surface,
+                    cursorWidth: 1.2,
+                    maxLines: 1,
+                    selectionColor: t.accent.withValues(alpha: 0.35),
+                    spellCheckConfiguration: floSpellCheckConfiguration(),
+                    contextMenuBuilder: floSpellCheckContextMenuBuilder,
+                    onChanged: widget.onChanged,
+                  ),
+                ],
               ),
-              onChanged: widget.onChanged,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -1820,6 +1820,63 @@ class _MlbTimestampChip extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PeriodModeToggle extends StatelessWidget {
+  const _PeriodModeToggle({
+    required this.quarterMode,
+    required this.tokens,
+    required this.onChanged,
+  });
+
+  final bool quarterMode;
+  final FfTokens tokens;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 24,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: tokens.bg,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: tokens.inputBorder),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _segment('Half', !quarterMode, () => onChanged(false)),
+          _segment('Quarter', quarterMode, () => onChanged(true)),
+        ],
+      ),
+    );
+  }
+
+  Widget _segment(String label, bool selected, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: 20,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: selected ? tokens.hover : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? tokens.text : tokens.textSecondary,
           ),
         ),
       ),

@@ -549,7 +549,16 @@ async function runSync(trigger: SyncTrigger): Promise<{
 
     const delayMs =
       cfg.syncAllSports === true || cfg.syncAllMlb === true ? 400 : 0;
-    const totals = await syncJobs(db, items, { delayBetweenJobsMs: delayMs });
+    const historySnap = await db.doc("config/rosterHistory").get();
+    const historyData = historySnap.exists ? historySnap.data() : null;
+    const rosterHistory = historyData?.enabled !== false;
+    if (!rosterHistory) {
+      logger.info("config/rosterHistory.enabled is false — skipping roster history.");
+    }
+    const totals = await syncJobs(db, items, {
+      delayBetweenJobsMs: delayMs,
+      rosterHistory,
+    });
     result = { ok: true, totals, jobCount: items.length };
     return result;
   } finally {

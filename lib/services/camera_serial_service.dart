@@ -40,9 +40,10 @@ class CameraSerialService {
       Map.from(_cameraMappings);
 
   Future<void> initialize() async {
-    if (_initialized) return;
-    await _loadMappings();
-    _initialized = true;
+    if (!_initialized) {
+      await _loadMappings();
+      _initialized = true;
+    }
   }
 
   Future<void> _loadMappings() async {
@@ -121,9 +122,19 @@ class CameraSerialService {
           }
         }
         if (value is Map) {
+          final localKey = existingSerialKey(serial);
+          final local = localKey == null ? null : _cameraMappings[localKey];
+          final body = (value['body']?.toString().trim().isNotEmpty ?? false)
+              ? value['body'].toString().trim()
+              : (local?['body'] ?? '');
+          final added = (value['added']?.toString().trim().isNotEmpty ?? false)
+              ? value['added'].toString().trim()
+              : (local?['added'] ?? '');
           next[target] = {
             'name': value['name']?.toString() ?? '',
             'initials': value['initials']?.toString() ?? '',
+            if (body.isNotEmpty) 'body': body,
+            if (added.isNotEmpty) 'added': added,
           };
         } else if (value != null) {
           next[target] = {
@@ -160,8 +171,13 @@ class CameraSerialService {
 
   /// Adds or updates a mapping. Returns `true` if an existing serial was
   /// updated (no second entry is created).
-  Future<bool> addCameraMapping(String serialNumber, String photographerName,
-      {String initials = ''}) async {
+  Future<bool> addCameraMapping(
+    String serialNumber,
+    String photographerName, {
+    String initials = '',
+    String body = '',
+    String added = '',
+  }) async {
     final result = await mergeMappings([
       (
         serial: serialNumber,
@@ -172,7 +188,78 @@ class CameraSerialService {
     if (result.errors.isNotEmpty) {
       throw ArgumentError(result.errors.first);
     }
+    if (body.trim().isNotEmpty) {
+      await rememberCameraBodies({serialNumber: body});
+    }
+    if (added.trim().isNotEmpty) {
+      await _setAddedDate(serialNumber, added);
+    }
     return result.updated > 0;
+  }
+
+  /// Make + model from EXIF, without repeating the brand already in the model.
+  static String bodyNameFromExif(Map<dynamic, dynamic> raw) {
+    String? text(dynamic value) {
+      final s = value?.toString().trim() ?? '';
+      return s.isEmpty ? null : s;
+    }
+
+    final make = _exifField(raw, const ['make']) ?? '';
+    final model = _exifField(
+          raw,
+          const ['model', 'cameramodelname', 'uniquecameramodel'],
+        ) ??
+        '';
+    if (make.isEmpty) return model;
+    if (model.isEmpty) return make;
+    final modelLower = model.toLowerCase();
+    if (modelLower.startsWith(make.toLowerCase())) return model;
+    final brand = make.split(RegExp(r'\s+')).first;
+    if (brand.isNotEmpty && modelLower.startsWith(brand.toLowerCase())) {
+      return model;
+    }
+    return '$make $model';
+  }
+
+  static String? _exifField(Map<dynamic, dynamic> raw, List<String> names) {
+    final wanted = names.map((name) => name.toLowerCase()).toSet();
+    for (final entry in raw.entries) {
+      final key = entry.key.toString().toLowerCase();
+      final bare = key.split(':').last;
+      if (!wanted.contains(key) && !wanted.contains(bare)) continue;
+      final value = entry.value?.toString().trim() ?? '';
+      if (value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  /// Stores the camera body read from EXIF on serials that are already mapped.
+  Future<void> rememberCameraBodies(Map<String, String> serialToBody) async {
+    await initialize();
+    var changed = false;
+    for (final entry in serialToBody.entries) {
+      final key = existingSerialKey(entry.key);
+      if (key == null) continue;
+      final body = entry.value.trim();
+      if (body.isEmpty) continue;
+      final current = _cameraMappings[key]!;
+      if ((current['body'] ?? '') == body) continue;
+      current['body'] = body;
+      changed = true;
+    }
+    if (changed) await _saveMappings();
+  }
+
+  Future<void> _setAddedDate(String serialNumber, String added) async {
+    await initialize();
+    final key = existingSerialKey(serialNumber);
+    if (key == null) return;
+    final value = added.trim();
+    if (value.isEmpty) return;
+    final current = _cameraMappings[key]!;
+    if ((current['added'] ?? '') == value) return;
+    current['added'] = value;
+    await _saveMappings();
   }
 
   /// Bulk merge for Import / Paste. Same serial never creates a second row
@@ -212,6 +299,17 @@ class CameraSerialService {
     var updated = 0;
     for (final entry in incoming.entries) {
       final existingKey = existingSerialKey(entry.key);
+      final previousBody = existingKey == null
+          ? ''
+          : (_cameraMappings[existingKey]?['body'] ?? '');
+      final previousAdded = existingKey == null
+          ? ''
+          : (_cameraMappings[existingKey]?['added'] ?? '');
+      final addedOn = previousAdded.isNotEmpty
+          ? previousAdded
+          : (existingKey == null
+              ? DateTime.now().toUtc().toIso8601String()
+              : '');
       if (existingKey != null) {
         updated++;
         if (existingKey != entry.key) {
@@ -220,7 +318,11 @@ class CameraSerialService {
       } else {
         added++;
       }
-      _cameraMappings[entry.key] = entry.value;
+      _cameraMappings[entry.key] = {
+        ...entry.value,
+        if (previousBody.isNotEmpty) 'body': previousBody,
+        if (addedOn.isNotEmpty) 'added': addedOn,
+      };
     }
 
     if (added > 0 || updated > 0) {

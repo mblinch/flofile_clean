@@ -1,10 +1,14 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 import '../services/camera_serial_service.dart';
 import '../theme/ff_tokens.dart';
+import '../utils/oriented_image_bytes.dart';
 import 'app_styled_dialogs.dart';
-import 'ff_dropdown.dart';
+import 'photographer_name_field.dart';
 
 /// Result of assigning a photographer for an unknown / missing camera serial.
 class UnknownSerialAssignment {
@@ -25,6 +29,8 @@ class UnknownSerialDialog extends StatefulWidget {
     super.key,
     required this.cameraService,
     this.serialNumber,
+    this.imagePath,
+    this.cameraBody,
   });
 
   final CameraSerialService cameraService;
@@ -32,11 +38,19 @@ class UnknownSerialDialog extends StatefulWidget {
   /// Camera serial from EXIF, or null/empty when the file has none.
   final String? serialNumber;
 
+  /// Photo this serial was read from.
+  final String? imagePath;
+
+  /// Camera body (make and model) read from the same EXIF as [serialNumber].
+  final String? cameraBody;
+
   /// Shows the dialog and returns the assignment, or null if cancelled.
   static Future<UnknownSerialAssignment?> show(
     BuildContext context, {
     required CameraSerialService cameraService,
     String? serialNumber,
+    String? imagePath,
+    String? cameraBody,
   }) {
     return showDialog<UnknownSerialAssignment>(
       context: context,
@@ -44,6 +58,8 @@ class UnknownSerialDialog extends StatefulWidget {
       builder: (context) => UnknownSerialDialog(
         cameraService: cameraService,
         serialNumber: serialNumber,
+        imagePath: imagePath,
+        cameraBody: cameraBody,
       ),
     );
   }
@@ -55,18 +71,10 @@ class UnknownSerialDialog extends StatefulWidget {
 class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
   final _nameController = TextEditingController();
   final _initialsController = TextEditingController();
-  String? _selectedExisting;
-  bool _useExisting = false;
 
   String get _serial => widget.serialNumber?.trim() ?? '';
   bool get _hasSerial => _serial.isNotEmpty;
-
-  @override
-  void initState() {
-    super.initState();
-    final existing = widget.cameraService.getUniquePhotographerNames();
-    _useExisting = existing.isNotEmpty;
-  }
+  String get _body => widget.cameraBody?.trim() ?? '';
 
   @override
   void dispose() {
@@ -75,26 +83,28 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
     super.dispose();
   }
 
-  Future<void> _submit() async {
-    final String name;
-    String initials = _initialsController.text.trim();
+  void _applyPhotographerInitials(String name) {
+    var initials = '';
+    for (final entry in widget.cameraService.fullCameraMappings.entries) {
+      if ((entry.value['name'] ?? '') == name) {
+        initials = entry.value['initials'] ?? '';
+        break;
+      }
+    }
+    setState(() => _initialsController.text = initials);
+  }
 
-    if (_useExisting && _selectedExisting != null) {
-      name = _selectedExisting!.trim();
-      if (name.isEmpty) return;
-      // Reuse initials already stored for that photographer, if any.
-      if (initials.isEmpty) {
-        for (final entry
-            in widget.cameraService.fullCameraMappings.entries) {
-          if ((entry.value['name'] ?? '') == name) {
-            initials = entry.value['initials'] ?? '';
-            break;
-          }
+  Future<void> _submit() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    var initials = _initialsController.text.trim();
+    if (initials.isEmpty) {
+      for (final entry in widget.cameraService.fullCameraMappings.entries) {
+        if ((entry.value['name'] ?? '') == name) {
+          initials = entry.value['initials'] ?? '';
+          break;
         }
       }
-    } else {
-      name = _nameController.text.trim();
-      if (name.isEmpty) return;
     }
 
     if (_hasSerial) {
@@ -102,6 +112,7 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
         _serial,
         name,
         initials: initials,
+        body: widget.cameraBody ?? '',
       );
     }
 
@@ -111,25 +122,35 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
     );
   }
 
-  InputDecoration _fieldDecoration(FfTokens t, {required String label}) {
+  Widget _label(FfTokens t, String text) {
+    return Text(
+      text,
+      style: t.metaStyle.copyWith(
+        fontSize: 11,
+        color: t.textTertiary,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+  }
+
+  InputDecoration _fieldDecoration(FfTokens t, {String? hint}) {
     final border = OutlineInputBorder(
       borderRadius: BorderRadius.circular(FfTokens.radiusChip),
       borderSide: BorderSide(color: t.divider),
     );
     return InputDecoration(
-      labelText: label,
       isDense: true,
+      hintText: hint,
       filled: true,
       fillColor: t.sunken,
-      labelStyle: t.metaStyle.copyWith(color: t.textSecondary),
-      floatingLabelStyle: t.metaStyle.copyWith(color: t.accent),
+      hintStyle: t.metaStyle.copyWith(color: t.textTertiary),
       border: border,
       enabledBorder: border,
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(FfTokens.radiusChip),
         borderSide: BorderSide(color: t.accent, width: 1.2),
       ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
     );
   }
 
@@ -137,9 +158,7 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final existing = widget.cameraService.getUniquePhotographerNames();
-    final canSubmit = _useExisting
-        ? _selectedExisting != null && _selectedExisting!.trim().isNotEmpty
-        : _nameController.text.trim().isNotEmpty;
+    final canSubmit = _nameController.text.trim().isNotEmpty;
 
     return AppDialogFfStyle(
       enabled: true,
@@ -147,7 +166,7 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
         backgroundColor: Colors.transparent,
         insetPadding: const EdgeInsets.all(24),
         child: Container(
-          width: 420,
+          width: 520,
           decoration: BoxDecoration(
             color: t.surface,
             borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
@@ -175,12 +194,30 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          'Who took this photo?',
-                          style: t.labelStyle.copyWith(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Assign serial number to photographer byline',
+                              style: t.labelStyle.copyWith(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            if ((widget.imagePath ?? '').trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                p.basename(widget.imagePath!.trim()),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: t.metaStyle.copyWith(
+                                  color: t.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                       IconButton(
@@ -194,140 +231,65 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
                     ],
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _hasSerial
-                            ? 'Serial “$_serial” isn’t in your camera list yet. '
-                                'Enter the photographer so bylines can use them next time.'
-                            : 'This photo has no camera serial number. '
-                                'Enter the photographer for the byline.',
-                        style: t.bodyStyle.copyWith(
-                          fontSize: 13,
-                          height: 1.35,
-                          color: t.text.withValues(alpha: 0.88),
-                        ),
-                      ),
-                      if (_hasSerial) ...[
-                        const SizedBox(height: 10),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: t.sunken,
-                            borderRadius:
-                                BorderRadius.circular(FfTokens.radiusChip),
-                            border: Border.all(color: t.divider),
-                          ),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.sizeOf(context).height * 0.62,
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if ((widget.imagePath ?? '').trim().isNotEmpty)
+                          _SerialPromptPhoto(path: widget.imagePath!.trim()),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                           child: Text(
-                            'SN: $_serial',
+                            _hasSerial
+                                ? 'Serial number $_serial${_body.isEmpty ? '' : ' · $_body'} is not on the list.'
+                                : 'This photo has no camera serial.',
                             style: t.metaStyle.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: t.accent,
+                              color: t.textSecondary,
+                              fontSize: 12,
                             ),
                           ),
                         ),
-                      ],
-                      const SizedBox(height: 14),
-                      if (existing.isNotEmpty) ...[
-                        Row(
-                          children: [
-                            ChoiceChip(
-                              label: const Text('Existing'),
-                              selected: _useExisting,
-                              onSelected: (_) => setState(() {
-                                _useExisting = true;
-                              }),
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: const Text('New'),
-                              selected: !_useExisting,
-                              onSelected: (_) => setState(() {
-                                _useExisting = false;
-                                _selectedExisting = null;
-                              }),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                      if (_useExisting && existing.isNotEmpty)
-                        InputDecorator(
-                          decoration: _fieldDecoration(
-                            t,
-                            label: 'Photographer',
-                          ),
-                          child: FfDropdownButton<String>(
-                            value: _selectedExisting,
-                            isExpanded: true,
-                            menuColor: t.surface,
-                            style: t.bodyStyle.copyWith(fontSize: 13),
-                            items: [
-                              for (final name in existing)
-                                DropdownMenuItem(
-                                  value: name,
-                                  child: Text(name),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _label(t, 'Photographer'),
+                              const SizedBox(height: 6),
+                              PhotographerNameField(
+                                controller: _nameController,
+                                names: existing,
+                                onSelected: _applyPhotographerInitials,
+                              ),
+                              const SizedBox(height: 10),
+                              _label(t, 'Initials'),
+                              const SizedBox(height: 6),
+                              SizedBox(
+                                width: 96,
+                                height: 36,
+                                child: TextField(
+                                  controller: _initialsController,
+                                  style: t.bodyStyle.copyWith(
+                                    fontSize: 13,
+                                    height: 1.2,
+                                  ),
+                                  cursorColor: t.accent,
+                                  textAlignVertical: TextAlignVertical.center,
+                                  textCapitalization:
+                                      TextCapitalization.characters,
+                                  decoration: _fieldDecoration(t, hint: 'MDB')
+                                      .copyWith(isCollapsed: true),
                                 ),
+                              ),
                             ],
-                            onChanged: (v) => setState(() {
-                              _selectedExisting = v;
-                            }),
-                          ),
-                        )
-                      else ...[
-                        TextField(
-                          controller: _nameController,
-                          autofocus: true,
-                          style: t.bodyStyle.copyWith(fontSize: 13),
-                          cursorColor: t.accent,
-                          decoration: _fieldDecoration(
-                            t,
-                            label: 'Photographer name',
-                          ),
-                          onChanged: (_) => setState(() {}),
-                          onSubmitted: (_) {
-                            if (canSubmit) _submit();
-                          },
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: 120,
-                          child: TextField(
-                            controller: _initialsController,
-                            style: t.bodyStyle.copyWith(fontSize: 13),
-                            cursorColor: t.accent,
-                            textCapitalization: TextCapitalization.characters,
-                            decoration: _fieldDecoration(
-                              t,
-                              label: 'Initials',
-                            ),
                           ),
                         ),
                       ],
-                      if (_useExisting && existing.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: 120,
-                          child: TextField(
-                            controller: _initialsController,
-                            style: t.bodyStyle.copyWith(fontSize: 13),
-                            cursorColor: t.accent,
-                            textCapitalization: TextCapitalization.characters,
-                            decoration: _fieldDecoration(
-                              t,
-                              label: 'Initials',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                    ),
                   ),
                 ),
                 Padding(
@@ -336,13 +298,13 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       ElevatedGreyButton(
-                        label: 'Skip',
+                        label: 'Cancel',
                         fontSize: 11,
                         onPressed: () => Navigator.of(context).pop(),
                       ),
                       const SizedBox(width: 8),
                       ElevatedGreyButton(
-                        label: _hasSerial ? 'Save & use' : 'Use for byline',
+                        label: 'Save',
                         fontSize: 11,
                         isPrimary: true,
                         onPressed: canSubmit ? _submit : null,
@@ -355,6 +317,61 @@ class _UnknownSerialDialogState extends State<UnknownSerialDialog> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SerialPromptPhoto extends StatefulWidget {
+  const _SerialPromptPhoto({required this.path});
+
+  final String path;
+
+  @override
+  State<_SerialPromptPhoto> createState() => _SerialPromptPhotoState();
+}
+
+class _SerialPromptPhotoState extends State<_SerialPromptPhoto> {
+  Uint8List? _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final bytes = await OrientedImageBytes.load(
+      widget.path,
+      maxWidth: 960,
+      priority: true,
+    );
+    if (!mounted) return;
+    setState(() => _bytes = bytes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ColoredBox(
+          color: t.bg,
+          child: SizedBox(
+            height: 180,
+            width: double.infinity,
+            child: _bytes == null
+                ? const Center(
+                    child: SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : Image.memory(_bytes!, fit: BoxFit.contain),
+          ),
+        ),
+      ],
     );
   }
 }

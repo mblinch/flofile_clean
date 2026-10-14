@@ -95,12 +95,10 @@ class CaptionV2ActionRow extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _ActionButton(
+              _AccentActionButton(
                 icon: PhosphorIconsRegular.cloudArrowUp,
                 label: transmitLabel,
                 tooltip: 'FTP · $transmitLabel',
-                tokens: t,
-                primary: true,
                 enabled: transmitEnabled,
                 onPressed: onTransmit,
               ),
@@ -382,6 +380,121 @@ class _ActionButton extends StatelessWidget {
                   const SizedBox(width: 4),
                   Icon(icon, size: 14, color: fg),
                 ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Same teal fill as the serial-list Add button.
+class _AccentActionButton extends StatefulWidget {
+  const _AccentActionButton({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    required this.onPressed,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool enabled;
+
+  @override
+  State<_AccentActionButton> createState() => _AccentActionButtonState();
+}
+
+class _AccentActionButtonState extends State<_AccentActionButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.enabled && widget.onPressed != null;
+    final border = !enabled
+        ? FfTokens.nocturneLn
+        : _hovered
+            ? Colors.white.withValues(alpha: 0.92)
+            : FfTokens.nocturneAc.withValues(alpha: 0.95);
+    final gradient = !enabled
+        ? null
+        : _pressed
+            ? const LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color(0xFF1A2A36),
+                  Color(0xFF0C141A),
+                  Color(0xFF080E12),
+                ],
+                stops: [0.0, 0.45, 1.0],
+              )
+            : _hovered
+                ? const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xFF2E4658),
+                      Color(0xFF1A2E3A),
+                      Color(0xFF121F28),
+                    ],
+                    stops: [0.0, 0.45, 1.0],
+                  )
+                : _kActionTealGradient;
+    final fg = enabled
+        ? Colors.white
+        : Colors.white.withValues(alpha: 0.4);
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: enabled
+            ? (_) => setState(() {
+                  _hovered = false;
+                  _pressed = false;
+                })
+            : null,
+        child: GestureDetector(
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          onTap: enabled ? widget.onPressed : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            height: 28,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: enabled ? null : const Color(0xFF15242E).withValues(alpha: 0.55),
+              gradient: gradient,
+              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+              border: Border.all(color: border),
+              boxShadow: enabled
+                  ? FfTokens.accentButtonGlow(
+                      _hovered ? Colors.white : FfTokens.nocturneAc,
+                    )
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(widget.icon, size: 14, color: fg),
+                const SizedBox(width: 6),
+                Text(
+                  widget.label,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.3,
+                    color: fg,
+                  ),
+                ),
               ],
             ),
           ),

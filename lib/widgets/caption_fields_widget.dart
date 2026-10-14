@@ -9,9 +9,11 @@ import '../services/mlb_api_service.dart';
 import '../services/mlb_inning_feature_gate.dart';
 import '../services/mlb_inning_from_timestamp_service.dart';
 import '../services/api_manager.dart';
+import '../services/roster_history_service.dart';
 import '../services/ftpclient_service.dart';
 import '../services/camera_serial_service.dart';
 import 'unknown_serial_dialog.dart';
+import 'older_roster_dialog.dart';
 import 'dart:io';
 import 'dart:async';
 import 'package:path/path.dart' as p;
@@ -703,6 +705,10 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   List<Player> _homeRoster = [];
   List<Player> _awayRoster = [];
   bool _isLoadingRosters = false;
+  String? _rosterHistoryKey;
+  bool _rosterHistoryCanSwitch = false;
+  bool _usingGameDateRoster = false;
+  bool _freezeRosterHistoryKey = false;
 
   // Static teams list for dropdown
   final List<String> teamsList = [
@@ -2727,6 +2733,165 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
   }
   // Removed _setCityFromStadium function - no auto-population of city/state
 
+  String _rosterLoadKey() =>
+      '$_currentSport|$selectedHomeTeam|$selectedAwayTeam|${_rosterGameDateYmd()}';
+
+  String? _rosterGameDateYmd() {
+    final meta = widget.metadata;
+    if (meta == null) return null;
+    final raw = meta['DateTimeOriginal']?.toString() ??
+        meta['CreateDate']?.toString() ??
+        meta['ModifyDate']?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    final datePart = raw.split(' ').first;
+    final pieces = datePart.split(':');
+    if (pieces.length < 3) return null;
+    final year = int.tryParse(pieces[0]);
+    final month = int.tryParse(pieces[1]);
+    final day = int.tryParse(pieces[2]);
+    if (year == null || month == null || day == null) return null;
+    return RosterHistoryService.calendarDate(DateTime(year, month, day));
+  }
+
+  /// Returns true when this game's rosters are already resolved, including
+  /// a history load. Returns false to fall through to the existing loader.
+  Future<bool> _loadRosterHistoryIfNeeded() async {
+    final key = _rosterLoadKey();
+    if (_rosterHistoryKey == key && _homeRoster.isNotEmpty) return true;
+
+    final gameDate = _rosterGameDateYmd();
+    if (await RosterHistoryService.servedByTank01(_currentSport)) {
+      final tankKey = '$_currentSport|$selectedHomeTeam|$selectedAwayTeam|tank01';
+      if (_rosterHistoryKey == tankKey && _homeRoster.isNotEmpty) return true;
+      _rosterHistoryCanSwitch = false;
+      _usingGameDateRoster = false;
+      _freezeRosterHistoryKey = true;
+      _rosterHistoryKey = tankKey;
+      return false;
+    }
+    _freezeRosterHistoryKey = false;
+    if (gameDate == null || !await RosterHistoryService.useRosterHistory()) {
+      _rosterHistoryCanSwitch = false;
+      _usingGameDateRoster = false;
+      return false;
+    }
+
+    setState(() => _isLoadingRosters = true);
+    try {
+      final homeSide = await RosterHistoryService.loadTeam(
+        sportId: _currentSport,
+        teamName: selectedHomeTeam!,
+        gameDate: gameDate,
+        liveToday: false,
+      );
+      final awaySide = await RosterHistoryService.loadTeam(
+        sportId: _currentSport,
+        teamName: selectedAwayTeam!,
+        gameDate: gameDate,
+        liveToday: false,
+      );
+      if (homeSide.useExistingPath || awaySide.useExistingPath) {
+        if (mounted) setState(() => _isLoadingRosters = false);
+        _rosterHistoryCanSwitch = false;
+        return false;
+      }
+
+      final older = <OlderRosterTeam>[
+        if (homeSide.differsFromLatest && homeSide.effectiveOn != null)
+          OlderRosterTeam(
+            teamName: homeSide.teamName,
+            effectiveOn: homeSide.effectiveOn!,
+          ),
+        if (awaySide.differsFromLatest && awaySide.effectiveOn != null)
+          OlderRosterTeam(
+            teamName: awaySide.teamName,
+            effectiveOn: awaySide.effectiveOn!,
+          ),
+      ];
+
+      var useGameDate = true;
+      if (older.isNotEmpty && mounted) {
+        useGameDate = await OlderRosterDialog.show(
+          context,
+          gameDate: gameDate,
+          teams: older,
+        );
+      }
+      if (!mounted) return true;
+
+      var homePlayers = homeSide.players;
+      var awayPlayers = awaySide.players;
+      if (older.isNotEmpty && !useGameDate) {
+        final liveHome = await RosterHistoryService.loadTeam(
+          sportId: _currentSport,
+          teamName: selectedHomeTeam!,
+          gameDate: gameDate,
+          liveToday: true,
+        );
+        final liveAway = await RosterHistoryService.loadTeam(
+          sportId: _currentSport,
+          teamName: selectedAwayTeam!,
+          gameDate: gameDate,
+          liveToday: true,
+        );
+        if (liveHome.players.isNotEmpty) homePlayers = liveHome.players;
+        if (liveAway.players.isNotEmpty) awayPlayers = liveAway.players;
+      }
+
+      setState(() {
+        _homeRoster = homePlayers;
+        _awayRoster = awayPlayers;
+        _isLoadingRosters = false;
+        _rosterHistoryCanSwitch = older.isNotEmpty;
+        _usingGameDateRoster = useGameDate;
+        selectedHomePlayers.clear();
+        selectedAwayPlayers.clear();
+        _firstTeamSelected = null;
+        _firstPlayerSelected = null;
+      });
+      _rosterHistoryKey = key;
+      _publishCaptionPreviewSessionData();
+      return true;
+    } catch (e) {
+      print('Roster history load failed: $e');
+      if (mounted) setState(() => _isLoadingRosters = false);
+      _rosterHistoryCanSwitch = false;
+      return false;
+    }
+  }
+
+  Future<void> _switchRosterHistorySource() async {
+    final gameDate = _rosterGameDateYmd();
+    if (!_rosterHistoryCanSwitch || gameDate == null) return;
+    if (selectedHomeTeam == null || selectedAwayTeam == null) return;
+    final nextGameDate = !_usingGameDateRoster;
+    setState(() => _isLoadingRosters = true);
+    try {
+      final homeSide = await RosterHistoryService.loadTeam(
+        sportId: _currentSport,
+        teamName: selectedHomeTeam!,
+        gameDate: gameDate,
+        liveToday: !nextGameDate,
+      );
+      final awaySide = await RosterHistoryService.loadTeam(
+        sportId: _currentSport,
+        teamName: selectedAwayTeam!,
+        gameDate: gameDate,
+        liveToday: !nextGameDate,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (homeSide.players.isNotEmpty) _homeRoster = homeSide.players;
+        if (awaySide.players.isNotEmpty) _awayRoster = awaySide.players;
+        _usingGameDateRoster = nextGameDate;
+        _isLoadingRosters = false;
+      });
+    } catch (e) {
+      print('Roster history switch failed: $e');
+      if (mounted) setState(() => _isLoadingRosters = false);
+    }
+  }
+
   Future<void> _loadTeamRosters() async {
     if (selectedHomeTeam == null || selectedAwayTeam == null) return;
 
@@ -2760,6 +2925,8 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
 
       return; // Skip API calls since we have preloaded data
     }
+
+    if (await _loadRosterHistoryIfNeeded()) return;
 
     setState(() {
       _isLoadingRosters = true;
@@ -2816,6 +2983,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       _publishCaptionPreviewSessionData();
       print('Home team stadium: $homeTeamStadium');
       print('Away team stadium: $awayTeamStadium');
+      if (!_freezeRosterHistoryKey) _rosterHistoryKey = _rosterLoadKey();
     } catch (e) {
       print('Error loading team rosters: $e');
       setState(() {
@@ -2899,6 +3067,17 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         _loadMetadata(
           preserveActiveCaption: preserveActiveCaptionOnFirstBind,
         );
+        final pasted = widget.preloadedHomeRoster != null &&
+            widget.preloadedHomeRoster!.isNotEmpty &&
+            widget.preloadedAwayRoster != null &&
+            widget.preloadedAwayRoster!.isNotEmpty;
+        final nextKey = _rosterLoadKey();
+        if (!pasted &&
+            nextKey != _rosterHistoryKey &&
+            selectedHomeTeam != null &&
+            selectedAwayTeam != null) {
+          unawaited(_loadTeamRosters());
+        }
       } else if (staleMapOnImageHop ||
           (imageIdentityChanged && widget.metadata == null) ||
           (metadataRefChanged && widget.metadata == null)) {
@@ -5883,6 +6062,18 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       ),
       child: Column(
         children: [
+          if (_rosterHistoryCanSwitch)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: _isLoadingRosters ? null : _switchRosterHistorySource,
+                child: Text(
+                  _usingGameDateRoster
+                      ? "Switch to today's roster"
+                      : 'Switch to game-date roster',
+                ),
+              ),
+            ),
           // Inline inning/period bar
           _buildInlineInningBar(),
           // 3-panel roster: Away | Verbs | Home
@@ -16930,6 +17121,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
       context,
       cameraService: widget.cameraService!,
       serialNumber: serialNumber,
+      imagePath: widget.currentImagePath,
     );
   }
 

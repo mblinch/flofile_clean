@@ -34,7 +34,18 @@ service cloud.firestore {
           allow read: if true;
           allow write: if false;
         }
+        // Dated roster snapshots. Public read matches the live players path
+        // so captioning works without sign-in. Only the Admin SDK writes.
+        match /rosterDays/{dayId} {
+          allow read: if true;
+          allow write: if false;
+        }
       }
+    }
+
+    // Nightly roster-history kill switch. Admin SDK reads it; clients cannot.
+    match /config/rosterHistory {
+      allow read, write: if false;
     }
 
     // Tank01 RapidAPI mirror — public read so captioning works without sign-in;

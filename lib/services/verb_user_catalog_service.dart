@@ -7,6 +7,25 @@ import 'preferences_service.dart';
 /// Merges app-default catalog with the user's prefs. Persisting writes only to
 /// [PreferencesService] (which syncs to `users/{uid}/preferences/current`) and
 /// never to app-default Firebase originals.
+bool _hockeyTextBanned(Object? value) {
+  const phrase = 'skates like an animal';
+  if (value is String) return value.toLowerCase().contains(phrase);
+  if (value is Map) {
+    for (final entry in value.entries) {
+      if (_hockeyTextBanned(entry.key) || _hockeyTextBanned(entry.value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (value is Iterable) {
+    for (final item in value) {
+      if (_hockeyTextBanned(item)) return true;
+    }
+  }
+  return false;
+}
+
 class VerbUserCatalogService {
   VerbUserCatalogService._();
 
@@ -51,6 +70,24 @@ class VerbUserCatalogService {
         value.toString(),
       ...localDeleted.map((value) => value.toString()),
     };
+    // "Fuck" (key "Untitled verb 2") and any "skates like an animal" wording
+    // were removed from the shared hockey catalog. Older accounts still have
+    // them in local custom verbs and overrides.
+    if (sport.trim().toLowerCase() == 'hockey') {
+      deleted.add('Untitled verb 2');
+      deleted.add('Fuck');
+      for (final raw in [
+        ...((base['customVerbs'] as List?) ?? const []),
+        ...localCustoms,
+      ]) {
+        if (raw is! Map) continue;
+        if (!_hockeyTextBanned(raw)) continue;
+        final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
+        final label = (raw['label'] ?? '').toString().trim();
+        if (key.isNotEmpty) deleted.add(key);
+        if (label.isNotEmpty) deleted.add(label);
+      }
+    }
     final deletedLower = {
       for (final value in deleted) value.trim().toLowerCase(),
     };
@@ -61,6 +98,16 @@ class VerbUserCatalogService {
           deletedLower.contains(trimmed.toLowerCase());
     }
 
+    bool customRecordDeleted(Map raw) {
+      final key = (raw['key'] ?? '').toString();
+      final label = (raw['label'] ?? '').toString();
+      final phrase = (raw['verbPhrase'] ?? '').toString();
+      return isDeleted(key) ||
+          isDeleted(label) ||
+          isDeleted(phrase) ||
+          (sport.trim().toLowerCase() == 'hockey' && _hockeyTextBanned(raw));
+    }
+
     // Published customs first, then the user's copies. A verb only in app
     // defaults (and not deleted) still shows. The local copy wins when both
     // exist. [hasLocalCustoms] still marks that a local file was read.
@@ -68,13 +115,13 @@ class VerbUserCatalogService {
     for (final raw in ((base['customVerbs'] as List?) ?? const [])) {
       if (raw is! Map) continue;
       final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-      if (key.isEmpty || isDeleted(key)) continue;
+      if (key.isEmpty || customRecordDeleted(raw)) continue;
       customsByKey[key] = Map<String, dynamic>.from(raw);
     }
     if (hasLocalCustoms || localCustoms.isNotEmpty) {
       for (final raw in localCustoms) {
         final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-        if (key.isEmpty || isDeleted(key)) continue;
+        if (key.isEmpty || customRecordDeleted(raw)) continue;
         customsByKey[key] = Map<String, dynamic>.from(raw);
       }
     }
@@ -86,8 +133,21 @@ class VerbUserCatalogService {
     localOverrides.forEach((key, value) {
       overrides[key] = Map<String, dynamic>.from(value);
     });
-    overrides.removeWhere((key, _) => isDeleted(key));
+    overrides.removeWhere((key, value) {
+      if (isDeleted(key)) return true;
+      if (sport.trim().toLowerCase() != 'hockey') return false;
+      return _hockeyTextBanned(value) || _hockeyTextBanned(key);
+    });
     base['verbOverrides'] = overrides;
+    if (sport.trim().toLowerCase() == 'hockey') {
+      final wordings = base['customVerbWordings'];
+      if (wordings is Map) {
+        wordings.removeWhere(
+          (key, value) =>
+              _hockeyTextBanned(key) || _hockeyTextBanned(value),
+        );
+      }
+    }
     // Local pins win, but a published move (Pre-Game, Post-Game, …) stays
     // when this device never stored that pin.
     final pins = Map<String, String>.from(publishedPins);

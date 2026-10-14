@@ -32,6 +32,7 @@ import '../../../services/mlb_api_service.dart';
 import '../../../services/mlb_inning_feature_gate.dart';
 import '../../../services/mlb_inning_from_timestamp_service.dart';
 import '../../../services/preferences_service.dart';
+import '../../../services/roster_history_service.dart';
 import '../../../services/camera_serial_service.dart';
 import '../../../services/admin_service.dart';
 import '../../../config/tank01_config.dart';
@@ -140,6 +141,26 @@ class CaptionProvenanceSpan {
 }
 
 enum _BylineProvenance { none, iptc, serial, serialAssigned }
+
+class _FrameSerialScan {
+  const _FrameSerialScan({
+    required this.serial,
+    required this.hasCreator,
+    this.body = '',
+  });
+
+  final String serial;
+  final bool hasCreator;
+  final String body;
+}
+
+class _SerialPrompt {
+  const _SerialPrompt({required this.serial, this.imagePath, this.body = ''});
+
+  final String serial;
+  final String? imagePath;
+  final String body;
+}
 
 /// How an OCR token matched a roster player.
 enum JerseyOcrMatchKind { jersey, name }
@@ -440,10 +461,35 @@ class CaptionV2Controller extends ChangeNotifier {
   _BylineProvenance _photographerProvenance = _BylineProvenance.none;
   String? _photographerSerialUsed;
 
-  /// When serial bylines is on and this frame has no mapped photographer,
-  /// set to the EXIF serial (or '' if the file has none) so the UI can prompt.
+  /// When serial bylines is on and a camera serial is not in the app yet,
+  /// set to that EXIF serial (or '' if the file has none) so the UI can prompt.
+  /// One prompt per distinct serial; the head of [_serialBylinesQueue].
   String? pendingSerialBylinesPrompt;
+
+  /// Photo the current prompt's serial was read from.
+  String? get pendingSerialBylinesImagePath => _serialBylinesQueue.isEmpty
+      ? null
+      : _serialBylinesQueue.first.imagePath;
+
+  /// Camera body (make/model) read from the same EXIF as the pending serial.
+  String? get pendingSerialBylinesBody {
+    if (_serialBylinesQueue.isEmpty) return null;
+    final body = _serialBylinesQueue.first.body.trim();
+    return body.isEmpty ? null : body;
+  }
+
+  final List<_SerialPrompt> _serialBylinesQueue = [];
+  final Set<String> _serialBylinesHandled = {};
   final Set<String> _serialBylinesPromptDismissed = {};
+  Completer<void>? _serialBylinesGate;
+
+  /// Skip the prompt UI while the session is still scanning the folder, then
+  /// ask once for every unmapped serial before [sessionReady].
+  bool _deferSerialBylinesUi = false;
+
+  /// Folder had no pictures at session start, so each file is checked as it
+  /// lands instead of in the pre-session scan.
+  bool _scanSerialsOnArrival = false;
 
   /// Active caption style from prefs (Getty / Imagn / AP / …).
   CaptionTemplate captionTemplate = CaptionTemplate.getty();
@@ -509,11 +555,22 @@ class CaptionV2Controller extends ChangeNotifier {
   bool preGame = false;
   bool postGame = false;
 
+  /// True when this game offered a game-date roster that differs from today.
+  bool rosterHistoryCanSwitch = false;
+
+  /// True when the session is showing the roster from the game date.
+  bool usingGameDateRoster = false;
+
+  bool _homeRosterPasted = false;
+  bool _awayRosterPasted = false;
+  String? _rosterHistoryGameDate;
+  bool _rosterHistoryApplied = false;
+
   /// Basketball/WNBA half selection (`1H` / `2H`); null = use quarter/OT via [inning].
   String? timingHalf;
 
   /// Basketball/WNBA period bar. True shows quarters; false shows halves.
-  bool timingByQuarter = true;
+  bool timingByQuarter = false;
 
   bool mlbTimestampAvailable = false;
   bool mlbTimestampEnabled = true;
@@ -2420,7 +2477,7 @@ class CaptionV2Controller extends ChangeNotifier {
   Future<void> setSerialBylinesEnabled(bool enabled) async {
     if (enabled == serialBylinesEnabled) return;
     serialBylinesEnabled = enabled;
-    if (!enabled) pendingSerialBylinesPrompt = null;
+    if (!enabled) _releaseSerialBylinesGate();
     notifyListeners();
     await _prefs?.saveSerialNumberBylines(enabled);
   }
@@ -2439,7 +2496,7 @@ class CaptionV2Controller extends ChangeNotifier {
     ftpModeEnabled = await prefs.getFtpModeEnabled();
     hideFirebar = await prefs.getHideFirebar();
     serialBylinesEnabled = await prefs.getSerialNumberBylines();
-    if (!serialBylinesEnabled) pendingSerialBylinesPrompt = null;
+    if (!serialBylinesEnabled) _releaseSerialBylinesGate();
     burstDetectionEnabled = await prefs.getBurstDetectionEnabled();
     resolutionWarningThreshold = await prefs.getResolutionWarningThreshold();
     await _refreshJerseyOcrEnabled();
@@ -2464,9 +2521,16 @@ class CaptionV2Controller extends ChangeNotifier {
     String countryCode = '',
     bool? homeWearsDark,
     bool homeWearsDarkAnswered = false,
+    Future<bool> Function(String gameDate, List<OlderRosterTeam> teams)?
+        chooseOlderRoster,
   }) async {
     sessionGeneration++;
     _jerseyOcrPrescanStop = false;
+    _serialBylinesHandled.clear();
+    _serialBylinesPromptDismissed.clear();
+    _releaseSerialBylinesGate();
+    _scanSerialsOnArrival = false;
+    _deferSerialBylinesUi = true;
     this.sport = sport;
     this.homeTeam = homeTeam;
     this.singleTeamMode = singleTeamMode;
@@ -2495,13 +2559,20 @@ class CaptionV2Controller extends ChangeNotifier {
     rbi = 0;
     selectedBase = null;
     inning = 1;
-    timingHalf = null;
+    timingByQuarter = false;
+    timingHalf = supportsTimingHalves ? '1H' : null;
     preGame = false;
     postGame = false;
     _recentPicks.clear();
     _homeDarkVotes = 0;
     homeWearsDarkOverride = homeWearsDark;
     _homeWearsDarkAnswered = homeWearsDarkAnswered;
+    rosterHistoryCanSwitch = false;
+    usingGameDateRoster = false;
+    _homeRosterPasted = homeRosterOverride != null;
+    _awayRosterPasted = singleTeamMode || awayRosterOverride != null;
+    _rosterHistoryGameDate = null;
+    _rosterHistoryApplied = false;
     sessionLoading = true;
     sessionLoadingLabel = 'Loading rosters…';
     sessionReady = false;
@@ -2520,12 +2591,14 @@ class CaptionV2Controller extends ChangeNotifier {
     sessionLoadingLabel = 'Loading images…';
     notifyListeners();
     await loadFolder(folderPath);
+    await _checkSerialBylinesBeforeSession();
 
     // loadFolder awaits saved/uploaded marks + preview EXIF before returning.
     // Still on the loading screen: pre-warm thumbs (+ OCR when enabled) so the
     // session opens snappy instead of catching up in the background.
     await _refreshJerseyOcrEnabled();
     await _preloadSessionDuringLoad();
+    await applyDatedRosterHistory(chooseOlderRoster: chooseOlderRoster);
 
     sessionLoading = false;
     sessionLoadingLabel = null;
@@ -2784,6 +2857,9 @@ class CaptionV2Controller extends ChangeNotifier {
   void resetToStartup() {
     _folderWatchGeneration++;
     _stopFolderWatch();
+    _scanSerialsOnArrival = false;
+    _deferSerialBylinesUi = false;
+    _releaseSerialBylinesGate();
     sessionReady = false;
     sessionLoading = false;
     sessionLoadingLabel = null;
@@ -2864,6 +2940,144 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       _scheduleJerseyOcr();
     }
+  }
+
+  String? _sessionGameDateYmd() {
+    DateTime? earliest;
+    for (final captured in captureByPath.values) {
+      if (earliest == null || captured.isBefore(earliest)) earliest = captured;
+    }
+    return RosterHistoryService.calendarDate(earliest);
+  }
+
+  /// One Firestore history pass per session, after photo dates are known.
+  /// Tank01 sessions return before any rosterDays read.
+  Future<void> applyDatedRosterHistory({
+    Future<bool> Function(String gameDate, List<OlderRosterTeam> teams)?
+        chooseOlderRoster,
+  }) async {
+    if (_rosterHistoryApplied) return;
+    _rosterHistoryApplied = true;
+    final gameDate = _sessionGameDateYmd();
+    if (gameDate == null) return;
+    if (await RosterHistoryService.servedByTank01(sport)) return;
+    if (!await RosterHistoryService.useRosterHistory()) return;
+
+    final homeSide = _homeRosterPasted
+        ? null
+        : await RosterHistoryService.loadTeam(
+            sportId: sport,
+            teamName: homeTeam,
+            gameDate: gameDate,
+            liveToday: false,
+          );
+    final awaySide = _awayRosterPasted || !hasOpponentTeam
+        ? null
+        : await RosterHistoryService.loadTeam(
+            sportId: sport,
+            teamName: awayTeam,
+            gameDate: gameDate,
+            liveToday: false,
+          );
+
+    final older = <OlderRosterTeam>[];
+    void collect(SideHistory? side) {
+      if (side == null || side.useExistingPath || !side.differsFromLatest) {
+        return;
+      }
+      final on = side.effectiveOn;
+      if (on == null || on.isEmpty) return;
+      older.add(OlderRosterTeam(teamName: side.teamName, effectiveOn: on));
+    }
+
+    collect(homeSide);
+    collect(awaySide);
+
+    var useGameDate = true;
+    if (older.isNotEmpty && chooseOlderRoster != null) {
+      useGameDate = await chooseOlderRoster(gameDate, older);
+    }
+    usingGameDateRoster = useGameDate;
+    rosterHistoryCanSwitch = older.isNotEmpty;
+    _rosterHistoryGameDate = gameDate;
+
+    if (older.isNotEmpty && !useGameDate) {
+      await _loadLiveHistoryRosters();
+      return;
+    }
+    _applyHistorySide(homeSide, isHome: true);
+    _applyHistorySide(awaySide, isHome: false);
+    notifyListeners();
+    _scheduleJerseyOcr();
+  }
+
+  void _applyHistorySide(SideHistory? side, {required bool isHome}) {
+    if (side == null || side.useExistingPath) return;
+    if (isHome) {
+      homeRoster = _sortPlayers(side.players);
+    } else {
+      awayRoster = _sortPlayers(side.players);
+    }
+  }
+
+  Future<void> _loadLiveHistoryRosters() async {
+    final gameDate = _rosterHistoryGameDate;
+    if (gameDate == null) return;
+    if (!_homeRosterPasted) {
+      final side = await RosterHistoryService.loadTeam(
+        sportId: sport,
+        teamName: homeTeam,
+        gameDate: gameDate,
+        liveToday: true,
+      );
+      if (!side.useExistingPath && side.players.isNotEmpty) {
+        homeRoster = _sortPlayers(side.players);
+      }
+    }
+    if (!_awayRosterPasted && hasOpponentTeam) {
+      final side = await RosterHistoryService.loadTeam(
+        sportId: sport,
+        teamName: awayTeam,
+        gameDate: gameDate,
+        liveToday: true,
+      );
+      if (!side.useExistingPath && side.players.isNotEmpty) {
+        awayRoster = _sortPlayers(side.players);
+      }
+    }
+    notifyListeners();
+    _scheduleJerseyOcr();
+  }
+
+  /// Reloads both teams once from Firestore. Photos do not call this.
+  Future<void> switchRosterHistorySource() async {
+    if (!rosterHistoryCanSwitch || _rosterHistoryGameDate == null) return;
+    usingGameDateRoster = !usingGameDateRoster;
+    if (!usingGameDateRoster) {
+      await _loadLiveHistoryRosters();
+      return;
+    }
+    final gameDate = _rosterHistoryGameDate!;
+    if (!_homeRosterPasted) {
+      final side = await RosterHistoryService.loadTeam(
+        sportId: sport,
+        teamName: homeTeam,
+        gameDate: gameDate,
+        liveToday: false,
+      );
+      _applyHistorySide(side, isHome: true);
+    }
+    if (!_awayRosterPasted && hasOpponentTeam) {
+      final side = await RosterHistoryService.loadTeam(
+        sportId: sport,
+        teamName: awayTeam,
+        gameDate: gameDate,
+        liveToday: false,
+      );
+      _applyHistorySide(side, isHome: false);
+    }
+    notifyListeners();
+    _scheduleJerseyOcr();
   }
 
   /// Replaces a loaded roster after the user decides how to handle duplicates.
@@ -3454,6 +3668,9 @@ class CaptionV2Controller extends ChangeNotifier {
       _fileChangedMs[path] = stat.changed.millisecondsSinceEpoch;
     } catch (_) {}
     notifyListeners();
+    if (_scanSerialsOnArrival) {
+      unawaited(_checkArrivingSerial(path));
+    }
     // Scan the new frame as soon as it lands — thumb + OCR (if on).
     warmThumbnailPaths([path]);
     if (path == currentPath) {
@@ -7428,18 +7645,23 @@ class CaptionV2Controller extends ChangeNotifier {
     String path,
     Map<dynamic, dynamic> raw,
   ) async {
-    pendingSerialBylinesPrompt = null;
-
     final prefs = await PreferencesService.getInstance();
     final enabled = await prefs.getSerialNumberBylines();
     serialBylinesEnabled = enabled;
-    if (!enabled) return;
+    if (!enabled) {
+      _releaseSerialBylinesGate();
+      return;
+    }
 
     final camera = CameraSerialService.instance;
     await camera.initialize();
 
     final serial = serialNumberFromMetadata(raw)?.trim() ?? '';
+    final body = CameraSerialService.bodyNameFromExif(raw);
     if (serial.isNotEmpty && !camera.isSerialNumberUnknown(serial)) {
+      if (body.isNotEmpty) {
+        await camera.rememberCameraBodies({serial: body});
+      }
       final mapped = camera.getPhotographerForSerial(serial)?.trim() ?? '';
       if (mapped.isNotEmpty) {
         final current = photographerName.trim();
@@ -7458,20 +7680,235 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     if (photographerName.trim().isNotEmpty) return;
+    if (_deferSerialBylinesUi) return;
+    if (_serialBylinesHandled.contains(_serialPromptKey(serial))) return;
 
     final dismissKey = '$path|${serial.isEmpty ? '_' : serial}';
     if (_serialBylinesPromptDismissed.contains(dismissKey)) return;
-    pendingSerialBylinesPrompt = serial;
+    _enqueueSerialPrompt(serial, imagePath: path, body: body);
+  }
+
+  /// Distinct unmapped serials in the open folder, before the session UI.
+  /// An empty folder waits and checks each photo as it is ingested.
+  Future<void> _checkSerialBylinesBeforeSession() async {
+    _scanSerialsOnArrival = false;
+    if (!serialBylinesEnabled) {
+      _deferSerialBylinesUi = false;
+      return;
+    }
+    if (imagePaths.isEmpty) {
+      _scanSerialsOnArrival = true;
+      _deferSerialBylinesUi = false;
+      return;
+    }
+    _setSessionLoadingLabel('Checking camera serials…');
+    final unknown = await _unknownSerialsForPaths(imagePaths);
+    _deferSerialBylinesUi = false;
+    if (unknown.isEmpty) return;
+    final gate = Completer<void>();
+    _serialBylinesGate = gate;
+    for (final prompt in unknown) {
+      _enqueueSerialPrompt(
+        prompt.serial,
+        imagePath: prompt.imagePath,
+        body: prompt.body,
+      );
+    }
+    if (_serialBylinesQueue.isEmpty) {
+      if (identical(_serialBylinesGate, gate)) _serialBylinesGate = null;
+      if (!gate.isCompleted) gate.complete();
+      return;
+    }
+    _setSessionLoadingLabel('Assign camera serials…');
+    await gate.future;
+  }
+
+  /// Read the serial on a photo that landed in a folder that started empty.
+  Future<void> _checkArrivingSerial(String path) async {
+    if (!_scanSerialsOnArrival || !serialBylinesEnabled) return;
+    if (!imagePaths.contains(path)) return;
+    final read = await _readFrameSerials([path]);
+    if (read == null || !imagePaths.contains(path)) return;
+    final frame = read[path];
+    if (frame == null) return;
+    final serial = frame.serial;
+    if (serial.isNotEmpty) {
+      final camera = CameraSerialService.instance;
+      await camera.initialize();
+      if (!camera.isSerialNumberUnknown(serial)) {
+        if (frame.body.isNotEmpty) {
+          await camera.rememberCameraBodies({serial: frame.body});
+        }
+        if (path == currentPath && photographerName.trim().isEmpty) {
+          final mapped = camera.getPhotographerForSerial(serial)?.trim() ?? '';
+          if (mapped.isNotEmpty) {
+            photographerName = mapped;
+            _photographerProvenance = _BylineProvenance.serial;
+            _photographerSerialUsed = serial;
+            notifyListeners();
+          }
+        }
+        return;
+      }
+      _enqueueSerialPrompt(serial, imagePath: path, body: frame.body);
+      return;
+    }
+    if (!frame.hasCreator) {
+      _enqueueSerialPrompt('', imagePath: path, body: frame.body);
+    }
+  }
+
+  Future<List<_SerialPrompt>> _unknownSerialsForPaths(List<String> paths) async {
+    final camera = CameraSerialService.instance;
+    await camera.initialize();
+    final ordered = <_SerialPrompt>[];
+    final seen = <String>{};
+    final matchedBodies = <String, String>{};
+    void consider(_FrameSerialScan frame, String path) {
+      final serial = frame.serial;
+      if (serial.isNotEmpty &&
+          frame.body.isNotEmpty &&
+          !camera.isSerialNumberUnknown(serial)) {
+        matchedBodies.putIfAbsent(serial, () => frame.body);
+      }
+      final key = _serialPromptKey(serial);
+      if (seen.contains(key) || _serialBylinesHandled.contains(key)) return;
+      if (serial.isEmpty) {
+        // A filled byline does not answer a later file that has neither.
+        if (frame.hasCreator) return;
+        seen.add(key);
+        ordered.add(_SerialPrompt(serial: '', imagePath: path));
+        return;
+      }
+      seen.add(key);
+      if (!camera.isSerialNumberUnknown(serial)) return;
+      ordered.add(
+        _SerialPrompt(serial: serial, imagePath: path, body: frame.body),
+      );
+    }
+
+    const chunk = 40;
+    for (var i = 0; i < paths.length; i += chunk) {
+      final end = i + chunk > paths.length ? paths.length : i + chunk;
+      final slice = paths.sublist(i, end);
+      final read = await _readFrameSerials(slice);
+      if (read == null) continue;
+      for (final path in slice) {
+        final frame = read[path];
+        if (frame == null) continue;
+        consider(frame, path);
+      }
+    }
+    if (matchedBodies.isNotEmpty) {
+      await camera.rememberCameraBodies(matchedBodies);
+    }
+    return ordered;
+  }
+
+  /// Serial plus whether Creator/byline is already filled.
+  /// Null when ExifTool could not read the batch.
+  Future<Map<String, _FrameSerialScan>?> _readFrameSerials(
+    List<String> paths,
+  ) async {
+    if (paths.isEmpty) return {};
+    try {
+      final proc = await ExiftoolHelper.run([
+        '-j',
+        '-SerialNumber',
+        '-BodySerialNumber',
+        '-InternalSerialNumber',
+        '-CameraSerialNumber',
+        '-Make',
+        '-Model',
+        '-IPTC:By-line',
+        '-By-line',
+        '-Byline',
+        '-Creator',
+        '-XMP:Creator',
+        '-Artist',
+        '-Photographer',
+        ...paths,
+      ]);
+      if (!proc.isSuccess || proc.stdoutText.trim().isEmpty) return null;
+      final decoded = jsonDecode(proc.stdoutText);
+      if (decoded is! List) return null;
+      final bySource = <String, _FrameSerialScan>{};
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final source = item['SourceFile']?.toString();
+        if (source == null || source.isEmpty) continue;
+        bySource[p.normalize(source)] = _FrameSerialScan(
+          serial: serialNumberFromMetadata(item)?.trim() ?? '',
+          hasCreator: photographerNameFromMetadata(item).trim().isNotEmpty,
+          body: CameraSerialService.bodyNameFromExif(item),
+        );
+      }
+      final out = <String, _FrameSerialScan>{};
+      for (final path in paths) {
+        final frame = bySource[p.normalize(path)];
+        if (frame != null) out[path] = frame;
+      }
+      return out;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _serialPromptKey(String serial) {
+    final trimmed = serial.trim();
+    return trimmed.isEmpty ? '_' : trimmed.toLowerCase();
+  }
+
+  void _enqueueSerialPrompt(
+    String serial, {
+    String? imagePath,
+    String body = '',
+  }) {
+    final trimmed = serial.trim();
+    final key = _serialPromptKey(trimmed);
+    if (_serialBylinesHandled.contains(key)) return;
+    if (_serialBylinesQueue.any((queued) => _serialPromptKey(queued.serial) == key)) {
+      return;
+    }
+    _serialBylinesQueue.add(
+      _SerialPrompt(serial: trimmed, imagePath: imagePath, body: body.trim()),
+    );
+    pendingSerialBylinesPrompt = _serialBylinesQueue.first.serial;
+    notifyListeners();
+  }
+
+  void _popSerialPrompt() {
+    if (_serialBylinesQueue.isNotEmpty) {
+      _serialBylinesQueue.removeAt(0);
+    }
+    pendingSerialBylinesPrompt =
+        _serialBylinesQueue.isEmpty ? null : _serialBylinesQueue.first.serial;
+    if (_serialBylinesQueue.isEmpty) {
+      final gate = _serialBylinesGate;
+      _serialBylinesGate = null;
+      if (gate != null && !gate.isCompleted) gate.complete();
+    }
+    notifyListeners();
+  }
+
+  void _releaseSerialBylinesGate() {
+    _serialBylinesQueue.clear();
+    pendingSerialBylinesPrompt = null;
+    final gate = _serialBylinesGate;
+    _serialBylinesGate = null;
+    if (gate != null && !gate.isCompleted) gate.complete();
   }
 
   void dismissSerialBylinesPrompt() {
+    final serial = pendingSerialBylinesPrompt ?? '';
     final path = currentPath;
     if (path != null) {
-      final serial = pendingSerialBylinesPrompt ?? '';
-      _serialBylinesPromptDismissed.add('$path|${serial.isEmpty ? '_' : serial}');
+      _serialBylinesPromptDismissed.add(
+        '$path|${serial.isEmpty ? '_' : serial}',
+      );
     }
-    pendingSerialBylinesPrompt = null;
-    notifyListeners();
+    _serialBylinesHandled.add(_serialPromptKey(serial));
+    _popSerialPrompt();
   }
 
   /// Apply a photographer chosen in the unknown-serial dialog for the current
@@ -7485,20 +7922,23 @@ class CaptionV2Controller extends ChangeNotifier {
       dismissSerialBylinesPrompt();
       return;
     }
-    photographerName = trimmed;
-    _photographerProvenance = _BylineProvenance.serialAssigned;
-    _photographerSerialUsed =
-        (pendingSerialBylinesPrompt ?? '').trim().isEmpty
-            ? _photographerSerialUsed
-            : pendingSerialBylinesPrompt!.trim();
+    final serial = (pendingSerialBylinesPrompt ?? '').trim();
+    final currentSerial = (_photographerSerialUsed ?? '').trim();
+    final appliesToFrame = serial.isEmpty
+        ? currentSerial.isEmpty
+        : currentSerial.toLowerCase() == serial.toLowerCase();
+    if (appliesToFrame) {
+      photographerName = trimmed;
+      _photographerProvenance = _BylineProvenance.serialAssigned;
+      if (serial.isNotEmpty) _photographerSerialUsed = serial;
+      metadataDirty = true;
+    }
     final path = currentPath;
-    final serial = pendingSerialBylinesPrompt ?? '';
     if (path != null) {
       _serialBylinesPromptDismissed.add('$path|${serial.isEmpty ? '_' : serial}');
     }
-    pendingSerialBylinesPrompt = null;
-    metadataDirty = true;
-    notifyListeners();
+    _serialBylinesHandled.add(_serialPromptKey(serial));
+    _popSerialPrompt();
   }
 
   static String? _stringFromMeta(dynamic value) {
@@ -7601,7 +8041,7 @@ class CaptionV2Controller extends ChangeNotifier {
       agencyName = '';
       _photographerProvenance = _BylineProvenance.none;
       _photographerSerialUsed = null;
-      pendingSerialBylinesPrompt = null;
+      if (_serialBylinesQueue.isEmpty) pendingSerialBylinesPrompt = null;
       notifyListeners();
       return;
     }

@@ -24,6 +24,7 @@ import '../../widgets/oriented_file_preview.dart';
 import '../../utils/oriented_image_bytes.dart';
 import '../../services/camera_serial_service.dart';
 import '../../widgets/preferences_dialog.dart';
+import '../../widgets/older_roster_dialog.dart';
 import '../../widgets/unknown_serial_dialog.dart';
 import 'caption_v2_flag.dart';
 import 'caption_v2_shortcuts.dart';
@@ -274,24 +275,29 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   Future<void> _promptSerialBylines() async {
     if (!mounted || _serialBylinesPromptOpen) return;
     if (!_controller.serialBylinesEnabled) return;
-    final pending = _controller.pendingSerialBylinesPrompt;
-    if (pending == null) return;
+    if (_controller.pendingSerialBylinesPrompt == null) return;
     _serialBylinesPromptOpen = true;
     try {
-      final serial = pending.trim().isEmpty ? null : pending.trim();
-      final assignment = await UnknownSerialDialog.show(
-        context,
-        cameraService: CameraSerialService.instance,
-        serialNumber: serial,
-      );
-      if (!mounted) return;
-      if (assignment != null && assignment.name.trim().isNotEmpty) {
-        _controller.applySerialBylinesAssignment(
-          name: assignment.name,
-          initials: assignment.initials,
+      while (mounted && _controller.serialBylinesEnabled) {
+        final pending = _controller.pendingSerialBylinesPrompt;
+        if (pending == null) break;
+        final serial = pending.trim().isEmpty ? null : pending.trim();
+        final assignment = await UnknownSerialDialog.show(
+          context,
+          cameraService: CameraSerialService.instance,
+          serialNumber: serial,
+          imagePath: _controller.pendingSerialBylinesImagePath,
+          cameraBody: _controller.pendingSerialBylinesBody,
         );
-      } else {
-        _controller.dismissSerialBylinesPrompt();
+        if (!mounted) return;
+        if (assignment != null && assignment.name.trim().isNotEmpty) {
+          _controller.applySerialBylinesAssignment(
+            name: assignment.name,
+            initials: assignment.initials,
+          );
+        } else {
+          _controller.dismissSerialBylinesPrompt();
+        }
       }
     } finally {
       _serialBylinesPromptOpen = false;
@@ -332,6 +338,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       singleTeamMode: result.singleTeamMode,
       homeWearsDark: result.homeWearsDark,
       homeWearsDarkAnswered: !result.singleTeamMode,
+      chooseOlderRoster: (gameDate, teams) => OlderRosterDialog.show(
+        context,
+        gameDate: gameDate,
+        teams: teams,
+      ),
     );
     if (!mounted) return;
     await _confirmLoadedDuplicateJerseys(result);
@@ -2560,6 +2571,15 @@ class _ModesMenuState extends State<_ModesMenu> {
             label: mode.label,
             value: mode.on,
             onChanged: (value) => unawaited(mode.onChanged(value)),
+          ),
+        if (c.rosterHistoryCanSwitch)
+          MenuItemButton(
+            onPressed: () => unawaited(c.switchRosterHistorySource()),
+            child: Text(
+              c.usingGameDateRoster
+                  ? "Switch to today's roster"
+                  : 'Switch to game-date roster',
+            ),
           ),
         if (_showSize) ...[
           Divider(height: 1, thickness: 1, color: t.divider),

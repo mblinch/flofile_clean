@@ -135,7 +135,19 @@ class _SubjectChip extends StatelessWidget {
               style: tokens.labelStyle.copyWith(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: selected ? tokens.bg : tokens.textSecondary,
+                color: selected ? tokens.bg : tokens.text,
+                shadows: [
+                  Shadow(
+                    color: (selected ? tokens.bg : tokens.text)
+                        .withValues(alpha: 0.9),
+                    blurRadius: 8,
+                  ),
+                  Shadow(
+                    color: (selected ? tokens.bg : tokens.text)
+                        .withValues(alpha: 0.55),
+                    blurRadius: 18,
+                  ),
+                ],
               ),
             ),
           ),

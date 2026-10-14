@@ -1,0 +1,12 @@
+---
+description: Do not add placeholder hint text in fields unless the user asks for it
+alwaysApply: true
+---
+
+# No hint text
+
+Do not put hint text, placeholders, or ghost copy inside text fields, search boxes, or dropdowns.
+
+Labels above a field are fine. Empty fields stay empty.
+
+Add hint text only when the user explicitly asks for a hint or placeholder on that field.

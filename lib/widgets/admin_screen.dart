@@ -1305,18 +1305,19 @@ class _AdminScreenState extends State<AdminScreen> {
 
   void _deleteVerb(_AdminVerbRow row) {
     final bundle = Map<String, dynamic>.from(_activeVerbBundle);
+    final deleted = ((bundle['deletedVerbs'] as List?) ?? const [])
+        .map((e) => e.toString())
+        .toSet()
+      ..add(row.key);
+    final label = row.label.trim();
+    if (label.isNotEmpty) deleted.add(label);
+    bundle['deletedVerbs'] = deleted.toList();
     if (row.isCustom) {
       final list = ((bundle['customVerbs'] as List?) ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map))
           .where((e) => e['label']?.toString() != row.key)
           .toList();
       bundle['customVerbs'] = list;
-    } else {
-      final deleted = ((bundle['deletedVerbs'] as List?) ?? [])
-          .map((e) => e.toString())
-          .toSet();
-      deleted.add(row.key);
-      bundle['deletedVerbs'] = deleted.toList();
     }
     setState(() => _setActiveVerbBundle(bundle));
   }

@@ -448,7 +448,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
             ),
             _PrefsModeBuffButton(
               icon: PhosphorIconsRegular.stack,
-              label: 'Burst mode',
+              label: 'Burst detection mode',
               tooltip:
                   'When saving, detect rapid bursts forward from the current photo and offer to apply the same caption to those frames.',
               enabled: burstOn,
@@ -473,7 +473,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
               ),
             _PrefsModeBuffButton(
               icon: PhosphorIconsRegular.camera,
-              label: 'Serial number mode',
+              label: 'Serial number byline mode',
               tooltip:
                   'Write photographer name and bylines according to camera serial numbers.',
               enabled: serialBylines,
@@ -482,39 +482,18 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                 !serialBylines,
                 _preferencesService.saveSerialNumberBylines,
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () async {
-                    final cameraService = CameraSerialService.instance;
-                    await cameraService.initialize();
-                    if (!context.mounted) return;
-                    await showDialog<void>(
-                      context: context,
-                      builder: (context) => CameraSerialDialog(
-                        cameraService: cameraService,
-                      ),
-                    );
-                  },
-                  style: TextButton.styleFrom(
-                    foregroundColor: _t.textSecondary,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    minimumSize: const Size(0, 28),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              editLabel: 'Edit serial number list',
+              onEdit: () async {
+                final cameraService = CameraSerialService.instance;
+                await cameraService.initialize();
+                if (!context.mounted) return;
+                await showDialog<void>(
+                  context: context,
+                  builder: (context) => CameraSerialDialog(
+                    cameraService: cameraService,
                   ),
-                  child: const Text(
-                    'Serial number list',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ),
+                );
+              },
             ),
             ],
           ),
@@ -1098,6 +1077,8 @@ class _PrefsModeBuffButton extends StatelessWidget {
     required this.tooltip,
     required this.enabled,
     required this.onToggle,
+    this.editLabel,
+    this.onEdit,
   });
 
   final IconData icon;
@@ -1105,6 +1086,8 @@ class _PrefsModeBuffButton extends StatelessWidget {
   final String tooltip;
   final bool enabled;
   final VoidCallback onToggle;
+  final String? editLabel;
+  final VoidCallback? onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -1124,17 +1107,46 @@ class _PrefsModeBuffButton extends StatelessWidget {
                 color: enabled ? t.text : t.textSecondary,
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: t.text,
-                  ),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: t.text,
                 ),
               ),
+              if (editLabel != null && onEdit != null) ...[
+                const SizedBox(width: 10),
+                Material(
+                  color: t.sunken,
+                  borderRadius: BorderRadius.circular(6),
+                  child: InkWell(
+                    onTap: onEdit,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: t.divider),
+                      ),
+                      child: Text(
+                        editLabel!,
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: t.text,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+              const Spacer(),
               Switch(
                 value: enabled,
                 onChanged: (_) => onToggle(),

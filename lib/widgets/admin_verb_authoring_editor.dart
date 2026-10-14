@@ -1252,10 +1252,14 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     if (_pendingDraft?.key == verb.key) _pendingDraft = null;
     // Tombstone every delete so Firebase/app-default catalogs cannot resurrect
     // the verb on the next merge (custom or default).
+    // Tombstone every delete so a shared custom verb cannot come back from
+    // another account's local copy.
     final deleted = ((bundle['deletedVerbs'] as List?) ?? const [])
         .map((value) => value.toString())
         .toSet()
       ..add(verb.key);
+    final label = verb.label.trim();
+    if (label.isNotEmpty) deleted.add(label);
     bundle['deletedVerbs'] = deleted.toList();
     if (verb.isCustom) {
       final customs = ((bundle['customVerbs'] as List?) ?? const [])

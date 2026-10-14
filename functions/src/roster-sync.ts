@@ -11,7 +11,12 @@
  *        - team doc: update displayName + coach fields only on change
  */
 
-import { FieldValue, Firestore, WriteBatch } from "firebase-admin/firestore";
+import {
+  CollectionReference,
+  FieldValue,
+  Firestore,
+  WriteBatch,
+} from "firebase-admin/firestore";
 import { logger } from "firebase-functions/v2";
 
 const MLB_HOST = "statsapi.mlb.com";
@@ -33,6 +38,136 @@ const PLAYER_FIELDS = [
   "position",
   "displayName",
 ] as const;
+
+/** How long rosterDays docs are kept. The newest doc older than this stays. */
+export const ROSTER_HISTORY_DAYS = 365;
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function torontoParts(now: Date): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+} {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Toronto",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = fmt.formatToParts(now);
+  const num = (type: string) =>
+    Number(parts.find((p) => p.type === type)?.value ?? "0");
+  let hour = num("hour");
+  if (hour === 24) hour = 0;
+  return { year: num("year"), month: num("month"), day: num("day"), hour };
+}
+
+function ymd(year: number, month: number, day: number): string {
+  const dt = new Date(Date.UTC(year, month - 1, day));
+  const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(dt.getUTCDate()).padStart(2, "0");
+  return `${dt.getUTCFullYear()}-${m}-${d}`;
+}
+
+/**
+ * Calendar date stamped on a rosterDays doc.
+ * A valid feedDate wins. Otherwise America/Toronto: before noon, yesterday.
+ * The 6:00 a.m. run records last night, so a same-night move still applies
+ * to that night's game. A manual run after noon stamps today.
+ */
+export function snapshotEffectiveOn(now: Date, feedDate?: string | null): string {
+  if (feedDate && DATE_RE.test(feedDate)) return feedDate;
+  const p = torontoParts(now);
+  if (p.hour < 12) return ymd(p.year, p.month, p.day - 1);
+  return ymd(p.year, p.month, p.day);
+}
+
+export function torontoDateMinusDays(now: Date, days: number): string {
+  const p = torontoParts(now);
+  return ymd(p.year, p.month, p.day - days);
+}
+
+interface SnapshotPlayer {
+  playerId: string;
+  fullName: string;
+  firstName: string;
+  jerseyNumber: string | null;
+  position: string | null;
+  displayName: string;
+}
+
+function snapshotPlayers(players: Player[]): SnapshotPlayer[] {
+  const byId = new Map<string, SnapshotPlayer>();
+  for (const p of players) {
+    const id = playerDocId(p);
+    if (!id) continue;
+    const playerId =
+      p.playerId != null && String(p.playerId).trim()
+        ? String(p.playerId).trim()
+        : id;
+    byId.set(playerId, {
+      playerId,
+      fullName: p.fullName ?? "",
+      firstName: p.firstName ?? "",
+      jerseyNumber: p.jerseyNumber ?? null,
+      position: p.position ?? null,
+      displayName: p.displayName ?? "",
+    });
+  }
+  return [...byId.values()];
+}
+
+function fieldStr(v: unknown): string {
+  if (v == null) return "";
+  return String(v);
+}
+
+function snapshotFieldKey(row: {
+  fullName: string;
+  firstName: string;
+  jerseyNumber: string | null;
+  position: string | null;
+  displayName: string;
+}): string {
+  return [
+    row.fullName,
+    row.firstName,
+    row.jerseyNumber ?? "",
+    row.position ?? "",
+    row.displayName,
+  ].join("\u0001");
+}
+
+/** Same player ids and the same five visible fields. List order is ignored. */
+export function snapshotPlayersMatch(existing: unknown, incoming: SnapshotPlayer[]): boolean {
+  if (!Array.isArray(existing)) return false;
+  const stored = new Map<string, string>();
+  for (const row of existing) {
+    if (!row || typeof row !== "object") return false;
+    const r = row as Record<string, unknown>;
+    const id = fieldStr(r.playerId).trim();
+    if (!id) return false;
+    stored.set(
+      id,
+      snapshotFieldKey({
+        fullName: fieldStr(r.fullName),
+        firstName: fieldStr(r.firstName),
+        jerseyNumber: r.jerseyNumber == null ? null : fieldStr(r.jerseyNumber),
+        position: r.position == null ? null : fieldStr(r.position),
+        displayName: fieldStr(r.displayName),
+      }),
+    );
+  }
+  if (stored.size !== incoming.length) return false;
+  for (const p of incoming) {
+    if (stored.get(p.playerId) !== snapshotFieldKey(p)) return false;
+  }
+  return true;
+}
 
 export interface Player {
   fullName: string;
@@ -81,6 +216,8 @@ export interface SyncJob {
 
 export interface SyncOptions {
   delayBetweenJobsMs?: number;
+  /** When false, skip snapshot writes, seeding, and pruning. */
+  rosterHistory?: boolean;
 }
 
 export interface SyncTotals {
@@ -620,6 +757,26 @@ export async function fetchAllSportsJobs(): Promise<SyncJob[]> {
   return [...mlb, ...nba, ...wnba, ...nhl, ...mls];
 }
 
+async function pruneRosterDays(
+  rosterDays: CollectionReference,
+  cutoff: string,
+): Promise<void> {
+  const old = await rosterDays
+    .where("effectiveOn", "<", cutoff)
+    .orderBy("effectiveOn", "desc")
+    .get();
+  // docs[0] is the newest roster still before the cutoff. It is the anchor.
+  const toDelete = old.docs.slice(1);
+  const chunk = 400;
+  for (let i = 0; i < toDelete.length; i += chunk) {
+    const batch = rosterDays.firestore.batch();
+    for (const doc of toDelete.slice(i, i + chunk)) {
+      batch.delete(doc.ref);
+    }
+    await batch.commit();
+  }
+}
+
 export async function syncJobs(
   db: Firestore,
   items: SyncJob[],
@@ -657,12 +814,39 @@ export async function syncJobs(
         String(teamId),
       );
 
+      const historyOn = options.rosterHistory !== false;
+      const rosterDays = historyOn
+        ? db
+            .collection("sports")
+            .doc(String(sportId))
+            .collection("teams")
+            .doc(String(teamId))
+            .collection("rosterDays")
+        : null;
+      const newestSnap = rosterDays
+        ? await rosterDays.orderBy("effectiveOn", "desc").limit(1).get()
+        : null;
+
       const rosterResult = await reconcilePlayers(
         db,
         String(sportId),
         String(teamId),
         players,
       );
+
+      if (rosterDays) {
+        const now = new Date();
+        const incoming = snapshotPlayers(players);
+        const newestPlayers = newestSnap?.docs[0]?.get("players");
+        if (!snapshotPlayersMatch(newestPlayers, incoming)) {
+          const effectiveOn = snapshotEffectiveOn(now);
+          await rosterDays.doc(effectiveOn).set({
+            effectiveOn,
+            players: incoming,
+          });
+        }
+        await pruneRosterDays(rosterDays, torontoDateMinusDays(now, ROSTER_HISTORY_DAYS));
+      }
       const metaResult = await reconcileTeamMeta(
         db,
         String(sportId),
