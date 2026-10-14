@@ -240,6 +240,7 @@ class _RosterColumnState extends State<RosterColumn> {
                           controller: _filter,
                           tokens: t,
                           height: 24,
+                          hideIconWhenFilled: true,
                           onChanged: (_) => setState(() {}),
                         ),
                       ),

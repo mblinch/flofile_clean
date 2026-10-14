@@ -67,6 +67,8 @@ class _DrumPickerState extends State<DrumPicker> {
   String? _homeLetterFilter;
   String? _awayLetterFilter;
   bool _numberMode = true;
+  /// Squares across each numbers-mode row. Fewer columns means larger squares.
+  int _numberColumns = _NumberRoster.minColumns;
   bool _verbAccordionCollapsed = false;
   final _homeFilter = TextEditingController();
   final _awayFilter = TextEditingController();
@@ -320,18 +322,13 @@ class _DrumPickerState extends State<DrumPicker> {
     return visible;
   }
 
-  /// Shared grid metrics so home/away number cells stay the same size.
-  _NumberGridMetrics _numberModeMetrics() {
-    final home = _NumberRoster.gridMetrics(_visiblePlayersFor(DrumLane.home));
-    final away = _NumberRoster.gridMetrics(_visiblePlayersFor(DrumLane.away));
-    final cols =
-        home.columnCount > away.columnCount ? home.columnCount : away.columnCount;
-    final rows = home.rowCount > away.rowCount ? home.rowCount : away.rowCount;
-    return _NumberGridMetrics(
-      columnCount: cols.clamp(1, _NumberRoster.maxColumns),
-      rowCount: rows.clamp(1, 40),
-      needsOtherRow: home.needsOtherRow || away.needsOtherRow,
-    );
+  void _stepNumberColumns(int delta) {
+    setState(() {
+      _numberColumns = (_numberColumns + delta).clamp(
+        _NumberRoster.minColumns,
+        _NumberRoster.maxColumns,
+      );
+    });
   }
 
   void _onRosterFilterChanged(DrumLane lane) {
@@ -697,7 +694,6 @@ class _DrumPickerState extends State<DrumPicker> {
 
     Widget playerList() {
       final numberMode = _numberMode;
-      final numberMetrics = numberMode ? _numberModeMetrics() : null;
       return Expanded(
         child: visiblePlayers.isEmpty
             ? Center(
@@ -714,10 +710,7 @@ class _DrumPickerState extends State<DrumPicker> {
             : numberMode
                 ? _NumberRoster(
                     players: visiblePlayers,
-                    // Keep home/away on the same grid so names don't
-                    // disappear on only one side when rosters differ.
-                    columns: numberMetrics!.columnCount,
-                    layoutRowCount: numberMetrics.rowCount,
+                    columns: _numberColumns,
                     includeOtherRow: true,
                     tokens: tokens,
                     playersSubjectSelected: controller.teamPlayersIsHome ==
@@ -908,9 +901,20 @@ class _DrumPickerState extends State<DrumPicker> {
                   tokens: tokens,
                   height: 26,
                   leadingInset: 26,
+                  hideIconWhenFilled: true,
                   onChanged: (_) => _onRosterFilterChanged(lane),
                 ),
               ),
+              if (_numberMode) ...[
+                const SizedBox(width: 2),
+                _NumberSquareSizeStepper(
+                  tokens: tokens,
+                  canShrink: _numberColumns < _NumberRoster.maxColumns,
+                  canGrow: _numberColumns > _NumberRoster.minColumns,
+                  onShrink: () => _stepNumberColumns(1),
+                  onGrow: () => _stepNumberColumns(-1),
+                ),
+              ],
               const SizedBox(width: 2),
               _RosterViewButton(
                 tokens: tokens,
@@ -2470,23 +2474,10 @@ class _FilteredPlayerList extends StatelessWidget {
   }
 }
 
-class _NumberGridMetrics {
-  const _NumberGridMetrics({
-    required this.columnCount,
-    required this.rowCount,
-    required this.needsOtherRow,
-  });
-
-  final int columnCount;
-  final int rowCount;
-  final bool needsOtherRow;
-}
-
 class _NumberRoster extends StatelessWidget {
   const _NumberRoster({
     required this.players,
     required this.columns,
-    required this.layoutRowCount,
     required this.includeOtherRow,
     required this.tokens,
     this.playersSubjectSelected = false,
@@ -2501,7 +2492,6 @@ class _NumberRoster extends StatelessWidget {
 
   final List<Player> players;
   final int columns;
-  final int layoutRowCount;
   final bool includeOtherRow;
   final FfTokens tokens;
   final bool playersSubjectSelected;
@@ -2513,16 +2503,23 @@ class _NumberRoster extends StatelessWidget {
   final ValueChanged<Player>? onPin;
   final void Function(Player player, Offset globalPosition)? onSecondaryTap;
 
-  /// Always 4 across, with a tight gap between separate cells.
+  /// User-chosen squares across each row. Plus grows squares by dropping a column.
   static const int minColumns = 4;
-  static const int maxColumns = 4;
-  static const double minCell = 44.0;
+  static const int maxColumns = 6;
+  static const double columnGap = 2.0;
   static const double maxCell = 140.0;
   /// Wider-than-tall aspect used at small sizes (W/H).
   static const double smallAspect = 1.28;
   /// Below this width → full rectangle; above → full square.
   static const double rectBlendStart = 58.0;
   static const double squareBlendEnd = 96.0;
+
+  static double _aspectForCellWidth(double cellW) {
+    if (cellW <= rectBlendStart) return smallAspect;
+    if (cellW >= squareBlendEnd) return 1.0;
+    final t = (cellW - rectBlendStart) / (squareBlendEnd - rectBlendStart);
+    return smallAspect + (1.0 - smallAspect) * t;
+  }
 
   static int? _jersey(Player player) =>
       int.tryParse(player.jerseyNumber?.trim() ?? '');
@@ -2532,9 +2529,6 @@ class _NumberRoster extends StatelessWidget {
     if (parts.length < 2) return player.fullName;
     return parts.sublist(1).join(' ');
   }
-
-  static int _wrappedRows(int count, int perRow) =>
-      count <= 0 ? 0 : ((count + perRow - 1) ~/ perRow);
 
   static List<List<Player>> _chunk(List<Player> players, int perRow) {
     if (players.isEmpty) return const [];
@@ -2577,151 +2571,140 @@ class _NumberRoster extends StatelessWidget {
     return numbered;
   }
 
-  /// Full rows of [minColumns], labeled by the numbers present. No fixed
-  /// 0–19 bands, so a short range does not leave empty squares.
-  static _NumberGridMetrics gridMetrics(List<Player> players) {
-    final numbered = _sortedNumbered(players).length;
-    final other = players.length - numbered;
-    const perRow = minColumns;
-    var visualRows = _wrappedRows(numbered, perRow);
-    if (other > 0) visualRows += _wrappedRows(other, perRow);
-    final widest = numbered == 0 && other == 0
-        ? 1
-        : (numbered > other ? numbered : other);
-    return _NumberGridMetrics(
-      columnCount: widest.clamp(1, maxColumns),
-      rowCount: visualRows.clamp(1, 40),
-      needsOtherRow: other > 0,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final numbered = _sortedNumbered(players);
     final other = [for (final player in players) if (!_isNumbered(player)) player]
       ..sort((a, b) => a.fullName.compareTo(b.fullName));
 
-    final bands = <(String, List<Player>)>[
-      for (final group in _chunk(numbered, minColumns))
-        (_rangeLabel(group), group),
-    ];
     final showSubjects = onPlayersSubject != null;
-    if ((includeOtherRow && other.isNotEmpty) || showSubjects) {
-      bands.add(('Other', other));
-    }
 
     final shortest = MediaQuery.sizeOf(context).shortestSide;
     final scale = (shortest / 1000.0).clamp(0.62, 1.0);
     final numberSize = 26.0 * scale;
     final nameSize = 13.0 * scale;
     const nameNumberGap = 4.0;
-    final cellH =
+    final textCellH =
         (nameSize * 1.15 + numberSize * 1.05 + 12.5 + nameNumberGap)
             .clamp(48.0, 68.0);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
-      children: [
-        for (var i = 0; i < bands.length; i++) ...[
-          Padding(
-            padding: EdgeInsets.only(top: i == 0 ? 0 : 6, bottom: 6),
-            child: Row(
-              children: [
-                Text(
-                  bands[i].$1,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
-                    color: tokens.textTertiary,
-                    height: 1,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(height: 1, color: tokens.divider),
-                ),
-              ],
-            ),
-          ),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              const cols = 4;
-              const gap = 2.0;
-              const comfortableCell = 72.0;
-              final cellW = cols <= 1
-                  ? constraints.maxWidth
-                  : (constraints.maxWidth - gap * (cols - 1)) / cols;
-              final fit = (cellW / comfortableCell).clamp(0.72, 1.0);
-              final jerseySize = numberSize * fit;
-              final fittedName = nameSize * fit;
-              final fittedH = (cellH * fit).clamp(40.0, cellH);
-              final band = bands[i];
-              final isOther = band.$1 == 'Other';
-              final subjectCount = isOther && showSubjects ? 2 : 0;
-              final count = band.$2.length + subjectCount;
-              Widget cellAt(int index) {
-                if (index >= band.$2.length) {
-                  final playersButton = index == band.$2.length;
-                  return _TeamSubjectCell(
-                    label: playersButton ? 'Players' : 'Team\nName',
-                    selected: playersButton
-                        ? playersSubjectSelected
-                        : teamNameSubjectSelected,
-                    tokens: tokens,
-                    height: fittedH,
-                    fontSize: fittedName - 0.5,
-                    onTap: playersButton
-                        ? onPlayersSubject!
-                        : onTeamNameSubject!,
-                  );
-                }
-                final player = band.$2[index];
-                return _NumberCell(
-                  player: player,
-                  lastName: _lastName(player),
-                  selected: isSelected(player),
-                  tokens: tokens,
-                  width: double.infinity,
-                  height: fittedH,
-                  nameSize: fittedName,
-                  jerseySize: jerseySize,
-                  onTap: () => onCommit(player),
-                  onPin: onPin == null ? null : () => onPin!(player),
-                  onSecondaryTap: onSecondaryTap == null
-                      ? null
-                      : (position) => onSecondaryTap!(player, position),
-                );
-              }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const horizontalPad = 10.0;
+        final innerWidth = constraints.maxWidth - horizontalPad * 2;
+        final cols = columns.clamp(minColumns, maxColumns);
+        final bands = <(String, List<Player>)>[
+          for (final group in _chunk(numbered, cols))
+            (_rangeLabel(group), group),
+        ];
+        if ((includeOtherRow && other.isNotEmpty) || showSubjects) {
+          bands.add(('Other', other));
+        }
 
-              final rowCount = (count / cols).ceil();
-              return Column(
-                children: [
-                  for (var row = 0; row < rowCount; row++) ...[
-                    if (row > 0) const SizedBox(height: gap),
-                    SizedBox(
-                      height: fittedH,
-                      child: Row(
-                        children: [
-                          for (var col = 0; col < cols; col++) ...[
-                            if (col > 0) const SizedBox(width: gap),
-                            Expanded(
-                              child: row * cols + col < count
-                                  ? cellAt(row * cols + col)
-                                  : const SizedBox.shrink(),
-                            ),
-                          ],
-                        ],
+        final cellW = cols <= 1
+            ? innerWidth
+            : (innerWidth - columnGap * (cols - 1)) / cols;
+        const comfortableCell = 72.0;
+        final fit = (cellW / comfortableCell).clamp(0.72, 1.15);
+        final jerseySize = numberSize * fit;
+        final fittedName = nameSize * fit;
+        final squareH = (cellW / _aspectForCellWidth(cellW))
+            .clamp(40.0, maxCell);
+        final fittedH = squareH < textCellH ? (textCellH * fit).clamp(40.0, textCellH) : squareH;
+
+        Widget cellAt((String, List<Player>) band, int index) {
+          if (index >= band.$2.length) {
+            final playersButton = index == band.$2.length;
+            return _TeamSubjectCell(
+              label: playersButton ? 'Players' : 'Team\nName',
+              selected: playersButton
+                  ? playersSubjectSelected
+                  : teamNameSubjectSelected,
+              tokens: tokens,
+              height: fittedH,
+              fontSize: fittedName - 0.5,
+              onTap: playersButton ? onPlayersSubject! : onTeamNameSubject!,
+            );
+          }
+          final player = band.$2[index];
+          return _NumberCell(
+            player: player,
+            lastName: _lastName(player),
+            selected: isSelected(player),
+            tokens: tokens,
+            width: double.infinity,
+            height: fittedH,
+            nameSize: fittedName,
+            jerseySize: jerseySize,
+            onTap: () => onCommit(player),
+            onPin: onPin == null ? null : () => onPin!(player),
+            onSecondaryTap: onSecondaryTap == null
+                ? null
+                : (position) => onSecondaryTap!(player, position),
+          );
+        }
+
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(horizontalPad, 0, horizontalPad, 8),
+          children: [
+            for (var i = 0; i < bands.length; i++) ...[
+              Padding(
+                padding: EdgeInsets.only(top: i == 0 ? 0 : 6, bottom: 6),
+                child: Row(
+                  children: [
+                    Text(
+                      bands[i].$1,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.6,
+                        color: tokens.textTertiary,
+                        height: 1,
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Container(height: 1, color: tokens.divider),
+                    ),
                   ],
-                ],
-              );
-            },
-          ),
-        ],
-      ],
+                ),
+              ),
+              Builder(
+                builder: (context) {
+                  final band = bands[i];
+                  final isOther = band.$1 == 'Other';
+                  final subjectCount = isOther && showSubjects ? 2 : 0;
+                  final count = band.$2.length + subjectCount;
+                  final rowCount = count == 0 ? 0 : (count / cols).ceil();
+                  return Column(
+                    children: [
+                      for (var row = 0; row < rowCount; row++) ...[
+                        if (row > 0) const SizedBox(height: columnGap),
+                        SizedBox(
+                          height: fittedH,
+                          child: Row(
+                            children: [
+                              for (var col = 0; col < cols; col++) ...[
+                                if (col > 0) const SizedBox(width: columnGap),
+                                Expanded(
+                                  child: row * cols + col < count
+                                      ? cellAt(band, row * cols + col)
+                                      : const SizedBox.shrink(),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }
@@ -3928,6 +3911,80 @@ class _PinnedHintBarState extends State<_PinnedHintBar> {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NumberSquareSizeStepper extends StatelessWidget {
+  const _NumberSquareSizeStepper({
+    required this.tokens,
+    required this.canShrink,
+    required this.canGrow,
+    required this.onShrink,
+    required this.onGrow,
+  });
+
+  final FfTokens tokens;
+  final bool canShrink;
+  final bool canGrow;
+  final VoidCallback onShrink;
+  final VoidCallback onGrow;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _NumberSquareSizeButton(
+          icon: PhosphorIconsRegular.minus,
+          tooltip: 'Smaller number squares',
+          tokens: tokens,
+          onTap: canShrink ? onShrink : null,
+        ),
+        _NumberSquareSizeButton(
+          icon: PhosphorIconsRegular.plus,
+          tooltip: 'Larger number squares',
+          tokens: tokens,
+          onTap: canGrow ? onGrow : null,
+        ),
+      ],
+    );
+  }
+}
+
+class _NumberSquareSizeButton extends StatelessWidget {
+  const _NumberSquareSizeButton({
+    required this.icon,
+    required this.tooltip,
+    required this.tokens,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final FfTokens tokens;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Tooltip(
+      message: tooltip,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.35,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: PhosphorIcon(
+              icon,
+              size: 14,
+              color: tokens.textSecondary,
+            ),
+          ),
         ),
       ),
     );

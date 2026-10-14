@@ -13,6 +13,7 @@ class QuietFilterField extends StatefulWidget {
     this.height = 26,
     this.hint = 'Search',
     this.leadingInset = 0,
+    this.hideIconWhenFilled = false,
   });
 
   final TextEditingController controller;
@@ -25,6 +26,10 @@ class QuietFilterField extends StatefulWidget {
   /// there without changing the field's size.
   final double leadingInset;
 
+  /// Player search: drop the magnifying glass and [leadingInset] once the
+  /// field has text, so the caret starts at the field's normal left padding.
+  final bool hideIconWhenFilled;
+
   @override
   State<QuietFilterField> createState() => _QuietFilterFieldState();
 }
@@ -33,15 +38,28 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
   final FocusNode _focusNode = FocusNode();
   bool _hovered = false;
   bool _focused = false;
+  bool _filled = false;
 
   @override
   void initState() {
     super.initState();
+    _filled = widget.controller.text.isNotEmpty;
     _focusNode.addListener(_onFocusChanged);
+    widget.controller.addListener(_onTextChanged);
+  }
+
+  @override
+  void didUpdateWidget(QuietFilterField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_onTextChanged);
+    _filled = widget.controller.text.isNotEmpty;
+    widget.controller.addListener(_onTextChanged);
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_onTextChanged);
     _focusNode
       ..removeListener(_onFocusChanged)
       ..dispose();
@@ -53,6 +71,15 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
     if (next == _focused) return;
     setState(() => _focused = next);
   }
+
+  void _onTextChanged() {
+    if (!widget.hideIconWhenFilled) return;
+    final filled = widget.controller.text.isNotEmpty;
+    if (filled == _filled) return;
+    setState(() => _filled = filled);
+  }
+
+  bool get _showLeading => !widget.hideIconWhenFilled || !_filled;
 
   @override
   Widget build(BuildContext context) {
@@ -76,13 +103,16 @@ class _QuietFilterFieldState extends State<QuietFilterField> {
         ),
         child: Row(
           children: [
-            if (widget.leadingInset > 0) SizedBox(width: widget.leadingInset),
-            PhosphorIcon(
-              PhosphorIconsRegular.magnifyingGlass,
-              size: 14,
-              color: t.textTertiary,
-            ),
-            const SizedBox(width: 5),
+            if (_showLeading && widget.leadingInset > 0)
+              SizedBox(width: widget.leadingInset),
+            if (_showLeading) ...[
+              PhosphorIcon(
+                PhosphorIconsRegular.magnifyingGlass,
+                size: 14,
+                color: t.textTertiary,
+              ),
+              const SizedBox(width: 5),
+            ],
             Expanded(
               child: TextField(
                 controller: widget.controller,

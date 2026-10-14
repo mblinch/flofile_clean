@@ -182,8 +182,11 @@ class CaptionStrip extends StatelessWidget {
                         tokens: t,
                         onChanged: onPersonalityChanged!,
                       ),
-                childBuilder: (captionSize) =>
-                    _captionBody(t, captionSize, fill: true),
+                childBuilder: (captionSize) => _captionBody(
+                  t,
+                  captionSize,
+                  fill: true,
+                ),
               ),
             )
           else
@@ -197,7 +200,10 @@ class CaptionStrip extends StatelessWidget {
                       tokens: t,
                       onChanged: onPersonalityChanged!,
                     ),
-              childBuilder: (captionSize) => _captionBody(t, captionSize),
+              childBuilder: (captionSize) => _captionBody(
+                t,
+                captionSize,
+              ),
             ),
           if (onHeadlineChanged != null) ...[
             const SizedBox(height: 4),
@@ -224,7 +230,11 @@ class CaptionStrip extends StatelessWidget {
     );
   }
 
-  Widget _captionBody(FfTokens t, double captionSize, {bool fill = false}) {
+  Widget _captionBody(
+    FfTokens t,
+    double captionSize, {
+    bool fill = false,
+  }) {
     final captionStyle = t.captionStyle.copyWith(
       fontSize: captionSize,
       height: 1.32,
@@ -779,6 +789,13 @@ class _CaptionPanelState extends State<_CaptionPanel> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
+    final sizeStepper = _CaptionSizeStepper(
+      tokens: t,
+      canDecrease: _captionSize > _minCaptionSize,
+      canIncrease: _captionSize < _maxCaptionSize,
+      onDecrease: () => _stepCaptionSize(-1),
+      onIncrease: () => _stepCaptionSize(1),
+    );
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
       decoration: BoxDecoration(
@@ -821,13 +838,7 @@ class _CaptionPanelState extends State<_CaptionPanel> {
               ] else
                 const Spacer(),
               const SizedBox(width: 8),
-              _CaptionSizeStepper(
-                tokens: t,
-                canDecrease: _captionSize > _minCaptionSize,
-                canIncrease: _captionSize < _maxCaptionSize,
-                onDecrease: () => _stepCaptionSize(-1),
-                onIncrease: () => _stepCaptionSize(1),
-              ),
+              sizeStepper,
             ],
           ),
           const SizedBox(height: 6),
