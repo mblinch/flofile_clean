@@ -7,17 +7,15 @@ import '../../../theme/ff_tokens.dart';
 import '../data/caption_v2_controller.dart';
 import 'frame_status_dot.dart';
 
-/// Filename, exposure, and the admin edit button. Sits on the top of the photo.
+/// Capture time and exposure. Sits on the top of the photo.
 class PhotoPreviewInfoBar extends StatelessWidget {
   const PhotoPreviewInfoBar({
     super.key,
     required this.controller,
-    required this.editSession,
     this.showExposure = true,
   });
 
   final CaptionV2Controller controller;
-  final PhotoEditSession editSession;
   final bool showExposure;
 
   String _meta(List<String> keys) {
@@ -44,6 +42,14 @@ class PhotoPreviewInfoBar extends StatelessWidget {
       if (focalRaw.isNotEmpty)
         focal == null ? '${focalRaw}mm' : '${focal.toInt()}mm',
     ].join(' · ');
+    final taken = _formatTaken(
+      _meta(const ['DateTimeOriginal', 'CreateDate']),
+    );
+    final info = [
+      if (taken.isNotEmpty) taken,
+      if (showExposure && exposure.isNotEmpty) exposure,
+    ].join('  ·  ');
+    if (info.isEmpty) return const SizedBox.shrink();
     final style = tokens.metaStyle.copyWith(
       fontSize: 12,
       height: 1.2,
@@ -56,47 +62,46 @@ class PhotoPreviewInfoBar extends StatelessWidget {
         color: tokens.surface,
         border: Border(bottom: BorderSide(color: tokens.divider)),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Row(
-            children: [
-              ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: constraints.maxWidth * 0.46,
-                ),
-                child: Text(
-                  controller.currentFileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: style.copyWith(
-                    color: tokens.textSecondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-              if (showExposure && exposure.isNotEmpty) ...[
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    exposure,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: style,
-                  ),
-                ),
-              ] else
-                const Spacer(),
-              PhotoEditModeButton(
-                session: editSession,
-                controller: controller,
-                compact: true,
-              ),
-            ],
-          );
-        },
+      child: Text(
+        info,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: style,
       ),
     );
   }
+}
+
+String _formatTaken(String raw) {
+  final parts = raw.trim().split(RegExp(r'\s+'));
+  if (parts.length < 2) return raw.trim();
+  final dateParts = parts[0].split(':');
+  final timeParts = parts[1].split(':');
+  if (dateParts.length != 3 || timeParts.length < 2) return raw.trim();
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  final year = dateParts[0];
+  final monthIdx = int.tryParse(dateParts[1]) ?? 0;
+  final day = int.tryParse(dateParts[2]) ?? 0;
+  if (monthIdx < 1 || monthIdx > 12 || day <= 0) return raw.trim();
+  final hour24 = int.tryParse(timeParts[0]) ?? 0;
+  final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
+  final period = hour24 < 12 ? 'AM' : 'PM';
+  final minute = timeParts[1].padLeft(2, '0');
+  final second = timeParts.length > 2 ? timeParts[2].padLeft(2, '0') : '00';
+  return '${months[monthIdx - 1]} $day, $year · $hour12:$minute:$second $period';
 }
 
 String _formatShutter(String raw) {
@@ -108,33 +113,57 @@ String _formatShutter(String raw) {
       : '${value.toStringAsFixed(1)}s';
 }
 
-/// Saved and uploaded marks. Sits on the bottom of the photo.
+/// Filename, saved and uploaded marks, and the edit button.
+/// Sits on the bottom of the photo.
 class PhotoPreviewActionBar extends StatelessWidget {
   const PhotoPreviewActionBar({
     super.key,
     required this.controller,
+    required this.editSession,
     required this.path,
   });
 
   final CaptionV2Controller controller;
+  final PhotoEditSession editSession;
   final String path;
 
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final nameStyle = tokens.metaStyle.copyWith(
+      fontSize: 12,
+      height: 1.2,
+      color: tokens.textSecondary,
+      fontWeight: FontWeight.w500,
+    );
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
       decoration: BoxDecoration(
         color: tokens.surface,
         border: Border(top: BorderSide(color: tokens.divider)),
       ),
       child: Row(
         children: [
-          const Spacer(),
+          Expanded(
+            child: Text(
+              controller.currentFileName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.left,
+              style: nameStyle,
+            ),
+          ),
+          const SizedBox(width: 8),
           PhotoPreviewStatusIcons(
             state: controller.frameStateFor(path),
             tokens: tokens,
+          ),
+          const SizedBox(width: 8),
+          PhotoEditModeButton(
+            session: editSession,
+            controller: controller,
+            compact: true,
           ),
         ],
       ),

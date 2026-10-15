@@ -205,6 +205,8 @@ class PreferencesService {
   static const String _keyIptcWirePresetPrefix = 'iptc_wire_preset_';
   static const String _keyIptcWireClearedPrefix = 'iptc_wire_cleared_';
   static const String _keySelectedIptcTemplateId = 'selected_iptc_template_id';
+  /// Named IPTC templates saved from the template editor.
+  static const String _keyLocalIptcTemplates = 'iptc_local_templates';
   /// Per-wire, per-sport game identifier phrases (mirrors Firebase catalog).
   static const String _keyGameIdentifierByWireAndSportJson =
       'game_identifier_by_wire_and_sport_json';
@@ -3013,6 +3015,38 @@ class PreferencesService {
   Future<void> setSelectedIptcTemplateId(String id) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keySelectedIptcTemplateId, id.trim());
+  }
+
+  Future<List<IptcTemplateCatalogEntry>> getLocalIptcTemplates() async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_keyLocalIptcTemplates);
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! List) return const [];
+      final out = <IptcTemplateCatalogEntry>[];
+      for (final item in decoded) {
+        if (item is Map) {
+          final parsed = IptcTemplateCatalogEntry.fromMap(
+            Map<String, dynamic>.from(item),
+          );
+          if (parsed != null) out.add(parsed);
+        }
+      }
+      return out;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveLocalIptcTemplates(
+    List<IptcTemplateCatalogEntry> templates,
+  ) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(
+      _keyLocalIptcTemplates,
+      json.encode(templates.map((e) => e.toFirestore()).toList()),
+    );
   }
 
   String _iptcWirePresetKey(WireStyle wire) =>

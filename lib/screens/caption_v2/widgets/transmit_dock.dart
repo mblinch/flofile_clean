@@ -61,78 +61,88 @@ class CaptionV2ActionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        _ActionGroup(
-          tokens: t,
-          onCopy: onCopy,
-          onPaste: onPaste,
-          onPasteLast: onPastePrevious,
-          pasteEnabled: pasteEnabled,
-        ),
-        _ActionButton(
-          icon: PhosphorIconsRegular.caretLeft,
-          label: 'Save & Prev',
-          tooltip: 'Save & Prev',
-          tokens: t,
-          primary: true,
-          iconAtEnd: false,
-          onPressed: onSavePrevious,
-        ),
-        _ActionButton(
-          icon: PhosphorIconsRegular.caretRight,
-          label: 'Save & Next',
-          tooltip: 'Save & Next  ·  ⌘S',
-          tokens: t,
-          primary: true,
-          onPressed: onSaveNext,
-          enabled: saveNextEnabled,
-        ),
-        if (showTransmit)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _AccentActionButton(
-                icon: PhosphorIconsRegular.cloudArrowUp,
-                label: transmitLabel,
-                tooltip: 'FTP · $transmitLabel',
-                enabled: transmitEnabled,
-                onPressed: onTransmit,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ActionButton(
+              icon: PhosphorIconsRegular.caretLeft,
+              label: 'Save & Prev',
+              tooltip: 'Save & Prev',
+              tokens: t,
+              primary: true,
+              iconAtEnd: false,
+              onPressed: onSavePrevious,
+            ),
+            const SizedBox(width: 6),
+            _ActionGroup(
+              tokens: t,
+              onCopy: onCopy,
+              onPaste: onPaste,
+              onPasteLast: onPastePrevious,
+              pasteEnabled: pasteEnabled,
+            ),
+            const SizedBox(width: 6),
+            _ActionButton(
+              icon: PhosphorIconsRegular.caretRight,
+              label: 'Save & Next',
+              tooltip: 'Save & Next  ·  ⌘S',
+              tokens: t,
+              primary: true,
+              onPressed: onSaveNext,
+              enabled: saveNextEnabled,
+            ),
+            if (showTransmit)
+              Padding(
+                padding: const EdgeInsets.only(left: 18),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _AccentActionButton(
+                      icon: PhosphorIconsRegular.cloudArrowUp,
+                      label: transmitLabel,
+                      tooltip: 'FTP · $transmitLabel',
+                      enabled: transmitEnabled,
+                      onPressed: onTransmit,
+                    ),
+                    if (onFtpHistory != null) ...[
+                      const SizedBox(width: 6),
+                      _FtpTrailingSlot(
+                        active: ftpActive,
+                        history: _ActionButton(
+                          icon: PhosphorIconsRegular.clockCounterClockwise,
+                          label: 'FTP history',
+                          tooltip: 'FTP history',
+                          tokens: t,
+                          iconAtEnd: false,
+                          onPressed: onFtpHistory,
+                        ),
+                        bar: _FtpProgressBar(
+                          progress: ftpProgress ?? 0,
+                          active: ftpActive,
+                          thumbPath: ftpThumbPath,
+                          tokens: t,
+                        ),
+                      ),
+                    ] else if (ftpActive) ...[
+                      const SizedBox(width: 6),
+                      _FtpProgressBar(
+                        progress: ftpProgress ?? 0,
+                        active: true,
+                        thumbPath: ftpThumbPath,
+                        tokens: t,
+                      ),
+                    ],
+                  ],
+                ),
               ),
-              if (onFtpHistory != null) ...[
-                const SizedBox(width: 6),
-                _FtpTrailingSlot(
-                  active: ftpActive,
-                  history: _ActionButton(
-                    icon: PhosphorIconsRegular.clockCounterClockwise,
-                    label: 'FTP history',
-                    tooltip: 'FTP history',
-                    tokens: t,
-                    iconAtEnd: false,
-                    onPressed: onFtpHistory,
-                  ),
-                  bar: _FtpProgressBar(
-                    progress: ftpProgress ?? 0,
-                    active: ftpActive,
-                    thumbPath: ftpThumbPath,
-                    tokens: t,
-                  ),
-                ),
-              ] else if (ftpActive) ...[
-                const SizedBox(width: 6),
-                _FtpProgressBar(
-                  progress: ftpProgress ?? 0,
-                  active: true,
-                  thumbPath: ftpThumbPath,
-                  tokens: t,
-                ),
-              ],
-            ],
-          ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -150,8 +160,31 @@ class _FtpTrailingSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (active) return bar;
-    return history;
+    // History sets the slot size. Progress draws inside it so starting or
+    // finishing an upload cannot change the FTP button's size.
+    return Stack(
+      alignment: Alignment.centerLeft,
+      children: [
+        Visibility(
+          visible: !active,
+          maintainSize: true,
+          maintainAnimation: true,
+          maintainState: true,
+          child: history,
+        ),
+        if (active)
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: bar,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 
@@ -254,8 +287,8 @@ class _FtpProgressBarState extends State<_FtpProgressBar>
           ClipRRect(
             borderRadius: BorderRadius.circular(4),
             child: SizedBox(
-              width: 44,
-              height: 44,
+              width: 40,
+              height: 40,
               child: OrientedFilePreview(
                 path: thumb,
                 fit: BoxFit.cover,
@@ -319,6 +352,7 @@ class _ActionButton extends StatelessWidget {
   final FfTokens tokens;
   final VoidCallback? onPressed;
   final bool primary;
+
   /// Caret sits after the label. Save & Prev keeps it on the left.
   final bool iconAtEnd;
   final bool iconOnly;
@@ -338,13 +372,12 @@ class _ActionButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(8),
           hoverColor: primary ? const Color(0xFF343C45) : tokens.surface,
           child: Container(
-            height: 28,
-            padding: EdgeInsets.symmetric(horizontal: iconOnly ? 10 : 11),
+            height: 40,
+            padding: EdgeInsets.symmetric(horizontal: iconOnly ? 14 : 16),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (leadingIcon)
-                  Icon(icon, size: 14, color: fg),
+                if (leadingIcon) Icon(icon, size: 14, color: fg),
                 if (!iconOnly) ...[
                   if (leadingIcon) const SizedBox(width: 6),
                   Text(
@@ -360,7 +393,8 @@ class _ActionButton extends StatelessWidget {
                 if (hint != null) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(4),
@@ -446,9 +480,7 @@ class _AccentActionButtonState extends State<_AccentActionButton> {
                     stops: [0.0, 0.45, 1.0],
                   )
                 : _kActionTealGradient;
-    final fg = enabled
-        ? Colors.white
-        : Colors.white.withValues(alpha: 0.4);
+    final fg = enabled ? Colors.white : Colors.white.withValues(alpha: 0.4);
     return Tooltip(
       message: widget.tooltip,
       child: MouseRegion(
@@ -467,10 +499,12 @@ class _AccentActionButtonState extends State<_AccentActionButton> {
           onTap: enabled ? widget.onPressed : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 100),
-            height: 28,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 17),
             decoration: BoxDecoration(
-              color: enabled ? null : const Color(0xFF15242E).withValues(alpha: 0.55),
+              color: enabled
+                  ? null
+                  : const Color(0xFF15242E).withValues(alpha: 0.55),
               gradient: gradient,
               borderRadius: BorderRadius.circular(FfTokens.radiusChip),
               border: Border.all(color: border),
@@ -533,7 +567,7 @@ class _ActionGroup extends StatelessWidget {
         child: InkWell(
           onTap: enabled ? onPressed : null,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 11),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -560,7 +594,7 @@ class _ActionGroup extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        height: 28,
+        height: 40,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -571,7 +605,7 @@ class _ActionGroup extends StatelessWidget {
               onPressed: onCopy,
               enabled: true,
             ),
-            Container(width: 1, height: 28, color: tokens.divider),
+            Container(width: 1, height: 40, color: tokens.divider),
             item(
               icon: PhosphorIconsRegular.clipboardText,
               label: 'Paste',
@@ -579,7 +613,7 @@ class _ActionGroup extends StatelessWidget {
               onPressed: onPaste,
               enabled: pasteEnabled,
             ),
-            Container(width: 1, height: 28, color: tokens.divider),
+            Container(width: 1, height: 40, color: tokens.divider),
             item(
               icon: PhosphorIconsRegular.clockCounterClockwise,
               label: 'Paste last',
@@ -593,6 +627,7 @@ class _ActionGroup extends StatelessWidget {
     );
   }
 }
+
 class FtpModeToggle extends StatelessWidget {
   const FtpModeToggle({
     super.key,
@@ -834,10 +869,12 @@ class _UtilityButtonState extends State<_UtilityButton> {
     final pressing = enabled && _pressed;
 
     // Teal gradient fill for the caption action row; hover brightens the rim.
-    final fg = Colors.white.withValues(alpha: enabled || !dimWhenDisabled ? 1 : 0.55);
+    final fg =
+        Colors.white.withValues(alpha: enabled || !dimWhenDisabled ? 1 : 0.55);
     final border = hovering || primary
         ? Colors.white.withValues(alpha: 0.92)
-        : tokens.accent.withValues(alpha: enabled || !dimWhenDisabled ? 0.95 : 0.4);
+        : tokens.accent
+            .withValues(alpha: enabled || !dimWhenDisabled ? 0.95 : 0.4);
     final glowColor = hovering || primary ? Colors.white : tokens.accent;
     final gradient = pressing
         ? const LinearGradient(
@@ -1003,14 +1040,10 @@ class _OutlinedActionButtonState extends State<_OutlinedActionButton> {
             ? Colors.white.withValues(alpha: 0.92)
             : Colors.white.withValues(alpha: 0.35))
         : (enabled
-            ? (hovering
-                ? Colors.white.withValues(alpha: 0.92)
-                : tokens.accent)
+            ? (hovering ? Colors.white.withValues(alpha: 0.92) : tokens.accent)
             : tokens.accent.withValues(alpha: 0.35));
     final textColor = emphasized
-        ? (enabled
-            ? Colors.white
-            : Colors.white.withValues(alpha: 0.45))
+        ? (enabled ? Colors.white : Colors.white.withValues(alpha: 0.45))
         : (enabled ? tokens.text : tokens.textSecondary);
     final fill = emphasized
         ? (enabled

@@ -334,11 +334,7 @@ class IptcTemplateImportService {
       'Source': _first(meta, ['IPTC:Source', 'Source', 'XMP:Source']),
       'Headline': _first(meta, ['IPTC:Headline', 'Headline']),
       'Keywords': _keywords(meta),
-      'Personality': _first(meta, [
-        'XMP-getty:Personality',
-        'Personality',
-        'XMP:Personality',
-      ]),
+      'Personality': _personality(meta),
       'Caption': _first(meta, [
         'IPTC:Description',
         'Description',
@@ -414,6 +410,40 @@ class IptcTemplateImportService {
 
     out.removeWhere((_, v) => v.trim().isEmpty);
     return out;
+  }
+
+  /// Getty often repeats each name in the XMP bag. Keep the first copy.
+  static String _personality(Map<String, dynamic> meta) {
+    for (final key in const [
+      'XMP-getty:Personality',
+      'Personality',
+      'XMP:Personality',
+    ]) {
+      final raw = meta[key];
+      if (raw == null) continue;
+      final parts = <String>[];
+      void addPiece(String value) {
+        for (final piece in value.split(RegExp(r'[;|]'))) {
+          final trimmed = piece.trim();
+          if (trimmed.isNotEmpty) parts.add(trimmed);
+        }
+      }
+
+      if (raw is List) {
+        for (final item in raw) {
+          addPiece(item.toString());
+        }
+      } else {
+        addPiece(raw.toString());
+      }
+      final seen = <String>{};
+      final unique = <String>[
+        for (final part in parts)
+          if (seen.add(part.toLowerCase())) part,
+      ];
+      if (unique.isNotEmpty) return unique.join(';');
+    }
+    return '';
   }
 
   static String _first(Map<String, dynamic> meta, List<String> keys) {

@@ -8,7 +8,9 @@ import 'package:path/path.dart' as p;
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/ff_menu.dart';
 import '../../../widgets/oriented_file_preview.dart';
+import '../../../widgets/teal_action_button.dart';
 import '../data/caption_transfer_payload.dart';
 import '../data/caption_v2_controller.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
@@ -96,29 +98,20 @@ Future<void> showCaptionV2PhotoMenu({
   required Offset position,
   List<String>? pasteTargets,
 }) async {
-  final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-  final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
-  final menuPosition = RelativeRect.fromLTRB(
-    position.dx,
-    position.dy,
-    overlay.size.width - position.dx,
-    overlay.size.height - position.dy,
-  );
-  PopupMenuItem<_PhotoAction> item(
+  FfMenuChoice<_PhotoAction> item(
     _PhotoAction value,
     String label,
     IconData icon, {
     bool destructive = false,
   }) {
-    final color = destructive ? FfTokens.danger : t.text;
-    return PopupMenuItem<_PhotoAction>(
+    final color = destructive ? FfTokens.danger : null;
+    return FfMenuChoice<_PhotoAction>(
       value: value,
-      height: 38,
       child: Row(
         children: [
-          PhosphorIcon(icon, size: 16, color: color),
+          PhosphorIcon(icon, color: color),
           const SizedBox(width: 10),
-          Text(label, style: t.labelStyle.copyWith(color: color)),
+          Text(label, style: color == null ? null : TextStyle(color: color)),
         ],
       ),
     );
@@ -130,18 +123,12 @@ Future<void> showCaptionV2PhotoMenu({
           : pasteTargets)
       .toSet()
       .toList();
-  final action = await showMenu<_PhotoAction>(
+  final picked = await showFfMenu<_PhotoAction>(
     context: context,
-    position: menuPosition,
-    popUpAnimationStyle: AnimationStyle.noAnimation,
-    color: t.surface,
-    surfaceTintColor: Colors.transparent,
-    elevation: 12,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-      side: BorderSide(color: t.divider),
-    ),
-    items: [
+    anchorGlobal: Rect.fromLTWH(position.dx, position.dy, 0, 0),
+    width: 260,
+    scrollable: false,
+    choices: [
       item(_PhotoAction.copyCaption, 'Copy Caption', PhosphorIconsRegular.copy),
       item(
         _PhotoAction.pasteCaption,
@@ -161,7 +148,7 @@ Future<void> showCaptionV2PhotoMenu({
         'Edit in Photoshop',
         PhosphorIconsRegular.paintBrush,
       ),
-      const PopupMenuDivider(height: 1),
+      const FfMenuChoice<_PhotoAction>.divider(),
       if (controller.ftpModeEnabled) ...[
         if (sent)
           item(
@@ -171,7 +158,7 @@ Future<void> showCaptionV2PhotoMenu({
           )
         else
           item(_PhotoAction.ftp, 'FTP Image', PhosphorIconsRegular.cloudArrowUp),
-        const PopupMenuDivider(height: 1),
+        const FfMenuChoice<_PhotoAction>.divider(),
       ],
       item(_PhotoAction.reveal, 'Open in Finder', PhosphorIconsRegular.arrowSquareOut),
       item(
@@ -179,7 +166,7 @@ Future<void> showCaptionV2PhotoMenu({
         'Rename Image',
         PhosphorIconsRegular.pencilSimple,
       ),
-      const PopupMenuDivider(height: 1),
+      const FfMenuChoice<_PhotoAction>.divider(),
       item(
         _PhotoAction.delete,
         'Delete Image',
@@ -188,6 +175,7 @@ Future<void> showCaptionV2PhotoMenu({
       ),
     ],
   );
+  final action = picked?.value;
   if (action == null || !context.mounted) return;
 
   switch (action) {
@@ -460,16 +448,16 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
         widget.controller.captionTemplate.wireStyle);
     final size = MediaQuery.sizeOf(context);
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
       backgroundColor: t.bg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-        side: BorderSide(color: t.divider),
+        side: BorderSide(color: FfTokens.nocturneLn2),
       ),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
         width: (size.width * 0.84).clamp(760, 1180),
-        height: (size.height * 0.88).clamp(560, 900),
+        height: (size.height * 0.94).clamp(640, 1080),
         child: Column(
           children: [
             _DialogHeader(
@@ -494,10 +482,10 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
                           child: Container(
                             margin: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: t.sunken,
+                              color: FfTokens.nocturneSunken,
                               borderRadius:
                                   BorderRadius.circular(FfTokens.radiusCard),
-                              border: Border.all(color: t.divider),
+                              border: Border.all(color: FfTokens.nocturneLn2),
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: OrientedFilePreview(
@@ -510,34 +498,49 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
                           ),
                         ),
                         Expanded(
-                          child: GridView.builder(
-                            padding: const EdgeInsets.fromLTRB(0, 14, 14, 14),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 12,
-                              mainAxisSpacing: 10,
-                              childAspectRatio: 4.1,
-                            ),
-                            itemCount: specs.length,
-                            itemBuilder: (context, index) {
-                              final spec = specs[index];
-                              return _IptcField(
-                                spec: spec,
-                                controller: _fields[spec.storageKey]!,
-                                tokens: t,
-                              );
-                            },
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(0, 8, 14, 8),
+                            children: [
+                              for (var i = 0; i < specs.length; i += 2)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(
+                                        child: _IptcField(
+                                          spec: specs[i],
+                                          controller:
+                                              _fields[specs[i].storageKey]!,
+                                          tokens: t,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: i + 1 < specs.length
+                                            ? _IptcField(
+                                                spec: specs[i + 1],
+                                                controller: _fields[specs[i + 1]
+                                                        .storageKey]!,
+                                                tokens: t,
+                                              )
+                                            : const SizedBox.shrink(),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ],
                     ),
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
               decoration: BoxDecoration(
                 color: t.surface,
-                border: Border(top: BorderSide(color: t.divider)),
+                border: const Border(top: BorderSide(color: FfTokens.nocturneLn2)),
               ),
               child: Row(
                 children: [
@@ -549,29 +552,32 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
                   TextButton(
                     onPressed:
                         _saving ? null : () => Navigator.of(context).pop(),
-                    child: Text('Cancel', style: t.labelStyle),
+                    style: TextButton.styleFrom(
+                      foregroundColor: t.textSecondary,
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: t.labelStyle.copyWith(color: t.textSecondary),
+                    ),
                   ),
                   const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _save,
+                  TealActionButton(
+                    label: 'Save IPTC',
+                    enabled: !_saving,
+                    onPressed: _save,
                     icon: _saving
                         ? const SizedBox.square(
                             dimension: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
-                        : const PhosphorIcon(PhosphorIconsRegular.floppyDisk, size: 17),
-                    label: const Text('Save IPTC'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF15242E),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor:
-                          const Color(0xFF15242E).withValues(alpha: 0.45),
-                      disabledForegroundColor:
-                          Colors.white.withValues(alpha: 0.4),
-                      side: BorderSide(
-                        color: FfTokens.nocturneAc.withValues(alpha: 0.95),
-                      ),
-                    ),
+                        : const PhosphorIcon(
+                            PhosphorIconsRegular.floppyDisk,
+                            size: 14,
+                            color: Colors.white,
+                          ),
                   ),
                 ],
               ),
@@ -608,6 +614,7 @@ class _IptcField extends StatelessWidget {
         level = 'OPTIONAL';
         break;
     }
+    final multiline = spec.storageKey == 'Caption';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -617,45 +624,43 @@ class _IptcField extends StatelessWidget {
             Text(
               level,
               style: tokens.microStyle.copyWith(
-                fontSize: 8,
+                fontSize: 9,
+                letterSpacing: 0.4,
                 color: spec.level == IptcFieldLevel.required
                     ? tokens.accent
-                    : tokens.textSecondary,
+                    : tokens.textTertiary,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 4),
-        Expanded(
-          child: TextField(
-            controller: controller,
-            style: tokens.bodyStyle,
-            maxLines: spec.storageKey == 'Caption' ? null : 1,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: tokens.surface,
-              hintText: spec.example,
-              hintStyle: tokens.bodyStyle.copyWith(color: tokens.textSecondary),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-                borderSide: BorderSide(color: tokens.divider),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-                borderSide: BorderSide(color: tokens.divider),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-                borderSide: BorderSide(color: tokens.accent, width: 1.5),
-              ),
-            ),
+        const SizedBox(height: 2),
+        TextField(
+          controller: controller,
+          style: tokens.bodyStyle.copyWith(fontSize: 13, height: 1.25),
+          maxLines: multiline ? 2 : 1,
+          minLines: 1,
+          cursorColor: tokens.accent,
+          decoration: InputDecoration(
+            isDense: true,
+            filled: true,
+            fillColor: FfTokens.nocturneSunken,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            border: _iptcFieldBorder(FfTokens.nocturneLn2),
+            enabledBorder: _iptcFieldBorder(FfTokens.nocturneLn2),
+            focusedBorder: _iptcFieldBorder(tokens.accent, width: 1.5),
           ),
         ),
       ],
     );
   }
+}
+
+OutlineInputBorder _iptcFieldBorder(Color color, {double width = 1}) {
+  return OutlineInputBorder(
+    borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+    borderSide: BorderSide(color: color, width: width),
+  );
 }
 
 class _DialogHeader extends StatelessWidget {
@@ -676,13 +681,21 @@ class _DialogHeader extends StatelessWidget {
     return Container(
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        border: Border(bottom: BorderSide(color: tokens.divider)),
+      decoration: const BoxDecoration(
+        color: FfTokens.nocturneEl,
+        border: Border(bottom: BorderSide(color: FfTokens.nocturneLn2)),
       ),
       child: Row(
         children: [
-          Text(title, style: tokens.labelStyle.copyWith(fontSize: 15)),
+          Text(
+            title,
+            style: tokens.labelStyle.copyWith(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+              color: FfTokens.nocturneT2,
+            ),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

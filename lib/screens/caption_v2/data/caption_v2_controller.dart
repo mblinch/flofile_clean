@@ -250,6 +250,9 @@ enum FirebarOptionKind { homeRun, rbi, celebration, base, destination }
 
 enum RosterSortMode { number, firstName, lastName }
 
+/// Whole-side caption subject on the Other row.
+enum TeamSubjectKind { players, name, teammates }
+
 class FirebarOption {
   const FirebarOption(
     this.label, {
@@ -530,8 +533,12 @@ class CaptionV2Controller extends ChangeNotifier {
   /// When set, the caption subject is the whole side instead of named athletes.
   bool? teamPlayersIsHome;
 
-  /// True: "{team} players". False: the team name alone.
-  bool teamSubjectAsPlayers = true;
+  /// Players, the team name, or teammates.
+  TeamSubjectKind teamSubjectKind = TeamSubjectKind.players;
+
+  /// Teammates is an extra pick on this side: the selected player stays the
+  /// subject and the caption gains a trailing "with teammates".
+  bool? withTeammatesIsHome;
   String? selectedVerb;
   final Map<String, String?> verbModifierSelections = {};
   String customVerbPhrase = '';
@@ -1542,18 +1549,31 @@ class CaptionV2Controller extends ChangeNotifier {
     if (hasTeamPlayersSubject && selectedPlayers.isEmpty) {
       return teamSubjectLabel(isHome: teamPlayersIsHome!);
     }
-    return selectedPlayers.map((row) {
+    final names = selectedPlayers.map((row) {
       final j = row.player.jerseyNumber ?? '';
       final short = _shortName(row.player.fullName);
       return j.isEmpty ? short : '$j $short';
     }).join(' + ');
+    if (_captionIncludesTeammates) {
+      return names.isEmpty ? 'teammates' : '$names + teammates';
+    }
+    return names;
+  }
+
+  /// Selected player stays the subject; "teammates" is appended like another pick.
+  bool get _captionIncludesTeammates {
+    final side = withTeammatesIsHome;
+    if (side == null || hasTeamPlayersSubject || selectedPlayers.isEmpty) {
+      return false;
+    }
+    return _captionSubjectIsHome == side;
   }
 
   bool get hasTeamPlayersSubject => teamPlayersIsHome != null;
 
-  /// Players button, not the bare team name. Verbs use the plural form.
+  /// Players button or Teammates, not the bare team name. Verbs use the plural form.
   bool get _playersButtonIsGroup =>
-      hasTeamPlayersSubject && teamSubjectAsPlayers;
+      hasTeamPlayersSubject && teamSubjectKind != TeamSubjectKind.name;
 
   bool get hasCaptionSubject =>
       selectedPlayer != null || hasTeamPlayersSubject;
@@ -1571,10 +1591,21 @@ class CaptionV2Controller extends ChangeNotifier {
     return '$name players';
   }
 
+  /// Group subject, e.g. "Toronto FC teammates".
+  String teamTeammatesLabel({required bool isHome}) {
+    final name = teamNameLabel(isHome: isHome);
+    return '$name teammates';
+  }
+
   String teamSubjectLabel({required bool isHome}) {
-    return teamSubjectAsPlayers
-        ? teamPlayersLabel(isHome: isHome)
-        : teamNameLabel(isHome: isHome);
+    switch (teamSubjectKind) {
+      case TeamSubjectKind.players:
+        return teamPlayersLabel(isHome: isHome);
+      case TeamSubjectKind.teammates:
+        return teamTeammatesLabel(isHome: isHome);
+      case TeamSubjectKind.name:
+        return teamNameLabel(isHome: isHome);
+    }
   }
 
   bool get _captionSubjectIsHome {
@@ -1585,19 +1616,36 @@ class CaptionV2Controller extends ChangeNotifier {
 
   void toggleTeamSubject({
     required bool isHome,
-    required bool asPlayers,
+    required TeamSubjectKind kind,
   }) {
     captionSelectionStarted = true;
     manualCaptionOverride = null;
+    if (kind == TeamSubjectKind.teammates) {
+      if (withTeammatesIsHome == isHome) {
+        withTeammatesIsHome = null;
+        captionSelectionStarted =
+            selectedPlayers.isNotEmpty || hasTeamPlayersSubject;
+      } else {
+        withTeammatesIsHome = isHome;
+        if (hasTeamPlayersSubject) {
+          teamPlayersIsHome = null;
+        }
+      }
+      _syncPersonality();
+      _syncKeywords();
+      notifyListeners();
+      return;
+    }
+    withTeammatesIsHome = null;
     final same = hasTeamPlayersSubject &&
         teamPlayersIsHome == isHome &&
-        teamSubjectAsPlayers == asPlayers;
+        teamSubjectKind == kind;
     if (same) {
       teamPlayersIsHome = null;
       captionSelectionStarted = selectedPlayers.isNotEmpty;
     } else {
       teamPlayersIsHome = isHome;
-      teamSubjectAsPlayers = asPlayers;
+      teamSubjectKind = kind;
       selectedPlayers.clear();
       selectedPlayer = null;
       selectedIsHome = isHome;
@@ -1606,6 +1654,17 @@ class CaptionV2Controller extends ChangeNotifier {
     _syncPersonality();
     _syncKeywords();
     notifyListeners();
+  }
+
+  /// Teammates stays armed until the subject leaves that side.
+  void _dropTeammatesIfSubjectLeft() {
+    final side = withTeammatesIsHome;
+    if (side == null) return;
+    if (selectedPlayers.isEmpty) return;
+    if (selectedPlayers.first.isHome != side &&
+        !selectedPlayers.any((row) => row.isHome == side)) {
+      withTeammatesIsHome = null;
+    }
   }
 
   bool isPlayerSelected(Player player, {required bool isHome}) {
@@ -2147,12 +2206,21 @@ class CaptionV2Controller extends ChangeNotifier {
       subOptions: definition?.subOptions,
     );
 
+    final genericTeammates = _captionIncludesTeammates &&
+        !action.toLowerCase().contains('with teammates');
     if (withTeammates && !_playersButtonIsGroup && subjects.length > 1) {
       final teammates = subjects.skip(1).toList(growable: false);
-      final names = _formatPlayerNamesOnly(teammates, captionTemplate);
+      var names = _formatPlayerNamesOnly(teammates, captionTemplate);
+      if (genericTeammates && names.isNotEmpty) {
+        names = '$names and teammates';
+      }
       if (names.isNotEmpty) {
         action = '$action with $names';
+      } else if (genericTeammates) {
+        action = '$action with teammates';
       }
+    } else if (genericTeammates && !_playersButtonIsGroup) {
+      action = '$action with teammates';
     }
 
     final includeOpponent = definition?.wantsOpponent ?? true;
@@ -2188,6 +2256,10 @@ class CaptionV2Controller extends ChangeNotifier {
 
   String _customActionPhrase() {
     var action = customVerbPhrase.trim();
+    if (_captionIncludesTeammates &&
+        !action.toLowerCase().contains('with teammates')) {
+      action = '$action with teammates';
+    }
     final subjectIsHome = _captionSubjectIsHome;
     final opponentName =
         (subjectIsHome ? awayTeam : homeTeam).trim();
@@ -2551,6 +2623,7 @@ class CaptionV2Controller extends ChangeNotifier {
     selectedPlayers.clear();
     selectedPlayer = null;
     teamPlayersIsHome = null;
+    withTeammatesIsHome = null;
     selectedIsHome = true;
     selectedVerb = null;
     celebrationType = null;
@@ -2874,6 +2947,7 @@ class CaptionV2Controller extends ChangeNotifier {
     selectedPlayers.clear();
     selectedPlayer = null;
     teamPlayersIsHome = null;
+    withTeammatesIsHome = null;
     selectedVerb = null;
     pinnedVerb = null;
     pinnedPlayer = null;
@@ -3990,6 +4064,7 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     manualCaptionOverride = null;
     _syncPrimaryPlayer();
+    _dropTeammatesIfSubjectLeft();
     _syncKeywords();
     notifyListeners();
   }
@@ -4356,6 +4431,7 @@ class CaptionV2Controller extends ChangeNotifier {
       }
     }
     _syncPrimaryPlayer();
+    _dropTeammatesIfSubjectLeft();
     notifyListeners();
   }
 
@@ -4572,6 +4648,7 @@ class CaptionV2Controller extends ChangeNotifier {
     selectedPlayers.clear();
     selectedPlayer = null;
     teamPlayersIsHome = null;
+    withTeammatesIsHome = null;
     selectedVerb = null;
     customVerbPhrase = '';
     lastCustomVerbPhrase = '';
@@ -8500,6 +8577,7 @@ class CaptionV2Controller extends ChangeNotifier {
     selectedPlayers.clear();
     selectedPlayer = null;
     teamPlayersIsHome = null;
+    withTeammatesIsHome = null;
     playerSearchClearGeneration++;
     // Pinned catalog verb always comes back on the next frame, even if the
     // user picked a different verb for the frame they just saved.
@@ -8827,6 +8905,7 @@ class CaptionV2Controller extends ChangeNotifier {
     if (ftpHistory.length > 80) {
       ftpHistory.removeRange(80, ftpHistory.length);
     }
+    notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _ftpHistoryKey,
@@ -9163,6 +9242,7 @@ class CaptionV2Controller extends ChangeNotifier {
       ..clear()
       ..add(row);
     _syncPrimaryPlayer();
+    _dropTeammatesIfSubjectLeft();
     selectedVerb = verb;
     _stashCustomVerbIfNeeded();
     customVerbPhrase = '';

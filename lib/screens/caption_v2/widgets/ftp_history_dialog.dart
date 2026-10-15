@@ -15,7 +15,10 @@ Future<void> showFtpHistoryDialog(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.55),
     builder: (context) {
-      final entries = controller.ftpHistory;
+      final started = ftpSessionStartedAt();
+      final entries = controller.ftpHistory
+          .where((entry) => !entry.at.isBefore(started))
+          .toList();
       return Center(
         child: Material(
           color: Colors.transparent,

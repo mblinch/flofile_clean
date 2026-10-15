@@ -205,7 +205,6 @@ class _EditStage extends StatelessWidget {
                   if (path != null)
                     PhotoPreviewInfoBar(
                       controller: controller,
-                      editSession: session,
                     ),
                   Expanded(
                     child: path == null
@@ -243,6 +242,7 @@ class _EditStage extends StatelessWidget {
                   if (path != null)
                     PhotoPreviewActionBar(
                       controller: controller,
+                      editSession: session,
                       path: path,
                     ),
                 ],

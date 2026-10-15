@@ -903,15 +903,6 @@ Future<bool> showVerbEditorDeleteVerbDialog({
                     height: 1.35,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  "Captions you've already written won't change. "
-                  'Nothing goes live until you publish.',
-                  style: t.metaStyle.copyWith(
-                    color: t.text.withValues(alpha: 0.50),
-                    height: 1.35,
-                  ),
-                ),
                 const SizedBox(height: 14),
                 Row(
                   children: [

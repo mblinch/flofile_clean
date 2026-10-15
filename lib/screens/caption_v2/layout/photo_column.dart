@@ -107,6 +107,7 @@ class _PhotoColumnState extends State<PhotoColumn> {
       ValueNotifier<JerseyOcrSuggestion?>(null);
 
   static const double _handleHeight = 14;
+
   /// Keep a usable large preview — never collapse it away.
   static const double _minPreviewFraction = 0.28;
   static const double _maxPreviewFraction = 0.85;
@@ -447,7 +448,6 @@ class _PhotoCard extends StatelessWidget {
             if (path != null)
               PhotoPreviewInfoBar(
                 controller: controller,
-                editSession: editSession,
                 showExposure: MediaQuery.sizeOf(context).width >= 1100,
               ),
             Expanded(
@@ -475,8 +475,7 @@ class _PhotoCard extends StatelessWidget {
                             controller: controller,
                             editSession: editSession,
                             ocrHover: ocrHover,
-                            onOpenZoom: () =>
-                                showCaptionV2Zoom(context, path!),
+                            onOpenZoom: () => showCaptionV2Zoom(context, path!),
                             onSecondaryTapDown: (details) =>
                                 showCaptionV2PhotoMenu(
                               context: context,
@@ -486,110 +485,111 @@ class _PhotoCard extends StatelessWidget {
                             ),
                           ),
                   ),
-                if (path != null) ...[
-                  if (_playerTag(controller) != null)
-                    Positioned(
-                      top: 10,
-                      left: 10,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: tokens.bg.withValues(alpha: 0.7),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          _playerTag(controller)!,
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: tokens.text,
+                  if (path != null) ...[
+                    if (_playerTag(controller) != null)
+                      Positioned(
+                        top: 10,
+                        left: 10,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: tokens.bg.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _playerTag(controller)!,
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: tokens.text,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  if (controller.jerseyOcrEnabled)
-                    Positioned(
-                      top: 10,
-                      right: 10,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              _PhotoOcrScanButton(
+                    if (controller.jerseyOcrEnabled)
+                      Positioned(
+                        top: 10,
+                        right: 10,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _PhotoOcrScanButton(
+                                  controller: controller,
+                                  tokens: tokens,
+                                ),
+                              ],
+                            ),
+                            if (controller.jerseySuggestions.isNotEmpty ||
+                                controller.jerseyOcrBusy) ...[
+                              const SizedBox(height: 8),
+                              _PhotoOcrSuggestionChips(
                                 controller: controller,
                                 tokens: tokens,
+                                ocrHover: ocrHover,
                               ),
                             ],
-                          ),
-                          if (controller.jerseySuggestions.isNotEmpty ||
-                              controller.jerseyOcrBusy) ...[
-                            const SizedBox(height: 8),
-                            _PhotoOcrSuggestionChips(
-                              controller: controller,
-                              tokens: tokens,
-                              ocrHover: ocrHover,
-                            ),
                           ],
-                        ],
+                        ),
+                      ),
+                    Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: _PhotoFrameCounter(
+                        index: controller.currentIndex + 1,
+                        total: controller.imagePaths.length,
+                        tokens: tokens,
                       ),
                     ),
-                  Positioned(
-                    right: 12,
-                    bottom: 12,
-                    child: _PhotoFrameCounter(
-                      index: controller.currentIndex + 1,
-                      total: controller.imagePaths.length,
-                      tokens: tokens,
-                    ),
-                  ),
-                  Positioned(
-                    left: 12,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: PhotoSaveArrow(
-                        direction: AxisDirection.left,
-                        onPressed: onSavePrevious,
+                    Positioned(
+                      left: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: PhotoSaveArrow(
+                          direction: AxisDirection.left,
+                          onPressed: onSavePrevious,
+                        ),
                       ),
                     ),
-                  ),
-                  Positioned(
-                    right: 12,
-                    top: 0,
-                    bottom: 0,
-                    child: Center(
-                      child: PhotoSaveArrow(
-                        direction: AxisDirection.right,
-                        onPressed: onSaveNext,
+                    Positioned(
+                      right: 12,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: PhotoSaveArrow(
+                          direction: AxisDirection.right,
+                          onPressed: onSaveNext,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
+                  if (path != null &&
+                      controller.transmitting &&
+                      controller.transmittingPath == path)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: TransmitProgressOverlay(
+                          progress: controller.transmitProgress,
+                          status: controller.transmitStatus,
+                          compact: true,
+                        ),
+                      ),
+                    ),
                 ],
-                if (path != null &&
-                    controller.transmitting &&
-                    controller.transmittingPath == path)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: TransmitProgressOverlay(
-                        progress: controller.transmitProgress,
-                        status: controller.transmitStatus,
-                        compact: true,
-                      ),
-                    ),
-                  ),
-              ],
+              ),
             ),
-          ),
             if (path != null)
               PhotoPreviewActionBar(
                 controller: controller,
+                editSession: editSession,
                 path: path!,
               ),
           ],
@@ -734,7 +734,8 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
   /// Tight on purpose so the native crop upscales the number hard.
   JerseyOcrRegion? _loupeRegion(Offset sampleAt, Rect imageRect) {
     if (imageRect.width <= 0 || imageRect.height <= 0) return null;
-    final nx = ((sampleAt.dx - imageRect.left) / imageRect.width).clamp(0.0, 1.0);
+    final nx =
+        ((sampleAt.dx - imageRect.left) / imageRect.width).clamp(0.0, 1.0);
     final nyTop =
         ((sampleAt.dy - imageRect.top) / imageRect.height).clamp(0.0, 1.0);
     // ~18% of the frame — number + a little jersey fabric, not the boards.
@@ -869,9 +870,7 @@ class _PhotoLoupePreviewState extends State<_PhotoLoupePreview>
         final showLoupe = cursor != null &&
             imageRect.isEmpty == false &&
             (overImage || _pointerDown);
-        final sampleAt = showLoupe
-            ? _clampToRect(cursor, imageRect)
-            : null;
+        final sampleAt = showLoupe ? _clampToRect(cursor, imageRect) : null;
 
         return MouseRegion(
           cursor: SystemMouseCursors.zoomIn,
@@ -1237,11 +1236,8 @@ class _OcrNumberMarks extends StatelessWidget {
         child: Text(label, style: labelStyle),
       ),
     );
-    final showVerbs =
-        verbAnchor != null && _sameOcrMark(verbAnchor!, match);
-    final menuTop = landscape
-        ? namePosition.top + 4
-        : namePosition.top + 12;
+    final showVerbs = verbAnchor != null && _sameOcrMark(verbAnchor!, match);
+    final menuTop = landscape ? namePosition.top + 4 : namePosition.top + 12;
     final menuLeft = landscape
         ? (rect.center.dx - 100).clamp(imageRect.left, imageRect.right - 8)
         : namePosition.left;
@@ -1625,59 +1621,59 @@ class _OcrMatchChip extends StatelessWidget {
       onEnter: (_) => onHover(match),
       onExit: (_) => onHover(null),
       child: Tooltip(
-      message:
-          '${match.isHome ? 'Home' : 'Away'} · matched “${match.matchedText}” '
-          '(${match.matchKind == JerseyOcrMatchKind.jersey ? 'jersey' : 'name'})',
-      child: Material(
-        // Opaque fills: these chips sit over the photo, so any alpha lets the
-        // image bleed through the text.
-        color: hovered
-            ? Color.alphaBlend(
-                _ocrTargetTeal.withValues(alpha: 0.32),
-                FfTokens.viewerChrome,
-              )
-            : selected
-                ? Color.alphaBlend(
-                    tokens.accent.withValues(alpha: 0.45),
-                    FfTokens.viewerChrome,
-                  )
-                : FfTokens.viewerChrome,
-        borderRadius: BorderRadius.circular(7),
-        child: InkWell(
-          onTap: onTap,
+        message:
+            '${match.isHome ? 'Home' : 'Away'} · matched “${match.matchedText}” '
+            '(${match.matchKind == JerseyOcrMatchKind.jersey ? 'jersey' : 'name'})',
+        child: Material(
+          // Opaque fills: these chips sit over the photo, so any alpha lets the
+          // image bleed through the text.
+          color: hovered
+              ? Color.alphaBlend(
+                  _ocrTargetTeal.withValues(alpha: 0.32),
+                  FfTokens.viewerChrome,
+                )
+              : selected
+                  ? Color.alphaBlend(
+                      tokens.accent.withValues(alpha: 0.45),
+                      FfTokens.viewerChrome,
+                    )
+                  : FfTokens.viewerChrome,
           borderRadius: BorderRadius.circular(7),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(7),
-              border: Border.all(
-                color: hovered
-                    ? _ocrTargetTealHot
-                    : selected
-                        ? tokens.accent.withValues(alpha: 0.55)
-                        : tokens.divider,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(7),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(7),
+                border: Border.all(
+                  color: hovered
+                      ? _ocrTargetTealHot
+                      : selected
+                          ? tokens.accent.withValues(alpha: 0.55)
+                          : tokens.divider,
+                ),
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: tokens.metaStyle.copyWith(
-                      fontSize: 11,
-                      color: tokens.text,
-                      fontWeight: FontWeight.w600,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.metaStyle.copyWith(
+                        fontSize: 11,
+                        color: tokens.text,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
-      ),
       ),
     );
   }
@@ -1868,9 +1864,10 @@ Future<void> _showOcrScanDialog({
                       itemBuilder: (context, index) {
                         final match = matches[index];
                         final side = match.isHome ? 'Home' : 'Away';
-                        final kind = match.matchKind == JerseyOcrMatchKind.jersey
-                            ? 'jersey'
-                            : 'name';
+                        final kind =
+                            match.matchKind == JerseyOcrMatchKind.jersey
+                                ? 'jersey'
+                                : 'name';
                         final label = _ocrMatchLabel(match);
                         return ListTile(
                           dense: true,
@@ -1997,6 +1994,9 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
   bool _repairScheduled = false;
   String? _visibilitySignature;
   int _lastWarmFirst = -1;
+  /// Image that no longer matches the filter, kept visible after stepping back.
+  String? _filterHoldPath;
+  int? _trackedIndex;
 
   CaptionV2Controller get controller => widget.controller;
   FfTokens get tokens => widget.tokens;
@@ -2040,20 +2040,48 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     controller.warmThumbnailPaths(paths.sublist(first, end));
   }
 
+  bool _matchesScope(String path) {
+    switch (_scope) {
+      case _BrowseScope.all:
+        return true;
+      case _BrowseScope.toCaption:
+        return !controller.captionedImages.contains(path);
+      case _BrowseScope.captioned:
+        return controller.captionedImages.contains(path);
+      case _BrowseScope.toFtp:
+        return !controller.sentImages.contains(path);
+      case _BrowseScope.ftp:
+        return controller.sentImages.contains(path);
+    }
+  }
+
+  /// Stepping backward onto a saved or sent frame keeps it visible until
+  /// the selection moves on, then the active filter hides it again.
+  void _updateFilterHold() {
+    final index = controller.currentIndex;
+    final current = controller.currentPath;
+    final previousIndex = _trackedIndex;
+    _trackedIndex = index;
+    if (current == null || _scope == _BrowseScope.all) {
+      _filterHoldPath = null;
+      return;
+    }
+    if (_filterHoldPath != null && _filterHoldPath != current) {
+      _filterHoldPath = null;
+    }
+    final wentBack = previousIndex != null && index < previousIndex;
+    if (wentBack && !_matchesScope(current)) {
+      _filterHoldPath = current;
+    } else if (_matchesScope(current)) {
+      _filterHoldPath = null;
+    }
+  }
+
   List<String> get _visiblePaths {
+    _updateFilterHold();
     final paths = controller.imagePaths.where((path) {
-      switch (_scope) {
-        case _BrowseScope.all:
-          return true;
-        case _BrowseScope.toCaption:
-          return !controller.captionedImages.contains(path);
-        case _BrowseScope.captioned:
-          return controller.captionedImages.contains(path);
-        case _BrowseScope.toFtp:
-          return !controller.sentImages.contains(path);
-        case _BrowseScope.ftp:
-          return controller.sentImages.contains(path);
-      }
+      if (path == _filterHoldPath) return true;
+      return _matchesScope(path);
     }).toList();
     paths.sort(_comparePaths);
     return paths;
@@ -2085,6 +2113,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     setState(() {
       _scope = scope;
       _selectedPaths.clear();
+      _filterHoldPath = null;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scrollController.hasClients) {
@@ -2367,6 +2396,8 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
       _lastSessionGeneration = controller.sessionGeneration;
       _scope = _BrowseScope.all;
       _selectedPaths.clear();
+      _filterHoldPath = null;
+      _trackedIndex = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _scrollController.hasClients) {
           _scrollController.jumpTo(0);
@@ -2402,251 +2433,260 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
       focusNode: _focusNode,
       onKeyEvent: _handleKeyEvent,
       child: Container(
-          decoration: BoxDecoration(
-            color: tokens.surface,
-            borderRadius: BorderRadius.circular(FfTokens.radiusCard),
-          ),
+        decoration: BoxDecoration(
+          color: tokens.surface,
+          borderRadius: BorderRadius.circular(FfTokens.radiusCard),
+        ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(FfTokens.radiusCard),
           child: Column(
-          children: [
-            _ThumbnailToolbar(
-              tokens: tokens,
-              sort: _sort,
-              scope: _scope,
-              visibleCount: paths.length,
-              totalCount: allPaths.length,
-              captionedCount: captionedCount,
-              sentCount: sentCount,
-              columnCount: columnCount,
-              maxColumns: maxColumns,
-              refreshing: controller.refreshingFolder,
-              onSortChanged: _setSort,
-              onScopeChanged: _setScope,
-              onRefresh: controller.refreshOpenFolder,
-              onOpenOverview: () =>
-                  showCaptionV2ThumbnailOverview(context, controller),
-              onSmaller: columnCount >= maxColumns
-                  ? null
-                  : () => _adjustColumns(1, maxColumns),
-              onLarger: columnCount <= 2
-                  ? null
-                  : () => _adjustColumns(-1, maxColumns),
-            ),
-            Expanded(
-              child: paths.isEmpty
-                  ? Center(
-                      child: FfGlow(
-                        glowW: 320,
-                        glowH: 180,
-                        child: Text(
-                          'No images match current filters',
-                          style: tokens.metaStyle,
+            children: [
+              _ThumbnailToolbar(
+                tokens: tokens,
+                sort: _sort,
+                scope: _scope,
+                visibleCount: paths.length,
+                totalCount: allPaths.length,
+                captionedCount: captionedCount,
+                sentCount: sentCount,
+                columnCount: columnCount,
+                maxColumns: maxColumns,
+                refreshing: controller.refreshingFolder,
+                onSortChanged: _setSort,
+                onScopeChanged: _setScope,
+                onRefresh: controller.refreshOpenFolder,
+                onOpenOverview: () =>
+                    showCaptionV2ThumbnailOverview(context, controller),
+                onSmaller: columnCount >= maxColumns
+                    ? null
+                    : () => _adjustColumns(1, maxColumns),
+                onLarger: columnCount <= 2
+                    ? null
+                    : () => _adjustColumns(-1, maxColumns),
+              ),
+              Expanded(
+                child: paths.isEmpty
+                    ? Center(
+                        child: FfGlow(
+                          glowW: 320,
+                          glowH: 180,
+                          child: Text(
+                            'No images match current filters',
+                            style: tokens.metaStyle,
+                          ),
                         ),
-                      ),
-                    )
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        const spacing = 8.0;
-                        final contentWidth = (constraints.maxWidth - 20)
-                            .clamp(1.0, double.infinity);
-                        final minCell =
-                            (110 - (columnCount - 3) * 28).clamp(72.0, 180.0);
-                        final rawColumns =
-                            ((contentWidth + spacing) / (minCell + spacing))
-                                .floor();
-                        final columns = rawColumns < 1
-                            ? 1
-                            : (rawColumns > maxColumns ? maxColumns : rawColumns);
-                        final itemWidth =
-                            ((contentWidth - spacing * (columns - 1)) / columns)
-                                .clamp(1.0, contentWidth);
-                        final aspect = itemWidth / (itemWidth * 0.75 + 34);
-                        _thumbAspect = aspect;
-                        _keepCurrentThumbnailVisible(
-                          paths: paths,
-                          columns: columns,
-                          spacing: spacing,
-                          itemWidth: itemWidth,
-                        );
-                        return Listener(
-                          behavior: HitTestBehavior.translucent,
-                          onPointerDown: _startMarquee,
-                          onPointerMove: (event) => _updateMarquee(
-                            event,
+                      )
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          const spacing = 8.0;
+                          final contentWidth = (constraints.maxWidth - 20)
+                              .clamp(1.0, double.infinity);
+                          final minCell =
+                              (110 - (columnCount - 3) * 28).clamp(72.0, 180.0);
+                          final rawColumns =
+                              ((contentWidth + spacing) / (minCell + spacing))
+                                  .floor();
+                          final columns = rawColumns < 1
+                              ? 1
+                              : (rawColumns > maxColumns
+                                  ? maxColumns
+                                  : rawColumns);
+                          final itemWidth =
+                              ((contentWidth - spacing * (columns - 1)) /
+                                      columns)
+                                  .clamp(1.0, contentWidth);
+                          final aspect = itemWidth / (itemWidth * 0.75 + 34);
+                          _thumbAspect = aspect;
+                          _keepCurrentThumbnailVisible(
                             paths: paths,
                             columns: columns,
                             spacing: spacing,
                             itemWidth: itemWidth,
-                          ),
-                          onPointerUp: _endMarquee,
-                          onPointerCancel: _endMarquee,
-                          child: Stack(
-                            children: [
-                              GridView.builder(
-                                controller: _scrollController,
-                                padding: const EdgeInsets.all(8),
-                                cacheExtent: 2200,
-                                gridDelegate:
-                                    SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: columns,
-                                  mainAxisSpacing: spacing,
-                                  crossAxisSpacing: spacing,
-                                  childAspectRatio: aspect,
-                                ),
-                                itemCount: paths.length,
-                                itemBuilder: (context, i) {
-                                  final path = paths[i];
-                                  final originalIndex =
-                                      controller.imagePaths.indexOf(path);
-                                  final selected = _selectedPaths.isEmpty
-                                      ? originalIndex == controller.currentIndex
-                                      : _selectedPaths.contains(path);
-                                  final captioned =
-                                      controller.captionedImages.contains(path);
-                                  final ftp =
-                                      controller.sentImages.contains(path);
-                                  final borderColor = tokens.accent;
-                                  return GestureDetector(
-                                    key: ValueKey(path),
-                                    onTap: () => _selectThumbnail(paths, i),
-                                    onSecondaryTapDown: (details) =>
-                                        _showThumbnailMenu(
-                                      context,
-                                      path,
-                                      details.globalPosition,
-                                    ),
-                                    child: Tooltip(
-                                      message: p.basename(path),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(6),
-                                        decoration: BoxDecoration(
-                                          color: tokens.sunken,
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: selected
-                                              ? Border.all(
-                                                  color: borderColor,
-                                                  width: 2,
-                                                )
-                                              : null,
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(7),
-                                          child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.stretch,
-                                          children: [
-                                            Expanded(
-                                              child: ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(7),
-                                                child: Stack(
-                                                  fit: StackFit.expand,
-                                                  children: [
-                                                    OrientedFilePreview(
-                                                      path: path,
-                                                      version: controller
-                                                          .imageContentStamp(
-                                                              path),
-                                                      fit: BoxFit.contain,
-                                                      cacheWidth:
-                                                          _thumbCacheWidth,
-                                                    ),
-                                                    if (controller
-                                                            .transmitting &&
-                                                        controller
-                                                                .transmittingPath ==
-                                                            path)
-                                                      Positioned.fill(
-                                                        child:
-                                                            TransmitProgressOverlay(
-                                                          progress: controller
-                                                              .transmitProgress,
-                                                          status: controller
-                                                              .transmitStatus,
-                                                          compact: true,
+                          );
+                          return Listener(
+                            behavior: HitTestBehavior.translucent,
+                            onPointerDown: _startMarquee,
+                            onPointerMove: (event) => _updateMarquee(
+                              event,
+                              paths: paths,
+                              columns: columns,
+                              spacing: spacing,
+                              itemWidth: itemWidth,
+                            ),
+                            onPointerUp: _endMarquee,
+                            onPointerCancel: _endMarquee,
+                            child: Stack(
+                              children: [
+                                GridView.builder(
+                                  controller: _scrollController,
+                                  padding: const EdgeInsets.all(8),
+                                  cacheExtent: 2200,
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: columns,
+                                    mainAxisSpacing: spacing,
+                                    crossAxisSpacing: spacing,
+                                    childAspectRatio: aspect,
+                                  ),
+                                  itemCount: paths.length,
+                                  itemBuilder: (context, i) {
+                                    final path = paths[i];
+                                    final originalIndex =
+                                        controller.imagePaths.indexOf(path);
+                                    final selected = _selectedPaths.isEmpty
+                                        ? originalIndex ==
+                                            controller.currentIndex
+                                        : _selectedPaths.contains(path);
+                                    final captioned = controller.captionedImages
+                                        .contains(path);
+                                    final ftp =
+                                        controller.sentImages.contains(path);
+                                    final borderColor = tokens.accent;
+                                    return GestureDetector(
+                                      key: ValueKey(path),
+                                      onTap: () => _selectThumbnail(paths, i),
+                                      onSecondaryTapDown: (details) =>
+                                          _showThumbnailMenu(
+                                        context,
+                                        path,
+                                        details.globalPosition,
+                                      ),
+                                      child: Tooltip(
+                                        message: p.basename(path),
+                                        child: Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: BoxDecoration(
+                                            color: tokens.sunken,
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: selected
+                                                ? Border.all(
+                                                    color: borderColor,
+                                                    width: 2,
+                                                  )
+                                                : null,
+                                          ),
+                                          child: ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(7),
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.stretch,
+                                              children: [
+                                                Expanded(
+                                                  child: ClipRRect(
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                            7),
+                                                    child: Stack(
+                                                      fit: StackFit.expand,
+                                                      children: [
+                                                        OrientedFilePreview(
+                                                          path: path,
+                                                          version: controller
+                                                              .imageContentStamp(
+                                                                  path),
+                                                          fit: BoxFit.contain,
+                                                          cacheWidth:
+                                                              _thumbCacheWidth,
                                                         ),
-                                                      ),
-                                                    Positioned(
-                                                      top: 4,
-                                                      right: 4,
-                                                      child: captioned
-                                                          ? const PhosphorIcon(
-                                                              PhosphorIconsFill
-                                                                  .checkCircle,
-                                                              size: 14,
-                                                              color: FfTokens
-                                                                  .statusSaved,
-                                                            )
-                                                          : Container(
-                                                              width: 8,
-                                                              height: 8,
-                                                              decoration:
-                                                                  const BoxDecoration(
-                                                                color: FfTokens
-                                                                    .gold,
-                                                                shape: BoxShape
-                                                                    .circle,
-                                                              ),
+                                                        if (controller
+                                                                .transmitting &&
+                                                            controller
+                                                                    .transmittingPath ==
+                                                                path)
+                                                          Positioned.fill(
+                                                            child:
+                                                                TransmitProgressOverlay(
+                                                              progress: controller
+                                                                  .transmitProgress,
+                                                              status: controller
+                                                                  .transmitStatus,
+                                                              compact: true,
                                                             ),
+                                                          ),
+                                                        Positioned(
+                                                          top: 4,
+                                                          right: 4,
+                                                          child: captioned
+                                                              ? const PhosphorIcon(
+                                                                  PhosphorIconsFill
+                                                                      .checkCircle,
+                                                                  size: 14,
+                                                                  color: FfTokens
+                                                                      .statusSaved,
+                                                                )
+                                                              : Container(
+                                                                  width: 8,
+                                                                  height: 8,
+                                                                  decoration:
+                                                                      const BoxDecoration(
+                                                                    color:
+                                                                        FfTokens
+                                                                            .gold,
+                                                                    shape: BoxShape
+                                                                        .circle,
+                                                                  ),
+                                                                ),
+                                                        ),
+                                                      ],
                                                     ),
-                                                  ],
+                                                  ),
                                                 ),
-                                              ),
+                                                const SizedBox(height: 3),
+                                                Text(
+                                                  _shortThumbName(
+                                                      p.basename(path)),
+                                                  maxLines: 1,
+                                                  softWrap: false,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  textAlign: TextAlign.center,
+                                                  style: tokens.monoMetaStyle
+                                                      .copyWith(
+                                                    color: tokens.textSecondary,
+                                                    fontSize: 10.5,
+                                                    fontWeight:
+                                                        FfTokens.weightRegular,
+                                                  ),
+                                                ),
+                                                _captureTimeLabel(path),
+                                              ],
                                             ),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              _shortThumbName(p.basename(path)),
-                                              maxLines: 1,
-                                              softWrap: false,
-                                              overflow: TextOverflow.ellipsis,
-                                              textAlign: TextAlign.center,
-                                              style: tokens.monoMetaStyle
-                                                  .copyWith(
-                                                color: tokens.textSecondary,
-                                                fontSize: 10.5,
-                                                fontWeight:
-                                                    FfTokens.weightRegular,
-                                              ),
-                                            ),
-                                            _captureTimeLabel(path),
-                                          ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                                if (_marqueeStart != null &&
+                                    _marqueeCurrent != null &&
+                                    _marqueeDragging)
+                                  Positioned.fromRect(
+                                    rect: Rect.fromPoints(
+                                      _marqueeStart!,
+                                      _marqueeCurrent!,
+                                    ),
+                                    child: IgnorePointer(
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: tokens.accent
+                                              .withValues(alpha: 0.12),
+                                          border: Border.all(
+                                            color: tokens.accent,
+                                            width: 1,
                                           ),
                                         ),
                                       ),
                                     ),
-                                  );
-                                },
-                              ),
-                              if (_marqueeStart != null &&
-                                  _marqueeCurrent != null &&
-                                  _marqueeDragging)
-                                Positioned.fromRect(
-                                  rect: Rect.fromPoints(
-                                    _marqueeStart!,
-                                    _marqueeCurrent!,
                                   ),
-                                  child: IgnorePointer(
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: tokens.accent
-                                            .withValues(alpha: 0.12),
-                                        border: Border.all(
-                                          color: tokens.accent,
-                                          width: 1,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-            ),
-          ],
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
         ),
       ),
@@ -2834,7 +2874,8 @@ class _ThumbnailSortDropdown extends StatelessWidget {
                   SizedBox(
                     width: 17,
                     child: value == sort
-                        ? PhosphorIcon(PhosphorIconsRegular.check,
+                        ? PhosphorIcon(
+                            PhosphorIconsRegular.check,
                             size: 14,
                             color: tokens.accent,
                           )
@@ -2979,6 +3020,40 @@ class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
     super.dispose();
   }
 
+  Future<void> _openMenu() async {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final picked = await showFfMenu<_BrowseScope>(
+      context: context,
+      anchorGlobal: origin & box.size,
+      width: 220,
+      choices: [
+        for (final scope in _BrowseScope.values)
+          FfMenuChoice<_BrowseScope>(
+            value: scope,
+            selected: scope == widget.scope,
+            child: Text(_label(scope)),
+            trailingBuilder: (context, close) => Text(
+              '${_count(scope)}',
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: scope == widget.scope
+                    ? FfTokens.sessionTx
+                    : FfTokens.sessionT3,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+      ],
+    );
+    final value = picked?.value;
+    if (value == null) return;
+    widget.onChanged(value);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = widget.tokens;
@@ -2986,107 +3061,49 @@ class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
       focusNode: _focusNode,
       onKeyEvent: _handleKey,
       onFocusChange: (value) => setState(() => _focused = value),
-      child: PopupMenuButton<_BrowseScope>(
-        tooltip: 'Choose thumbnail scope',
-        color: FfTokens.sessionEl,
-        surfaceTintColor: Colors.transparent,
-        position: PopupMenuPosition.under,
-        elevation: 16,
-        shadowColor: FfTokens.sessionMenuShadow,
-        shape: FfMenuSurface.shape,
-        onOpened: _focusNode.requestFocus,
-        onSelected: widget.onChanged,
-        itemBuilder: (context) => [
-          for (final scope in _BrowseScope.values)
-            PopupMenuItem<_BrowseScope>(
-              value: scope,
-              height: 30,
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: Container(
-                width: 140,
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                decoration: BoxDecoration(
-                  color: scope == widget.scope
-                      ? tokens.accent.withValues(alpha: 0.16)
-                      : tokens.surface,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 17,
-                      child: scope == widget.scope
-                          ? PhosphorIcon(PhosphorIconsRegular.check,
-                              size: 14,
-                              color: tokens.accent,
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 3),
-                    Expanded(
-                      child: Text(
-                        _label(scope),
-                        softWrap: false,
-                        style: TextStyle(
-                          color: scope == widget.scope
-                              ? tokens.accent
-                              : tokens.text,
-                          fontSize: 10.5,
-                          fontWeight: scope == widget.scope
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '${_count(scope)}',
-                      style: TextStyle(
-                        color: (scope == widget.scope
-                                ? tokens.accent
-                                : tokens.text)
-                            .withValues(alpha: 0.65),
-                        fontSize: 9.5,
-                        fontFamily: 'monospace',
-                      ),
-                    ),
-                  ],
-                ),
+      child: Tooltip(
+        message: 'Choose thumbnail scope',
+        child: InkWell(
+          onTap: () {
+            _focusNode.requestFocus();
+            _openMenu();
+          },
+          borderRadius: BorderRadius.circular(5),
+          child: Container(
+            width: 108,
+            height: 22,
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: tokens.bg,
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: _focused ? tokens.accent : tokens.divider,
+                width: _focused ? FfTokens.focusOutlineWidth : 1,
               ),
             ),
-        ],
-        child: Container(
-          width: 108,
-          height: 22,
-          padding: const EdgeInsets.symmetric(horizontal: 6),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: tokens.bg,
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(
-              color: _focused ? tokens.accent : tokens.divider,
-              width: _focused ? FfTokens.focusOutlineWidth : 1,
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _label(widget.scope),
-                  softWrap: false,
-                  style: TextStyle(
-                    color: tokens.text,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w400,
-                    height: 1.1,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _label(widget.scope),
+                    softWrap: false,
+                    style: TextStyle(
+                      color: tokens.text,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w400,
+                      height: 1.1,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 2),
-              PhosphorIcon(PhosphorIconsRegular.caretDown,
-                size: 14,
-                color: tokens.textSecondary,
-              ),
-            ],
+                const SizedBox(width: 2),
+                PhosphorIcon(
+                  PhosphorIconsRegular.caretDown,
+                  size: 14,
+                  color: tokens.textSecondary,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -3328,7 +3345,8 @@ class _ThumbnailRefreshButton extends StatelessWidget {
                       color: tokens.accent,
                     ),
                   )
-                : PhosphorIcon(PhosphorIconsRegular.arrowClockwise,
+                : PhosphorIcon(
+                    PhosphorIconsRegular.arrowClockwise,
                     size: 15,
                     color: tokens.accent,
                   ),
@@ -3626,7 +3644,8 @@ class MobileFrameThumb extends StatelessWidget {
             ),
             clipBehavior: Clip.antiAlias,
             child: path == null
-                ? PhosphorIcon(PhosphorIconsRegular.image, color: t.textSecondary, size: 20)
+                ? PhosphorIcon(PhosphorIconsRegular.image,
+                    color: t.textSecondary, size: 20)
                 : Stack(
                     fit: StackFit.expand,
                     children: [
@@ -3697,9 +3716,8 @@ class MobileFrameBanner extends StatelessWidget {
             : paths[controller.currentIndex.clamp(0, paths.length - 1)];
         final grade = editSession.adjustmentsFor(path);
         final cropping = editSession.cropping;
-        final viewCrop = path == null || cropping
-            ? null
-            : editSession.cropFor(path);
+        final viewCrop =
+            path == null || cropping ? null : editSession.cropFor(path);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

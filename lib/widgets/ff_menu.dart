@@ -101,6 +101,7 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
   required List<FfMenuChoice<T>> choices,
   double? width,
   double maxHeight = 300,
+  bool scrollable = true,
   Color? color,
 }) {
   final overlayState = Overlay.of(context);
@@ -156,12 +157,10 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
                 return KeyEventResult.ignored;
               },
               child: FfMenuSurface(
-                maxHeight: maxHeight,
+                maxHeight: scrollable ? maxHeight : double.infinity,
                 color: color,
-                child: ListView(
-                  padding: const EdgeInsets.all(6),
-                  shrinkWrap: true,
-                  primary: false,
+                child: _FfMenuBody(
+                  scrollable: scrollable,
                   children: [
                     for (final choice in choices)
                       if (choice.divider)
@@ -208,6 +207,36 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
   );
   overlayState.insert(entry);
   return completer.future;
+}
+
+class _FfMenuBody extends StatelessWidget {
+  const _FfMenuBody({
+    required this.scrollable,
+    required this.children,
+  });
+
+  final bool scrollable;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!scrollable) {
+      return Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      );
+    }
+    return ListView(
+      padding: const EdgeInsets.all(6),
+      shrinkWrap: true,
+      primary: false,
+      children: children,
+    );
+  }
 }
 
 class _FfMenuRow extends StatefulWidget {

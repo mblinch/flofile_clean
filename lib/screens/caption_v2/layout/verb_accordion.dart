@@ -612,32 +612,12 @@ class _PinnedVerbSlot extends StatelessWidget {
             size: 10,
             color: FfTokens.pinned,
           ),
-          const SizedBox(width: 4),
-          Text(
-            'Pinned',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontFamily: FfTokens.labelFamily,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-              height: 1.0,
-              letterSpacing: 0.1,
-              color: FfTokens.pinned,
-            ),
-          ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           Expanded(
             child: hasVerb
                 ? CmdClick(
-                    onTap: () {
-                      onVerbArmed?.call();
-                      controller.selectVerb(verb!.key);
-                    },
-                    onCmdTap: () {
-                      onVerbArmed?.call();
-                      controller.toggleVerbPin(verb!.key);
-                    },
+                    onTap: () => controller.toggleVerbPin(verb!.key),
+                    onCmdTap: () => controller.toggleVerbPin(verb!.key),
                     child: Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -672,27 +652,6 @@ class _PinnedVerbSlot extends StatelessWidget {
                     ),
                   ),
           ),
-          if (hasVerb)
-            TextButton(
-              onPressed: () => controller.toggleVerbPin(verb!.key),
-              style: TextButton.styleFrom(
-                foregroundColor: FfTokens.pinned,
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-              ),
-              child: Text(
-                'Unpin',
-                style: TextStyle(
-                  fontFamily: FfTokens.labelFamily,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  height: 1.0,
-                  color: FfTokens.pinned,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -709,7 +668,6 @@ class _PinnedVerbSlot extends StatelessWidget {
             showRbi: showRbi,
             showBase: showBase,
             showCelebration: showCelebration,
-            showSaveActions: false,
             tokens: tokens,
           ),
       ],
@@ -938,7 +896,6 @@ class _AccordionVerbRow extends StatefulWidget {
     required this.onEditVerb,
     this.onVerbArmed,
     this.showDragHandle = false,
-    this.showSaveActions = true,
   });
 
   final CaptionV2Controller controller;
@@ -949,7 +906,6 @@ class _AccordionVerbRow extends StatefulWidget {
   final ValueChanged<String> onEditVerb;
   final VoidCallback? onVerbArmed;
   final bool showDragHandle;
-  final bool showSaveActions;
 
   @override
   State<_AccordionVerbRow> createState() => _AccordionVerbRowState();
@@ -1070,18 +1026,13 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                   ],
     );
 
-    final extras = armed &&
-            (showRbi ||
-                showBase ||
-                showCelebration ||
-                widget.showSaveActions)
+    final extras = armed && (showRbi || showBase || showCelebration)
         ? VerbExtrasPanel(
             controller: controller,
             verbKey: verb.key,
             showRbi: showRbi,
             showBase: showBase,
             showCelebration: showCelebration,
-            showSaveActions: widget.showSaveActions,
             tokens: tokens,
             embedded: true,
           )
@@ -1134,8 +1085,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
   }
 }
 
-/// Nested RUNNERS ON / BASE / REACTION panel under an armed verb,
-/// ending with Save / FTP once the option rows are shown.
+/// Nested RUNNERS ON / BASE / REACTION panel under an armed verb.
 ///
 /// Authored modifier groups are edited in Admin → Verb authoring only;
 /// the live caption session keeps these classic RBI / base / celebration rows.
@@ -1148,7 +1098,6 @@ class VerbExtrasPanel extends StatelessWidget {
     required this.showBase,
     required this.showCelebration,
     required this.tokens,
-    this.showSaveActions = true,
     this.embedded = false,
   });
 
@@ -1157,7 +1106,6 @@ class VerbExtrasPanel extends StatelessWidget {
   final bool showRbi;
   final bool showBase;
   final bool showCelebration;
-  final bool showSaveActions;
   final FfTokens tokens;
 
   /// Drawn inside the selected verb border, without a second card.
@@ -1165,24 +1113,12 @@ class VerbExtrasPanel extends StatelessWidget {
 
   bool get _hasOptionRows => showRbi || showBase || showCelebration;
 
-  bool get _optionsComplete {
-    if (showRbi && verbKey == 'Home Run' && controller.rbi < 1) return false;
-    if (showBase &&
-        (controller.selectedBase == null ||
-            controller.selectedBase!.trim().isEmpty)) {
-      return false;
-    }
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
     final homeRun = verbKey == 'Home Run';
     final reactionChips = controller.reactionOptionsFor(verbKey);
     final celebrationTypes = controller.celebrationTypeOptionsFor(verbKey);
-    final showActions =
-        showSaveActions && (!_hasOptionRows || _optionsComplete);
-    if (!_hasOptionRows && !showActions) {
+    if (!_hasOptionRows) {
       return const SizedBox.shrink();
     }
 
@@ -1237,37 +1173,6 @@ class VerbExtrasPanel extends StatelessWidget {
                 selected: controller.celebrationType,
                 onChanged: controller.setCelebrationType,
               ),
-            if (showActions) ...[
-              if (_hasOptionRows) const SizedBox(height: 6),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _VerbActionButton(
-                        label: 'Save',
-                        tokens: tokens,
-                        onTap: () => controller.saveOrTransmitFromVerbMenu(
-                          transmit: false,
-                        ),
-                      ),
-                    ),
-                    if (controller.ftpModeEnabled) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _VerbActionButton(
-                          label: 'FTP',
-                          tokens: tokens,
-                          onTap: () => controller.saveOrTransmitFromVerbMenu(
-                            transmit: true,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
           ],
     );
 
@@ -1288,55 +1193,6 @@ class VerbExtrasPanel extends StatelessWidget {
           border: Border.all(color: tokens.divider),
         ),
         child: body,
-      ),
-    );
-  }
-}
-
-class _VerbActionButton extends StatefulWidget {
-  const _VerbActionButton({
-    required this.label,
-    required this.tokens,
-    required this.onTap,
-  });
-
-  final String label;
-  final FfTokens tokens;
-  final VoidCallback onTap;
-
-  @override
-  State<_VerbActionButton> createState() => _VerbActionButtonState();
-}
-
-class _VerbActionButtonState extends State<_VerbActionButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Material(
-        color: _hovered ? const Color(0xFF343C45) : const Color(0xFF272D34),
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: widget.onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            height: 28,
-            child: Center(
-              child: Text(
-                widget.label,
-                style: widget.tokens.labelStyle.copyWith(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

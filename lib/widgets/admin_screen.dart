@@ -788,8 +788,8 @@ class _AdminScreenState extends State<AdminScreen> {
     return okAdmin == true && mounted;
   }
 
-  Future<void> _writeActiveVerbBundleAsDefaults({String? successLabel}) async {
-    if (!mounted) return;
+  Future<bool> _writeActiveVerbBundleAsDefaults({String? successLabel}) async {
+    if (!mounted) return false;
     setState(() => _busy = true);
     try {
       final bundle = VerbDefaultsBundle.ensureComplete(
@@ -802,7 +802,7 @@ class _AdminScreenState extends State<AdminScreen> {
       _catalog = AppDefaultsFirestoreService.getCachedCatalog();
       _verbBundles[_verbSport] = Map<String, dynamic>.from(bundle);
       _verbBundles[_verbSport]!['favoriteVerbs'] = <String>[];
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -814,14 +814,16 @@ class _AdminScreenState extends State<AdminScreen> {
           backgroundColor: kFloTealLight,
         ),
       );
+      return true;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to write defaults: $e'),
           backgroundColor: Colors.red,
         ),
       );
+      return false;
     } finally {
       if (mounted) setState(() => _busy = false);
     }

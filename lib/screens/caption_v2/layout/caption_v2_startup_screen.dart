@@ -117,7 +117,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool _useOfficialLeagueApis = false;
   bool _isAdmin = false;
   IptcApplyMode _iptcMode = IptcApplyMode.none;
-  IptcApplyMode _preferredWriteMode = IptcApplyMode.onSave;
   String _iptcStatus = "Don't write IPTC";
   List<String> _missingCaptionIptc = const [];
   bool _scanningIptc = false;
@@ -285,8 +284,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _useOfficialLeagueApis = await _prefs!.getUseOfficialLeagueApis();
       _isAdmin = await AdminService.isCurrentUserAdmin();
       _iptcMode = await _prefs!.getIptcApplyMode();
-      if (_iptcMode != IptcApplyMode.none) {
-        _preferredWriteMode = _iptcMode;
+      if (_iptcMode == IptcApplyMode.onSave) {
+        _iptcMode = IptcApplyMode.onImport;
+        await _prefs!.saveIptcApplyMode(_iptcMode);
       }
       _iptcStatus = await _iptcStatusFromPrefs();
       _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
@@ -631,7 +631,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   Future<void> _setWriteIptc(bool enabled) async {
     if (enabled == _writeIptc) return;
-    final mode = enabled ? _preferredWriteMode : IptcApplyMode.none;
+    final mode = enabled ? IptcApplyMode.onImport : IptcApplyMode.none;
     await _prefs?.saveIptcApplyMode(mode);
     final status = await _iptcStatusFromPrefs();
     if (!mounted) return;
@@ -826,9 +826,6 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (!mounted) return;
     setState(() {
       _iptcMode = summary.mode;
-      if (summary.mode != IptcApplyMode.none) {
-        _preferredWriteMode = summary.mode;
-      }
       _iptcStatus = summary.statusLine;
     });
   }
@@ -920,6 +917,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             'Only $teamName is selected. Continue with a single-team session (no opponent)?',
         cancelLabel: 'Cancel',
         confirmLabel: 'Continue',
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    if (_writeIptc) {
+      final confirmed = await showAppConfirmDialog(
+        context: context,
+        title: 'Write IPTC?',
+        message:
+            'Are you sure you want the IPTC to be written to all these photos?',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'Write IPTC',
       );
       if (confirmed != true || !mounted) return;
     }
@@ -1577,15 +1586,44 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             title: 'Write IPTC',
             description: iptcWarning
                 ? (_iptcWarningText ??
-                    "Embed the caption in each image's metadata")
-                : "Embed the caption in each image's metadata",
+                    'When on, writes over IPTC on every photo when the folder loads')
+                : 'When on, writes over IPTC on every photo when the folder loads',
             warn: iptcWarning,
             value: _writeIptc,
             onChanged: (next) => unawaited(_setWriteIptc(next)),
             trailing: _writeIptc
-                ? _LinkButton(
-                    label: 'Edit IPTC',
-                    onPressed: _openIptc,
+                ? Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: _Pressable(
+                      height: 30,
+                      radius: 8,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      color: FfTokens.sessionEl,
+                      hoverColor: FfTokens.sessionHv,
+                      borderColor: FfTokens.sessionLn2,
+                      borderWidth: 1,
+                      onPressed: _openIptc,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          PhosphorIcon(
+                            PhosphorIconsRegular.pencilSimple,
+                            size: 14,
+                            color: FfTokens.sessionTx,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Edit IPTC',
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: FfTokens.sessionTx,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   )
                 : null,
           ),
@@ -2524,43 +2562,35 @@ class _SessionLeadOption extends StatelessWidget {
         children: [
           PhosphorIcon(icon, size: 16, color: FfTokens.sessionT2),
           const SizedBox(width: 10),
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: FfTokens.fontFamily,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: warn ? FfTokens.danger : FfTokens.sessionTx,
+            ),
+          ),
+          const SizedBox(width: 14),
+          _SessionSwitch(
+            value: value,
+            onChanged: onChanged,
+            alignment: Alignment.centerLeft,
+          ),
+          if (trailing != null) trailing!,
+          const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: warn ? FfTokens.danger : FfTokens.sessionTx,
-                      ),
-                    ),
-                    _SessionSwitch(
-                      value: value,
-                      onChanged: onChanged,
-                      alignment: Alignment.centerLeft,
-                    ),
-                    if (trailing != null) trailing!,
-                  ],
-                ),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    height: 1.3,
-                    color: warn ? FfTokens.danger : FfTokens.sessionT3,
-                  ),
-                ),
-              ],
+            child: Text(
+              description,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 12,
+                color: warn ? FfTokens.danger : FfTokens.sessionT3,
+              ),
             ),
           ),
         ],

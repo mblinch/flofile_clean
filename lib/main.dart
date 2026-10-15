@@ -23,6 +23,7 @@ import 'services/auth_service.dart';
 import 'widgets/app_auth_shell.dart';
 import 'widgets/click_hand_cursor.dart';
 import 'widgets/preferences_dialog.dart';
+import 'gestures/mac_control_click.dart';
 import 'intents.dart';
 import 'widgets/app_styled_dialogs.dart';
 
@@ -30,7 +31,7 @@ import 'widgets/app_styled_dialogs.dart';
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  FloWidgetsBinding.ensureInitialized();
   tz_data.initializeTimeZones();
 
   await _initFirebaseIfConfigured();

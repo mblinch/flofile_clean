@@ -165,6 +165,7 @@ class StartupIptcTemplatePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final specs = WireIptcSpecs.fieldsForPanel(selectedWire);
+    if (sessionStyle) return _buildSessionEditorLayout(specs);
     WireIptcFieldSpec? captionSpec;
     WireIptcFieldSpec? keywordsSpec;
     WireIptcFieldSpec? headlineSpec;
@@ -460,6 +461,184 @@ class StartupIptcTemplatePanel extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildSessionEditorLayout(List<WireIptcFieldSpec> specs) {
+    const tokens = FfTokens.dark;
+    return IptcPanelStyle(
+      session: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!fieldsOnly)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 2, 10, 0),
+              child: Row(
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 360),
+                    child: _WireTemplateDropdown(
+                      selectedWire: selectedWire,
+                      wireLabels: wireLabels,
+                      templates: visibleTemplates,
+                      selectedTemplateId: selectedTemplateId,
+                      onTemplateSelected: onTemplateSelected,
+                      onWireSelected: onWireSelected,
+                      compact: true,
+                    ),
+                  ),
+                  if (onLoadTemplate != null) ...[
+                    const SizedBox(width: 4),
+                    _sessionTopAction(
+                      label: isLoadTemplateLoading ? 'Loading…' : 'Load template',
+                      icon: PhosphorIconsRegular.uploadSimple,
+                      enabled: !_fieldsInactive &&
+                          !isLoadTemplateLoading &&
+                          !isLoadTemplateDisabled,
+                      onPressed: onLoadTemplate,
+                      tokens: tokens,
+                    ),
+                    Text(
+                      '(load from XMP, Getty TXT, or JPG)',
+                      style: tokens.metaStyle.copyWith(color: tokens.textTertiary),
+                    ),
+                  ],
+                  if (onClearTemplate != null)
+                    _sessionTopAction(
+                      label: 'Clear all',
+                      icon: PhosphorIconsRegular.trash,
+                      enabled: !_fieldsInactive && !isLoadTemplateLoading,
+                      onPressed: onClearTemplate,
+                      tokens: tokens,
+                      danger: true,
+                    ),
+                ],
+              ),
+            ),
+          if (isLoading)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 2, 14, 4),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(strokeWidth: 1.5),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Reading IPTC from folder…',
+                    style: tokens.metaStyle,
+                  ),
+                ],
+              ),
+            ),
+          Expanded(child: _sessionFieldList(specs)),
+        ],
+      ),
+    );
+  }
+
+  Widget _sessionTopAction({
+    required String label,
+    required IconData icon,
+    required bool enabled,
+    required VoidCallback? onPressed,
+    required FfTokens tokens,
+    bool danger = false,
+  }) {
+    final color = !enabled
+        ? tokens.textTertiary
+        : danger
+            ? FfTokens.danger
+            : tokens.textSecondary;
+    return TextButton.icon(
+      onPressed: enabled ? onPressed : null,
+      icon: PhosphorIcon(icon, size: 14, color: color),
+      label: Text(label, style: tokens.labelStyle.copyWith(color: color)),
+    );
+  }
+
+  Widget _sessionFieldList(List<WireIptcFieldSpec> specs) {
+    WireIptcFieldSpec? caption;
+    WireIptcFieldSpec? keywords;
+    WireIptcFieldSpec? specialInstructions;
+    final rest = <WireIptcFieldSpec>[];
+    for (final spec in specs) {
+      if (spec.label == _captionLabel && caption == null) {
+        caption = spec;
+      } else if (spec.label == 'Camera time') {
+        continue;
+      } else if (spec.label == _keywordsLabel && keywords == null) {
+        keywords = spec;
+      } else if (spec.label == _specialInstructionsLabel &&
+          specialInstructions == null) {
+        specialInstructions = spec;
+      } else {
+        rest.add(spec);
+      }
+    }
+    if (specialInstructions != null) rest.add(specialInstructions);
+    if (keywords != null) rest.add(keywords);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      children: [
+        if (caption != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: _sessionField(caption, lines: 2),
+          ),
+        for (var i = 0; i < rest.length; i += 3)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var col = 0; col < 3; col++) ...[
+                  if (col > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: i + col < rest.length
+                        ? _sessionField(
+                            rest[i + col],
+                            lines: rest[i + col].label == _keywordsLabel ||
+                                    rest[i + col].label ==
+                                        _specialInstructionsLabel
+                                ? 2
+                                : 1,
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _sessionField(WireIptcFieldSpec spec, {int lines = 1}) {
+    return _EditableFieldRow(
+      key: ValueKey(_fieldKey(spec.storageKey)),
+      spec: spec,
+      valueMaxLines: lines,
+      enabled: !_fieldsInactive,
+      value: _displayValueForField(
+        label: spec.label,
+        storedValue: IptcTemplateApplyService.lookupValue(
+          _displayValues,
+          spec.storageKey,
+        ),
+        showFoundInFiles: _isFoundInFiles(
+          spec.storageKey,
+          _displayFoundInFilesKeys,
+        ),
+      ),
+      showFoundInFiles: _isFoundInFiles(
+        spec.storageKey,
+        _displayFoundInFilesKeys,
+      ),
+      onValueChanged: onValueChanged,
+    );
+  }
 }
 
 class _IptcApplyModeHelpButton extends StatelessWidget {
@@ -555,9 +734,12 @@ class _IptcApplyModeHelpButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           child: Padding(
             padding: const EdgeInsets.all(2),
-            child: PhosphorIcon(PhosphorIconsRegular.question,
-              size: 12,
-              color: Colors.grey.shade600,
+            child: PhosphorIcon(
+              PhosphorIconsRegular.question,
+              size: 14,
+              color: IptcPanelStyle.sessionOf(context)
+                  ? FfTokens.nocturneT2
+                  : Colors.grey.shade600,
             ),
           ),
         ),
@@ -901,6 +1083,9 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
 
   @override
   Widget build(BuildContext context) {
+    if (IptcPanelStyle.sessionOf(context)) {
+      return _buildSessionEditor(context);
+    }
     final singleLine = widget.valueMaxLines == 1;
 
     if (_isUrgency) {
@@ -956,6 +1141,153 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSessionEditor(BuildContext context) {
+    final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    String level;
+    switch (widget.spec.level) {
+      case IptcFieldLevel.required:
+        level = 'REQUIRED';
+        break;
+      case IptcFieldLevel.recommended:
+        level = 'RECOMMENDED';
+        break;
+      case IptcFieldLevel.optional:
+        level = 'OPTIONAL';
+        break;
+    }
+    final lines = widget.valueMaxLines < 1 ? 1 : widget.valueMaxLines;
+    final labelStyle = tokens.metaStyle.copyWith(
+      color: widget.enabled ? tokens.textSecondary : tokens.textTertiary,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                widget.spec.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: labelStyle,
+              ),
+            ),
+            if (widget.showFoundInFiles) ...[
+              Text(
+                'IN FILES',
+                style: tokens.microStyle.copyWith(
+                  fontSize: 9,
+                  letterSpacing: 0.4,
+                  color: FfTokens.sessionOk,
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Text(
+              level,
+              style: tokens.microStyle.copyWith(
+                fontSize: 9,
+                letterSpacing: 0.4,
+                color: widget.spec.level == IptcFieldLevel.required
+                    ? tokens.accent
+                    : tokens.textTertiary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        if (_isUrgency)
+          _sessionUrgencyField(tokens)
+        else
+          SizedBox(
+            height: lines == 1
+                ? _sessionControlHeight
+                : _sessionControlHeight + (lines - 1) * 18,
+            child: TextField(
+              controller: _controller,
+              focusNode: _focusNode,
+              enabled: widget.enabled,
+              readOnly: !widget.enabled,
+              expands: true,
+              maxLines: null,
+              minLines: null,
+              textAlignVertical: lines == 1
+                  ? TextAlignVertical.center
+                  : TextAlignVertical.top,
+              cursorColor: tokens.accent,
+              style: _valueStyleFor(context).copyWith(fontSize: 13, height: 1.25),
+              decoration: InputDecoration(
+                isDense: true,
+                filled: true,
+                fillColor: widget.enabled
+                    ? FfTokens.nocturneSunken
+                    : FfTokens.nocturneEl,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                border: _sessionFieldBorder(FfTokens.nocturneLn2),
+                enabledBorder: _sessionFieldBorder(FfTokens.nocturneLn2),
+                disabledBorder: _sessionFieldBorder(Colors.transparent),
+                focusedBorder: _sessionFieldBorder(tokens.accent, width: 1.5),
+              ),
+              onChanged: (value) {
+                setState(() {});
+                _notifyChanged(value);
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _sessionUrgencyField(FfTokens tokens) {
+    final current = IptcTemplateApplyService.normalizeUrgencyValue(
+      _controller.text,
+    );
+    final value = IptcTemplateApplyService.urgencyValues.contains(current)
+        ? current
+        : '0';
+    return Container(
+      height: _sessionControlHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: widget.enabled ? FfTokens.nocturneSunken : FfTokens.nocturneEl,
+        borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+        border: Border.all(
+          color: widget.enabled ? FfTokens.nocturneLn2 : Colors.transparent,
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          isDense: true,
+          dropdownColor: FfTokens.nocturneEl,
+          style: _valueStyleFor(context).copyWith(fontSize: 13, height: 1.25),
+          items: [
+            for (final level in IptcTemplateApplyService.urgencyValues)
+              DropdownMenuItem<String>(
+                value: level,
+                child: Text(
+                  IptcTemplateApplyService.urgencyMenuLabel(level),
+                  style: _valueStyleFor(context).copyWith(fontSize: 13),
+                ),
+              ),
+          ],
+          onChanged: widget.enabled
+              ? (newValue) {
+                  if (newValue == null) return;
+                  setState(() => _controller.text = newValue);
+                  _notifyChanged(newValue);
+                }
+              : null,
+        ),
       ),
     );
   }
@@ -1040,6 +1372,15 @@ class _EditableFieldRowState extends State<_EditableFieldRow> {
       ),
     );
   }
+}
+
+const double _sessionControlHeight = 34;
+
+OutlineInputBorder _sessionFieldBorder(Color color, {double width = 1}) {
+  return OutlineInputBorder(
+    borderRadius: BorderRadius.circular(FfTokens.radiusChip),
+    borderSide: BorderSide(color: color, width: width),
+  );
 }
 
 class _FieldLabel extends StatelessWidget {

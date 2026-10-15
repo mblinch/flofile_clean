@@ -28,21 +28,23 @@ class TeamPlayersButton extends StatelessWidget {
               children: [
                 _SubjectChip(
                   label: '$nickname player',
-                  selected: active && controller.teamSubjectAsPlayers,
+                  selected: active &&
+                      controller.teamSubjectKind == TeamSubjectKind.players,
                   tokens: tokens,
                   onTap: () => controller.toggleTeamSubject(
                     isHome: isHome,
-                    asPlayers: true,
+                    kind: TeamSubjectKind.players,
                   ),
                 ),
                 const SizedBox(height: 6),
                 _SubjectChip(
                   label: nickname,
-                  selected: active && !controller.teamSubjectAsPlayers,
+                  selected: active &&
+                      controller.teamSubjectKind == TeamSubjectKind.name,
                   tokens: tokens,
                   onTap: () => controller.toggleTeamSubject(
                     isHome: isHome,
-                    asPlayers: false,
+                    kind: TeamSubjectKind.name,
                   ),
                 ),
               ],
@@ -52,11 +54,12 @@ class TeamPlayersButton extends StatelessWidget {
                 Expanded(
                   child: _SubjectChip(
                     label: '$nickname player',
-                    selected: active && controller.teamSubjectAsPlayers,
+                    selected: active &&
+                      controller.teamSubjectKind == TeamSubjectKind.players,
                     tokens: tokens,
                     onTap: () => controller.toggleTeamSubject(
                       isHome: isHome,
-                      asPlayers: true,
+                      kind: TeamSubjectKind.players,
                     ),
                   ),
                 ),
@@ -64,11 +67,12 @@ class TeamPlayersButton extends StatelessWidget {
                 Expanded(
                   child: _SubjectChip(
                     label: nickname,
-                    selected: active && !controller.teamSubjectAsPlayers,
+                    selected: active &&
+                      controller.teamSubjectKind == TeamSubjectKind.name,
                     tokens: tokens,
                     onTap: () => controller.toggleTeamSubject(
                       isHome: isHome,
-                      asPlayers: false,
+                      kind: TeamSubjectKind.name,
                     ),
                   ),
                 ),

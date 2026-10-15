@@ -9,6 +9,7 @@ import '../theme/ff_tokens.dart';
 import '../utils/default_verb_keywords.dart';
 import 'app_compact_checkbox.dart';
 import 'app_styled_dialogs.dart';
+import 'new_verb_dialog.dart';
 import 'verb_edit_plural_field.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
@@ -954,9 +955,26 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
   Future<void> _startCreateVerb() async {
     if (!await _confirmLeaveIfDirty()) return;
     if (!mounted) return;
-    final cat = _browseCategory.isNotEmpty
-        ? _browseCategory
-        : (_categories.isNotEmpty ? _categories.first : 'Offense');
+    final names = {
+      for (final list in _verbsByCategory.values)
+        for (final verb in list) verb.toLowerCase(),
+    };
+    final result = await showNewVerbDialog(
+      context: context,
+      tokens: _v2 ?? FfTokens.dark,
+      categories: [
+        for (final category in _categories)
+          if (category != 'Favorites' && category != 'All') category,
+      ],
+      existingVerbNames: names,
+    );
+    if (!mounted || result == null) return;
+    if (result.createdCategory && !_categories.contains(result.category)) {
+      setState(() => _categories.add(result.category));
+      await _persistCategoryOrder();
+      if (!mounted) return;
+    }
+    final cat = result.category;
     setState(() {
       _isCreating = true;
       _editingCustom = true;
@@ -977,8 +995,8 @@ class _FullVerbEditDialogState extends State<FullVerbEditDialog> {
         celebrationEnabled: false,
         celebrationPhrase: VerbSubOptions.defaultReactionPhrases,
       );
-      _setText(_label, '');
-      _setText(_singular, '');
+      _setText(_label, result.title);
+      _setText(_singular, result.title);
       _setText(_plural, '');
       _setText(_ing, '');
       _lastAutoIng = '';

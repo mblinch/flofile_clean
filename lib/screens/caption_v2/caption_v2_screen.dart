@@ -2221,9 +2221,32 @@ String _teamSearchNickname(String teamName) {
   return parts.last;
 }
 
+/// Club suffixes that do not identify a team on their own.
+const _genericClubTokens = <String>{
+  'fc',
+  'sc',
+  'cf',
+  'afc',
+  'cfc',
+  'city',
+  'united',
+  'club',
+};
+
+/// Google label for one side. Nicknames stay short ("Yankees", "Crew").
+/// When the nickname is only a club suffix ("SC", "FC"), keep the full name
+/// so the city is in the query ("Nashville SC", "Austin FC").
+String _teamSearchLabel(String teamName) {
+  final trimmed = teamName.trim();
+  if (trimmed.isEmpty) return '';
+  final nickname = _teamSearchNickname(trimmed);
+  if (_genericClubTokens.contains(nickname.toLowerCase())) return trimmed;
+  return nickname;
+}
+
 String _gameMatchupLabel(CaptionV2Controller controller) {
-  final away = _teamSearchNickname(controller.awayTeam);
-  final home = _teamSearchNickname(controller.homeTeam);
+  final away = _teamSearchLabel(controller.awayTeam);
+  final home = _teamSearchLabel(controller.homeTeam);
   if (away.isNotEmpty && home.isNotEmpty) return '$away @ $home';
   if (home.isNotEmpty) return home;
   if (away.isNotEmpty) return away;

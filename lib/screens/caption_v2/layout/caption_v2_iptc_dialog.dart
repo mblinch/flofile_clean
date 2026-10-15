@@ -14,8 +14,7 @@ import '../../../services/iptc_template_import_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
-import '../../../widgets/startup_iptc_template_panel.dart';
-import 'package:phosphor_icons/phosphor_icons.dart';
+import 'iptc_template_editor.dart';
 
 /// Result summary shown on the V2 startup form after closing the dialog.
 class CaptionV2IptcSummary {
@@ -69,7 +68,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   String _selectedTemplateId = 'getty';
   List<IptcTemplateCatalogEntry> _visibleTemplates = const [];
   final Map<WireStyle, String> _wireLabels = {};
-  Map<String, String> _values = {};
+  Map<String, String> _values = const {'Urgency': '5'};
   final Set<String> _keysFoundInFiles = {};
   Set<String> _clearedFields = {};
   int _revision = 0;
@@ -93,32 +92,24 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     final visible = await AppDefaultsFirestoreService.getVisibleIptcTemplates(
       hiddenIds: hidden,
     );
-    final selectedId = await _prefs.getSelectedIptcTemplateId();
+    final local = await _prefs.getLocalIptcTemplates();
     final captionTemplate = await _prefs.getCaptionTemplate();
     await _loadWireLabels();
-
-    String id = selectedId ?? 'getty';
-    if (visible.isNotEmpty && !visible.any((t) => t.id == id)) {
-      id = visible.first.id;
-    }
-    WireStyle wire = WireStyle.getty;
-    for (final t in visible) {
-      if (t.id == id) {
-        wire = t.wireStyle;
-        break;
-      }
-    }
 
     if (!mounted) return;
     setState(() {
       _mode = mode;
-      _visibleTemplates = visible;
-      _selectedTemplateId = id;
-      _wire = wire;
+      _visibleTemplates = [
+        ...local,
+        for (final t in visible)
+          if (!local.any((saved) => saved.id == t.id)) t,
+      ];
+      _selectedTemplateId = '';
+      _wire = WireStyle.getty;
       _captionTemplate = captionTemplate;
+      _values = const {'Urgency': '5'};
       _loading = false;
     });
-    await _loadPresetForWire(wire, forceReplace: true);
   }
 
   List<String> get _missingCaptionIptc =>
@@ -183,9 +174,11 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       setState(() {
         _wire = wire;
         _selectedTemplateId = AppDefaultsFirestoreService.templateIdForWire(wire);
-        _values = IptcTemplateApplyService.panelValuesFromImportedTemplate(
-          _values,
-          wire,
+        _values = _withDefaultUrgency(
+          IptcTemplateApplyService.panelValuesFromImportedTemplate(
+            _values,
+            wire,
+          ),
         );
         _revision++;
       });
@@ -194,7 +187,9 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     setState(() {
       _wire = wire;
       _selectedTemplateId = AppDefaultsFirestoreService.templateIdForWire(wire);
-      _values = IptcTemplateApplyService.denormalizeForPanel(preset);
+      _values = _withDefaultUrgency(
+        IptcTemplateApplyService.denormalizeForPanel(preset),
+      );
       _clearedFields = cleared.toSet();
       _keysFoundInFiles.clear();
       _revision++;
@@ -202,9 +197,162 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   }
 
   void _onTemplateSelected(IptcTemplateCatalogEntry entry) {
-    if (_wire == entry.wireStyle && _selectedTemplateId == entry.id) return;
-    setState(() => _selectedTemplateId = entry.id);
-    unawaited(_loadPresetForWire(entry.wireStyle));
+    if (_selectedTemplateId == entry.id) return;
+    setState(() {
+      _selectedTemplateId = entry.id;
+      _wire = entry.wireStyle;
+      _values = _withDefaultUrgency(
+        IptcTemplateApplyService.denormalizeForPanel(
+          Map<String, String>.from(entry.preset),
+        ),
+      );
+      _clearedFields = entry.clearedFields.toSet();
+      _keysFoundInFiles.clear();
+      _revision++;
+    });
+  }
+
+  Future<void> _saveNamedTemplate() async {
+    var currentName = '';
+    for (final t in _visibleTemplates) {
+      if (t.id == _selectedTemplateId && t.id.startsWith('local:')) {
+        currentName = t.displayName;
+        break;
+      }
+    }
+    final name = await _askTemplateName(currentName);
+    if (name == null || !mounted) return;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+
+    final locals = await _prefs.getLocalIptcTemplates();
+    var id = 'local:${DateTime.now().millisecondsSinceEpoch}';
+    for (final t in locals) {
+      if (t.displayName.toLowerCase() == trimmed.toLowerCase()) {
+        id = t.id;
+        break;
+      }
+    }
+    _values = _withDefaultUrgency(_values);
+    final entry = IptcTemplateCatalogEntry(
+      id: id,
+      wireStyle: _wire,
+      displayName: trimmed,
+      preset: IptcTemplateApplyService.normalizeForPreset(_values),
+      clearedFields: _computeClearedFields().toList(),
+    );
+    final next = <IptcTemplateCatalogEntry>[
+      for (final t in locals)
+        if (t.id != id) t,
+      entry,
+    ];
+    await _prefs.saveLocalIptcTemplates(next);
+    if (!mounted) return;
+    setState(() {
+      _visibleTemplates = [
+        ...next,
+        for (final t in _visibleTemplates)
+          if (!t.id.startsWith('local:')) t,
+      ];
+      _selectedTemplateId = id;
+      _clearedFields = entry.clearedFields.toSet();
+    });
+    await _persist();
+  }
+
+  Future<String?> _askTemplateName(String initial) {
+    final controller = TextEditingController(text: initial);
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: FfTokens.sessionPanel,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: FfTokens.sessionLn),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text(
+                  'Save template',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Name',
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    color: FfTokens.sessionT2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    color: FfTokens.sessionTx,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    filled: true,
+                    fillColor: FfTokens.sessionEl,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(7),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                  onSubmitted: (value) =>
+                      Navigator.of(dialogContext).pop(value),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(dialogContext).pop(),
+                      child: const Text(
+                        'Cancel',
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          color: FfTokens.sessionT2,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: () =>
+                          Navigator.of(dialogContext).pop(controller.text),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: FfTokens.sessionTx,
+                        foregroundColor: FfTokens.sessionBg,
+                      ),
+                      child: const Text('Save'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ).whenComplete(controller.dispose);
   }
 
   void _onWireSelected(WireStyle wire) {
@@ -241,7 +389,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
         await _loadOriginalFromFolder();
       } else {
         setState(() {
-          _values = {};
+          _values = const {'Urgency': '5'};
           _keysFoundInFiles.clear();
           _revision++;
         });
@@ -253,7 +401,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   Future<void> _clearTemplate() async {
     if (_loadingFromFiles || _loadingExternal) return;
     setState(() {
-      _values = {};
+      _values = const {'Urgency': '5'};
       _keysFoundInFiles.clear();
       _revision++;
     });
@@ -304,7 +452,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       );
       if (!mounted) return;
       setState(() {
-        _values = merged;
+        _values = _withDefaultUrgency(merged);
         _keysFoundInFiles
           ..clear()
           ..addAll(merged.keys.where(
@@ -354,9 +502,11 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
         return;
       }
       setState(() {
-        _values = IptcTemplateApplyService.panelValuesFromImportedTemplate(
-          result.values,
-          _wire,
+        _values = _withDefaultUrgency(
+          IptcTemplateApplyService.panelValuesFromImportedTemplate(
+            result.values,
+            _wire,
+          ),
         );
         _keysFoundInFiles.clear();
         _revision++;
@@ -372,6 +522,15 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     }
   }
 
+  Map<String, String> _withDefaultUrgency(Map<String, String> values) {
+    final next = Map<String, String>.from(values);
+    final current = IptcTemplateApplyService.lookupValue(next, 'Urgency');
+    if (current == null || current.trim().isEmpty) {
+      next['Urgency'] = '5';
+    }
+    return next;
+  }
+
   Set<String> _computeClearedFields() {
     const neverClear = {'Time and Date', 'Date', 'Time'};
     return WireIptcSpecs.fieldsForPanel(_wire)
@@ -384,6 +543,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   }
 
   Future<void> _persist() async {
+    _values = _withDefaultUrgency(_values);
     final prefs = await SharedPreferences.getInstance();
     final preset = IptcTemplateApplyService.normalizeForPreset(_values);
     if (preset.isNotEmpty) {
@@ -401,7 +561,9 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       preset: preset,
       clearedFields: _clearedFields.toList(),
     );
-    await _prefs.setSelectedIptcTemplateId(_selectedTemplateId);
+    if (_selectedTemplateId.isNotEmpty) {
+      await _prefs.setSelectedIptcTemplateId(_selectedTemplateId);
+    }
     await _prefs.saveIptcApplyMode(_mode);
   }
 
@@ -416,132 +578,47 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
+    final fieldsOff = _mode == IptcApplyMode.none;
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 28),
-      backgroundColor: FfTokens.nocturneBg,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      backgroundColor: FfTokens.sessionPanel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: FfTokens.sessionLn),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: (size.width * 0.72).clamp(640.0, 980.0),
-        height: (size.height * 0.82).clamp(480.0, 820.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: const BoxDecoration(
-                color: FfTokens.nocturneEl,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-                border: Border(
-                  bottom: BorderSide(color: FfTokens.sessionLn2),
+        width: (size.width - 32).clamp(0.0, 1240.0),
+        height: size.height - 32,
+        child: _loading
+            ? const Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
+              )
+            : IptcTemplateEditor(
+                wire: _wire,
+                templates: _visibleTemplates,
+                selectedTemplateId: _selectedTemplateId,
+                values: _values,
+                foundInFilesKeys: _keysFoundInFiles,
+                revision: _revision,
+                fieldsEnabled: !fieldsOff,
+                onTemplateSelected: _onTemplateSelected,
+                onValueChanged: _onValueChanged,
+                onLoadTemplate: _loadExternalTemplate,
+                onClearTemplate: _clearTemplate,
+                onSaveTemplate: _saveNamedTemplate,
+                loadEnabled: !_loadingExternal && !_loadingFromFiles && !fieldsOff,
+                clearEnabled: !_loadingExternal && !fieldsOff,
+                loadingTemplate: _loadingExternal,
+                onCancel: () => Navigator.of(context).pop(),
+                onDone: _done,
               ),
-              child: Row(
-                children: [
-                  const Text(
-                    'IPTC TEMPLATE',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: FfTokens.sessionT3,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text(
-                      'Cancel',
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        color: FfTokens.sessionT2,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  FilledButton(
-                    onPressed: _loading ? null : _done,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: FfTokens.nocturneAc,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor:
-                          FfTokens.nocturneAc.withValues(alpha: 0.4),
-                      disabledForegroundColor: Colors.white.withValues(alpha: 0.4),
-                    ),
-                    child: const Text('Done'),
-                  ),
-                ],
-              ),
-            ),
-            if (!_loading && _missingCaptionIptc.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                color: FfTokens.danger.withValues(alpha: 0.12),
-                child: Row(
-                  children: [
-                    const PhosphorIcon(
-                      PhosphorIconsRegular.warning,
-                      size: 14,
-                      color: FfTokens.danger,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Missing for caption: ${_missingCaptionIptc.join(', ')}',
-                        style: const TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: FfTokens.danger,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            Expanded(
-              child: _loading
-                  ? const Center(
-                      child: SizedBox(
-                        width: 28,
-                        height: 28,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                    )
-                  : Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
-                      child: StartupIptcTemplatePanel(
-                        selectedWire: _wire,
-                        wireLabels: _wireLabels,
-                        values: _values,
-                        foundInFilesKeys: _keysFoundInFiles,
-                        isLoading: _loadingFromFiles,
-                        onValueChanged: _onValueChanged,
-                        onWireSelected: _onWireSelected,
-                        visibleTemplates: _visibleTemplates,
-                        selectedTemplateId: _selectedTemplateId,
-                        onTemplateSelected: _onTemplateSelected,
-                        sessionStyle: true,
-                        iptcApplyMode: _mode,
-                        onIptcApplyModeChanged: _onModeChanged,
-                        onLoadTemplate: _loadExternalTemplate,
-                        onClearTemplate: _clearTemplate,
-                        onLoadOriginalValues: _loadOriginalFromFolder,
-                        isLoadTemplateLoading: _loadingExternal,
-                        isLoadTemplateDisabled: _loadingFromFiles,
-                        isLoadOriginalValuesDisabled:
-                            widget.folderPath == null ||
-                                widget.folderPath!.isEmpty,
-                        templateRevision: _revision,
-                      ),
-                    ),
-            ),
-          ],
-        ),
       ),
     );
   }
+
 }

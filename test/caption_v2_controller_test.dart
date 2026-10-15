@@ -87,7 +87,7 @@ void main() {
       ..awayTeam = 'New York City FC';
 
     expect(controller.teamPlayersLabel(isHome: true), 'Toronto FC players');
-    controller.toggleTeamSubject(isHome: true, asPlayers: true);
+    controller.toggleTeamSubject(isHome: true, kind: TeamSubjectKind.players);
     controller.selectVerb('Celebrates');
 
     expect(controller.buildCaptionBody(), startsWith('Toronto FC players'));
@@ -98,14 +98,20 @@ void main() {
       contains('against the New York City FC'),
     );
 
-    controller.toggleTeamSubject(isHome: true, asPlayers: false);
+    controller.toggleTeamSubject(isHome: true, kind: TeamSubjectKind.name);
     expect(controller.buildCaptionBody(), contains('celebrates against'));
     expect(controller.buildCaptionBody(), isNot(contains('players')));
 
-    controller.selectPlayer(player('Federico Bernardeschi', '10'), isHome: true);
+    controller.toggleTeamSubject(isHome: true, kind: TeamSubjectKind.teammates);
     expect(controller.hasTeamPlayersSubject, isFalse);
+    expect(controller.withTeammatesIsHome, isTrue);
+
+    controller.selectPlayer(player('Federico Bernardeschi', '10'), isHome: true);
+    controller.selectVerb('Celebrates a Goal');
     expect(controller.buildCaptionBody(), contains('Federico Bernardeschi'));
-    expect(controller.buildCaptionBody(), isNot(contains('Toronto FC players')));
+    expect(controller.buildCaptionBody(), contains('celebrates a goal with teammates'));
+    expect(controller.playerChipLabel, contains('10'));
+    expect(controller.playerChipLabel, contains('teammates'));
   });
 
   test('uses plural caption wording for multiple players', () {

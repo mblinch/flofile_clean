@@ -19,6 +19,7 @@ import '../utils/verb_name_casing.dart';
 import 'admin_verb_editor_v3_chrome.dart';
 import 'app_styled_dialogs.dart';
 import 'ff_dropdown.dart';
+import 'new_verb_dialog.dart';
 import 'verb_edit_sub_options_section.dart';
 
 typedef AdminVerbAction = Future<void> Function({
@@ -66,7 +67,8 @@ class AdminVerbAuthoringEditor extends StatefulWidget {
   final ValueChanged<Map<String, dynamic>> onBundleChanged;
   final AdminVerbAction? onPublishCurrentVerb;
   /// Publishes the full in-editor sport catalog to Firebase app defaults.
-  final Future<void> Function({String? successLabel})? onWriteSportDefaults;
+  /// Returns false when the write did not land.
+  final Future<bool> Function({String? successLabel})? onWriteSportDefaults;
   /// Personal mode: wait until the latest bundle write has finished.
   final Future<void> Function()? onPersistIdle;
   /// Unpublished edit count for [sport]. `0` means that sport is clean.
@@ -104,6 +106,8 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   Map<String, dynamic>? _pendingBundle;
   _EditorSnapshot? _undoSnapshot;
   String? _undoMessage;
+  /// When true, Undo must write the restored catalog, not only the local draft.
+  bool _undoLive = false;
 
   @override
   void initState() {
@@ -187,9 +191,10 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     _undoTimer?.cancel();
     _undoSnapshot = null;
     _undoMessage = null;
+    _undoLive = false;
   }
 
-  void _pushUndo(String message) {
+  void _pushUndo(String message, {bool live = false}) {
     _undoSnapshot = _EditorSnapshot(
       bundle: _deepCopyMap(_bundle),
       selectedCategory: _selectedCategory,
@@ -201,6 +206,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       if (!mounted) return;
       setState(_clearUndo);
     });
+    _undoLive = live;
     if (mounted) {
       setState(() => _undoMessage = message);
     } else {
@@ -211,6 +217,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   void _undo() {
     final snap = _undoSnapshot;
     if (snap == null) return;
+    final live = _undoLive;
     _clearUndo();
     setState(() {
       _selectedCategory = snap.selectedCategory;
@@ -220,6 +227,31 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     _reportPending();
     widget.onBundleChanged(_deepCopyMap(snap.bundle));
     setState(_ensureSelection);
+    if (live) unawaited(_commitLiveBundle(successLabel: 'Restored'));
+  }
+
+  /// Writes the current catalog now. Delete uses this so Publish or Save is
+  /// not a second step. Other drafts in the catalog go out with it.
+  Future<void> _commitLiveBundle({String successLabel = 'Deleted'}) async {
+    await widget.onPersistIdle?.call();
+    if (!widget.personalMode) {
+      final write = widget.onWriteSportDefaults;
+      if (write == null) {
+        _markDraftChange();
+        return;
+      }
+      final ok = await write(successLabel: successLabel);
+      if (!ok || !mounted) {
+        if (mounted) _markDraftChange();
+        return;
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _publishedBaseline = _deepCopyMap(_bundle);
+      _pendingChanges = 0;
+    });
+    _reportPending();
   }
 
   void _discardDrafts() {
@@ -1315,22 +1347,39 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     _emit(bundle);
   }
 
-  void _newVerb() {
-    final category = _selectedCategory == null ||
-            _selectedCategory == _kAllVerbsCategory
-        ? (_categories.isEmpty ? 'Other' : _categories.first)
-        : _selectedCategory!;
-    var suffix = 1;
-    var key = 'Untitled verb';
+  Future<void> _newVerb() async {
     final keys = {
       for (final verb in _allVerbs) verb.key.toLowerCase(),
+      for (final verb in _allVerbs) verb.label.toLowerCase(),
       for (final value in ((_bundle['deletedVerbs'] as List?) ?? const []))
         value.toString().toLowerCase(),
     };
-    while (keys.contains(key.toLowerCase())) {
-      suffix++;
-      key = 'Untitled verb $suffix';
+    final result = await showNewVerbDialog(
+      context: context,
+      tokens: _t,
+      categories: _categories,
+      existingVerbNames: keys,
+    );
+    if (!mounted || result == null) return;
+
+    if (result.createdCategory) {
+      _pushUndo('Added “${result.category}”');
+      final bundle = _copyBundle();
+      final categories = List<String>.from(
+        (bundle['categoryOrder'] as List?) ?? _categories,
+      )..add(result.category);
+      bundle['categoryOrder'] = categories;
+      final order = Map<String, dynamic>.from(
+        (bundle['verbOrder'] as Map?) ?? const {},
+      );
+      order.putIfAbsent(result.category, () => <String>[]);
+      bundle['verbOrder'] = order;
+      setState(() => _selectedCategory = result.category);
+      _emit(bundle);
     }
+
+    final key = result.title;
+    final category = result.category;
     final draft = _VerbDraft(
       key: key,
       label: key,
@@ -1354,12 +1403,11 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       record: const {},
     );
     setState(() {
+      _selectedCategory = category;
       _selectedKey = key;
-      _renaming = true;
-      _verbRenameController.text = key;
+      _renaming = false;
     });
     _saveVerb(draft, debounce: Duration.zero);
-    _focusVerbRename();
   }
 
   void _focusVerbRename() {
@@ -1407,7 +1455,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       return siblings[index - 1].key;
     }();
 
-    _pushUndo('Deleted “${verb.label}”');
+    _pushUndo('Deleted “${verb.label}”', live: true);
     final bundle = _copyBundle();
     _removeVerbFromBundle(bundle, verb);
     if (hideDefault) {
@@ -1416,8 +1464,9 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       _selectedKey = nextKey;
       _selectedCategory = category;
     }
-    _emit(bundle);
+    _emit(bundle, countAsDraft: false);
     setState(_ensureSelection);
+    await _commitLiveBundle();
   }
 
   void _unhideVerb(_VerbDraft verb) {

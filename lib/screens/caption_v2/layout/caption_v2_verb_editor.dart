@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../theme/ff_tokens.dart';
+import '../../../widgets/ff_menu.dart';
 import '../../../widgets/preferences_dialog.dart';
 import '../data/caption_v2_controller.dart';
 
@@ -36,42 +36,28 @@ Future<void> showCaptionV2VerbEditor(
   await controller.reloadVerbCatalog();
 }
 
-/// V2-themed popup menu used for verb right-clicks.
+/// Right-click menu, drawn with the same card as the session dropdown.
 Future<T?> showCaptionV2PopupMenu<T>({
   required BuildContext context,
   required RelativeRect position,
   required List<PopupMenuEntry<T>> items,
+  double width = 240,
 }) {
-  final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-  return showMenu<T>(
+  final choices = <FfMenuChoice<T>>[
+    for (final item in items)
+      if (item is PopupMenuDivider)
+        FfMenuChoice<T>.divider()
+      else if (item is PopupMenuItem<T>)
+        FfMenuChoice<T>(
+          value: item.value,
+          enabled: item.enabled,
+          child: item.child ?? const SizedBox.shrink(),
+        ),
+  ];
+  return showFfMenu<T>(
     context: context,
-    position: position,
-    popUpAnimationStyle: AnimationStyle.noAnimation,
-    color: tokens.surface,
-    surfaceTintColor: Colors.transparent,
-    elevation: 12,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(FfTokens.radiusRow),
-      side: BorderSide(color: tokens.divider),
-    ),
-    items: [
-      for (final item in items)
-        if (item is PopupMenuItem<T>)
-          PopupMenuItem<T>(
-            value: item.value,
-            enabled: item.enabled,
-            height: item.height,
-            padding: item.padding,
-            child: DefaultTextStyle(
-              style: tokens.metaStyle.copyWith(
-                color: item.enabled ? tokens.text : tokens.textSecondary,
-                fontSize: 13,
-              ),
-              child: item.child!,
-            ),
-          )
-        else
-          item,
-    ],
-  );
+    anchorGlobal: Rect.fromLTWH(position.left, position.top, 0, 0),
+    width: width,
+    choices: choices,
+  ).then((result) => result == null ? null : result.value);
 }
