@@ -18,11 +18,13 @@ import '../../../caption_style/caption_text_normalize.dart';
 import '../../../caption_style/game_info.dart';
 import '../../../caption_style/sport_verb_categories.dart';
 import '../../../caption_style/verb_authoring_model.dart';
+import '../../../caption_style/verb_category_colors.dart';
 import '../../../caption_style/verb_caption_wording.dart';
 import '../../../caption_style/verb_sort_mode.dart';
 import '../../../caption_style/verb_sub_options.dart';
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/api_manager.dart';
+import '../../../services/ftp_complete_sound.dart';
 import '../../../services/ftpclient_service.dart';
 import '../../../services/flo_caption_mark.dart';
 import '../../../services/iptc_template_apply_service.dart';
@@ -129,15 +131,38 @@ class RosterHit {
       );
 }
 
+/// Players and verb clicked on the previous picture.
+class LastClickedSelection {
+  const LastClickedSelection({
+    required this.players,
+    this.verb,
+    this.customVerb = '',
+    this.rbi = 0,
+    this.base,
+    this.celebration,
+  });
+
+  final List<RosterHit> players;
+  final String? verb;
+  final String customVerb;
+  final int rbi;
+  final String? base;
+  final String? celebration;
+}
+
 /// A caption substring with a hover tip explaining where it came from.
 class CaptionProvenanceSpan {
   const CaptionProvenanceSpan({
     required this.phrase,
     required this.tip,
+    this.background,
   });
 
   final String phrase;
   final String tip;
+
+  /// Soft fill behind the phrase. Used for inserted verbs.
+  final Color? background;
 }
 
 enum _BylineProvenance { none, iptc, serial, serialAssigned }
@@ -397,6 +422,32 @@ String _ordinalWord(int n) {
 }
 
 /// Session controller for caption V2 — UI talks only to this.
+class _FtpSendJob {
+  const _FtpSendJob({
+    required this.path,
+    required this.host,
+    required this.username,
+    required this.password,
+    required this.port,
+    required this.remoteDir,
+    required this.passive,
+    required this.renameAs,
+    required this.duplicateFolder,
+    required this.profileName,
+  });
+
+  final String path;
+  final String host;
+  final String username;
+  final String password;
+  final int port;
+  final String remoteDir;
+  final bool passive;
+  final String renameAs;
+  final String duplicateFolder;
+  final String profileName;
+}
+
 class CaptionV2Controller extends ChangeNotifier {
   CaptionV2Controller({
     ApiManager? apiManager,
@@ -415,6 +466,25 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Bumps on each editor preview so a disk reload cannot paint over a newer save.
   int _verbPreviewToken = 0;
   VerbSortMode verbSortMode = VerbSortMode.alphabetical;
+
+  /// How many verb categories can stay open at once. 1 closes the previous.
+  int verbCascadeLimit = 1;
+
+  bool get verbMultiOpen => verbCascadeLimit > 1;
+
+  int cascadeLimitFor(int categoryCount) {
+    final max = categoryCount < 1 ? 1 : categoryCount;
+    final stored = verbCascadeLimit < 1 ? 1 : verbCascadeLimit;
+    return stored > max ? max : stored;
+  }
+
+  /// Steps from the default verb-menu type size. Negative is smaller.
+  int verbFontStep = 0;
+
+  static const int verbFontStepMin = -3;
+  static const int verbFontStepMax = 4;
+
+  double get verbFontScale => 1 + verbFontStep * 0.12;
   Map<String, int> _verbUsageCounts = {};
 
   // --- Game / teams ---
@@ -541,6 +611,10 @@ class CaptionV2Controller extends ChangeNotifier {
   bool? withTeammatesIsHome;
   String? selectedVerb;
   final Map<String, String?> verbModifierSelections = {};
+
+  /// Players and verb from the picture you just left, so the next one can
+  /// start from those clicks and add more.
+  LastClickedSelection? lastClicked;
   String customVerbPhrase = '';
   String lastCustomVerbPhrase = '';
   bool customVerbPinned = false;
@@ -1024,14 +1098,18 @@ class CaptionV2Controller extends ChangeNotifier {
       return false;
     }
 
-    void add(String raw, String tip) {
+    void add(String raw, String tip, {Color? background}) {
       final base = raw.trim();
       if (base.isEmpty) return;
       for (final phrase in <String>[base, base.toUpperCase()]) {
         if (phrase.isEmpty || seen.contains(phrase)) continue;
         if (!phraseFits(caption, phrase)) continue;
         seen.add(phrase);
-        spans.add(CaptionProvenanceSpan(phrase: phrase, tip: tip));
+        spans.add(CaptionProvenanceSpan(
+          phrase: phrase,
+          tip: tip,
+          background: background,
+        ));
         return;
       }
     }
@@ -1106,17 +1184,36 @@ class CaptionV2Controller extends ChangeNotifier {
       if (captionTemplate.removeDiacritics) {
         name = CaptionTextNormalize.stripDiacritics(name);
       }
-      add(name, _playerProvenanceTip(row));
+      add(
+        name,
+        _playerProvenanceTip(row),
+        background:
+            manualCaptionOverride == null ? captionPlayerHighlight : null,
+      );
     }
 
+    final verbFill =
+        manualCaptionOverride == null ? captionVerbHighlight : null;
     if (customVerbPhrase.trim().isNotEmpty) {
-      add(customVerbPhrase, 'Verb · Custom text');
+      add(
+        customVerbPhrase,
+        'Verb · Custom text',
+        background: verbFill,
+      );
     } else {
       final verb = selectedVerb;
       if (verb != null) {
         final def = verbDefinition(verb);
-        add(def?.singularPhrase ?? '', 'Verb · Selected');
-        add(def?.label ?? verb, 'Verb · Selected');
+        final category = def?.category.trim() ?? '';
+        final label = def?.label ?? verb;
+        final tip = category.isEmpty
+            ? 'Verb · $label'
+            : 'Verb · $category · $label';
+        final fill = verbFill;
+        add(def?.singularPhrase ?? '', tip, background: fill);
+        add(def?.pluralPhrase ?? '', tip, background: fill);
+        add(def?.ingPhrase ?? '', tip, background: fill);
+        add(label, tip, background: fill);
       }
     }
 
@@ -1128,6 +1225,31 @@ class CaptionV2Controller extends ChangeNotifier {
     }
 
     return spans;
+  }
+
+  /// Tip for caption text that did not match a known player, verb, or field.
+  String get captionUnmatchedTip {
+    if (manualCaptionOverride != null) return 'Typed in the caption box';
+    if (!hasCaptionSubject) return 'Photo · Existing caption';
+    return 'Caption style';
+  }
+
+  Future<void> setVerbCascadeLimit(int value) async {
+    final max = verbCategories.isEmpty ? 1 : verbCategories.length;
+    final next = value.clamp(1, max);
+    if (next == verbCascadeLimit) return;
+    verbCascadeLimit = next;
+    notifyListeners();
+    await _prefs?.saveVerbCascadeLimit(next);
+  }
+
+  Future<void> nudgeVerbFont(int delta) async {
+    final next =
+        (verbFontStep + delta).clamp(verbFontStepMin, verbFontStepMax);
+    if (next == verbFontStep) return;
+    verbFontStep = next;
+    notifyListeners();
+    await _prefs?.saveVerbFontStep(next);
   }
 
   String _playerProvenanceTip(RosterHit row) {
@@ -1384,6 +1506,8 @@ class CaptionV2Controller extends ChangeNotifier {
   String? ftpProfileName;
 
   String get ftpButtonLabel {
+    final selected = orderedSelectedImagePaths.length;
+    if (selected > 1) return 'FTP $selected images';
     final name = ftpProfileName?.trim();
     if (name == null || name.isEmpty) return 'FTP';
     return 'FTP: $name';
@@ -1393,14 +1517,41 @@ class CaptionV2Controller extends ChangeNotifier {
   bool transmitting = false;
   final List<FtpHistoryEntry> ftpHistory = [];
 
-  /// 0.0–1.0 while [transmitting]; cleared when idle.
+  /// 0.0–1.0 for the whole batch while [transmitting]; cleared when idle.
   double transmitProgress = 0;
+
+  /// 0.0–1.0 for the file in [ftpPreviewPath]. Resets when the next file starts.
+  double ftpFileProgress = 0;
 
   /// Human-readable phase, e.g. "Uploading…".
   String? transmitStatus;
 
-  /// Path currently uploading (for preview/thumbnail overlays).
-  String? transmittingPath;
+  /// Paths uploading right now, with each file's own 0.0–1.0 progress.
+  final Map<String, double> ftpActiveProgress = {};
+
+  /// File whose bytes are on the wire. The upload preview follows this.
+  String? ftpPreviewPath;
+
+  /// Path shown on the dock thumbnail while an upload is running.
+  String? get transmittingPath => ftpPreviewPath;
+
+  FtpCancelToken? _ftpCancelToken;
+  bool _ftpUserCancelled = false;
+
+  bool ftpUploadingPath(String? path) =>
+      path != null && ftpActiveProgress.containsKey(path);
+
+  static const int ftpConcurrency = 1;
+  final List<_FtpSendJob> _ftpWait = [];
+  bool _ftpDraining = false;
+  bool _ftpSessionOpen = false;
+  int _ftpSessionTotal = 0;
+  int _ftpSessionDone = 0;
+  int _ftpSessionOk = 0;
+  String? _ftpSessionError;
+  String? _ftpCopyError;
+  String _ftpSessionDuplicateFolder = '';
+
   String? statusMessage;
 
   String? get currentPath => imagePaths.isEmpty
@@ -1493,6 +1644,13 @@ class CaptionV2Controller extends ChangeNotifier {
       ..addAll(paths.where(imagePaths.contains));
     notifyListeners();
   }
+
+  /// The thumbnail grid mutates [selectedImagePaths] in place.
+  void noteImageSelectionChanged() {
+    notifyListeners();
+  }
+
+  Future<void> transmitPaths(List<String> paths) => _transmitPaths(paths);
 
   void clearSelectedImagePaths() {
     if (selectedImagePaths.isEmpty) return;
@@ -2412,8 +2570,16 @@ class CaptionV2Controller extends ChangeNotifier {
     // Always open A–Z; usage counts + custom verbOrder still persist.
     verbSortMode = VerbSortMode.alphabetical;
     await _prefs!.saveVerbSortMode(VerbSortMode.alphabetical);
+    verbCascadeLimit = await _prefs!.getVerbCascadeLimit();
+    verbFontStep = (await _prefs!.getVerbFontStep())
+        .clamp(verbFontStepMin, verbFontStepMax);
     _verbUsageCounts = await _prefs!.getVerbUsageCountsForSport(sport);
     await _loadVerbCatalog();
+    final cascadeMax = verbCategories.isEmpty ? 1 : verbCategories.length;
+    if (verbCascadeLimit > cascadeMax) {
+      verbCascadeLimit = cascadeMax;
+      await _prefs!.saveVerbCascadeLimit(verbCascadeLimit);
+    }
     captionTemplate = await _prefs!.getCaptionTemplate();
     gettyNoteIsNbae = await _prefs!.getGettyNoteIsNbae();
     mlbTimestampEnabled = await _prefs!.getMlbInningFromClockEnabled();
@@ -2619,6 +2785,7 @@ class CaptionV2Controller extends ChangeNotifier {
     customVerbPinned = false;
     lastCustomPlayerName = '';
     lastCustomPlayerJersey = '';
+    lastClicked = null;
     captionSelectionStarted = false;
     selectedPlayers.clear();
     selectedPlayer = null;
@@ -2956,6 +3123,7 @@ class CaptionV2Controller extends ChangeNotifier {
     customVerbPinned = false;
     lastCustomPlayerName = '';
     lastCustomPlayerJersey = '';
+    lastClicked = null;
     personality = '';
     manualCaptionOverride = null;
     notifyListeners();
@@ -4346,8 +4514,7 @@ class CaptionV2Controller extends ChangeNotifier {
   }) {
     final name = fullName.trim();
     if (name.isEmpty) return 'Enter a player name.';
-    final jersey = jerseyNumber?.trim();
-    final jerseyKey = (jersey == null || jersey.isEmpty) ? null : jersey;
+    final jerseyKey = _normalizeJerseyKey(jerseyNumber);
     final roster = isHome ? homeRoster : awayRoster;
     if (jerseyKey != null) {
       final taken = roster.any(
@@ -8573,7 +8740,115 @@ class CaptionV2Controller extends ChangeNotifier {
     return saved;
   }
 
+  bool get hasLastClicked {
+    final last = lastClicked;
+    if (last == null) return false;
+    return last.players.isNotEmpty ||
+        (last.verb?.trim().isNotEmpty ?? false) ||
+        last.customVerb.trim().isNotEmpty;
+  }
+
+  void _rememberLastClicked() {
+    final pin = pinnedPlayer;
+    final extraPlayer = selectedPlayers.any((row) {
+      if (pin == null) return true;
+      return row.isHome != pin.isHome || !_samePlayer(row.player, pin.player);
+    });
+    final verbClicked = selectedVerb != null && selectedVerb != pinnedVerb;
+    final customClicked =
+        customVerbPhrase.trim().isNotEmpty && !customVerbPinned;
+    if (!extraPlayer && !verbClicked && !customClicked) return;
+    lastClicked = LastClickedSelection(
+      players: [
+        for (final row in selectedPlayers) row,
+      ],
+      verb: selectedVerb,
+      customVerb: customVerbPhrase.trim(),
+      rbi: rbi,
+      base: selectedBase,
+      celebration: celebrationType,
+    );
+  }
+
+  void clearLastClicked() {
+    lastClicked = null;
+    captionSelectionStarted = false;
+    selectedPlayers.clear();
+    selectedPlayer = null;
+    teamPlayersIsHome = null;
+    withTeammatesIsHome = null;
+    selectedVerb = null;
+    if (customVerbPhrase.trim().isNotEmpty) {
+      lastCustomVerbPhrase = customVerbPhrase.trim();
+    }
+    customVerbPhrase = '';
+    celebrationType = null;
+    verbModifierSelections.clear();
+    rbi = 0;
+    selectedBase = null;
+    preGame = false;
+    postGame = false;
+    manualCaptionOverride = null;
+    personality = originalPersonality;
+    _basePersonalityNames
+      ..clear()
+      ..addAll(_parseMetadataList(personality));
+    keywords = _metadataListFromRaw(
+      currentIptcMeta['IPTC:Keywords'] ??
+          currentIptcMeta['Keywords'] ??
+          currentIptcMeta['XMP:Subject'] ??
+          currentIptcMeta['XMP-dc:Subject'],
+      separator: ', ',
+    );
+    _baseKeywordKeys
+      ..clear()
+      ..addAll(_parseMetadataList(keywords).map((item) => item.toLowerCase()));
+    _managedKeywordKeys.clear();
+    _firebarCommitted.clear();
+    _clearFirebarOptions();
+    playerSearchClearGeneration++;
+    _syncKeywords();
+    _syncPersonality();
+    notifyListeners();
+  }
+
+  /// Put the previous picture's clicked players and verb on this one.
+  void useLastClicked() {
+    final last = lastClicked;
+    if (last == null) return;
+    captionSelectionStarted = true;
+    teamPlayersIsHome = null;
+    for (final row in last.players) {
+      final match = _findRosterPlayer(row.player, isHome: row.isHome);
+      if (match == null) continue;
+      final already = selectedPlayers.any(
+        (item) => item.isHome == row.isHome && _samePlayer(item.player, match),
+      );
+      if (already) continue;
+      selectedPlayers.add(row.copyWith(player: match));
+    }
+    final custom = last.customVerb.trim();
+    if (custom.isNotEmpty) {
+      customVerbPhrase = custom;
+      lastCustomVerbPhrase = custom;
+      selectedVerb = null;
+    } else if (last.verb != null && last.verb!.trim().isNotEmpty) {
+      selectedVerb = last.verb;
+      if (!customVerbPinned) customVerbPhrase = '';
+      rbi = last.rbi;
+      selectedBase = last.base;
+      celebrationType = last.celebration;
+      final category = _categoryForVerb(last.verb!);
+      if (category != null) verbCategory = category;
+    }
+    manualCaptionOverride = null;
+    _syncPrimaryPlayer();
+    _syncKeywords();
+    notifyListeners();
+  }
+
   void _clearCaptionSelection() {
+    _rememberLastClicked();
     selectedPlayers.clear();
     selectedPlayer = null;
     teamPlayersIsHome = null;
@@ -8703,14 +8978,26 @@ class CaptionV2Controller extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (transmitting || _retransmitPromptOpen) {
+    if (_retransmitPromptOpen) {
       statusMessage = 'FTP already in progress';
       notifyListeners();
       return;
     }
 
-    final alreadySent = paths.where(_wasAlreadyFtpd).toList();
-    var toSend = paths.where((path) => !_wasAlreadyFtpd(path)).toList();
+    final busy = <String>{
+      ..._ftpWait.map((job) => job.path),
+      ...ftpActiveProgress.keys,
+    };
+    final fresh = paths.where((path) => !busy.contains(path)).toList();
+    if (fresh.isEmpty) {
+      statusMessage =
+          _ftpSessionOpen ? 'Already in the FTP queue' : 'Nothing to FTP';
+      notifyListeners();
+      return;
+    }
+
+    final alreadySent = fresh.where(_wasAlreadyFtpd).toList();
+    var toSend = fresh.where((path) => !_wasAlreadyFtpd(path)).toList();
     if (alreadySent.isNotEmpty) {
       _retransmitPromptOpen = true;
       bool allow = false;
@@ -8727,23 +9014,12 @@ class CaptionV2Controller extends ChangeNotifier {
       return;
     }
 
-    transmitting = true;
-    transmitProgress = 0;
-    transmitStatus = 'Connecting…';
-    transmittingPath = toSend.first;
-    queuedCount = toSend.length;
-    notifyListeners();
-
     final prefs = _prefs;
     if (prefs == null) {
       sentImages.addAll(toSend);
       savedImages.addAll(toSend);
       lastSentLabel = _formatTime(DateTime.now());
-      queuedCount = 0;
-      transmitting = false;
-      transmittingPath = null;
-      transmitStatus = null;
-      transmitProgress = 0;
+      queuedCount = _ftpWait.length;
       statusMessage = 'Marked sent (prefs unavailable)';
       notifyListeners();
       return;
@@ -8754,13 +9030,11 @@ class CaptionV2Controller extends ChangeNotifier {
     final profile = profileName == null ? null : profiles[profileName];
 
     if (profile == null) {
-      transmitting = false;
-      transmittingPath = null;
-      transmitStatus = null;
-      transmitProgress = 0;
-      queuedCount = savedNotSentCount;
-      statusMessage = 'Configure an FTP profile first (Settings → FTP)';
-      notifyListeners();
+      if (!_ftpSessionOpen) {
+        queuedCount = savedNotSentCount;
+        statusMessage = 'Configure an FTP profile first (Settings → FTP)';
+        notifyListeners();
+      }
       return;
     }
 
@@ -8774,102 +9048,234 @@ class CaptionV2Controller extends ChangeNotifier {
     final duplicateFolder = profile['duplicateFolder']?.toString() ?? '';
 
     if (host.isEmpty || user.isEmpty || pass.isEmpty) {
-      transmitting = false;
-      transmittingPath = null;
-      transmitStatus = null;
-      transmitProgress = 0;
-      statusMessage = 'FTP profile is incomplete';
-      notifyListeners();
+      if (!_ftpSessionOpen) {
+        statusMessage = 'FTP profile is incomplete';
+        notifyListeners();
+      }
       return;
     }
 
-    var ok = 0;
-    String? lastError;
-    String? copyError;
-    for (var i = 0; i < toSend.length; i++) {
-      final path = toSend[i];
-      transmittingPath = path;
-      transmitProgress = 0;
-      transmitStatus = toSend.length > 1
-          ? 'Uploading ${i + 1}/${toSend.length}…'
-          : 'Uploading…';
-      notifyListeners();
+    final jobs = [
+      for (final path in toSend)
+        _FtpSendJob(
+          path: path,
+          host: host,
+          username: user,
+          password: pass,
+          port: port,
+          remoteDir: remoteDir,
+          passive: passive,
+          renameAs: renameAs,
+          duplicateFolder: duplicateFolder,
+          profileName: profileName ?? '',
+        ),
+    ];
 
-      final fileName = ftpTransferFileName(path, renameAs);
-      final remote = remoteDir.endsWith('/')
-          ? '$remoteDir$fileName'
-          : '$remoteDir/$fileName';
+    final starting = !_ftpSessionOpen;
+    if (starting) {
+      _ftpSessionOpen = true;
+      _ftpSessionTotal = jobs.length;
+      _ftpSessionDone = 0;
+      _ftpSessionOk = 0;
+      _ftpSessionError = null;
+      _ftpCopyError = null;
+      _ftpSessionDuplicateFolder = duplicateFolder;
+      transmitting = true;
+      transmitProgress = 0;
+      transmitStatus = jobs.length > 1 ? 'Connecting…' : 'Uploading…';
+    } else {
+      _ftpSessionTotal += jobs.length;
+    }
+    _ftpWait.addAll(jobs);
+    queuedCount = _ftpWait.length;
+    statusMessage = starting
+        ? (jobs.length == 1
+            ? 'FTP starting'
+            : 'FTP ${jobs.length} · ${ftpConcurrency} at a time')
+        : 'Queued ${jobs.length} · ${_ftpWait.length} waiting';
+    _publishFtpProgress(force: true);
+    unawaited(_ensureFtpDrain());
+  }
+
+  void _publishFtpProgress({bool force = false}) {
+    final activeSum =
+        ftpActiveProgress.values.fold<double>(0, (sum, value) => sum + value);
+    final next = _ftpSessionTotal == 0
+        ? 0.0
+        : ((_ftpSessionDone + activeSum) / _ftpSessionTotal).clamp(0.0, 1.0);
+    final waiting = _ftpWait.length;
+    final active = ftpActiveProgress.length;
+    final shown = _ftpSessionDone + active;
+    final status = _ftpSessionTotal <= 1
+        ? 'Uploading…'
+        : (waiting > 0
+            ? 'Sending $shown/$_ftpSessionTotal · $waiting queued'
+            : 'Sending $shown/$_ftpSessionTotal');
+    final bumped = force ||
+        (next - transmitProgress).abs() >= 0.01 ||
+        status != transmitStatus;
+    transmitProgress = next;
+    transmitStatus = status;
+    transmitting = true;
+    queuedCount = waiting;
+    if (bumped) notifyListeners();
+  }
+
+  Future<void> _ensureFtpDrain() async {
+    if (_ftpDraining) return;
+    _ftpDraining = true;
+    try {
+      final running = <Future<void>>[];
+      while (_ftpWait.isNotEmpty || running.isNotEmpty) {
+        if (_ftpUserCancelled) _ftpWait.clear();
+        while (!_ftpUserCancelled &&
+            running.length < ftpConcurrency &&
+            _ftpWait.isNotEmpty) {
+          final job = _ftpWait.removeAt(0);
+          _ftpCancelToken = FtpCancelToken();
+          ftpPreviewPath = job.path;
+          ftpFileProgress = 0;
+          ftpActiveProgress
+            ..clear()
+            ..[job.path] = 0;
+          late final Future<void> task;
+          task = _uploadFtpJob(job).whenComplete(() => running.remove(task));
+          running.add(task);
+          _publishFtpProgress(force: true);
+        }
+        if (running.isEmpty) break;
+        await Future.any(List<Future<void>>.of(running));
+      }
+    } finally {
+      _ftpDraining = false;
+      if (_ftpWait.isNotEmpty || ftpActiveProgress.isNotEmpty) {
+        await _ensureFtpDrain();
+      } else if (_ftpSessionOpen) {
+        _finishFtpSession();
+      }
+    }
+  }
+
+  Future<void> _uploadFtpJob(_FtpSendJob job) async {
+    final path = job.path;
+    String? error;
+    var success = false;
+    try {
+      final fileName = ftpTransferFileName(path, job.renameAs);
+      final remote = job.remoteDir.endsWith('/')
+          ? '${job.remoteDir}$fileName'
+          : '${job.remoteDir}/$fileName';
       final copied = await copyFtpDuplicate(
         sourcePath: path,
-        folder: duplicateFolder,
+        folder: job.duplicateFolder,
         fileName: fileName,
       );
-      if (copied != null) copyError = copied;
+      if (copied != null) _ftpCopyError = copied;
       final result = await FtpClientService.uploadFile(
-        host: host,
-        username: user,
-        password: pass,
+        host: job.host,
+        username: job.username,
+        password: job.password,
         localFilePath: path,
         remoteFilePath: remote,
-        port: port,
-        passiveMode: passive,
-        onProgress: (status, progress, error) {
-          final fileProgress = progress.clamp(0.0, 1.0);
-          final next = toSend.length <= 1
-              ? fileProgress
-              : (i + fileProgress) / toSend.length;
-          final bumped = (next - transmitProgress).abs() >= 0.01 ||
-              status != transmitStatus ||
-              error != null;
-          transmitStatus = status;
-          transmitProgress = next;
-          if (error != null && error.isNotEmpty) lastError = error;
-          if (bumped) notifyListeners();
+        port: job.port,
+        passiveMode: job.passive,
+        cancelToken: _ftpCancelToken,
+        onProgress: (status, progress, progressError) {
+          if (ftpPreviewPath != path) return;
+          final value = progress.clamp(0.0, 1.0);
+          ftpActiveProgress[path] = value;
+          ftpFileProgress = value;
+          if (progressError != null && progressError.isNotEmpty) {
+            _ftpSessionError = progressError;
+          }
+          _publishFtpProgress();
         },
       );
-      if (result.success) {
-        ok++;
+      final cancelled = _ftpUserCancelled ||
+          _ftpCancelToken?.cancelled == true ||
+          result.error == 'Cancelled';
+      success = result.success && !cancelled;
+      if (success) {
+        _ftpSessionOk++;
         sentImages.add(path);
         savedImages.add(path);
+      } else if (!cancelled) {
+        error = result.details ?? result.error ?? 'Upload failed';
+        _ftpSessionError = error;
       } else {
-        lastError = result.details ?? result.error ?? 'Upload failed';
+        error = 'Cancelled';
       }
-      await _recordFtpHistory(
-        FtpHistoryEntry(
-          at: DateTime.now(),
-          fileName: p.basename(path),
-          path: path,
-          profile: profileName ?? '',
-          success: result.success,
-          error: result.success ? null : lastError,
-        ),
-      );
+      if (!cancelled) {
+        await _recordFtpHistory(
+          FtpHistoryEntry(
+            at: DateTime.now(),
+            fileName: p.basename(path),
+            path: path,
+            profile: job.profileName,
+            success: success,
+            error: success ? null : error,
+          ),
+        );
+      }
+    } finally {
+      ftpActiveProgress.remove(path);
+      _ftpSessionDone++;
+      if (_ftpSessionOpen) _publishFtpProgress(force: true);
     }
+  }
 
-    lastSentLabel = _formatTime(DateTime.now());
-    queuedCount = savedNotSentCount;
+  void cancelFtp() {
+    if (!_ftpSessionOpen && !transmitting && _ftpWait.isEmpty) return;
+    _ftpUserCancelled = true;
+    _ftpWait.clear();
+    _ftpCancelToken?.cancel();
+    statusMessage = 'Cancelling FTP…';
+    notifyListeners();
+  }
+
+  void _finishFtpSession() {
+    final total = _ftpSessionTotal;
+    final ok = _ftpSessionOk;
+    final cancelled = _ftpUserCancelled;
+    final lastError = _ftpSessionError;
+    final copyError = _ftpCopyError;
+    final duplicateFolder = _ftpSessionDuplicateFolder;
+    _ftpSessionOpen = false;
+    _ftpSessionTotal = 0;
+    _ftpSessionDone = 0;
+    _ftpSessionOk = 0;
+    _ftpSessionError = null;
+    _ftpCopyError = null;
+    _ftpSessionDuplicateFolder = '';
+    _ftpUserCancelled = false;
+    _ftpCancelToken = null;
+    ftpActiveProgress.clear();
+    ftpPreviewPath = null;
+    ftpFileProgress = 0;
     transmitting = false;
-    transmittingPath = null;
     transmitProgress = 0;
     transmitStatus = null;
+    lastSentLabel = _formatTime(DateTime.now());
+    queuedCount = savedNotSentCount;
     final copyNote = copyError == null
         ? (duplicateFolder.trim().isEmpty ? '' : ' · copy saved')
         : ' · copy failed: $copyError';
-    if (ok == toSend.length) {
-      statusMessage = (toSend.length == 1
-              ? 'FTP complete'
-              : 'Sent $ok / ${toSend.length}') +
-          copyNote;
+    if (cancelled) {
+      statusMessage = ok == 0 ? 'FTP cancelled' : 'FTP cancelled · sent $ok';
+    } else if (ok == total) {
+      statusMessage =
+          (total == 1 ? 'FTP complete' : 'Sent $ok / $total') + copyNote;
     } else if (ok == 0) {
       statusMessage =
           (lastError == null ? 'FTP failed' : 'FTP failed: $lastError') +
               copyNote;
     } else {
-      statusMessage = 'Sent $ok / ${toSend.length}'
+      statusMessage = 'Sent $ok / $total'
           '${lastError == null ? '' : ' — $lastError'}'
           '$copyNote';
     }
     notifyListeners();
+    if (!cancelled && ok > 0) unawaited(FtpCompleteSound.play());
   }
 
   String _formatTime(DateTime dt) {

@@ -10,6 +10,7 @@ import '../services/mlb_inning_feature_gate.dart';
 import '../services/mlb_inning_from_timestamp_service.dart';
 import '../services/api_manager.dart';
 import '../services/roster_history_service.dart';
+import '../services/ftp_complete_sound.dart';
 import '../services/ftpclient_service.dart';
 import '../services/camera_serial_service.dart';
 import 'unknown_serial_dialog.dart';
@@ -18345,6 +18346,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
         if (widget.onImageUploaded != null && widget.currentImagePath != null) {
           widget.onImageUploaded!(widget.currentImagePath!);
         }
+        unawaited(FtpCompleteSound.play());
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

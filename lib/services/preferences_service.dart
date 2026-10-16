@@ -101,6 +101,9 @@ class PreferencesService {
   static const String _keyHiddenCategories = 'hidden_categories';
   /// Caption V2 verb list ordering: alphabetical | mostUsed | custom.
   static const String _keyVerbSortMode = 'verb_sort_mode';
+  static const String _keyVerbMultiOpen = 'verb_multi_open';
+  static const String _keyVerbCascadeLimit = 'verb_cascade_limit';
+  static const String _keyVerbFontStep = 'verb_font_step';
   /// Per-sport map of verb key → usage count (synced via user Firebase prefs).
   static const String _keyVerbUsageCounts = 'verb_usage_counts';
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
@@ -1605,6 +1608,43 @@ class PreferencesService {
   Future<void> saveVerbSortMode(VerbSortMode mode) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keyVerbSortMode, mode.storageValue);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<bool> getVerbMultiOpen() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyVerbMultiOpen) ?? false;
+  }
+
+  Future<void> saveVerbMultiOpen(bool value) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyVerbMultiOpen, value);
+    _afterLocalPreferencesChanged();
+  }
+
+  /// How many verb categories can stay open. Missing value keeps the old
+  /// on/off toggle: off is 1, on is every category.
+  Future<int> getVerbCascadeLimit() async {
+    final prefs = await _getPrefs();
+    final stored = prefs.getInt(_keyVerbCascadeLimit);
+    if (stored != null && stored >= 1) return stored;
+    return (prefs.getBool(_keyVerbMultiOpen) ?? false) ? 99 : 1;
+  }
+
+  Future<void> saveVerbCascadeLimit(int value) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(_keyVerbCascadeLimit, value < 1 ? 1 : value);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<int> getVerbFontStep() async {
+    final prefs = await _getPrefs();
+    return prefs.getInt(_keyVerbFontStep) ?? 0;
+  }
+
+  Future<void> saveVerbFontStep(int step) async {
+    final prefs = await _getPrefs();
+    await prefs.setInt(_keyVerbFontStep, step);
     _afterLocalPreferencesChanged();
   }
 

@@ -34,6 +34,7 @@ class CaptionStrip extends StatelessWidget {
     this.fullCaption,
     this.highlightPhrases = const [],
     this.provenanceSpans = const [],
+    this.unmatchedTip,
     this.onChipTap,
     this.inningLabel,
     this.timingUnitLabel = 'Inning',
@@ -95,6 +96,9 @@ class CaptionStrip extends StatelessWidget {
 
   /// Phrases with hover tips explaining where caption pieces came from.
   final List<CaptionProvenanceSpan> provenanceSpans;
+
+  /// Hover tip for caption text that is not covered by [provenanceSpans].
+  final String? unmatchedTip;
 
   final ValueChanged<String>? onChipTap;
 
@@ -251,6 +255,7 @@ class CaptionStrip extends StatelessWidget {
               fontSize: captionSize,
               highlightPhrases: highlightPhrases,
               provenanceSpans: provenanceSpans,
+              unmatchedTip: unmatchedTip,
               onChanged: onCaptionChanged!,
             )
           : fullCaption != null && fullCaption!.trim().isNotEmpty
@@ -264,6 +269,7 @@ class CaptionStrip extends StatelessWidget {
                     provenanceColor: t.accent,
                     tokens: t,
                     interactiveTips: true,
+                    unmatchedTip: unmatchedTip,
                   ),
                 )
               : Wrap(
@@ -350,6 +356,7 @@ class _CaptionEditor extends StatefulWidget {
     this.fontSize = 17,
     this.highlightPhrases = const [],
     this.provenanceSpans = const [],
+    this.unmatchedTip,
   });
 
   final String value;
@@ -359,6 +366,7 @@ class _CaptionEditor extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final List<String> highlightPhrases;
   final List<CaptionProvenanceSpan> provenanceSpans;
+  final String? unmatchedTip;
 
   @override
   State<_CaptionEditor> createState() => _CaptionEditorState();
@@ -410,8 +418,16 @@ class _CaptionEditorState extends State<_CaptionEditor> {
     );
     final text = _controller.text;
 
+    // Typing stays plain text. Colours and source tips return when focus leaves.
+    if (_focusNode.hasFocus) {
+      return _plainField(baseStyle, t);
+    }
+
+    final showRich = text.trim().isNotEmpty &&
+        (_hasAnnotations || (widget.unmatchedTip?.trim().isNotEmpty ?? false));
+
     // Unfocused: show tip-able highlights. Tap/focus switches to the editor.
-    if (!_focusNode.hasFocus && _hasAnnotations && text.trim().isNotEmpty) {
+    if (showRich) {
       return Focus(
         focusNode: _focusNode,
         child: GestureDetector(
@@ -427,22 +443,25 @@ class _CaptionEditorState extends State<_CaptionEditor> {
               provenanceColor: t.accent,
               tokens: t,
               interactiveTips: true,
+              unmatchedTip: widget.unmatchedTip,
             ),
           ),
         ),
       );
     }
 
-    final field = TextField(
+    return _plainField(baseStyle, t);
+  }
+
+  Widget _plainField(TextStyle baseStyle, FfTokens t) {
+    return TextField(
       controller: _controller,
       focusNode: _focusNode,
       maxLines: null,
       minLines: 1,
       keyboardType: TextInputType.multiline,
       textAlignVertical: TextAlignVertical.top,
-      style: _hasAnnotations
-          ? baseStyle.copyWith(color: Colors.transparent)
-          : baseStyle,
+      style: baseStyle,
       cursorColor:
           widget.highlightPhrases.isNotEmpty ? FfTokens.firebar : t.accent,
       mouseCursor: SystemMouseCursors.text,
@@ -454,30 +473,10 @@ class _CaptionEditorState extends State<_CaptionEditor> {
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
         contentPadding: EdgeInsets.zero,
-        hintText: _hasAnnotations ? null : widget.hintText,
+        hintText: widget.hintText,
         hintStyle: baseStyle.copyWith(color: t.textSecondary),
       ),
       onChanged: widget.onChanged,
-    );
-    if (!_hasAnnotations) return field;
-    return Stack(
-      children: [
-        IgnorePointer(
-          child: Text.rich(
-            _captionAnnotatedSpan(
-              text,
-              firebarPhrases: widget.highlightPhrases,
-              provenance: widget.provenanceSpans,
-              base: baseStyle,
-              firebarColor: FfTokens.firebar,
-              provenanceColor: t.accent,
-              tokens: t,
-              interactiveTips: false,
-            ),
-          ),
-        ),
-        field,
-      ],
     );
   }
 }
@@ -488,20 +487,14 @@ class _CaptionAnnoRange {
     required this.end,
     this.firebar = false,
     this.tip,
+    this.fill,
   });
 
   final int start;
   final int end;
   final bool firebar;
   final String? tip;
-}
-
-bool _hotTip(String? tip) {
-  if (tip == null || tip.isEmpty) return false;
-  final lower = tip.toLowerCase();
-  return lower.startsWith('verb') ||
-      lower.contains('user input') ||
-      lower.contains('text recognition');
+  final Color? fill;
 }
 
 TextSpan _captionAnnotatedSpan(
@@ -513,6 +506,7 @@ TextSpan _captionAnnotatedSpan(
   required Color provenanceColor,
   required FfTokens tokens,
   required bool interactiveTips,
+  String? unmatchedTip,
 }) {
   final ranges = <_CaptionAnnoRange>[];
   for (final phrase in firebarPhrases) {
@@ -540,11 +534,31 @@ TextSpan _captionAnnotatedSpan(
         start: index,
         end: index + phrase.length,
         tip: span.tip,
+        fill: span.background,
       ));
       from = index + phrase.length;
     }
   }
-  if (ranges.isEmpty) return TextSpan(text: text, style: base);
+  if (ranges.isEmpty) {
+    final tip = unmatchedTip?.trim() ?? '';
+    if (!interactiveTips || tip.isEmpty || text.isEmpty) {
+      return TextSpan(text: text, style: base);
+    }
+    return TextSpan(
+      style: base,
+      children: [
+        WidgetSpan(
+          alignment: PlaceholderAlignment.baseline,
+          baseline: TextBaseline.alphabetic,
+          child: _ProvenanceTip(
+            tip: tip,
+            tokens: tokens,
+            child: Text(text, style: base),
+          ),
+        ),
+      ],
+    );
+  }
 
   ranges.sort((a, b) {
     final byStart = a.start.compareTo(b.start);
@@ -569,7 +583,24 @@ TextSpan _captionAnnotatedSpan(
       end: prev.end > range.end ? prev.end : range.end,
       firebar: prev.firebar || range.firebar,
       tip: tip.isEmpty ? null : tip,
+      fill: prev.fill ?? range.fill,
     ));
+  }
+
+  InlineSpan piece(String phrase, {String? tip, TextStyle? style}) {
+    final painted = style ?? base;
+    if (interactiveTips && tip != null && tip.isNotEmpty && phrase.isNotEmpty) {
+      return WidgetSpan(
+        alignment: PlaceholderAlignment.baseline,
+        baseline: TextBaseline.alphabetic,
+        child: _ProvenanceTip(
+          tip: tip,
+          tokens: tokens,
+          child: Text(phrase, style: painted),
+        ),
+      );
+    }
+    return TextSpan(text: phrase, style: painted);
   }
 
   final children = <InlineSpan>[];
@@ -577,36 +608,35 @@ TextSpan _captionAnnotatedSpan(
   for (final range in merged) {
     if (range.start < cursor) continue;
     if (range.start > cursor) {
-      children.add(TextSpan(text: text.substring(cursor, range.start)));
+      children.add(piece(
+        text.substring(cursor, range.start),
+        tip: unmatchedTip,
+      ));
     }
     final phrase = text.substring(range.start, range.end);
-    final style = range.firebar || _hotTip(range.tip)
-        ? base.copyWith(
-            backgroundColor: provenanceColor.withValues(alpha: 0.14),
-          )
-        : base.copyWith(
-            decoration: TextDecoration.underline,
-            decorationColor: tokens.inputBorder,
-            decorationThickness: 1,
-          );
-    if (interactiveTips && range.tip != null && range.tip!.isNotEmpty) {
-      children.add(WidgetSpan(
-        alignment: PlaceholderAlignment.baseline,
-        baseline: TextBaseline.alphabetic,
-        child: _ProvenanceTip(
-          tip: range.tip!,
-          tokens: tokens,
-          child: Text(phrase, style: style),
-        ),
-      ));
+    final TextStyle style;
+    if (range.firebar) {
+      style = base.copyWith(color: firebarColor);
+    } else if (range.fill != null) {
+      style = base.copyWith(
+        backgroundColor: range.fill!.withValues(alpha: 0.32),
+      );
+    } else if (range.tip != null) {
+      style = base.copyWith(
+        decoration: TextDecoration.underline,
+        decorationColor: provenanceColor.withValues(alpha: 0.55),
+        decorationThickness: 1,
+      );
     } else {
-      children.add(TextSpan(text: phrase, style: style));
+      style = base;
     }
+    children.add(piece(phrase, tip: range.tip, style: style));
     cursor = range.end;
   }
   if (cursor < text.length) {
-    children.add(TextSpan(text: text.substring(cursor)));
+    children.add(piece(text.substring(cursor), tip: unmatchedTip));
   }
+  if (children.isEmpty) return TextSpan(text: text, style: base);
   return TextSpan(style: base, children: children);
 }
 

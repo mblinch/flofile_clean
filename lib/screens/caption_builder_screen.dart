@@ -27,6 +27,7 @@ import '../utils/image_file_ready.dart';
 
 import '../widgets/metadata_popup_dialog.dart';
 import '../services/api_manager.dart';
+import '../services/ftp_complete_sound.dart';
 import '../services/mlb_api_service.dart'; // For Player model
 import '../caption_style/game_info.dart';
 import '../services/iptc_template_apply_service.dart';
@@ -245,7 +246,8 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
   final Map<String, double> _uploadProgress = {};
   // Track queued uploads
   final Set<String> _queuedUploads = {};
-  // Track currently uploading images (max 2)
+  bool _ftpBatchSucceeded = false;
+  // Track currently uploading images (one at a time)
   final Set<String> _currentlyUploading = {};
   // Request id for centering selected thumbnail on arrow navigation
   int _thumbCenterRequestId = 0;
@@ -4018,7 +4020,14 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
     _processUploadQueue();
   }
 
-  // Process the upload queue (max 2 concurrent uploads)
+  void _noteFtpQueueSettled() {
+    if (_currentlyUploading.isNotEmpty || _queuedUploads.isNotEmpty) return;
+    final play = _ftpBatchSucceeded;
+    _ftpBatchSucceeded = false;
+    if (play && mounted) unawaited(FtpCompleteSound.play());
+  }
+
+  // Process the upload queue (one at a time).
   void _processUploadQueue() {
     // Get the caption fields widget state to access FTP functionality
     dynamic captionState = _captionFieldsKey2.currentState;
@@ -4027,8 +4036,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
       return;
     }
 
-    // Process queue while we have capacity (max 2 concurrent uploads)
-    while (_currentlyUploading.length < 2 && _queuedUploads.isNotEmpty) {
+    while (_currentlyUploading.isEmpty && _queuedUploads.isNotEmpty) {
       final imagePath = _queuedUploads.first;
       _queuedUploads.remove(imagePath);
       _currentlyUploading.add(imagePath);
@@ -4051,10 +4059,12 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
           _uploadProgress[imagePath] =
               1.0; // Set to 1.0 to show "Upload complete"
         });
+        _ftpBatchSucceeded = true;
         print('DEBUG: Successfully FTPd and marked: $imagePath');
 
         // Process next item in queue
         _processUploadQueue();
+        _noteFtpQueueSettled();
       }).catchError((error) {
         // Upload failed
         setState(() {
@@ -4072,6 +4082,7 @@ class _CaptionBuilderScreenState extends State<CaptionBuilderScreen> {
 
         // Process next item in queue
         _processUploadQueue();
+        _noteFtpQueueSettled();
       });
     }
   }

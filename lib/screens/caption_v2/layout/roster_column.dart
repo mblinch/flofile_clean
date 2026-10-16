@@ -8,6 +8,7 @@ import '../data/caption_v2_controller.dart';
 import '../widgets/custom_name_entry.dart';
 import '../widgets/pinned_player_bar.dart';
 import '../widgets/team_players_button.dart';
+import '../widgets/use_last_clicked_bar.dart';
 import '../widgets/player_row.dart';
 import '../widgets/quiet_filter_field.dart';
 import 'caption_v2_verb_editor.dart';
@@ -273,6 +274,12 @@ class _RosterColumnState extends State<RosterColumn> {
                             );
                           }
                         },
+                      ),
+                    if (widget.isHome && c.hasLastClicked)
+                      UseLastClickedBar(
+                        tokens: t,
+                        onTap: c.useLastClicked,
+                        onClear: c.clearLastClicked,
                       ),
                     Expanded(
                       child: LayoutBuilder(

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../caption_style/verb_sort_mode.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/ff_menu.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
 import '../widgets/base_row.dart';
@@ -25,6 +26,19 @@ List<String> verbCategoriesForDisplay(Iterable<String> categories) {
 
 bool verbCategoryOrderLocked(String category) =>
     category == 'Favorites' || category == 'All';
+
+/// Drop the oldest open extras so at most [limit] categories stay open.
+/// The current category is not in [extras].
+void trimOpenVerbCategories(Set<String> extras, int limit) {
+  final maxExtras = limit - 1;
+  if (maxExtras <= 0) {
+    extras.clear();
+    return;
+  }
+  while (extras.length > maxExtras) {
+    extras.remove(extras.first);
+  }
+}
 
 /// Header chrome that accepts a category drop. Favorites and All are fixed.
 class VerbCategoryDropTarget extends StatelessWidget {
@@ -138,6 +152,7 @@ class DefaultVerbAccordion extends StatefulWidget {
 
 class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
   late String _openCategory;
+  final Set<String> _extraOpen = {};
 
   CaptionV2Controller get controller => widget.controller;
 
@@ -190,10 +205,51 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
     return category;
   }
 
+  bool _isOpen(String category) {
+    if (!controller.verbMultiOpen) return category == _openCategory;
+    return category == _openCategory || _extraOpen.contains(category);
+  }
+
+  void _trimExtras() {
+    trimOpenVerbCategories(
+      _extraOpen,
+      controller.cascadeLimitFor(_categories.length),
+    );
+  }
+
   void _open(String category) {
     if (category == _openCategory) return;
-    setState(() => _openCategory = category);
+    setState(() {
+      if (controller.verbMultiOpen) _extraOpen.add(_openCategory);
+      _extraOpen.remove(category);
+      _openCategory = category;
+      _trimExtras();
+    });
     controller.setVerbCategory(category);
+  }
+
+  void _toggle(String category) {
+    if (!controller.verbMultiOpen) {
+      _open(category);
+      return;
+    }
+    setState(() {
+      if (_extraOpen.contains(category)) {
+        _extraOpen.remove(category);
+        return;
+      }
+      if (category != _openCategory) {
+        _extraOpen.add(category);
+        _trimExtras();
+        return;
+      }
+      if (_extraOpen.isEmpty) return;
+      _openCategory = _extraOpen.first;
+      _extraOpen.remove(_openCategory);
+    });
+    if (controller.verbCategory != _openCategory) {
+      controller.setVerbCategory(_openCategory);
+    }
   }
 
   void _moveVerbSelection(int delta) {
@@ -270,6 +326,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
 
   @override
   Widget build(BuildContext context) {
+    _trimExtras();
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final categories = _categories;
     final openVerbs = _verbsFor(_openCategory);
@@ -284,8 +341,9 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             child: Row(
               children: [
-                const Spacer(),
                 _VerbSortMenu(controller: controller, tokens: t),
+                const Spacer(),
+                VerbMenuTools(controller: controller, tokens: t),
               ],
             ),
           ),
@@ -295,16 +353,15 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final bodyH = constraints.maxHeight;
-              final headerTotal =
-                  categories.length * DefaultVerbAccordion.headerH;
-              var verbRowH = DefaultVerbAccordion.verbRowH;
-              var headerH = DefaultVerbAccordion.headerH;
+              var verbRowH = DefaultVerbAccordion.verbRowH * controller.verbFontScale;
+              var headerH = DefaultVerbAccordion.headerH * controller.verbFontScale;
 
               // Tighten metrics when the body is short.
-              final worstOneUp = headerTotal + openVerbs.length * verbRowH;
+              final worstOneUp = headerH * categories.length +
+                  openVerbs.length * verbRowH;
               if (worstOneUp > bodyH && bodyH > 0) {
-                headerH = 28;
-                verbRowH = 20;
+                headerH = 28 * controller.verbFontScale;
+                verbRowH = 20 * controller.verbFontScale;
               }
 
               // Always show the pinned bar (title + verb on one row).
@@ -334,6 +391,45 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                 return true;
               }());
 
+              if (controller.verbMultiOpen) {
+                return Column(
+                  children: [
+                    _PinnedVerbSlot(
+                      height: pinnedH,
+                      tokens: t,
+                      controller: controller,
+                      verb: pinned,
+                      onEditVerb: widget.onEditVerb,
+                      onVerbArmed: widget.onVerbArmed,
+                    ),
+                    Expanded(
+                      child: ListView(
+                        children: [
+                          for (final category in categories)
+                            _AccordionSection(
+                              category: category,
+                              displayName: _displayName(category),
+                              open: _isOpen(category),
+                              headerH: headerH,
+                              verbRowH: verbRowH * controller.verbFontScale,
+                              verbs: _isOpen(category)
+                                  ? _verbsFor(category)
+                                  : const <EffectiveVerb>[],
+                              twoUp: false,
+                              rearrangeable: false,
+                              tokens: t,
+                              controller: controller,
+                              onOpen: () => _toggle(category),
+                              onEditVerb: widget.onEditVerb,
+                              onVerbArmed: widget.onVerbArmed,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              }
+
               return Column(
                 children: [
                   _PinnedVerbSlot(
@@ -357,7 +453,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                         rearrangeable: false,
                         tokens: t,
                         controller: controller,
-                        onOpen: () => _open(category),
+                        onOpen: () => _toggle(category),
                         onEditVerb: widget.onEditVerb,
                         onVerbArmed: widget.onVerbArmed,
                       )
@@ -369,7 +465,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                           open: true,
                           scrollBody: true,
                           headerH: headerH,
-                          verbRowH: verbRowH,
+                          verbRowH: verbRowH * controller.verbFontScale,
                           verbs: openVerbs,
                           // All is the full catalog — always one scrolling column.
                           twoUp: category == 'All' ||
@@ -382,7 +478,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                                   category != 'All',
                           tokens: t,
                           controller: controller,
-                          onOpen: () => _open(category),
+                          onOpen: () => _toggle(category),
                           onEditVerb: widget.onEditVerb,
                           onVerbArmed: widget.onVerbArmed,
                         ),
@@ -393,6 +489,165 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class VerbMenuTools extends StatelessWidget {
+  const VerbMenuTools({
+    required this.controller,
+    required this.tokens,
+    this.large = false,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+  final bool large;
+
+  @override
+  Widget build(BuildContext context) {
+    final atMin =
+        controller.verbFontStep <= CaptionV2Controller.verbFontStepMin;
+    final atMax =
+        controller.verbFontStep >= CaptionV2Controller.verbFontStepMax;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _VerbToolButton(
+          key: const ValueKey('verb-font-smaller'),
+          tooltip: 'Smaller verb text',
+          icon: PhosphorIconsRegular.minus,
+          enabled: !atMin,
+          tokens: tokens,
+          box: large ? 26 : 18,
+          iconSize: large ? 14 : 12,
+          onTap: () => controller.nudgeVerbFont(-1),
+        ),
+        _VerbToolButton(
+          key: const ValueKey('verb-font-larger'),
+          tooltip: 'Larger verb text',
+          icon: PhosphorIconsRegular.plus,
+          enabled: !atMax,
+          tokens: tokens,
+          box: large ? 26 : 18,
+          iconSize: large ? 14 : 12,
+          onTap: () => controller.nudgeVerbFont(1),
+        ),
+        _VerbCascadeLimitMenu(
+          controller: controller,
+          tokens: tokens,
+          large: large,
+        ),
+      ],
+    );
+  }
+}
+
+class _VerbCascadeLimitMenu extends StatelessWidget {
+  const _VerbCascadeLimitMenu({
+    required this.controller,
+    required this.tokens,
+    this.large = false,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+  final bool large;
+
+  Future<void> _open(BuildContext context, int max, int current) async {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final picked = await showFfMenu<int>(
+      context: context,
+      anchorGlobal: origin & box.size,
+      width: 168,
+      scrollable: max > 8,
+      choices: [
+        for (var n = 1; n <= max; n++)
+          FfMenuChoice<int>(
+            value: n,
+            selected: current == n,
+            child: Text('$n'),
+            trailingBuilder: current == n
+                ? (context, close) => const PhosphorIcon(
+                      PhosphorIconsRegular.check,
+                      size: 14,
+                      color: FfTokens.sessionTx,
+                    )
+                : null,
+          ),
+      ],
+    );
+    final value = picked?.value;
+    if (value != null) controller.setVerbCascadeLimit(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = verbCategoriesForDisplay(controller.verbCategories).length;
+    final max = count < 1 ? 1 : count;
+    final current = controller.cascadeLimitFor(max);
+    final box = large ? 26.0 : 18.0;
+    return Tooltip(
+      message: 'Categories open at once',
+      child: InkWell(
+        onTap: () => _open(context, max, current),
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: box,
+          height: box,
+          child: Icon(
+            PhosphorIconsRegular.gearSix,
+            size: large ? 14 : 12,
+            color: tokens.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VerbToolButton extends StatelessWidget {
+  const _VerbToolButton({
+    super.key,
+    required this.tooltip,
+    required this.icon,
+    required this.tokens,
+    required this.onTap,
+    this.enabled = true,
+    this.selected = false,
+    this.box = 18,
+    this.iconSize = 12,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+  final bool enabled;
+  final bool selected;
+  final double box;
+  final double iconSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = !enabled
+        ? tokens.text.withValues(alpha: 0.28)
+        : selected
+            ? tokens.accent
+            : tokens.text.withValues(alpha: 0.72);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(4),
+        child: SizedBox(
+          width: box,
+          height: box,
+          child: Icon(icon, size: iconSize, color: color),
+        ),
+      ),
     );
   }
 }
@@ -516,6 +771,9 @@ class _AccordionSection extends StatelessWidget {
         label: displayName,
         open: open,
         height: headerH,
+        fontSize: DefaultVerbAccordion.verbFontSize *
+                controller.verbFontScale +
+            2,
         tokens: tokens,
         onTap: onOpen,
         gold: category == 'Favorites',
@@ -680,6 +938,7 @@ class _CategoryHeader extends StatefulWidget {
     required this.label,
     required this.open,
     required this.height,
+    required this.fontSize,
     required this.tokens,
     required this.onTap,
     this.gold = false,
@@ -689,6 +948,7 @@ class _CategoryHeader extends StatefulWidget {
   final String label;
   final bool open;
   final double height;
+  final double fontSize;
   final FfTokens tokens;
   final VoidCallback onTap;
   final bool gold;
@@ -707,7 +967,7 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
     final open = widget.open;
     final gold = widget.gold;
     final labelColor = gold
-        ? FfTokens.favorites
+        ? FfTokens.favoritesLight
         : (open ? t.text : t.textSecondary);
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -752,7 +1012,19 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                   maxLines: 1,
                   softWrap: false,
                   overflow: TextOverflow.ellipsis,
-                  style: FfTokens.categoryLabel(color: labelColor),
+                  style: FfTokens.categoryLabel(color: labelColor).copyWith(
+                    fontSize: widget.fontSize,
+                    shadows: [
+                      Shadow(
+                        color: labelColor.withValues(alpha: 0.75),
+                        blurRadius: 6,
+                      ),
+                      Shadow(
+                        color: labelColor.withValues(alpha: 0.4),
+                        blurRadius: 16,
+                      ),
+                    ],
+                  ),
                 ),
               ),
               if (widget.trailing != null) widget.trailing!,
@@ -817,6 +1089,7 @@ class _VerbBoard extends StatelessWidget {
               verb: verb,
               index: index,
               rowHeight: rowHeight,
+              gold: category == 'Favorites',
               tokens: tokens,
               onEditVerb: onEditVerb,
               onVerbArmed: onVerbArmed,
@@ -835,6 +1108,7 @@ class _VerbBoard extends StatelessWidget {
               verb: verbs[i],
               index: i,
               rowHeight: rowHeight,
+              gold: category == 'Favorites',
               tokens: tokens,
               onEditVerb: onEditVerb,
               onVerbArmed: onVerbArmed,
@@ -858,6 +1132,7 @@ class _VerbBoard extends StatelessWidget {
                   verb: left[i],
                   index: i,
                   rowHeight: rowHeight,
+                  gold: category == 'Favorites',
                   tokens: tokens,
                   onEditVerb: onEditVerb,
                   onVerbArmed: onVerbArmed,
@@ -874,6 +1149,7 @@ class _VerbBoard extends StatelessWidget {
                   verb: right[i],
                   index: mid + i,
                   rowHeight: rowHeight,
+                  gold: category == 'Favorites',
                   tokens: tokens,
                   onEditVerb: onEditVerb,
                   onVerbArmed: onVerbArmed,
@@ -896,6 +1172,7 @@ class _AccordionVerbRow extends StatefulWidget {
     required this.onEditVerb,
     this.onVerbArmed,
     this.showDragHandle = false,
+    this.gold = false,
   });
 
   final CaptionV2Controller controller;
@@ -906,6 +1183,7 @@ class _AccordionVerbRow extends StatefulWidget {
   final ValueChanged<String> onEditVerb;
   final VoidCallback? onVerbArmed;
   final bool showDragHandle;
+  final bool gold;
 
   @override
   State<_AccordionVerbRow> createState() => _AccordionVerbRowState();
@@ -996,8 +1274,11 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: FfTokens.rosterName(
-                          color: tokens.text,
+                          color: widget.gold ? FfTokens.gold : tokens.text,
                           selected: armed,
+                        ).copyWith(
+                          fontSize: DefaultVerbAccordion.verbFontSize *
+                              controller.verbFontScale,
                         ),
                       ),
                     ),

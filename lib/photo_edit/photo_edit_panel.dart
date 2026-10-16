@@ -347,7 +347,7 @@ class _PhotoEditSheet extends StatelessWidget {
         final canApply = path != null &&
             session.isDirty(path) &&
             !saving &&
-            !(controller.transmitting && controller.transmittingPath == path);
+            !controller.ftpUploadingPath(path);
         final controls = Padding(
           padding: EdgeInsets.fromLTRB(rail ? 12 : 12, rail ? 12 : 8, rail ? 12 : 8, rail ? 16 : 10),
           child: Column(

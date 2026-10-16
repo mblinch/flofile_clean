@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../utils/native_file_picker.dart';
+import 'dart:async';
+
+import '../services/ftp_complete_sound.dart';
 import '../services/ftpclient_service.dart';
 import 'app_styled_dialogs.dart';
 
@@ -102,6 +105,7 @@ class _FtpUploadWidgetState extends State<FtpUploadWidget> {
       });
 
       if (result.success) {
+        unawaited(FtpCompleteSound.play());
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Upload successful: ${result.details}'),

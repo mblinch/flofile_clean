@@ -139,6 +139,9 @@ class FfTokens extends ThemeExtension<FfTokens> {
   /// Favorites gold (stars, Admin badge) (--badge / --gold).
   static const favorites = gold;
 
+  /// Lighter gold for the Favorites category label.
+  static const favoritesLight = Color(0xFFF4E0A6);
+
   /// Favorites header fill.
   static const favoritesFill = Color(0x12E8C547); // rgba(232,197,71,0.07)
 

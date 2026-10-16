@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/app_styled_dialogs.dart';
 import '../../../widgets/ff_menu.dart';
 import '../../../widgets/oriented_file_preview.dart';
 import '../../../widgets/teal_action_button.dart';
@@ -150,7 +151,13 @@ Future<void> showCaptionV2PhotoMenu({
       ),
       const FfMenuChoice<_PhotoAction>.divider(),
       if (controller.ftpModeEnabled) ...[
-        if (sent)
+        if (targets.length > 1)
+          item(
+            _PhotoAction.ftp,
+            'FTP ${targets.length} images',
+            PhosphorIconsRegular.cloudArrowUp,
+          )
+        else if (sent)
           item(
             _PhotoAction.clearFtp,
             'Remove FTP Status',
@@ -208,7 +215,21 @@ Future<void> showCaptionV2PhotoMenu({
       await _openInPhotoshop(context, imagePath);
       break;
     case _PhotoAction.ftp:
-      await controller.transmitPath(imagePath);
+      if (targets.length > 1) {
+        final n = targets.length;
+        final ok = await showAppConfirmDialog(
+          context: context,
+          title: 'FTP $n images',
+          message: 'Upload $n selected photos.',
+          cancelLabel: 'Cancel',
+          confirmLabel: 'FTP',
+        );
+        if (ok == true && context.mounted) {
+          await controller.transmitPaths(targets);
+        }
+      } else {
+        await controller.transmitPath(imagePath);
+      }
       break;
     case _PhotoAction.clearFtp:
       controller.clearSentStatus(imagePath);

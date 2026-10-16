@@ -416,6 +416,41 @@ class _PhotoCard extends StatelessWidget {
     return longest < threshold;
   }
 
+  Widget _previewFor(BuildContext context, String path) {
+    final selected = controller.orderedSelectedImagePaths;
+    if (selected.length > 1) {
+      return _MultiPhotoPreview(
+        paths: selected.take(4).toList(growable: false),
+        extra: selected.length - 4,
+        tokens: tokens,
+        onSecondaryTapDown: (details) => showCaptionV2PhotoMenu(
+          context: context,
+          controller: controller,
+          imagePath: path,
+          position: details.globalPosition,
+          pasteTargets: selected,
+        ),
+      );
+    }
+    return _PhotoLoupePreview(
+      key: ValueKey(path),
+      path: path,
+      version: controller.imageContentStamp(path),
+      tokens: tokens,
+      controller: controller,
+      editSession: editSession,
+      ocrHover: ocrHover,
+      onOpenZoom: () => showCaptionV2Zoom(context, path),
+      onSecondaryTapDown: (details) => showCaptionV2PhotoMenu(
+        context: context,
+        controller: controller,
+        imagePath: path,
+        position: details.globalPosition,
+        pasteTargets: selected.length > 1 ? selected : null,
+      ),
+    );
+  }
+
   int? _largestPixel(String raw) {
     int? best;
     for (final match in RegExp(r'\d+').allMatches(raw)) {
@@ -430,6 +465,13 @@ class _PhotoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = _meta(const ['ImageWidth', 'ExifImageWidth']);
     final height = _meta(const ['ImageHeight', 'ExifImageHeight']);
+    final uploadPath = controller.ftpPreviewPath;
+    final shown = (uploadPath != null && uploadPath.isNotEmpty)
+        ? uploadPath
+        : path;
+    final shownIndex = shown == null
+        ? controller.currentIndex
+        : controller.imagePaths.indexOf(shown);
 
     return Container(
       decoration: BoxDecoration(
@@ -456,7 +498,7 @@ class _PhotoCard extends StatelessWidget {
                 children: [
                   ColoredBox(
                     color: FfTokens.photoHeader,
-                    child: path == null
+                    child: shown == null
                         ? Center(
                             child: TextButton(
                               onPressed: controller.pickImageFolder,
@@ -468,24 +510,12 @@ class _PhotoCard extends StatelessWidget {
                               ),
                             ),
                           )
-                        : _PhotoLoupePreview(
-                            path: path!,
-                            version: controller.imageContentStamp(path!),
-                            tokens: tokens,
-                            controller: controller,
-                            editSession: editSession,
-                            ocrHover: ocrHover,
-                            onOpenZoom: () => showCaptionV2Zoom(context, path!),
-                            onSecondaryTapDown: (details) =>
-                                showCaptionV2PhotoMenu(
-                              context: context,
-                              controller: controller,
-                              imagePath: path!,
-                              position: details.globalPosition,
-                            ),
+                        : _previewFor(
+                            context,
+                            shown,
                           ),
                   ),
-                  if (path != null) ...[
+                  if (shown != null) ...[
                     if (_playerTag(controller) != null)
                       Positioned(
                         top: 10,
@@ -543,7 +573,10 @@ class _PhotoCard extends StatelessWidget {
                       right: 12,
                       bottom: 12,
                       child: _PhotoFrameCounter(
-                        index: controller.currentIndex + 1,
+                        index: (shownIndex < 0
+                                ? controller.currentIndex
+                                : shownIndex) +
+                            1,
                         total: controller.imagePaths.length,
                         tokens: tokens,
                       ),
@@ -571,13 +604,12 @@ class _PhotoCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (path != null &&
-                      controller.transmitting &&
-                      controller.transmittingPath == path)
+                  if (shown != null &&
+                      controller.ftpPreviewPath == shown)
                     Positioned.fill(
                       child: IgnorePointer(
                         child: TransmitProgressOverlay(
-                          progress: controller.transmitProgress,
+                          progress: controller.ftpFileProgress,
                           status: controller.transmitStatus,
                           compact: true,
                         ),
@@ -599,8 +631,106 @@ class _PhotoCard extends StatelessWidget {
   }
 }
 
+class _MultiPhotoPreview extends StatelessWidget {
+  const _MultiPhotoPreview({
+    required this.paths,
+    required this.extra,
+    required this.tokens,
+    required this.onSecondaryTapDown,
+  });
+
+  final List<String> paths;
+  final int extra;
+  final FfTokens tokens;
+  final GestureTapDownCallback onSecondaryTapDown;
+
+  @override
+  Widget build(BuildContext context) {
+    final columns = paths.length <= 1 ? 1 : 2;
+    final top = paths.length <= columns ? paths : paths.sublist(0, columns);
+    final bottom =
+        paths.length <= columns ? const <String>[] : paths.sublist(columns);
+    return GestureDetector(
+      onSecondaryTapDown: onSecondaryTapDown,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: Column(
+              children: [
+                Expanded(child: _previewRow(top, columns: columns)),
+                if (bottom.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Expanded(child: _previewRow(bottom, columns: columns)),
+                ],
+              ],
+            ),
+          ),
+          if (extra > 0)
+            Positioned(
+              left: 12,
+              right: 12,
+              bottom: 12,
+              child: Center(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: tokens.bg.withValues(alpha: 0.78),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: tokens.divider),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    child: Text(
+                      'plus $extra more',
+                      style: TextStyle(
+                        fontFamily: FfTokens.labelFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: tokens.text,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _previewRow(List<String> row, {required int columns}) {
+    return Row(
+      children: [
+        for (var i = 0; i < columns; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(
+            child: i >= row.length
+                ? const SizedBox.shrink()
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: ColoredBox(
+                      color: tokens.sunken,
+                      child: OrientedFilePreview(
+                        path: row[i],
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _PhotoLoupePreview extends StatefulWidget {
   const _PhotoLoupePreview({
+    super.key,
     required this.path,
     required this.version,
     required this.tokens,
@@ -2138,6 +2268,10 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     setState(() => _columnCount = (current + delta).clamp(2, maxColumns));
   }
 
+  void _publishSelection() {
+    controller.noteImageSelectionChanged();
+  }
+
   void _selectThumbnail(List<String> paths, int index) {
     _focusNode.requestFocus();
     controller.setColumnFocus(3);
@@ -2159,6 +2293,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
           _selectedPaths.addAll(paths.sublist(start, end + 1));
         }
       });
+      _publishSelection();
       return;
     }
 
@@ -2169,11 +2304,13 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
         }
         if (!_selectedPaths.remove(path)) _selectedPaths.add(path);
       });
+      _publishSelection();
       return;
     }
 
     if (_selectedPaths.isNotEmpty) {
       setState(_selectedPaths.clear);
+      _publishSelection();
     }
     controller.goToIndex(controller.imagePaths.indexOf(path));
   }
@@ -2239,12 +2376,14 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
 
   void _endMarquee(PointerEvent event) {
     if (_marqueeStart == null) return;
+    final dragged = _marqueeDragging;
     setState(() {
       _marqueeStart = null;
       _marqueeCurrent = null;
       _marqueeDragging = false;
       _marqueeBase = {};
     });
+    if (dragged) _publishSelection();
   }
 
   Future<void> _showThumbnailMenu(
@@ -2258,6 +2397,7 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
     final targets = useSelection ? _selectedPaths.toList() : <String>[path];
     if (!useSelection && _selectedPaths.isNotEmpty) {
       setState(_selectedPaths.clear);
+      _publishSelection();
     }
     await showCaptionV2PhotoMenu(
       context: context,
@@ -2294,8 +2434,10 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
         if (current >= 0) _selectedPaths.add(paths[current]);
         _selectedPaths.add(paths[next]);
       });
+      _publishSelection();
     } else if (_selectedPaths.isNotEmpty) {
       setState(_selectedPaths.clear);
+      _publishSelection();
     }
     controller.goToIndex(controller.imagePaths.indexOf(paths[next]));
     return KeyEventResult.handled;
@@ -2591,15 +2733,15 @@ class _ThumbnailGridState extends State<_ThumbnailGrid> {
                                                               _thumbCacheWidth,
                                                         ),
                                                         if (controller
-                                                                .transmitting &&
-                                                            controller
-                                                                    .transmittingPath ==
-                                                                path)
+                                                            .ftpUploadingPath(
+                                                                path))
                                                           Positioned.fill(
                                                             child:
                                                                 TransmitProgressOverlay(
                                                               progress: controller
-                                                                  .transmitProgress,
+                                                                      .ftpActiveProgress[
+                                                                  path] ??
+                                                                  0,
                                                               status: controller
                                                                   .transmitStatus,
                                                               compact: true,
@@ -3655,10 +3797,9 @@ class MobileFrameThumb extends StatelessWidget {
                         fit: BoxFit.cover,
                         cacheWidth: 88,
                       ),
-                      if (controller.transmitting &&
-                          controller.transmittingPath == path)
+                      if (controller.ftpUploadingPath(path))
                         TransmitProgressOverlay(
-                          progress: controller.transmitProgress,
+                          progress: controller.ftpActiveProgress[path] ?? 0,
                           status: controller.transmitStatus,
                           compact: true,
                         ),

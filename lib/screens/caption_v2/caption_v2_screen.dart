@@ -735,6 +735,29 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   /// Save current (with burst UI if needed), start FTP, and move on
   /// without waiting for the upload to finish.
   Future<void> _saveAndFtpCurrent() async {
+    final selected = _controller.orderedSelectedImagePaths;
+    if (selected.length > 1) {
+      final n = selected.length;
+      final ok = await showAppConfirmDialog(
+        context: context,
+        title: 'FTP $n images',
+        message: 'Upload $n selected photos.',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'FTP',
+      );
+      if (ok != true || !mounted) return;
+      if (_saveInFlight) return;
+      _saveInFlight = true;
+      try {
+        final result = await _controller.savePaths(selected);
+        if (!mounted) return;
+        unawaited(_transmitSaved(result));
+        _controller.setSelectedImagePaths(result.failedPaths);
+      } finally {
+        _saveInFlight = false;
+      }
+      return;
+    }
     await _saveInDirection(next: true, transmit: true);
   }
 
@@ -1283,7 +1306,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             },
           ),
           TransmitIntent: CaptionV2GuardedAction<TransmitIntent>(
-            enabledWhen: () => c.ftpModeEnabled && !c.transmitting,
+            enabledWhen: () => c.ftpModeEnabled,
             onInvoke: (_) {
               unawaited(_saveAndFtpCurrent());
               return null;
@@ -1566,12 +1589,13 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         onSaveNext: _saveAndNext,
         onTransmit: () => unawaited(_saveAndFtpCurrent()),
         transmitLabel: c.ftpButtonLabel,
-        transmitEnabled: !c.transmitting &&
-            (c.savedNotSentCount > 0 || c.currentPath != null),
+        transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
         showTransmit: c.ftpModeEnabled,
         ftpActive: c.transmitting,
-        ftpProgress: c.transmitProgress,
-        ftpThumbPath: c.transmittingPath,
+        ftpProgress: c.ftpFileProgress,
+        ftpThumbPath: c.ftpPreviewPath,
+        onFtpCancel: c.transmitting ? c.cancelFtp : null,
+        ftpQueued: c.transmitting ? c.queuedCount : 0,
         onFtpHistory: c.ftpModeEnabled
             ? () => showFtpHistoryDialog(context, c)
             : null,
@@ -1635,6 +1659,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       fullCaption: captionText,
       highlightPhrases: c.firebarInsertedHighlights,
       provenanceSpans: c.captionProvenanceSpans,
+      unmatchedTip: c.captionUnmatchedTip,
       captionHint: hasLiveCaption
           ? 'Caption will appear here as you add players and a verb.'
           : 'No caption embedded in image.',

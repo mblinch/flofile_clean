@@ -19,6 +19,25 @@ class FtpUploadResult {
 typedef FtpProgressCallback = void Function(
     String status, double progress, String? error);
 
+/// Aborts an in-flight FTP upload. Closing the sockets unblocks the send.
+class FtpCancelToken {
+  bool cancelled = false;
+  final List<void Function()> _hooks = [];
+
+  void cancel() {
+    if (cancelled) return;
+    cancelled = true;
+    for (final hook in List<void Function()>.of(_hooks)) {
+      hook();
+    }
+  }
+
+  void attach(void Function() hook) {
+    _hooks.add(hook);
+    if (cancelled) hook();
+  }
+}
+
 /// Remote (and duplicate-copy) file name. An empty rename keeps the original.
 /// A rename without an extension keeps the source extension.
 String ftpTransferFileName(String sourcePath, String renameAs) {
@@ -144,9 +163,17 @@ class FtpClientService {
     int port = 21,
     bool passiveMode = true,
     FtpProgressCallback? onProgress,
+    FtpCancelToken? cancelToken,
   }) async {
     FtpUploadResult? last;
     for (var attempt = 0; attempt < 3; attempt++) {
+      if (cancelToken?.cancelled == true) {
+        return FtpUploadResult(
+          success: false,
+          error: 'Cancelled',
+          details: 'FTP cancelled',
+        );
+      }
       last = await _uploadOnce(
         host: host,
         username: username,
@@ -156,7 +183,15 @@ class FtpClientService {
         port: port,
         passiveMode: passiveMode,
         onProgress: onProgress,
+        cancelToken: cancelToken,
       );
+      if (cancelToken?.cancelled == true) {
+        return FtpUploadResult(
+          success: false,
+          error: 'Cancelled',
+          details: 'FTP cancelled',
+        );
+      }
       if (last.success) return last;
       final details = last.details ?? '';
       final retryable = details.contains('TimeoutException') ||
@@ -184,10 +219,26 @@ class FtpClientService {
     required int port,
     required bool passiveMode,
     FtpProgressCallback? onProgress,
+    FtpCancelToken? cancelToken,
   }) async {
     Socket? controlSocket;
     RawSocket? dataSocket;
     _FtpControlSession? session;
+    cancelToken?.attach(() {
+      try {
+        controlSocket?.destroy();
+      } catch (_) {}
+      try {
+        dataSocket?.close();
+      } catch (_) {}
+    });
+    if (cancelToken?.cancelled == true) {
+      return FtpUploadResult(
+        success: false,
+        error: 'Cancelled',
+        details: 'FTP cancelled',
+      );
+    }
 
     try {
       if (!passiveMode) {
@@ -306,9 +357,14 @@ class FtpClientService {
 
       final fileBytes = await localFile.readAsBytes();
       print('FTP: Sending ${fileBytes.length} bytes...');
-      await _writeFtpData(dataSocket, fileBytes, (progress) {
-        onProgress?.call('Uploading file...', progress, null);
-      });
+      await _writeFtpData(
+        dataSocket,
+        fileBytes,
+        (progress) {
+          onProgress?.call('Uploading file...', progress, null);
+        },
+        cancelToken: cancelToken,
+      );
       await dataSocket.close();
       dataSocket = null;
 
@@ -362,9 +418,13 @@ class FtpClientService {
 Future<void> _writeFtpData(
   RawSocket socket,
   List<int> bytes,
-  void Function(double progress) onProgress,
-) async {
+  void Function(double progress) onProgress, {
+  FtpCancelToken? cancelToken,
+}) async {
   final total = bytes.length;
+  if (cancelToken?.cancelled == true) {
+    throw StateError('FTP cancelled');
+  }
   if (total == 0) {
     onProgress(1);
     return;
@@ -379,6 +439,9 @@ Future<void> _writeFtpData(
   socket.writeEventsEnabled = true;
   try {
     await for (final event in events.stream) {
+      if (cancelToken?.cancelled == true) {
+        throw StateError('FTP cancelled');
+      }
       if (event == RawSocketEvent.closed ||
           event == RawSocketEvent.readClosed) {
         throw StateError('FTP data connection closed');

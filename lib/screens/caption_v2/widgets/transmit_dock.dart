@@ -36,6 +36,8 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.ftpProgress,
     this.ftpActive = false,
     this.ftpThumbPath,
+    this.ftpQueued = 0,
+    this.onFtpCancel,
   });
 
   final VoidCallback? onSavePrevious;
@@ -57,6 +59,10 @@ class CaptionV2ActionRow extends StatelessWidget {
 
   /// File currently uploading. The bar keeps the last path after it finishes.
   final String? ftpThumbPath;
+
+  /// Photos waiting behind the one currently uploading.
+  final int ftpQueued;
+  final VoidCallback? onFtpCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +131,9 @@ class CaptionV2ActionRow extends StatelessWidget {
                           progress: ftpProgress ?? 0,
                           active: ftpActive,
                           thumbPath: ftpThumbPath,
+                          queued: ftpQueued,
                           tokens: t,
+                          onCancel: onFtpCancel,
                         ),
                       ),
                     ] else if (ftpActive) ...[
@@ -134,7 +142,9 @@ class CaptionV2ActionRow extends StatelessWidget {
                         progress: ftpProgress ?? 0,
                         active: true,
                         thumbPath: ftpThumbPath,
+                        queued: ftpQueued,
                         tokens: t,
+                        onCancel: onFtpCancel,
                       ),
                     ],
                   ],
@@ -194,12 +204,16 @@ class _FtpProgressBar extends StatefulWidget {
     required this.active,
     required this.tokens,
     this.thumbPath,
+    this.queued = 0,
+    this.onCancel,
   });
 
   final double progress;
   final bool active;
   final FfTokens tokens;
   final String? thumbPath;
+  final int queued;
+  final VoidCallback? onCancel;
 
   @override
   State<_FtpProgressBar> createState() => _FtpProgressBarState();
@@ -233,8 +247,17 @@ class _FtpProgressBarState extends State<_FtpProgressBar>
   void didUpdateWidget(covariant _FtpProgressBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     final incoming = widget.thumbPath;
+    final pathChanged = incoming != null &&
+        incoming.isNotEmpty &&
+        incoming != _thumbPath;
     if (incoming != null && incoming.isNotEmpty) _thumbPath = incoming;
     final next = widget.progress.clamp(0.0, 1.0);
+    if (pathChanged) {
+      _from = 0;
+      _to = next;
+      _anim.value = 1;
+      setState(() {});
+    }
     if (widget.active && !oldWidget.active) {
       _run++;
       _from = 0;
@@ -290,6 +313,7 @@ class _FtpProgressBarState extends State<_FtpProgressBar>
               width: 40,
               height: 40,
               child: OrientedFilePreview(
+                key: ValueKey(thumb),
                 path: thumb,
                 fit: BoxFit.cover,
                 cacheWidth: 132,
@@ -326,6 +350,38 @@ class _FtpProgressBarState extends State<_FtpProgressBar>
             ),
           ),
         ),
+        if (widget.queued > 0) ...[
+          const SizedBox(width: 6),
+          Text(
+            '${widget.queued} queued',
+            style: TextStyle(
+              fontFamily: FfTokens.labelFamily,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: tokens.text.withValues(alpha: 0.72),
+            ),
+          ),
+        ],
+        if (widget.active && widget.onCancel != null) ...[
+          const SizedBox(width: 4),
+          TextButton(
+            onPressed: widget.onCancel,
+            style: TextButton.styleFrom(
+              foregroundColor: tokens.text,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              minimumSize: const Size(0, 28),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                fontFamily: FfTokens.labelFamily,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -13,6 +13,7 @@ import '../widgets/celebration_dropdown.dart';
 import '../widgets/custom_name_entry.dart';
 import '../widgets/pinned_player_bar.dart';
 import '../widgets/team_players_button.dart';
+import '../widgets/use_last_clicked_bar.dart';
 import '../widgets/quiet_filter_field.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/verb_tile.dart';
@@ -70,6 +71,7 @@ class _DrumPickerState extends State<DrumPicker> {
   /// Squares across each numbers-mode row. Fewer columns means larger squares.
   int _numberColumns = _NumberRoster.defaultColumns;
   bool _verbAccordionCollapsed = false;
+  final Set<String> _extraOpenVerbCategories = {};
   final _homeFilter = TextEditingController();
   final _awayFilter = TextEditingController();
   final _verbFilter = TextEditingController();
@@ -182,7 +184,34 @@ class _DrumPickerState extends State<DrumPicker> {
     return index < 0 ? 0 : index;
   }
 
+  void _trimOpenCategories() {
+    trimOpenVerbCategories(
+      _extraOpenVerbCategories,
+      controller.cascadeLimitFor(_categories.length),
+    );
+  }
+
+  Set<String> get _openVerbCategories {
+    if (!controller.verbMultiOpen) {
+      if (_verbAccordionCollapsed) return {};
+      return {_category};
+    }
+    return {
+      if (!_verbAccordionCollapsed) _category,
+      ..._extraOpenVerbCategories,
+    };
+  }
+
   void _selectCategory(String category) {
+    if (controller.verbMultiOpen && category != _category) {
+      setState(() {
+        if (!_extraOpenVerbCategories.remove(category)) {
+          _extraOpenVerbCategories.add(category);
+          _trimOpenCategories();
+        }
+      });
+      return;
+    }
     if (category == _category) {
       setState(
         () => _verbAccordionCollapsed = !_verbAccordionCollapsed,
@@ -193,6 +222,7 @@ class _DrumPickerState extends State<DrumPicker> {
     setState(() {
       _verbIndex = 0;
       _verbAccordionCollapsed = false;
+      _extraOpenVerbCategories.remove(category);
     });
   }
 
@@ -269,8 +299,15 @@ class _DrumPickerState extends State<DrumPicker> {
       }
       final nextCategory = _categories[nextCategoryIndex];
       final nextVerbs = _verbsForCategory(nextCategory);
+      final previous = _category;
       controller.setVerbCategory(nextCategory);
       setState(() {
+        if (controller.verbMultiOpen) {
+          _extraOpenVerbCategories.add(previous);
+          _extraOpenVerbCategories.remove(nextCategory);
+          _trimOpenCategories();
+        }
+        _verbAccordionCollapsed = false;
         _verbIndex =
             delta.isNegative && nextVerbs.isNotEmpty ? nextVerbs.length - 1 : 0;
       });
@@ -506,6 +543,7 @@ class _DrumPickerState extends State<DrumPicker> {
 
   @override
   Widget build(BuildContext context) {
+    _trimOpenCategories();
     _repairIndices();
     if (controller.singleTeamMode && _armedLane == DrumLane.away) {
       _armedLane = DrumLane.verbs;
@@ -607,7 +645,7 @@ class _DrumPickerState extends State<DrumPicker> {
     final pinned = controller.pinnedVerbDefinition;
     final selected = pinned != null && controller.selectedVerb == pinned.key;
     return _PinnedVerbSlot(
-      height: _VerbAccordion.pinnedBarHeight,
+      height: 36,
       tokens: tokens,
       controller: controller,
       verb: pinned,
@@ -624,15 +662,24 @@ class _DrumPickerState extends State<DrumPicker> {
       onRbiChanged: controller.setRbi,
       onBaseChanged: controller.setSelectedBase,
       onCelebrationChanged: controller.setCelebrationType,
-      trailing: Padding(
-        padding: const EdgeInsets.only(left: 6),
-        child: QuietFilterField(
-          controller: _verbFilter,
-          tokens: tokens,
-          height: 22,
-          hint: '',
-          onChanged: (_) => setState(() {}),
-        ),
+      trailing: Row(
+        children: [
+          Expanded(
+            child: QuietFilterField(
+              controller: _verbFilter,
+              tokens: tokens,
+              height: 26,
+              hint: '',
+              onChanged: (_) => setState(() {}),
+            ),
+          ),
+          const SizedBox(width: 2),
+          VerbMenuTools(
+            controller: controller,
+            tokens: tokens,
+            large: true,
+          ),
+        ],
       ),
     );
   }
@@ -922,6 +969,12 @@ class _DrumPickerState extends State<DrumPicker> {
                   onTap: widget.onEditRosters!,
                 ),
         ),
+        if (isHome && controller.hasLastClicked)
+          UseLastClickedBar(
+            tokens: tokens,
+            onTap: controller.useLastClicked,
+            onClear: controller.clearLastClicked,
+          ),
         Expanded(
           child: Row(
             children: [
@@ -1055,7 +1108,7 @@ class _DrumPickerState extends State<DrumPicker> {
             categories: _categories,
             verbsByCategory: orderedVerbsByCategory,
             selectedCategory: _category,
-            collapsed: _verbAccordionCollapsed,
+            openCategories: _openVerbCategories,
             selectedIndex: _verbIndex,
             selectedVerbKey: selectedKey,
             armed: armed,
@@ -1211,7 +1264,7 @@ class _VerbAccordion extends StatelessWidget {
     required this.categories,
     required this.verbsByCategory,
     required this.selectedCategory,
-    required this.collapsed,
+    required this.openCategories,
     required this.selectedIndex,
     required this.selectedVerbKey,
     required this.armed,
@@ -1244,7 +1297,7 @@ class _VerbAccordion extends StatelessWidget {
   final List<String> categories;
   final Map<String, List<EffectiveVerb>> verbsByCategory;
   final String selectedCategory;
-  final bool collapsed;
+  final Set<String> openCategories;
   final int selectedIndex;
   final String? selectedVerbKey;
   final bool armed;
@@ -1280,11 +1333,13 @@ class _VerbAccordion extends StatelessWidget {
         final pinned = controller.pinnedVerbDefinition;
         final pinnedSelected =
             pinned != null && selectedVerbKey == pinned.key;
-        final openVerbs = collapsed
-            ? const <EffectiveVerb>[]
-            : (verbsByCategory[selectedCategory] ?? const <EffectiveVerb>[]);
-        final selectedInOpen = !collapsed &&
-            selectedVerbKey != null &&
+        final scale = controller.verbFontScale;
+        final preferredHeader = preferredHeaderHeight * scale;
+        final minHeader = minHeaderHeight * scale;
+        final openVerbs = openCategories.contains(selectedCategory)
+            ? (verbsByCategory[selectedCategory] ?? const <EffectiveVerb>[])
+            : const <EffectiveVerb>[];
+        final selectedInOpen = selectedVerbKey != null &&
             !pinnedSelected &&
             openVerbs.any((verb) => verb.key == selectedVerbKey);
         final extrasHeight =
@@ -1297,13 +1352,23 @@ class _VerbAccordion extends StatelessWidget {
         // Each row's padding sits outside [rowHeight]. Leaving it out made a
         // long All list look like it fit, then overflow by 2px per verb.
         var openBodyHeight = extrasHeight;
-        for (final verb in openVerbs) {
-          final selected = verb.key == selectedVerbKey;
-          openBodyHeight += selected
-              ? selectedRowHeight + selectedRowOuterPadding
-              : rowHeight + rowOuterPadding;
+        for (final category in categories) {
+          if (!openCategories.contains(category)) continue;
+          final verbs = verbsByCategory[category] ?? const <EffectiveVerb>[];
+          for (final verb in verbs) {
+            final selected = verb.key == selectedVerbKey;
+            openBodyHeight += selected
+                ? selectedRowHeight * scale + selectedRowOuterPadding
+                : rowHeight * scale + rowOuterPadding;
+          }
+          if (category != selectedCategory &&
+              !pinnedSelected &&
+              selectedVerbKey != null &&
+              verbs.any((verb) => verb.key == selectedVerbKey)) {
+            openBodyHeight += _extrasHeightFor(selectedVerbKey);
+          }
         }
-        final minContentHeight = categories.length * minHeaderHeight +
+        final minContentHeight = categories.length * minHeader +
             openBodyHeight +
             pinnedHeight;
         final bounded =
@@ -1313,14 +1378,14 @@ class _VerbAccordion extends StatelessWidget {
 
         final double headerHeight;
         if (categories.isEmpty) {
-          headerHeight = preferredHeaderHeight;
+          headerHeight = preferredHeader;
         } else if (needsScroll) {
-          headerHeight = minHeaderHeight;
+          headerHeight = minHeader;
         } else {
           final availableForHeaders =
               constraints.maxHeight - openBodyHeight - pinnedHeight;
           headerHeight = (availableForHeaders / categories.length)
-              .clamp(minHeaderHeight, preferredHeaderHeight);
+              .clamp(minHeader, preferredHeader);
         }
 
         // Re-check with the resolved header height — float/rounding can leave
@@ -1370,11 +1435,12 @@ class _VerbAccordion extends StatelessWidget {
                   controller: controller,
                   category: category,
                   displayCategory: _displayCategory(category),
-                  verbs: !collapsed && category == selectedCategory
-                      ? openVerbs
+                  verbs: openCategories.contains(category)
+                      ? (verbsByCategory[category] ?? const <EffectiveVerb>[])
                       : const <EffectiveVerb>[],
                   headerHeight: headerHeight,
-                  open: !collapsed && category == selectedCategory,
+                  open: openCategories.contains(category),
+                  fontSize: 12.5 * scale,
                   selectedIndex: selectedIndex,
                   selectedVerbKey: selectedVerbKey,
                   armed: armed,
@@ -1428,8 +1494,9 @@ class _VerbAccordion extends StatelessWidget {
                 category: category,
                 displayCategory: _displayCategory(category),
                 verbs: verbsByCategory[category] ?? const <EffectiveVerb>[],
-                headerHeight: stillOverflows ? minHeaderHeight : headerHeight,
-                open: !collapsed && category == selectedCategory,
+                headerHeight: stillOverflows ? minHeader : headerHeight,
+                open: openCategories.contains(category),
+                fontSize: 12.5 * scale,
                 selectedIndex: selectedIndex,
                 selectedVerbKey: selectedVerbKey,
                 armed: armed,
@@ -1463,6 +1530,7 @@ class _VerbAccordionSection extends StatelessWidget {
     required this.onVerbArmed,
     required this.onToggleFavorite,
     this.scrollable = false,
+    this.fontSize = 12.5,
   });
 
   final CaptionV2Controller controller;
@@ -1479,19 +1547,24 @@ class _VerbAccordionSection extends StatelessWidget {
   final VoidCallback onOpen;
   final ValueChanged<int> onVerbArmed;
   final Future<void> Function(String) onToggleFavorite;
+  final double fontSize;
 
   @override
   Widget build(BuildContext context) {
     final isFavorites = category == 'Favorites';
-    final labelColor = open ? tokens.text : tokens.textTertiary;
+    final labelColor = isFavorites
+        ? FfTokens.favoritesLight
+        : (open ? tokens.text : tokens.textTertiary);
     return Column(
       children: [
         VerbCategoryDropTarget(
           category: category,
           controller: controller,
           child: _VerbCategoryButton(
+            key: ValueKey('verb-accordion-$category'),
             height: headerHeight,
             tokens: tokens,
+            accent: null,
             onTap: onOpen,
             child: Row(
               children: [
@@ -1499,33 +1572,49 @@ class _VerbAccordionSection extends StatelessWidget {
                   angle: open ? 1.5708 : 0,
                   child: Icon(
                     PhosphorIconsRegular.caretRight,
-                    size: 12,
+                    size: 12 * controller.verbFontScale,
                     color: labelColor,
                   ),
                 ),
                 const SizedBox(width: 6),
-                if (isFavorites) ...[
-                  const PhosphorIcon(
-                    PhosphorIconsFill.star,
-                    size: 11,
-                    color: FfTokens.gold,
-                  ),
-                  const SizedBox(width: 4),
-                ],
                 Expanded(
-                  child: Text(
-                    displayCategory.toUpperCase(),
-                    maxLines: 1,
-                    softWrap: false,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.6,
-                      height: 1,
-                      color: labelColor,
-                    ),
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          displayCategory.toUpperCase(),
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: fontSize + 2,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            height: 1,
+                            color: labelColor,
+                            shadows: [
+                              Shadow(
+                                color: labelColor.withValues(alpha: 0.75),
+                                blurRadius: 6,
+                              ),
+                              Shadow(
+                                color: labelColor.withValues(alpha: 0.4),
+                                blurRadius: 16,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (isFavorites) ...[
+                        const SizedBox(width: 4),
+                        PhosphorIcon(
+                          PhosphorIconsFill.star,
+                          size: 11 * controller.verbFontScale,
+                          color: FfTokens.favoritesLight,
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 const SizedBox(width: 4),
@@ -1548,8 +1637,9 @@ class _VerbAccordionSection extends StatelessWidget {
               selectedVerbKey: selectedVerbKey,
               armed: armed,
               tokens: tokens,
-              leadingPadding: 18,
-              fontSize: 12.5,
+              leadingPadding: 44,
+              fontSize: fontSize,
+              gold: isFavorites,
               scrollable: true,
               onVerbArmed: onVerbArmed,
               onToggleFavorite: onToggleFavorite,
@@ -1568,8 +1658,9 @@ class _VerbAccordionSection extends StatelessWidget {
                     selectedVerbKey: selectedVerbKey,
                     armed: armed,
                     tokens: tokens,
-                    leadingPadding: 18,
-                    fontSize: 12.5,
+                    leadingPadding: 44,
+                    fontSize: fontSize,
+                    gold: isFavorites,
                     onVerbArmed: onVerbArmed,
                     onToggleFavorite: onToggleFavorite,
                   )
@@ -1582,16 +1673,19 @@ class _VerbAccordionSection extends StatelessWidget {
 
 class _VerbCategoryButton extends StatelessWidget {
   const _VerbCategoryButton({
+    super.key,
     required this.height,
     required this.tokens,
     required this.onTap,
     required this.child,
+    this.accent,
   });
 
   final double height;
   final FfTokens tokens;
   final VoidCallback onTap;
   final Widget child;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
@@ -1605,7 +1699,22 @@ class _VerbCategoryButton extends StatelessWidget {
           height: height,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: child,
+            child: Row(
+              children: [
+                if (accent != null) ...[
+                  Container(
+                    width: 3,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Expanded(child: child),
+              ],
+            ),
           ),
         ),
       ),
@@ -1653,6 +1762,7 @@ class _VerbRows extends StatefulWidget {
     this.leadingPadding = 26,
     this.fontSize = 13.5,
     this.scrollable = false,
+    this.gold = false,
   });
 
   final CaptionV2Controller controller;
@@ -1666,6 +1776,7 @@ class _VerbRows extends StatefulWidget {
   final double leadingPadding;
   final double fontSize;
   final bool scrollable;
+  final bool gold;
 
   @override
   State<_VerbRows> createState() => _VerbRowsState();
@@ -1725,6 +1836,7 @@ class _VerbRowsState extends State<_VerbRows> {
       verb: verb,
       leadingPadding: widget.leadingPadding,
       fontSize: widget.fontSize,
+      gold: widget.gold,
       tokens: widget.tokens,
       showRbi: showRbi,
       showBase: showBase,
@@ -1823,56 +1935,98 @@ class _PinnedVerbSlot extends StatelessWidget {
       tokens: tokens,
       hasContent: hasVerb,
       trailing: trailing,
-      child: Row(
-        children: [
-          Icon(
-            hasVerb ? PhosphorIconsFill.pushPin : PhosphorIconsRegular.pushPin,
-            size: 11,
-            color: tokens.textTertiary,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: hasVerb
-                ? CmdClick(
-                    key: ValueKey('verb-pinned-inline-${verb!.key}'),
-                    onTap: () => controller.toggleVerbPin(verb!.key),
-                    onCmdTap: () => controller.toggleVerbPin(verb!.key),
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              verb!.label,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: FfTokens.fontFamily,
-                                fontSize: 11.5,
-                                height: 1.0,
-                                fontWeight: FontWeight.w500,
-                                color: selected
-                                    ? tokens.text
-                                    : tokens.text.withValues(alpha: 0.78),
-                              ),
+      child: trailing == null
+          ? Row(
+              children: [
+                Icon(
+                  hasVerb
+                      ? PhosphorIconsFill.pushPin
+                      : PhosphorIconsRegular.pushPin,
+                  size: 11,
+                  color: tokens.textTertiary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: hasVerb
+                      ? CmdClick(
+                          key: ValueKey('verb-pinned-inline-${verb!.key}'),
+                          onTap: onTap ??
+                              () => controller.toggleVerbPin(verb!.key),
+                          onCmdTap: () => controller.toggleVerbPin(verb!.key),
+                          child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    verb!.label,
+                                    maxLines: 1,
+                                    softWrap: false,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontFamily: FfTokens.fontFamily,
+                                      fontSize: 11.5,
+                                      height: 1.0,
+                                      fontWeight: FontWeight.w500,
+                                      color: selected
+                                          ? tokens.text
+                                          : tokens.text.withValues(alpha: 0.78),
+                                    ),
+                                  ),
+                                ),
+                                if (committed) ...[
+                                  const SizedBox(width: 4),
+                                  PhosphorIcon(
+                                    PhosphorIconsRegular.check,
+                                    size: 12,
+                                    color: tokens.textSecondary,
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          if (committed) ...[
-                            const SizedBox(width: 4),
-                            PhosphorIcon(PhosphorIconsRegular.check,
-                              size: 12,
-                              color: tokens.textSecondary,
-                            ),
-                          ],
-                        ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
+            )
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (hasVerb) ...[
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 160),
+                    child: CmdClick(
+                      onTap: onTap ?? () => controller.toggleVerbPin(verb!.key),
+                      onCmdTap: () => controller.toggleVerbPin(verb!.key),
+                      child: Text(
+                        verb!.label,
+                        maxLines: 1,
+                        softWrap: false,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 12,
+                          height: 1.0,
+                          fontWeight: FontWeight.w600,
+                          color: selected
+                              ? tokens.text
+                              : tokens.text.withValues(alpha: 0.78),
+                        ),
                       ),
                     ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-        ],
-      ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Icon(
+                  hasVerb
+                      ? PhosphorIconsFill.pushPin
+                      : PhosphorIconsRegular.pushPin,
+                  size: 13,
+                  color: hasVerb ? tokens.textSecondary : tokens.textTertiary,
+                ),
+              ],
+            ),
     );
 
     if (!showBar && !hasOptionRows) return const SizedBox.shrink();
@@ -1976,6 +2130,7 @@ class _HoverVerbBlock extends StatefulWidget {
     required this.committed,
     required this.leadingPadding,
     required this.fontSize,
+    this.gold = false,
     required this.tokens,
     required this.showRbi,
     required this.showBase,
@@ -1998,6 +2153,7 @@ class _HoverVerbBlock extends StatefulWidget {
   final bool committed;
   final double leadingPadding;
   final double fontSize;
+  final bool gold;
   final FfTokens tokens;
   final bool showRbi;
   final bool showBase;
@@ -2053,6 +2209,7 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
           boxed: boxed,
           fontSize: widget.fontSize,
           leadingPadding: widget.leadingPadding,
+          gold: widget.gold,
           tokens: widget.tokens,
           onTap: widget.onTap,
           onToggleFavorite: widget.onToggleFavorite,
@@ -2149,6 +2306,7 @@ class _VerbAccordionRow extends StatelessWidget {
     required this.onToggleFavorite,
     this.boxed = false,
     this.leadingPadding = 26,
+    this.gold = false,
   });
 
   final CaptionV2Controller controller;
@@ -2163,6 +2321,7 @@ class _VerbAccordionRow extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onToggleFavorite;
   final double leadingPadding;
+  final bool gold;
 
   @override
   Widget build(BuildContext context) {
@@ -2188,9 +2347,10 @@ class _VerbAccordionRow extends StatelessWidget {
                     : _VerbAccordion.rowOuterPadding / 2,
           ),
           child: Container(
-            height: selected
-                ? _VerbAccordion.selectedRowHeight
-                : _VerbAccordion.rowHeight,
+            height: (selected
+                    ? _VerbAccordion.selectedRowHeight
+                    : _VerbAccordion.rowHeight) *
+                controller.verbFontScale,
             clipBehavior: Clip.none,
             padding: EdgeInsets.only(left: leadingPadding - 6, right: 4),
             decoration: BoxDecoration(
@@ -2220,7 +2380,7 @@ class _VerbAccordionRow extends StatelessWidget {
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
                     style: FfTokens.rosterName(
-                      color: tokens.text,
+                      color: gold ? FfTokens.gold : tokens.text,
                       selected: selected,
                     ).copyWith(fontSize: fontSize, height: 1.05),
                   ),
@@ -2421,8 +2581,15 @@ class _NumberRoster extends StatelessWidget {
     return smallAspect + (1.0 - smallAspect) * t;
   }
 
-  static int? _jersey(Player player) =>
-      int.tryParse(player.jerseyNumber?.trim() ?? '');
+  static int? _jersey(Player player) {
+    var raw = player.jerseyNumber?.trim() ?? '';
+    while (raw.startsWith('#')) {
+      raw = raw.substring(1).trim();
+    }
+    final number = int.tryParse(raw);
+    if (number == null || number < 0 || number > 99) return null;
+    return number;
+  }
 
   static String _lastName(Player player) {
     final parts = player.fullName.trim().split(RegExp(r'\s+'));
@@ -2483,10 +2650,6 @@ class _NumberRoster extends StatelessWidget {
     final scale = (shortest / 1000.0).clamp(0.62, 1.0);
     final numberSize = 26.0 * scale;
     final nameSize = 13.0 * scale;
-    const nameNumberGap = 4.0;
-    final textCellH =
-        (nameSize * 1.15 + numberSize * 1.05 + 12.5 + nameNumberGap)
-            .clamp(48.0, 68.0);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -2500,8 +2663,11 @@ class _NumberRoster extends StatelessWidget {
           for (final group in _chunk(numbered, cols))
             (_rangeLabel(group), group),
         ];
-        if ((includeOtherRow && other.isNotEmpty) || showSubjects) {
-          bands.add(('Other', other));
+        if (includeOtherRow && other.isNotEmpty) {
+          bands.add(('No number', other));
+        }
+        if (showSubjects) {
+          bands.add(('Other', const <Player>[]));
         }
 
         const comfortableCell = 72.0;
@@ -2510,7 +2676,10 @@ class _NumberRoster extends StatelessWidget {
         final fittedName = nameSize * fit;
         final squareH = (cellW / _aspectForCellWidth(cellW))
             .clamp(40.0, maxCell);
-        final fittedH = squareH < textCellH ? (textCellH * fit).clamp(40.0, textCellH) : squareH;
+        // Name plus jersey have to fit. A short square was clipping the
+        // number off the bottom, so an edited jersey never appeared.
+        final contentH = (fittedName - 0.5) * 1.05 + 4 + jerseySize + 8;
+        final fittedH = squareH < contentH ? contentH : squareH;
 
         Widget cellAt((String, List<Player>) band, int index) {
           final cellH = band.$1 == 'Other' ? 40.0 : fittedH;
@@ -2541,6 +2710,9 @@ class _NumberRoster extends StatelessWidget {
           }
           final player = band.$2[index];
           return _NumberCell(
+            key: ValueKey(
+              '${player.playerId ?? player.fullName}|${player.jerseyNumber ?? ''}',
+            ),
             player: player,
             lastName: _lastName(player),
             selected: isSelected(player),
@@ -2707,6 +2879,7 @@ class _TeamSubjectCellState extends State<_TeamSubjectCell> {
 
 class _NumberCell extends StatefulWidget {
   const _NumberCell({
+    super.key,
     required this.player,
     required this.lastName,
     required this.selected,
@@ -2774,7 +2947,11 @@ class _NumberCellState extends State<_NumberCell> {
               color: fill,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Column(
+            clipBehavior: Clip.antiAlias,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Text(
@@ -2819,6 +2996,7 @@ class _NumberCellState extends State<_NumberCell> {
                 ),
               ],
             ),
+          ),
           ),
         ),
       ),
@@ -3803,41 +3981,44 @@ class _PinnedHintBarState extends State<_PinnedHintBar> {
         ),
         child: Row(
           children: [
-            Expanded(
-              flex: 3,
-              child: Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  widget.child,
-                  if (!widget.hasContent)
-                    Positioned(
-                      left: 72,
-                      right: 8,
-                      child: IgnorePointer(
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 150),
-                          opacity: _hovered ? 1 : 0,
-                          child: Text(
-                            widget.hint,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontSize: 11.5,
-                              height: 1.0,
-                              fontWeight: FontWeight.w400,
-                              color: widget.tokens.textTertiary,
+            if (widget.trailing == null)
+              Expanded(child: widget.child)
+            else ...[
+              widget.child,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Stack(
+                  alignment: Alignment.centerLeft,
+                  children: [
+                    widget.trailing!,
+                    if (!widget.hasContent)
+                      Positioned(
+                        left: 8,
+                        right: 72,
+                        child: IgnorePointer(
+                          child: AnimatedOpacity(
+                            duration: const Duration(milliseconds: 150),
+                            opacity: _hovered ? 1 : 0,
+                            child: Text(
+                              widget.hint,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 11.5,
+                                height: 1.0,
+                                fontWeight: FontWeight.w400,
+                                color: widget.tokens.textTertiary,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            if (widget.trailing != null)
-              Expanded(flex: 2, child: widget.trailing!),
+            ],
           ],
         ),
       ),
@@ -3944,74 +4125,75 @@ class _RosterViewButton extends StatelessWidget {
   final VoidCallback onToggleDirection;
   final ValueChanged<DrumPickerMode>? onDrumMode;
 
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<String>(
-      tooltip: 'View',
-      padding: EdgeInsets.zero,
-      color: FfTokens.sessionEl,
-      surfaceTintColor: Colors.transparent,
-      elevation: 16,
-      shadowColor: FfTokens.sessionMenuShadow,
-      shape: FfMenuSurface.shape,
-      onSelected: (value) {
-        switch (value) {
-          case 'numbers':
-            onNumbers();
-          case 'names':
-            onNames();
-          case 'sort':
-            onCycleSort();
-          case 'direction':
-            onToggleDirection();
-          case 'scroll':
-            onDrumMode?.call(DrumPickerMode.scroll);
-          case 'loop':
-            onDrumMode?.call(DrumPickerMode.infinite);
-        }
-      },
-      itemBuilder: (context) => [
-        CheckedPopupMenuItem(
-          value: 'numbers',
-          checked: numberMode,
-          child: const Text('Numbers'),
-        ),
-        CheckedPopupMenuItem(
-          value: 'names',
-          checked: !numberMode,
-          child: const Text('Names'),
-        ),
+  FfMenuChoice<String> _choice(String value, String label, {bool selected = false}) {
+    return FfMenuChoice<String>(
+      value: value,
+      selected: selected,
+      child: Text(label),
+      trailingBuilder: selected
+          ? (context, close) => const PhosphorIcon(
+                PhosphorIconsRegular.check,
+                size: 14,
+                color: FfTokens.sessionTx,
+              )
+          : null,
+    );
+  }
+
+  Future<void> _open(BuildContext context) async {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final picked = await showFfMenu<String>(
+      context: context,
+      anchorGlobal: origin & box.size,
+      width: 168,
+      scrollable: false,
+      choices: [
+        _choice('numbers', 'Numbers', selected: numberMode),
+        _choice('names', 'Names', selected: !numberMode),
         if (!numberMode) ...[
-          PopupMenuItem(
-            value: 'sort',
-            child: Text('Sort by $sortLabel'),
-          ),
-          PopupMenuItem(
-            value: 'direction',
-            child: Text(ascending ? 'Ascending' : 'Descending'),
-          ),
+          _choice('sort', 'Sort by $sortLabel'),
+          _choice('direction', ascending ? 'Ascending' : 'Descending'),
         ],
         if (drumMode != null) ...[
-          const PopupMenuDivider(),
-          CheckedPopupMenuItem(
-            value: 'scroll',
-            checked: drumMode == DrumPickerMode.scroll,
-            child: const Text('Scroll'),
-          ),
-          CheckedPopupMenuItem(
-            value: 'loop',
-            checked: drumMode == DrumPickerMode.infinite,
-            child: const Text('Loop'),
-          ),
+          const FfMenuChoice<String>.divider(),
+          _choice('scroll', 'Scroll', selected: drumMode == DrumPickerMode.scroll),
+          _choice('loop', 'Loop', selected: drumMode == DrumPickerMode.infinite),
         ],
       ],
-      child: SizedBox(
-        width: 26,
-        height: 26,
-        child: Icon(
-          PhosphorIconsRegular.gearSix,
-          size: 14,
-          color: tokens.textSecondary,
+    );
+    switch (picked?.value) {
+      case 'numbers':
+        onNumbers();
+      case 'names':
+        onNames();
+      case 'sort':
+        onCycleSort();
+      case 'direction':
+        onToggleDirection();
+      case 'scroll':
+        onDrumMode?.call(DrumPickerMode.scroll);
+      case 'loop':
+        onDrumMode?.call(DrumPickerMode.infinite);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'View',
+      child: InkWell(
+        onTap: () => _open(context),
+        borderRadius: BorderRadius.circular(6),
+        child: SizedBox(
+          width: 26,
+          height: 26,
+          child: Icon(
+            PhosphorIconsRegular.gearSix,
+            size: 14,
+            color: tokens.textSecondary,
+          ),
         ),
       ),
     );
