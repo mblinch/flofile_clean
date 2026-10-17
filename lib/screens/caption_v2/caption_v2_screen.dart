@@ -762,9 +762,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Future<void> _transmitSaved(CaptionSaveResult result) async {
-    for (final path in result.succeededPaths) {
-      await _controller.transmitPath(path);
-    }
+    final paths = result.succeededPaths;
+    if (paths.isEmpty) return;
+    await _controller.transmitPaths(paths);
   }
 
   Future<void> _saveInDirection({
@@ -1495,7 +1495,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   const SizedBox(height: 6),
                 ],
                 _resizableCaption(c),
-                const SizedBox(height: 2),
                 _buildSearchBlock(c),
                 const SizedBox(height: 6),
                 Expanded(
@@ -1545,7 +1544,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                   ],
                   const SizedBox(height: 8),
                   _resizableCaption(c, inningStepperOnly: true),
-                  const SizedBox(height: 8),
                   _buildSearchBlock(c),
                   SizedBox(height: _gap),
                   Expanded(
@@ -1596,6 +1594,8 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         ftpThumbPath: c.ftpPreviewPath,
         onFtpCancel: c.transmitting ? c.cancelFtp : null,
         ftpQueued: c.transmitting ? c.queuedCount : 0,
+        ftpBatchIndex: c.ftpBatchIndex,
+        ftpBatchTotal: c.ftpBatchTotal,
         onFtpHistory: c.ftpModeEnabled
             ? () => showFtpHistoryDialog(context, c)
             : null,
@@ -1606,7 +1606,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     CaptionV2Controller c, {
     bool inningStepperOnly = false,
   }) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final height = _captionBoxHeight;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1625,7 +1624,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                 ),
         ),
         _CaptionResizeHandle(
-          tokens: t,
           onDrag: (delta) {
             final measured = _captionMeasureKey.currentContext?.size?.height ??
                 _captionBoxHeight ??
@@ -1906,12 +1904,10 @@ class _BurstSaveDecision {
 
 class _CaptionResizeHandle extends StatelessWidget {
   const _CaptionResizeHandle({
-    required this.tokens,
     required this.onDrag,
     required this.onReset,
   });
 
-  final FfTokens tokens;
   final ValueChanged<double> onDrag;
   final VoidCallback onReset;
 
@@ -1926,15 +1922,15 @@ class _CaptionResizeHandle extends StatelessWidget {
         child: Tooltip(
           message: 'Drag to resize the caption. Double-click to reset.',
           waitDuration: const Duration(milliseconds: 400),
-          child: SizedBox(
-            height: 8,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 10),
             child: Center(
               child: Container(
-                width: 42,
-                height: 2,
+                width: 56,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: tokens.text.withValues(alpha: 0.28),
-                  borderRadius: BorderRadius.circular(1),
+                  color: FfTokens.sessionLn2,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
@@ -2881,12 +2877,7 @@ class _AbbrChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 26,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: tokens.sunken,
-        borderRadius: BorderRadius.circular(6),
-      ),
       child: Text(
         label,
         style: TextStyle(

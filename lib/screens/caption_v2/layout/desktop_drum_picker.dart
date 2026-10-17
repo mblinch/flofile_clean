@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import '../../../services/mlb_api_service.dart';
 import '../../../services/mac_spell_check_service.dart';
 import '../../../theme/ff_tokens.dart';
-import '../../../widgets/ff_menu.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
 import '../widgets/base_row.dart';
@@ -71,6 +70,7 @@ class _DrumPickerState extends State<DrumPicker> {
   /// Squares across each numbers-mode row. Fewer columns means larger squares.
   int _numberColumns = _NumberRoster.defaultColumns;
   bool _verbAccordionCollapsed = false;
+  int? _appliedCascadeLimit;
   final Set<String> _extraOpenVerbCategories = {};
   final _homeFilter = TextEditingController();
   final _awayFilter = TextEditingController();
@@ -141,6 +141,15 @@ class _DrumPickerState extends State<DrumPicker> {
       if (_awayFilter.text.isNotEmpty) _awayFilter.clear();
       _homeLetterFilter = null;
       _awayLetterFilter = null;
+    }
+    if (_appliedCascadeLimit != controller.verbCascadeLimit) {
+      _appliedCascadeLimit = controller.verbCascadeLimit;
+      if (controller.verbCascadeLimit <= CaptionV2Controller.verbCascadeNone) {
+        _verbAccordionCollapsed = true;
+        _extraOpenVerbCategories.clear();
+      } else {
+        _trimOpenCategories();
+      }
     }
     setState(() {});
   }
@@ -677,7 +686,6 @@ class _DrumPickerState extends State<DrumPicker> {
           VerbMenuTools(
             controller: controller,
             tokens: tokens,
-            large: true,
           ),
         ],
       ),
@@ -713,7 +721,7 @@ class _DrumPickerState extends State<DrumPicker> {
         );
 
     Widget playerList() {
-      final numberMode = _numberMode;
+      final names = !_numberMode;
       return Expanded(
         child: visiblePlayers.isEmpty
             ? Center(
@@ -727,7 +735,7 @@ class _DrumPickerState extends State<DrumPicker> {
                   ),
                 ),
               )
-            : numberMode
+            : _numberMode
                 ? _NumberRoster(
                     players: visiblePlayers,
                     columns: _numberColumns,
@@ -770,7 +778,9 @@ class _DrumPickerState extends State<DrumPicker> {
                       position: position,
                     ),
                   )
-                : widget.mode == DrumPickerMode.scroll && letterFilter != null
+                : names &&
+                        widget.mode == DrumPickerMode.scroll &&
+                        letterFilter != null
                 ? _FilteredPlayerList(
                     letter: letterFilter,
                     players: visiblePlayers,
@@ -807,8 +817,7 @@ class _DrumPickerState extends State<DrumPicker> {
                       position: position,
                     ),
                   )
-                : widget.mode == DrumPickerMode.scroll
-                    ? _HoverPlayerList(
+                : _HoverPlayerList(
                         laneKey: lane.name,
                         players: visiblePlayers,
                         selectedIndex:
@@ -846,28 +855,6 @@ class _DrumPickerState extends State<DrumPicker> {
                           isHome: lane == DrumLane.home,
                           position: position,
                         ),
-                      )
-                    : _DrumWheel<Player>(
-                        laneKey: lane.name,
-                        items: visiblePlayers,
-                        selectedIndex:
-                            visibleSelectedIndex < 0 ? 0 : visibleSelectedIndex,
-                        looping: false,
-                        armed: _armedLane == lane,
-                        tokens: tokens,
-                        jerseyFor: (player) => player.jerseyNumber ?? '—',
-                        labelFor: controller.playerListName,
-                        isSelected: (player) => controller.isPlayerSelected(
-                          player,
-                          isHome: lane == DrumLane.home,
-                        ),
-                        onMove: (delta) => _spin(lane, delta),
-                        onCommit: (index) {
-                          final rosterIndex =
-                              rosterIndexOf(visiblePlayers[index]);
-                          _setIndex(lane, rosterIndex);
-                          _commit(lane, rosterIndex);
-                        },
                       ),
       );
     }
@@ -918,56 +905,63 @@ class _DrumPickerState extends State<DrumPicker> {
               color: tokens.text,
             ),
           ),
-          filter: Row(
+          filter: QuietFilterField(
+            key: ValueKey('drum-search-${lane.name}'),
+            controller: _filterFor(lane),
+            tokens: tokens,
+            height: 26,
+            leadingInset: 26,
+            hideIconWhenFilled: true,
+            onChanged: (_) => _onRosterFilterChanged(lane),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: QuietFilterField(
-                  key: ValueKey('drum-search-${lane.name}'),
-                  controller: _filterFor(lane),
-                  tokens: tokens,
-                  height: 26,
-                  leadingInset: 26,
-                  hideIconWhenFilled: true,
-                  onChanged: (_) => _onRosterFilterChanged(lane),
-                ),
-              ),
-              if (_numberMode) ...[
-                const SizedBox(width: 2),
-                _NumberSquareSizeStepper(
-                  tokens: tokens,
+              if (_numberMode)
+                _SquareSizeStepper(
                   canShrink: _numberColumns < _NumberRoster.maxColumns,
                   canGrow: _numberColumns > _NumberRoster.minColumns,
                   onShrink: () => _stepNumberColumns(1),
                   onGrow: () => _stepNumberColumns(-1),
+                )
+              else ...[
+                _GhostHeaderIcon(
+                  tooltip: 'Sort by number',
+                  tokens: tokens,
+                  label: controller.rosterSortFieldLabel(),
+                  onTap: controller.cycleRosterSortField,
+                ),
+                _GhostHeaderIcon(
+                  tooltip: controller.rosterSortAscending
+                      ? 'Ascending'
+                      : 'Descending',
+                  tokens: tokens,
+                  label: controller.rosterSortDirectionLabel(),
+                  onTap: controller.toggleRosterSortDirection,
                 ),
               ],
-              const SizedBox(width: 2),
-              _RosterViewButton(
-                tokens: tokens,
+              PlayerGearMenu(
                 numberMode: _numberMode,
-                sortLabel: controller.rosterSortFieldLabel(),
-                ascending: controller.rosterSortAscending,
-                drumMode: widget.onModeChanged == null ? null : widget.mode,
                 onNumbers: () => setState(() {
                   _numberMode = true;
                   _homeLetterFilter = null;
                   _awayLetterFilter = null;
                 }),
-                onNames: () => setState(() => _numberMode = false),
-                onCycleSort: controller.cycleRosterSortField,
-                onToggleDirection: controller.toggleRosterSortDirection,
-                onDrumMode: widget.onModeChanged,
+                onNames: () => setState(() {
+                  _numberMode = false;
+                }),
+                onEditTeam: widget.onEditRosters,
+                onReset: () {
+                  setState(() {
+                    _numberMode = true;
+                    _numberColumns = _NumberRoster.defaultColumns;
+                    _homeLetterFilter = null;
+                    _awayLetterFilter = null;
+                  });
+                },
               ),
             ],
           ),
-          trailing: widget.onEditRosters == null
-              ? null
-              : _GhostHeaderIcon(
-                  tooltip: 'Rename team',
-                  icon: PhosphorIconsRegular.pencilSimple,
-                  tokens: tokens,
-                  onTap: widget.onEditRosters!,
-                ),
         ),
         if (isHome && controller.hasLastClicked)
           UseLastClickedBar(
@@ -1031,11 +1025,16 @@ class _DrumPickerState extends State<DrumPicker> {
         ),
         const PopupMenuItem(value: 'google', child: Text('Google')),
         const PopupMenuItem(value: 'edit', child: Text('Edit player…')),
+        const PopupMenuItem(value: 'remove', child: Text('Remove')),
       ],
     );
     if (action == null || !context.mounted) return;
     if (action == 'pin') {
       controller.togglePlayerPin(player, isHome: isHome);
+      return;
+    }
+    if (action == 'remove') {
+      controller.removePlayer(isHome: isHome, player: player);
       return;
     }
     if (action == 'google') {
@@ -1280,8 +1279,8 @@ class _VerbAccordion extends StatelessWidget {
   static const minHeaderHeight = 26.0;
   /// Must match [_PinnedHintBar] fixed height (padding + label + bottom border).
   static const pinnedBarHeight = 26.0;
-  static const rowHeight = 24.0;
-  static const selectedRowHeight = 24.0;
+  static const rowHeight = 20.0;
+  static const selectedRowHeight = 20.0;
   /// Vertical padding around an unselected row.
   static const rowOuterPadding = 0.0;
   /// Vertical padding around a selected row.
@@ -1588,7 +1587,7 @@ class _VerbAccordionSection extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontFamily: FfTokens.fontFamily,
-                            fontSize: fontSize + 2,
+                            fontSize: fontSize + 1,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 0.6,
                             height: 1,
@@ -1637,7 +1636,7 @@ class _VerbAccordionSection extends StatelessWidget {
               selectedVerbKey: selectedVerbKey,
               armed: armed,
               tokens: tokens,
-              leadingPadding: 44,
+              leadingPadding: 26,
               fontSize: fontSize,
               gold: isFavorites,
               scrollable: true,
@@ -1658,7 +1657,7 @@ class _VerbAccordionSection extends StatelessWidget {
                     selectedVerbKey: selectedVerbKey,
                     armed: armed,
                     tokens: tokens,
-                    leadingPadding: 44,
+                    leadingPadding: 26,
                     fontSize: fontSize,
                     gold: isFavorites,
                     onVerbArmed: onVerbArmed,
@@ -2380,7 +2379,7 @@ class _VerbAccordionRow extends StatelessWidget {
                     softWrap: false,
                     overflow: TextOverflow.ellipsis,
                     style: FfTokens.rosterName(
-                      color: gold ? FfTokens.gold : tokens.text,
+                      color: gold ? FfTokens.favoritesVerb : tokens.text,
                       selected: selected,
                     ).copyWith(fontSize: fontSize, height: 1.05),
                   ),
@@ -2700,7 +2699,7 @@ class _NumberRoster extends StatelessWidget {
                       : teammatesSubjectSelected,
               tokens: tokens,
               height: cellH,
-              fontSize: fittedName - 0.5,
+              fontSize: nameSize,
               onTap: playersButton
                   ? onPlayersSubject!
                   : teamNameButton
@@ -2948,11 +2947,10 @@ class _NumberCellState extends State<_NumberCell> {
               borderRadius: BorderRadius.circular(8),
             ),
             clipBehavior: Clip.antiAlias,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Column(
+            child: Column(
               mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
                   name,
@@ -2996,7 +2994,6 @@ class _NumberCellState extends State<_NumberCell> {
                 ),
               ],
             ),
-          ),
           ),
         ),
       ),
@@ -3127,9 +3124,11 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
                 ? null
                 : (details) =>
                     widget.onEditPlayer!(player, details.globalPosition),
-            child: Padding(
+                child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 6),
-              child: AnimatedContainer(
+              child: SizedBox(
+                height: _itemExtent,
+                child: AnimatedContainer(
                 key: ValueKey(
                   'scroll-${widget.laneKey}-player-$index',
                 ),
@@ -3155,7 +3154,7 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
                         softWrap: false,
                         style: FfTokens.rosterJersey(
                           color: widget.tokens.textTertiary,
-                        ).copyWith(fontSize: 14),
+                        ).copyWith(fontSize: 14, height: 1),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -3168,7 +3167,7 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
                         style: FfTokens.rosterName(
                           color: widget.tokens.text,
                           selected: selected,
-                        ).copyWith(fontSize: 15),
+                        ).copyWith(fontSize: 15, height: 1),
                       ),
                     ),
                     if (showActions) ...[
@@ -3203,6 +3202,7 @@ class _HoverPlayerListState extends State<_HoverPlayerList> {
                       ),
                     ],
                   ],
+                ),
                 ),
               ),
             ),
@@ -3368,502 +3368,6 @@ class _PlayerMenuHoverAction extends StatelessWidget {
   }
 }
 
-class _DrumWheel<T> extends StatefulWidget {
-  const _DrumWheel({
-    required this.laneKey,
-    required this.items,
-    required this.selectedIndex,
-    required this.looping,
-    required this.armed,
-    required this.tokens,
-    required this.labelFor,
-    required this.onMove,
-    required this.onCommit,
-    this.jerseyFor,
-    this.categoryFor,
-    this.isSelected,
-  });
-
-  final String laneKey;
-  final List<T> items;
-  final int selectedIndex;
-  final bool looping;
-  final bool armed;
-  final FfTokens tokens;
-  final String Function(T item) labelFor;
-  final String Function(T item)? jerseyFor;
-  final String Function(T item)? categoryFor;
-  final bool Function(T item)? isSelected;
-  final ValueChanged<int> onMove;
-  final ValueChanged<int> onCommit;
-
-  @override
-  State<_DrumWheel<T>> createState() => _DrumWheelState<T>();
-}
-
-class _DrumWheelState<T> extends State<_DrumWheel<T>> {
-  static const _animationDuration = Duration(milliseconds: 110);
-  double _dragDistance = 0;
-
-  _DrumMetrics _metrics(int distance) {
-    final playerRow = widget.jerseyFor != null;
-    if (distance == 0) {
-      return playerRow
-          ? const _DrumMetrics(44, 18.5, 1, FontWeight.w700)
-          : const _DrumMetrics(52, 18, 1, FontWeight.w700);
-    }
-    if (distance == 1) {
-      return playerRow
-          ? const _DrumMetrics(30, 14.5, 0.86, FontWeight.w400)
-          : const _DrumMetrics(36, 15, 0.86, FontWeight.w400);
-    }
-    if (distance == 2) {
-      return playerRow
-          ? const _DrumMetrics(26, 13, 0.72, FontWeight.w400)
-          : const _DrumMetrics(31, 14, 0.72, FontWeight.w400);
-    }
-    if (distance == 3) {
-      return playerRow
-          ? const _DrumMetrics(22, 12, 0.60, FontWeight.w400)
-          : const _DrumMetrics(28, 13, 0.60, FontWeight.w400);
-    }
-    return playerRow
-        ? const _DrumMetrics(20, 11.5, 0.50, FontWeight.w400)
-        : const _DrumMetrics(26, 12.5, 0.50, FontWeight.w400);
-  }
-
-  double _gateTop(double laneHeight, double gateHeight) {
-    final fraction = widget.laneKey == 'verbs' ? 0.10 : 0.5;
-    return (laneHeight * fraction - gateHeight / 2)
-        .clamp(0.0, laneHeight - gateHeight)
-        .toDouble();
-  }
-
-  /// Verbs sit at 10% from the top; roster lanes stay slightly above center.
-  double _finiteGateTop(
-    double laneHeight,
-    double gateHeight,
-    int selected,
-    int count,
-  ) {
-    final fraction = widget.laneKey == 'verbs' ? 0.10 : 0.38;
-    return (laneHeight * fraction - gateHeight / 2)
-        .clamp(0.0, laneHeight - gateHeight)
-        .toDouble();
-  }
-
-  Widget _selectionWindow({
-    required double top,
-    required double height,
-    required int selected,
-  }) {
-    return Positioned(
-      key: ValueKey('drum-target-${widget.laneKey}'),
-      left: 0,
-      right: 0,
-      top: top,
-      height: height,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => widget.onCommit(selected),
-        child: DecoratedBox(
-          key: ValueKey('drum-gate-${widget.laneKey}'),
-          decoration: BoxDecoration(
-            color: widget.tokens.accent.withValues(
-              alpha: widget.armed ? 0.18 : 0.12,
-            ),
-            border: Border.symmetric(
-              horizontal: BorderSide(
-                color: widget.tokens.accent.withValues(
-                  alpha: widget.armed ? 1 : 0.72,
-                ),
-                width: widget.armed ? 1.5 : 1,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _edgeFade() {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                widget.tokens.surface,
-                widget.tokens.surface.withValues(alpha: 0),
-                widget.tokens.surface.withValues(alpha: 0),
-                widget.tokens.surface,
-              ],
-              stops: const [0, 0.12, 0.88, 1],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.items.isEmpty) {
-      return Center(
-        child: Text('No items', style: widget.tokens.metaStyle),
-      );
-    }
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final selected = widget.selectedIndex.clamp(0, widget.items.length - 1);
-        if (widget.looping) {
-          return _buildLooping(constraints, selected);
-        }
-        return _buildFinite(constraints, selected);
-      },
-    );
-  }
-
-  Widget _buildFinite(BoxConstraints constraints, int selected) {
-    final laneHeight = constraints.maxHeight;
-    final gateHeight = _metrics(0).height;
-    final gateY = _finiteGateTop(
-      laneHeight,
-      gateHeight,
-      selected,
-      widget.items.length,
-    );
-    final metrics = List<_DrumMetrics>.generate(
-      widget.items.length,
-      (index) => _metrics((index - selected).abs()),
-    );
-    final tops = List<double>.filled(widget.items.length, 0);
-    tops[selected] = gateY;
-    var above = gateY;
-    for (var index = selected - 1; index >= 0; index--) {
-      above -= metrics[index].height;
-      tops[index] = above;
-    }
-    var below = gateY + gateHeight;
-    for (var index = selected + 1; index < widget.items.length; index++) {
-      tops[index] = below;
-      below += metrics[index].height;
-    }
-
-    return Listener(
-      key: ValueKey('drum-${widget.laneKey}'),
-      onPointerSignal: (event) {
-        if (event is PointerScrollEvent && event.scrollDelta.dy != 0) {
-          widget.onMove(event.scrollDelta.dy > 0 ? 1 : -1);
-        }
-      },
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragStart: (_) => _dragDistance = 0,
-        onVerticalDragUpdate: (details) {
-          _dragDistance += details.delta.dy;
-          while (_dragDistance.abs() >= 30) {
-            widget.onMove(_dragDistance < 0 ? -1 : 1);
-            _dragDistance += _dragDistance < 0 ? 30 : -30;
-          }
-        },
-        onVerticalDragEnd: (details) {
-          final velocity = details.primaryVelocity ?? 0;
-          if (velocity.abs() < 300) return;
-          final rows = (velocity.abs() / 500).round().clamp(1, 12);
-          widget.onMove(velocity < 0 ? -rows : rows);
-        },
-        child: ClipRect(
-          child: Stack(
-            children: [
-              for (var index = 0; index < widget.items.length; index++)
-                AnimatedPositioned(
-                  key: ValueKey(
-                    'drum-${widget.laneKey}-row-$index',
-                  ),
-                  duration: _animationDuration,
-                  curve: Curves.easeOutCubic,
-                  left: 0,
-                  right: 0,
-                  top: tops[index],
-                  height: metrics[index].height,
-                  child: _row(
-                    item: widget.items[index],
-                    metrics: metrics[index],
-                    atGate: index == selected,
-                    index: index,
-                  ),
-                ),
-              _selectionWindow(
-                top: gateY,
-                height: gateHeight,
-                selected: selected,
-              ),
-              _edgeFade(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildLooping(BoxConstraints constraints, int selected) {
-    final laneHeight = constraints.maxHeight;
-    final gateHeight = _metrics(0).height;
-    final gateY = _gateTop(laneHeight, gateHeight);
-    final aboveCount = widget.items.length ~/ 2;
-    final firstDistance = -aboveCount;
-    final lastDistance = widget.items.length - aboveCount - 1;
-    const boundaryGap = 10.0;
-    var selectedOffset = 0.0;
-    for (var distance = firstDistance; distance < 0; distance++) {
-      final itemIndex = (selected + distance) % widget.items.length;
-      if (itemIndex == 0) selectedOffset += boundaryGap;
-      selectedOffset += _metrics(distance.abs()).height;
-    }
-    if (selected == 0) selectedOffset += boundaryGap;
-    var top = gateY - selectedOffset;
-    double? boundaryTop;
-    final rows = <_LoopingDrumRow<T>>[];
-    for (var distance = firstDistance; distance <= lastDistance; distance++) {
-      final metrics = _metrics(distance.abs());
-      final itemIndex = (selected + distance) % widget.items.length;
-      if (itemIndex == 0) {
-        boundaryTop = top;
-        top += boundaryGap;
-      }
-      rows.add(
-        _LoopingDrumRow(
-          item: widget.items[itemIndex],
-          itemIndex: itemIndex,
-          distance: distance,
-          top: top,
-          metrics: metrics,
-        ),
-      );
-      top += metrics.height;
-    }
-
-    return Listener(
-      key: ValueKey('drum-${widget.laneKey}'),
-      onPointerSignal: (event) {
-        if (event is PointerScrollEvent && event.scrollDelta.dy != 0) {
-          widget.onMove(event.scrollDelta.dy > 0 ? 1 : -1);
-        }
-      },
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onVerticalDragStart: (_) => _dragDistance = 0,
-        onVerticalDragUpdate: (details) {
-          _dragDistance += details.delta.dy;
-          while (_dragDistance.abs() >= 30) {
-            widget.onMove(_dragDistance < 0 ? -1 : 1);
-            _dragDistance += _dragDistance < 0 ? 30 : -30;
-          }
-        },
-        onVerticalDragEnd: (details) {
-          final velocity = details.primaryVelocity ?? 0;
-          if (velocity.abs() < 300) return;
-          final rowsToMove = (velocity.abs() / 500).round().clamp(1, 12);
-          widget.onMove(velocity < 0 ? -rowsToMove : rowsToMove);
-        },
-        child: ClipRect(
-          child: Stack(
-            children: [
-              for (final row in rows)
-                AnimatedPositioned(
-                  key: ValueKey(
-                    'drum-${widget.laneKey}-loop-${row.distance}',
-                  ),
-                  duration: _animationDuration,
-                  curve: Curves.easeOutCubic,
-                  left: 0,
-                  right: 0,
-                  top: row.top,
-                  height: row.metrics.height,
-                  child: _row(
-                    item: row.item,
-                    metrics: row.metrics,
-                    atGate: row.distance == 0,
-                    index: row.itemIndex,
-                  ),
-                ),
-              if (boundaryTop != null)
-                AnimatedPositioned(
-                  key: ValueKey(
-                    'drum-${widget.laneKey}-roster-boundary',
-                  ),
-                  duration: _animationDuration,
-                  curve: Curves.easeOutCubic,
-                  left: 0,
-                  right: 0,
-                  top: boundaryTop,
-                  height: boundaryGap,
-                  child: const SizedBox.expand(),
-                ),
-              _selectionWindow(
-                top: gateY,
-                height: gateHeight,
-                selected: selected,
-              ),
-              _edgeFade(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _row({
-    required T item,
-    required _DrumMetrics metrics,
-    required bool atGate,
-    required int index,
-  }) {
-    final textColor = atGate
-        ? widget.tokens.text
-        : widget.tokens.text.withValues(alpha: metrics.opacity);
-    final jerseyColor = atGate
-        ? widget.tokens.accent
-        : widget.tokens.text.withValues(alpha: metrics.opacity);
-    final committed = widget.isSelected?.call(item) ?? false;
-
-    return Semantics(
-      button: true,
-      selected: committed || atGate,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          if (!atGate) {
-            final length = widget.items.length;
-            var step = index - widget.selectedIndex;
-            if (widget.looping && length > 1) {
-              final wrapped = step > 0 ? step - length : step + length;
-              if (wrapped.abs() < step.abs()) step = wrapped;
-            }
-            if (step != 0) widget.onMove(step);
-          }
-          widget.onCommit(index);
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          child: Row(
-            children: [
-              if (widget.jerseyFor != null) ...[
-                SizedBox(
-                  width: 28,
-                  child: Text(
-                    widget.jerseyFor!(item),
-                    textAlign: TextAlign.right,
-                    style: widget.tokens.jerseyStyle.copyWith(
-                      fontSize: metrics.fontSize,
-                      fontWeight: atGate ? FontWeight.w700 : FontWeight.w500,
-                      color: jerseyColor,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                child: Text(
-                  widget.labelFor(item),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontFamily: FfTokens.labelFamily,
-                    fontSize: metrics.fontSize,
-                    fontWeight: metrics.weight,
-                    letterSpacing: atGate ? -0.55 : 0,
-                    color: textColor,
-                  ),
-                ),
-              ),
-              if (committed) ...[
-                const SizedBox(width: 6),
-                PhosphorIcon(PhosphorIconsRegular.check,
-                  size: atGate ? 14 : 12,
-                  color: widget.armed
-                      ? widget.tokens.accent
-                      : widget.tokens.textSecondary,
-                ),
-              ] else if (atGate) ...[
-                const SizedBox(width: 6),
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: widget.tokens.accent,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-              if (atGate && widget.categoryFor != null) ...[
-                const SizedBox(width: 6),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 64),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: widget.tokens.accent.withValues(
-                        alpha: widget.armed ? 0.24 : 0.14,
-                      ),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Text(
-                      widget.categoryFor!(item).toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: FfTokens.labelFamily,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                        color: widget.tokens.accent.withValues(
-                          alpha: widget.armed ? 1 : 0.85,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DrumMetrics {
-  const _DrumMetrics(this.height, this.fontSize, this.opacity, this.weight);
-
-  final double height;
-  final double fontSize;
-  final double opacity;
-  final FontWeight weight;
-}
-
-class _LoopingDrumRow<T> {
-  const _LoopingDrumRow({
-    required this.item,
-    required this.itemIndex,
-    required this.distance,
-    required this.top,
-    required this.metrics,
-  });
-
-  final T item;
-  final int itemIndex;
-  final int distance;
-  final double top;
-  final _DrumMetrics metrics;
-}
-
 class _VerbCategoryScrubber extends StatelessWidget {
   const _VerbCategoryScrubber({
     required this.categories,
@@ -3937,14 +3441,13 @@ class _VerbCategoryScrubber extends StatelessWidget {
   }
 }
 
-class _PinnedHintBar extends StatefulWidget {
+class _PinnedHintBar extends StatelessWidget {
   const _PinnedHintBar({
     required this.tokens,
     required this.hasContent,
     required this.child,
     this.height,
     this.trailing,
-    this.hint = '· ⌘-click a verb to pin',
   });
 
   final FfTokens tokens;
@@ -3952,72 +3455,372 @@ class _PinnedHintBar extends StatefulWidget {
   final Widget child;
   final double? height;
   final Widget? trailing;
-  final String hint;
-
-  @override
-  State<_PinnedHintBar> createState() => _PinnedHintBarState();
-}
-
-class _PinnedHintBarState extends State<_PinnedHintBar> {
-  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: Container(
-        height: widget.height ?? _VerbAccordion.pinnedBarHeight,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        alignment: Alignment.centerLeft,
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: widget.hasContent
-                  ? FfTokens.pinnedDivider
-                  : widget.tokens.divider,
-            ),
+    return Container(
+      height: height ?? _VerbAccordion.pinnedBarHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: hasContent ? FfTokens.pinnedDivider : tokens.divider,
           ),
         ),
-        child: Row(
+      ),
+      child: Row(
+        children: [
+          if (trailing == null)
+            Expanded(child: child)
+          else ...[
+            child,
+            const SizedBox(width: 8),
+            Expanded(child: trailing!),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class PlayerGearMenu extends StatefulWidget {
+  const PlayerGearMenu({
+    this.numberMode,
+    this.onNumbers,
+    this.onNames,
+    this.onEditTeam,
+    this.onReset,
+  });
+
+  /// Null hides the layout rows and leaves Edit rosters.
+  final bool? numberMode;
+  final VoidCallback? onNumbers;
+  final VoidCallback? onNames;
+  final VoidCallback? onEditTeam;
+  final VoidCallback? onReset;
+
+  @override
+  State<PlayerGearMenu> createState() => _PlayerGearMenuState();
+}
+
+class _PlayerGearMenuState extends State<PlayerGearMenu> {
+  static const _menuWidth = 280.0;
+
+  OverlayEntry? _entry;
+  bool _open = false;
+  bool _hovered = false;
+
+  bool get _layout => widget.numberMode != null;
+
+  @override
+  void didUpdateWidget(covariant PlayerGearMenu oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Names/Numbers update this widget while it is still building. Marking
+    // the overlay dirty has to wait until that build finishes.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _entry?.markNeedsBuild();
+    });
+  }
+
+  @override
+  void dispose() {
+    _entry?.remove();
+    _entry = null;
+    super.dispose();
+  }
+
+  void _toggle() {
+    if (_open) {
+      _close();
+    } else {
+      _show();
+    }
+  }
+
+  void _close() {
+    final entry = _entry;
+    _entry = null;
+    entry?.remove();
+    if (!mounted) return;
+    setState(() => _open = false);
+  }
+
+  void _show() {
+    final box = context.findRenderObject() as RenderBox?;
+    final overlayState = Overlay.maybeOf(context);
+    final overlayBox = overlayState?.context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || overlayBox == null || !overlayBox.hasSize) {
+      return;
+    }
+    final origin = overlayBox.globalToLocal(box.localToGlobal(Offset.zero));
+    final overlaySize = overlayBox.size;
+    const overhang = 8.0;
+    var left = origin.dx + box.size.width - _menuWidth + overhang;
+    final maxLeft = overlaySize.width - 8 - _menuWidth;
+    left = left.clamp(8.0, maxLeft < 8 ? 8.0 : maxLeft);
+
+    _entry = OverlayEntry(
+      builder: (menuContext) {
+        return Stack(
           children: [
-            if (widget.trailing == null)
-              Expanded(child: widget.child)
-            else ...[
-              widget.child,
-              const SizedBox(width: 8),
-              Expanded(
-                child: Stack(
-                  alignment: Alignment.centerLeft,
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _close,
+              ),
+            ),
+            CustomSingleChildLayout(
+              delegate: _GearMenuAbove(
+                anchorTop: origin.dy,
+                left: left,
+                width: _menuWidth,
+              ),
+              child: Focus(
+                autofocus: true,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.escape) {
+                    _close();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: DefaultTextStyle.merge(
+                  style: const TextStyle(decoration: TextDecoration.none),
+                  child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {},
+                  child: _PlayerGearCard(
+                  numberMode: widget.numberMode,
+                  onNumbers: widget.onNumbers,
+                  onNames: widget.onNames,
+                  onEditTeam: widget.onEditTeam == null
+                      ? null
+                      : () {
+                          final edit = widget.onEditTeam;
+                          _close();
+                          edit?.call();
+                        },
+                  showReset: false,
+                  onReset: widget.onReset,
+                ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    overlayState!.insert(_entry!);
+    setState(() => _open = true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_layout && widget.onEditTeam == null) return const SizedBox.shrink();
+    final active = _open || _hovered;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      hitTestBehavior: HitTestBehavior.opaque,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _toggle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? FfTokens.nocturneHv : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: PhosphorIcon(
+            PhosphorIconsRegular.gearSix,
+            size: 18,
+            color: active ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GearMenuAbove extends SingleChildLayoutDelegate {
+  _GearMenuAbove({
+    required this.anchorTop,
+    required this.left,
+    required this.width,
+  });
+
+  final double anchorTop;
+  final double left;
+  final double width;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final maxHeight = (constraints.maxHeight - 16).clamp(0.0, constraints.maxHeight);
+    return BoxConstraints(
+      minWidth: width,
+      maxWidth: width,
+      maxHeight: maxHeight > 0 ? maxHeight : constraints.maxHeight,
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    var top = anchorTop - childSize.height;
+    if (top < 8) top = 8;
+    final maxTop = size.height - 8 - childSize.height;
+    if (top > maxTop) top = maxTop < 8 ? 8.0 : maxTop;
+    var x = left;
+    final maxLeft = size.width - 8 - childSize.width;
+    if (x > maxLeft) x = maxLeft < 8 ? 8.0 : maxLeft;
+    if (x < 8) x = 8;
+    return Offset(x, top);
+  }
+
+  @override
+  bool shouldRelayout(covariant _GearMenuAbove oldDelegate) {
+    return anchorTop != oldDelegate.anchorTop ||
+        left != oldDelegate.left ||
+        width != oldDelegate.width;
+  }
+}
+
+class _PlayerGearCard extends StatelessWidget {
+  const _PlayerGearCard({
+    required this.numberMode,
+    required this.onNumbers,
+    required this.onNames,
+    required this.onEditTeam,
+    required this.showReset,
+    required this.onReset,
+  });
+
+  final bool? numberMode;
+  final VoidCallback? onNumbers;
+  final VoidCallback? onNames;
+  final VoidCallback? onEditTeam;
+  final bool showReset;
+  final VoidCallback? onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final showLayout = numberMode != null;
+    final show = numberMode == false ? _PlayerShow.names : _PlayerShow.numbers;
+    final showHint = show == _PlayerShow.names ? 'Player names' : 'Jersey squares';
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: FfTokens.nocturneEl,
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x80000000),
+            blurRadius: 40,
+            offset: Offset(0, 16),
+          ),
+          BoxShadow(
+            color: FfTokens.nocturneLn,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(10, 8, 10, 4),
+              child: Text(
+                'PLAYER PANEL',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.88,
+                  color: FfTokens.nocturneT3,
+                ),
+              ),
+            ),
+            if (showLayout) ...[
+              const SizedBox(height: 2),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    widget.trailing!,
-                    if (!widget.hasContent)
-                      Positioned(
-                        left: 8,
-                        right: 72,
-                        child: IgnorePointer(
-                          child: AnimatedOpacity(
-                            duration: const Duration(milliseconds: 150),
-                            opacity: _hovered ? 1 : 0,
-                            child: Text(
-                              widget.hint,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontFamily: FfTokens.fontFamily,
-                                fontSize: 11.5,
-                                height: 1.0,
-                                fontWeight: FontWeight.w400,
-                                color: widget.tokens.textTertiary,
-                              ),
-                            ),
-                          ),
-                        ),
+                    const Text(
+                      'Show',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: FfTokens.nocturneTx,
                       ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      showHint,
+                      style: const TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        color: FfTokens.nocturneT3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _ShowSegments(
+                      selected: show,
+                      onChanged: (next) {
+                        switch (next) {
+                          case _PlayerShow.numbers:
+                            onNumbers?.call();
+                          case _PlayerShow.names:
+                            onNames?.call();
+                        }
+                      },
+                    ),
                   ],
                 ),
               ),
+            ],
+            if (showReset || onEditTeam != null) ...[
+              const SizedBox(height: 2),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(color: FfTokens.nocturneLn),
+                  child: SizedBox(height: 1),
+                ),
+              ),
+              if (showReset) ...[
+                const SizedBox(height: 2),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _GearLink(
+                    icon: PhosphorIconsRegular.arrowCounterClockwise,
+                    label: 'Reset to default',
+                    onTap: onReset ?? () {},
+                  ),
+                ),
+              ],
+              if (onEditTeam != null) ...[
+                const SizedBox(height: 2),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: _GearLink(
+                    icon: PhosphorIconsRegular.pencilSimple,
+                    label: 'Edit rosters',
+                    onTap: onEditTeam!,
+                  ),
+                ),
+              ],
             ],
           ],
         ),
@@ -4026,16 +3829,307 @@ class _PinnedHintBarState extends State<_PinnedHintBar> {
   }
 }
 
-class _NumberSquareSizeStepper extends StatelessWidget {
-  const _NumberSquareSizeStepper({
-    required this.tokens,
+enum _PlayerShow { numbers, names }
+
+/// Joined Numbers / Names control, same pattern as the
+/// caption-strip Half / Quarter toggle.
+class _ShowSegments extends StatelessWidget {
+  const _ShowSegments({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final _PlayerShow selected;
+  final ValueChanged<_PlayerShow> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneBg,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: FfTokens.nocturneLn2),
+      ),
+      child: Row(
+        children: [
+          for (final option in _PlayerShow.values)
+            Expanded(
+              child: _ShowSegment(
+                label: switch (option) {
+                  _PlayerShow.numbers => 'Numbers',
+                  _PlayerShow.names => 'Names',
+                },
+                selected: option == selected,
+                onTap: () => onChanged(option),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ShowSegment extends StatelessWidget {
+  const _ShowSegment({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => onTap(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: 22,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? FfTokens.nocturneHv : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const _gearValueStyle = TextStyle(
+  fontFamily: FfTokens.fontFamily,
+  fontSize: 13,
+  fontWeight: FontWeight.w600,
+  color: FfTokens.nocturneTx,
+  decoration: TextDecoration.none,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
+
+class _GearSettingRow extends StatelessWidget {
+  const _GearSettingRow({
+    required this.name,
+    required this.hint,
+    required this.child,
+  });
+
+  final String name;
+  final String hint;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.nocturneTx,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hint,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    color: FfTokens.nocturneT3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _GearStepper extends StatelessWidget {
+  const _GearStepper({
+    required this.atMin,
+    required this.atMax,
+    required this.onMinus,
+    required this.onPlus,
+    required this.minus,
+    required this.plus,
+    required this.value,
+  });
+
+  final bool atMin;
+  final bool atMax;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+  final Widget minus;
+  final Widget plus;
+  final Widget value;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneBg,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _GearStepButton(enabled: !atMin, onTap: onMinus, child: minus),
+            const SizedBox(width: 2),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 34),
+              child: Center(child: value),
+            ),
+            const SizedBox(width: 2),
+            _GearStepButton(enabled: !atMax, onTap: onPlus, child: plus),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _GearStepButton extends StatefulWidget {
+  const _GearStepButton({
+    required this.enabled,
+    required this.onTap,
+    required this.child,
+  });
+
+  final bool enabled;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_GearStepButton> createState() => _GearStepButtonState();
+}
+
+class _GearStepButtonState extends State<_GearStepButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hot = _hovered && widget.enabled;
+    final color = hot ? FfTokens.nocturneTx : FfTokens.nocturneT2;
+    return MouseRegion(
+      cursor: widget.enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.enabled ? widget.onTap : null,
+        child: Opacity(
+          opacity: widget.enabled ? 1 : 0.3,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: hot ? FfTokens.nocturneHv : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: IconTheme(
+              data: IconThemeData(color: color, size: 15),
+              child: widget.child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GearLink extends StatefulWidget {
+  const _GearLink({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_GearLink> createState() => _GearLinkState();
+}
+
+class _GearLinkState extends State<_GearLink> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+          decoration: BoxDecoration(
+            color: _hovered ? FfTokens.nocturneHv : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PhosphorIcon(widget.icon, size: 12, color: color),
+              const SizedBox(width: 6),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SquareSizeStepper extends StatelessWidget {
+  const _SquareSizeStepper({
     required this.canShrink,
     required this.canGrow,
     required this.onShrink,
     required this.onGrow,
   });
 
-  final FfTokens tokens;
   final bool canShrink;
   final bool canGrow;
   final VoidCallback onShrink;
@@ -4046,153 +4140,46 @@ class _NumberSquareSizeStepper extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _NumberSquareSizeButton(
+        _SquareStepButton(
           icon: PhosphorIconsRegular.minus,
-          tooltip: 'Smaller number squares',
-          tokens: tokens,
-          onTap: canShrink ? onShrink : null,
+          enabled: canShrink,
+          onTap: onShrink,
         ),
-        _NumberSquareSizeButton(
+        _SquareStepButton(
           icon: PhosphorIconsRegular.plus,
-          tooltip: 'Larger number squares',
-          tokens: tokens,
-          onTap: canGrow ? onGrow : null,
+          enabled: canGrow,
+          onTap: onGrow,
         ),
       ],
     );
   }
 }
 
-class _NumberSquareSizeButton extends StatelessWidget {
-  const _NumberSquareSizeButton({
+class _SquareStepButton extends StatelessWidget {
+  const _SquareStepButton({
     required this.icon,
-    required this.tooltip,
-    required this.tokens,
+    required this.enabled,
     required this.onTap,
   });
 
   final IconData icon;
-  final String tooltip;
-  final FfTokens tokens;
-  final VoidCallback? onTap;
+  final bool enabled;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final enabled = onTap != null;
-    return Tooltip(
-      message: tooltip,
-      child: Opacity(
-        opacity: enabled ? 1 : 0.35,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: PhosphorIcon(
-              icon,
-              size: 14,
-              color: tokens.textSecondary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RosterViewButton extends StatelessWidget {
-  const _RosterViewButton({
-    required this.tokens,
-    required this.numberMode,
-    required this.sortLabel,
-    required this.ascending,
-    required this.drumMode,
-    required this.onNumbers,
-    required this.onNames,
-    required this.onCycleSort,
-    required this.onToggleDirection,
-    required this.onDrumMode,
-  });
-
-  final FfTokens tokens;
-  final bool numberMode;
-  final String sortLabel;
-  final bool ascending;
-  final DrumPickerMode? drumMode;
-  final VoidCallback onNumbers;
-  final VoidCallback onNames;
-  final VoidCallback onCycleSort;
-  final VoidCallback onToggleDirection;
-  final ValueChanged<DrumPickerMode>? onDrumMode;
-
-  FfMenuChoice<String> _choice(String value, String label, {bool selected = false}) {
-    return FfMenuChoice<String>(
-      value: value,
-      selected: selected,
-      child: Text(label),
-      trailingBuilder: selected
-          ? (context, close) => const PhosphorIcon(
-                PhosphorIconsRegular.check,
-                size: 14,
-                color: FfTokens.sessionTx,
-              )
-          : null,
-    );
-  }
-
-  Future<void> _open(BuildContext context) async {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final origin = box.localToGlobal(Offset.zero);
-    final picked = await showFfMenu<String>(
-      context: context,
-      anchorGlobal: origin & box.size,
-      width: 168,
-      scrollable: false,
-      choices: [
-        _choice('numbers', 'Numbers', selected: numberMode),
-        _choice('names', 'Names', selected: !numberMode),
-        if (!numberMode) ...[
-          _choice('sort', 'Sort by $sortLabel'),
-          _choice('direction', ascending ? 'Ascending' : 'Descending'),
-        ],
-        if (drumMode != null) ...[
-          const FfMenuChoice<String>.divider(),
-          _choice('scroll', 'Scroll', selected: drumMode == DrumPickerMode.scroll),
-          _choice('loop', 'Loop', selected: drumMode == DrumPickerMode.infinite),
-        ],
-      ],
-    );
-    switch (picked?.value) {
-      case 'numbers':
-        onNumbers();
-      case 'names':
-        onNames();
-      case 'sort':
-        onCycleSort();
-      case 'direction':
-        onToggleDirection();
-      case 'scroll':
-        onDrumMode?.call(DrumPickerMode.scroll);
-      case 'loop':
-        onDrumMode?.call(DrumPickerMode.infinite);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'View',
-      child: InkWell(
-        onTap: () => _open(context),
-        borderRadius: BorderRadius.circular(6),
-        child: SizedBox(
-          width: 26,
-          height: 26,
-          child: Icon(
-            PhosphorIconsRegular.gearSix,
-            size: 14,
-            color: tokens.textSecondary,
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      hitTestBehavior: HitTestBehavior.opaque,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: enabled ? (_) => onTap() : null,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.3,
+          child: SizedBox(
+            width: 14,
+            height: 22,
+            child: Icon(icon, size: 12, color: FfTokens.nocturneT2),
           ),
         ),
       ),
@@ -4237,12 +4224,15 @@ class _GhostHeaderIconState extends State<_GhostHeaderIcon> {
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
         cursor: SystemMouseCursors.click,
+        hitTestBehavior: HitTestBehavior.opaque,
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
-            width: 26,
             height: 26,
+            constraints: const BoxConstraints(minWidth: 16, minHeight: 26),
+            padding: const EdgeInsets.symmetric(horizontal: 2),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: _hovered ? widget.tokens.hover : Colors.transparent,
@@ -4252,6 +4242,8 @@ class _GhostHeaderIconState extends State<_GhostHeaderIcon> {
                 ? PhosphorIcon(widget.icon!, size: 13, color: color)
                 : Text(
                     widget.label ?? '',
+                    maxLines: 1,
+                    softWrap: false,
                     style: TextStyle(
                       fontFamily: FfTokens.fontFamily,
                       fontSize: 12,
@@ -4303,10 +4295,10 @@ class _RosterScrubber extends StatelessWidget {
         (players.isEmpty
             ? ''
             : _initial(players[activeIndex.clamp(0, players.length - 1)]));
-    return Container(
+    return SizedBox(
       width: 24,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: ListView(
+        padding: EdgeInsets.zero,
         children: [
           for (final entry in starts.entries)
             InkWell(

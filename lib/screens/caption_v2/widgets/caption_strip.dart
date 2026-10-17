@@ -497,6 +497,26 @@ class _CaptionAnnoRange {
   final Color? fill;
 }
 
+/// Spaces and list glue between player-name, jersey, and team chips.
+final _captionHighlightGlue = RegExp(r'^\s*((of the|and|,)\s*)*$');
+
+_CaptionAnnoRange _mergeCaptionAnno(
+  _CaptionAnnoRange prev,
+  _CaptionAnnoRange range,
+) {
+  final tip = <String>{
+    if (prev.tip != null && prev.tip!.isNotEmpty) prev.tip!,
+    if (range.tip != null && range.tip!.isNotEmpty) range.tip!,
+  }.join('\n');
+  return _CaptionAnnoRange(
+    start: prev.start < range.start ? prev.start : range.start,
+    end: prev.end > range.end ? prev.end : range.end,
+    firebar: prev.firebar || range.firebar,
+    tip: tip.isEmpty ? null : tip,
+    fill: prev.fill ?? range.fill,
+  );
+}
+
 TextSpan _captionAnnotatedSpan(
   String text, {
   required List<String> firebarPhrases,
@@ -573,19 +593,44 @@ TextSpan _captionAnnotatedSpan(
       merged.add(range);
       continue;
     }
-    final prev = merged.removeLast();
-    final tip = <String>{
-      if (prev.tip != null && prev.tip!.isNotEmpty) prev.tip!,
-      if (range.tip != null && range.tip!.isNotEmpty) range.tip!,
-    }.join('\n');
-    merged.add(_CaptionAnnoRange(
-      start: prev.start,
-      end: prev.end > range.end ? prev.end : range.end,
-      firebar: prev.firebar || range.firebar,
-      tip: tip.isEmpty ? null : tip,
-      fill: prev.fill ?? range.fill,
-    ));
+    merged.add(_mergeCaptionAnno(merged.removeLast(), range));
   }
+
+  // Same player fill on "Name", "#29", and "Team" is one highlight. Pull the
+  // glue (" ", "of the", "and") into that span so it does not drop back to
+  // the caption background between chips.
+  final glued = <_CaptionAnnoRange>[];
+  for (final range in merged) {
+    if (glued.isEmpty) {
+      glued.add(range);
+      continue;
+    }
+    final prev = glued.last;
+    final canBridge = !prev.firebar &&
+        !range.firebar &&
+        prev.fill != null &&
+        prev.fill == range.fill &&
+        range.start >= prev.end;
+    final gap = canBridge ? text.substring(prev.end, range.start) : '';
+    if (canBridge && _captionHighlightGlue.hasMatch(gap)) {
+      glued
+        ..removeLast()
+        ..add(_mergeCaptionAnno(
+          prev,
+          _CaptionAnnoRange(
+            start: prev.end,
+            end: range.end,
+            tip: range.tip,
+            fill: range.fill,
+          ),
+        ));
+      continue;
+    }
+    glued.add(range);
+  }
+  merged
+    ..clear()
+    ..addAll(glued);
 
   InlineSpan piece(String phrase, {String? tip, TextStyle? style}) {
     final painted = style ?? base;

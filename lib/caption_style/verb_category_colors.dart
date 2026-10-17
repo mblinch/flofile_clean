@@ -3,8 +3,8 @@ import 'dart:ui' show Color;
 /// Soft fill behind a player name in the caption. Distinct from verb colors.
 const Color captionPlayerHighlight = Color(0xFF8FB4D4);
 
-/// Soft warm fill behind a verb phrase in the caption.
-const Color captionVerbHighlight = Color(0xFFC4A06A);
+/// Soft teal fill behind a verb phrase. Greener than [captionPlayerHighlight].
+const Color captionVerbHighlight = Color(0xFF6FBFB3);
 
 /// Colour for a verb phrase highlighted in the caption.
 Color verbCategoryColor(String category) {

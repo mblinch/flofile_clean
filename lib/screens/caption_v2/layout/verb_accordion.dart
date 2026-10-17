@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 
 import '../../../caption_style/verb_sort_mode.dart';
 import '../../../theme/ff_tokens.dart';
-import '../../../widgets/ff_menu.dart';
 import '../data/caption_v2_controller.dart';
 import '../data/effective_verb_catalog.dart';
 import '../widgets/base_row.dart';
@@ -140,7 +139,7 @@ class DefaultVerbAccordion extends StatefulWidget {
   final VoidCallback? onVerbArmed;
 
   static const headerH = 32.0;
-  static const verbRowH = 24.0;
+  static const verbRowH = 20.0;
   static const laneHeaderH = 28.0;
   static const pinnedBarH = 22.0;
   static const categoryFontSize = 15.0;
@@ -206,6 +205,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
   }
 
   bool _isOpen(String category) {
+    if (controller.cascadeLimitFor(_categories.length) <= 0) return false;
     if (!controller.verbMultiOpen) return category == _openCategory;
     return category == _openCategory || _extraOpen.contains(category);
   }
@@ -335,10 +335,10 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: 22,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(10, 4, 4, 4),
+          child: SizedBox(
+            height: 36,
             child: Row(
               children: [
                 _VerbSortMenu(controller: controller, tokens: t),
@@ -497,110 +497,131 @@ class VerbMenuTools extends StatelessWidget {
   const VerbMenuTools({
     required this.controller,
     required this.tokens,
-    this.large = false,
   });
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
-  final bool large;
 
   @override
   Widget build(BuildContext context) {
-    final atMin =
-        controller.verbFontStep <= CaptionV2Controller.verbFontStepMin;
-    final atMax =
-        controller.verbFontStep >= CaptionV2Controller.verbFontStepMax;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _VerbToolButton(
-          key: const ValueKey('verb-font-smaller'),
-          tooltip: 'Smaller verb text',
-          icon: PhosphorIconsRegular.minus,
-          enabled: !atMin,
-          tokens: tokens,
-          box: large ? 26 : 18,
-          iconSize: large ? 14 : 12,
-          onTap: () => controller.nudgeVerbFont(-1),
-        ),
-        _VerbToolButton(
-          key: const ValueKey('verb-font-larger'),
-          tooltip: 'Larger verb text',
-          icon: PhosphorIconsRegular.plus,
-          enabled: !atMax,
-          tokens: tokens,
-          box: large ? 26 : 18,
-          iconSize: large ? 14 : 12,
-          onTap: () => controller.nudgeVerbFont(1),
-        ),
-        _VerbCascadeLimitMenu(
-          controller: controller,
-          tokens: tokens,
-          large: large,
-        ),
-      ],
-    );
+    return _VerbCascadeLimitMenu(controller: controller);
   }
 }
 
-class _VerbCascadeLimitMenu extends StatelessWidget {
-  const _VerbCascadeLimitMenu({
-    required this.controller,
-    required this.tokens,
-    this.large = false,
-  });
+class _VerbCascadeLimitMenu extends StatefulWidget {
+  const _VerbCascadeLimitMenu({required this.controller});
 
   final CaptionV2Controller controller;
-  final FfTokens tokens;
-  final bool large;
 
-  Future<void> _open(BuildContext context, int max, int current) async {
+  @override
+  State<_VerbCascadeLimitMenu> createState() => _VerbCascadeLimitMenuState();
+}
+
+class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
+  static const _menuWidth = 280.0;
+
+  OverlayEntry? _entry;
+  bool _open = false;
+  bool _hovered = false;
+
+  @override
+  void dispose() {
+    _entry?.remove();
+    _entry = null;
+    super.dispose();
+  }
+
+  void _toggle() {
+    if (_open) {
+      _close();
+    } else {
+      _show();
+    }
+  }
+
+  void _close() {
+    final entry = _entry;
+    _entry = null;
+    entry?.remove();
+    if (!mounted) return;
+    setState(() => _open = false);
+  }
+
+  void _show() {
     final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final origin = box.localToGlobal(Offset.zero);
-    final picked = await showFfMenu<int>(
-      context: context,
-      anchorGlobal: origin & box.size,
-      width: 168,
-      scrollable: max > 8,
-      choices: [
-        for (var n = 1; n <= max; n++)
-          FfMenuChoice<int>(
-            value: n,
-            selected: current == n,
-            child: Text('$n'),
-            trailingBuilder: current == n
-                ? (context, close) => const PhosphorIcon(
-                      PhosphorIconsRegular.check,
-                      size: 14,
-                      color: FfTokens.sessionTx,
-                    )
-                : null,
-          ),
-      ],
+    final overlayState = Overlay.maybeOf(context);
+    final overlayBox = overlayState?.context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize || overlayBox == null || !overlayBox.hasSize) {
+      return;
+    }
+    final origin = overlayBox.globalToLocal(box.localToGlobal(Offset.zero));
+    const overhang = 8.0;
+    var left = origin.dx + box.size.width - _menuWidth + overhang;
+    final maxLeft = overlayBox.size.width - 8 - _menuWidth;
+    left = left.clamp(8.0, maxLeft < 8 ? 8.0 : maxLeft);
+
+    _entry = OverlayEntry(
+      builder: (menuContext) {
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _close,
+              ),
+            ),
+            CustomSingleChildLayout(
+              delegate: _VerbGearMenuAbove(
+                anchorTop: origin.dy,
+                left: left,
+                width: _menuWidth,
+              ),
+              child: Focus(
+                autofocus: true,
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.escape) {
+                    _close();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: DefaultTextStyle.merge(
+                  style: const TextStyle(decoration: TextDecoration.none),
+                  child: _VerbSettingsCard(controller: widget.controller),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
-    final value = picked?.value;
-    if (value != null) controller.setVerbCascadeLimit(value);
+    overlayState!.insert(_entry!);
+    setState(() => _open = true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final count = verbCategoriesForDisplay(controller.verbCategories).length;
-    final max = count < 1 ? 1 : count;
-    final current = controller.cascadeLimitFor(max);
-    final box = large ? 26.0 : 18.0;
-    return Tooltip(
-      message: 'Categories open at once',
-      child: InkWell(
-        onTap: () => _open(context, max, current),
-        borderRadius: BorderRadius.circular(6),
-        child: SizedBox(
-          width: box,
-          height: box,
-          child: Icon(
+    final active = _open || _hovered;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: _toggle,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active ? FfTokens.nocturneHv : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: PhosphorIcon(
             PhosphorIconsRegular.gearSix,
-            size: large ? 14 : 12,
-            color: tokens.textSecondary,
+            size: 18,
+            color: active ? FfTokens.nocturneTx : FfTokens.nocturneT3,
           ),
         ),
       ),
@@ -608,44 +629,455 @@ class _VerbCascadeLimitMenu extends StatelessWidget {
   }
 }
 
-class _VerbToolButton extends StatelessWidget {
-  const _VerbToolButton({
-    super.key,
-    required this.tooltip,
-    required this.icon,
-    required this.tokens,
-    required this.onTap,
-    this.enabled = true,
-    this.selected = false,
-    this.box = 18,
-    this.iconSize = 12,
+class _VerbGearMenuAbove extends SingleChildLayoutDelegate {
+  _VerbGearMenuAbove({
+    required this.anchorTop,
+    required this.left,
+    required this.width,
   });
 
-  final String tooltip;
-  final IconData icon;
-  final FfTokens tokens;
-  final VoidCallback onTap;
-  final bool enabled;
-  final bool selected;
-  final double box;
-  final double iconSize;
+  final double anchorTop;
+  final double left;
+  final double width;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final maxHeight = (constraints.maxHeight - 16).clamp(0.0, constraints.maxHeight);
+    return BoxConstraints(
+      minWidth: width,
+      maxWidth: width,
+      maxHeight: maxHeight > 0 ? maxHeight : constraints.maxHeight,
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    var top = anchorTop - childSize.height;
+    if (top < 8) top = 8;
+    final maxTop = size.height - 8 - childSize.height;
+    if (top > maxTop) top = maxTop < 8 ? 8.0 : maxTop;
+    var x = left;
+    final maxLeft = size.width - 8 - childSize.width;
+    if (x > maxLeft) x = maxLeft < 8 ? 8.0 : maxLeft;
+    if (x < 8) x = 8;
+    return Offset(x, top);
+  }
+
+  @override
+  bool shouldRelayout(covariant _VerbGearMenuAbove oldDelegate) {
+    return anchorTop != oldDelegate.anchorTop ||
+        left != oldDelegate.left ||
+        width != oldDelegate.width;
+  }
+}
+
+class _VerbSettingsCard extends StatelessWidget {
+  const _VerbSettingsCard({required this.controller});
+
+  final CaptionV2Controller controller;
+
+  int get _categoryCount {
+    final count = verbCategoriesForDisplay(controller.verbCategories).length;
+    return count < 1 ? 1 : count;
+  }
+
+  bool get _allOpen {
+    final limit = controller.verbCascadeLimit;
+    final count = _categoryCount;
+    if (limit >= CaptionV2Controller.verbCascadeAll) return true;
+    return count > 1 && limit >= count;
+  }
+
+  int get _shownOpen {
+    if (_allOpen) return _categoryCount;
+    final limit = controller.verbCascadeLimit;
+    if (limit < 1) return 1;
+    return limit;
+  }
+
+  String get _openHint {
+    if (_allOpen) return 'Categories stay open';
+    if (_shownOpen <= 1) return 'One at a time';
+    return 'Oldest closes after $_shownOpen';
+  }
+
+  int get _fontStep => controller.verbFontStep.clamp(
+        CaptionV2Controller.verbFontStepMin,
+        CaptionV2Controller.verbFontStepMax,
+      );
+
+  int get _percent => 100 + _fontStep * 10;
+
+  String get _sizeHint {
+    if (_percent == 100) return 'Default';
+    if (_percent < 100) return 'Smaller';
+    return 'Larger';
+  }
+
+  bool get _isDefault =>
+      controller.verbCascadeLimit == 1 && controller.verbFontStep == 0;
+
+  void _fewerCategories() {
+    if (_allOpen) {
+      final previous = _categoryCount - 1;
+      controller.setVerbCascadeLimit(previous < 1 ? 1 : previous);
+      return;
+    }
+    if (_shownOpen <= 1) return;
+    controller.setVerbCascadeLimit(_shownOpen - 1);
+  }
+
+  void _moreCategories() {
+    if (_allOpen) return;
+    final next = _shownOpen + 1;
+    controller.setVerbCascadeLimit(
+      next >= _categoryCount ? CaptionV2Controller.verbCascadeAll : next,
+    );
+  }
+
+  Future<void> _reset() async {
+    await controller.setVerbCascadeLimit(1);
+    await controller.nudgeVerbFont(-controller.verbFontStep);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = !enabled
-        ? tokens.text.withValues(alpha: 0.28)
-        : selected
-            ? tokens.accent
-            : tokens.text.withValues(alpha: 0.72);
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(4),
-        child: SizedBox(
-          width: box,
-          height: box,
-          child: Icon(icon, size: iconSize, color: color),
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final atOpenMin = !_allOpen && _shownOpen <= 1;
+        final atOpenMax = _allOpen;
+        final atSizeMin = _fontStep <= CaptionV2Controller.verbFontStepMin;
+        final atSizeMax = _fontStep >= CaptionV2Controller.verbFontStepMax;
+        return DecoratedBox(
+          decoration: const BoxDecoration(
+            color: FfTokens.nocturneEl,
+            borderRadius: BorderRadius.all(Radius.circular(12)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x80000000),
+                blurRadius: 40,
+                offset: Offset(0, 16),
+              ),
+              BoxShadow(
+                color: FfTokens.nocturneLn,
+                spreadRadius: 1,
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(10, 8, 10, 4),
+                  child: Text(
+                    'VERB PANEL',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.88,
+                      color: FfTokens.nocturneT3,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                _VerbSettingRow(
+                  name: 'Open categories',
+                  hint: _openHint,
+                  child: _VerbStepper(
+                    atMin: atOpenMin,
+                    atMax: atOpenMax,
+                    onMinus: _fewerCategories,
+                    onPlus: _moreCategories,
+                    minus: const PhosphorIcon(
+                      PhosphorIconsRegular.minus,
+                      size: 15,
+                    ),
+                    plus: const PhosphorIcon(
+                      PhosphorIconsRegular.plus,
+                      size: 15,
+                    ),
+                    value: Text(
+                      _allOpen ? 'All' : '$_shownOpen',
+                      style: _stepValueStyle,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                _VerbSettingRow(
+                  name: 'Text size',
+                  hint: _sizeHint,
+                  child: _VerbStepper(
+                    atMin: atSizeMin,
+                    atMax: atSizeMax,
+                    onMinus: () => controller.nudgeVerbFont(-1),
+                    onPlus: () => controller.nudgeVerbFont(1),
+                    minus: const Text('A', style: _stepSmallA),
+                    plus: const Text('A', style: _stepLargeA),
+                    value: Text('$_percent%', style: _stepValueStyle),
+                  ),
+                ),
+                if (!_isDefault) ...[
+                  const SizedBox(height: 2),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(color: FfTokens.nocturneLn),
+                      child: SizedBox(height: 1),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: _ResetVerbSettings(onTap: _reset),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+const _stepValueStyle = TextStyle(
+  fontFamily: FfTokens.fontFamily,
+  fontSize: 13,
+  fontWeight: FontWeight.w600,
+  color: FfTokens.nocturneTx,
+  decoration: TextDecoration.none,
+  fontFeatures: [FontFeature.tabularFigures()],
+);
+
+const _stepSmallA = TextStyle(
+  fontFamily: FfTokens.fontFamily,
+  fontSize: 12,
+  fontWeight: FontWeight.w700,
+  height: 1,
+  decoration: TextDecoration.none,
+);
+
+const _stepLargeA = TextStyle(
+  fontFamily: FfTokens.fontFamily,
+  fontSize: 16,
+  fontWeight: FontWeight.w700,
+  height: 1,
+  decoration: TextDecoration.none,
+);
+
+class _VerbSettingRow extends StatelessWidget {
+  const _VerbSettingRow({
+    required this.name,
+    required this.hint,
+    required this.child,
+  });
+
+  final String name;
+  final String hint;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.nocturneTx,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hint,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                    color: FfTokens.nocturneT3,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _VerbStepper extends StatelessWidget {
+  const _VerbStepper({
+    required this.atMin,
+    required this.atMax,
+    required this.onMinus,
+    required this.onPlus,
+    required this.minus,
+    required this.plus,
+    required this.value,
+  });
+
+  final bool atMin;
+  final bool atMax;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+  final Widget minus;
+  final Widget plus;
+  final Widget value;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneBg,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _StepButton(enabled: !atMin, onTap: onMinus, child: minus),
+            const SizedBox(width: 2),
+            ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 34),
+              child: Center(child: value),
+            ),
+            const SizedBox(width: 2),
+            _StepButton(enabled: !atMax, onTap: onPlus, child: plus),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StepButton extends StatefulWidget {
+  const _StepButton({
+    required this.enabled,
+    required this.onTap,
+    required this.child,
+  });
+
+  final bool enabled;
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_StepButton> createState() => _StepButtonState();
+}
+
+class _StepButtonState extends State<_StepButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final hot = _hovered && widget.enabled;
+    final color = hot ? FfTokens.nocturneTx : FfTokens.nocturneT2;
+    return MouseRegion(
+      cursor: widget.enabled
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.enabled ? widget.onTap : null,
+        child: Opacity(
+          opacity: widget.enabled ? 1 : 0.3,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: hot ? FfTokens.nocturneHv : Colors.transparent,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: IconTheme(
+              data: IconThemeData(color: color, size: 15),
+              child: DefaultTextStyle(
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                  decoration: TextDecoration.none,
+                ),
+                child: widget.child,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ResetVerbSettings extends StatefulWidget {
+  const _ResetVerbSettings({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_ResetVerbSettings> createState() => _ResetVerbSettingsState();
+}
+
+class _ResetVerbSettingsState extends State<_ResetVerbSettings> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+          decoration: BoxDecoration(
+            color: _hovered ? FfTokens.nocturneHv : Colors.transparent,
+            borderRadius: BorderRadius.circular(7),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              PhosphorIcon(
+                PhosphorIconsRegular.arrowCounterClockwise,
+                size: 12,
+                color: color,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Reset to default',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -773,7 +1205,7 @@ class _AccordionSection extends StatelessWidget {
         height: headerH,
         fontSize: DefaultVerbAccordion.verbFontSize *
                 controller.verbFontScale +
-            2,
+            1,
         tokens: tokens,
         onTap: onOpen,
         gold: category == 'Favorites',
@@ -989,7 +1421,7 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                 open ? BorderRadius.circular(FfTokens.radiusRow) : null,
             boxShadow: open
                 ? FfTokens.selectionGlow(
-                    gold ? FfTokens.favorites : t.accent,
+                    gold ? FfTokens.favoritesVerb : t.accent,
                   )
                 : null,
             border: Border(
@@ -1274,7 +1706,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: FfTokens.rosterName(
-                          color: widget.gold ? FfTokens.gold : tokens.text,
+                          color: widget.gold ? FfTokens.favoritesVerb : tokens.text,
                           selected: armed,
                         ).copyWith(
                           fontSize: DefaultVerbAccordion.verbFontSize *

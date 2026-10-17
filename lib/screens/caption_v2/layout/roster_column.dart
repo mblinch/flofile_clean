@@ -12,6 +12,7 @@ import '../widgets/use_last_clicked_bar.dart';
 import '../widgets/player_row.dart';
 import '../widgets/quiet_filter_field.dart';
 import 'caption_v2_verb_editor.dart';
+import 'desktop_drum_picker.dart';
 import 'duplicate_jersey_dialog.dart';
 import 'player_data_issue_dialog.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
@@ -499,12 +500,6 @@ class _RosterViewToggle extends StatelessWidget {
                   size: 16,
                   color: selected ? tokens.accent : tokens.textSecondary,
                 ),
-                const SizedBox(height: 1),
-                Container(
-                  width: 12,
-                  height: 1.5,
-                  color: selected ? tokens.accent : Colors.transparent,
-                ),
               ],
             ),
           ),
@@ -869,8 +864,8 @@ class _RosterHeaderBar extends StatelessWidget {
     this.onEditRosters,
   });
 
-  static const double _controlHeight = 24;
-  static const double headerHeight = 32;
+  static const double _controlHeight = 36;
+  static const double headerHeight = 40;
 
   final String abbr;
   final FfTokens tokens;
@@ -896,16 +891,6 @@ class _RosterHeaderBar extends StatelessWidget {
               applyHeightToLastDescent: false,
             ),
           ),
-          if (onEditRosters != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 2, right: 2),
-              child: _RosterGhostIcon(
-                tooltip: 'Rename team',
-                icon: PhosphorIconsRegular.pencilSimple,
-                tokens: tokens,
-                onTap: onEditRosters!,
-              ),
-            ),
           const Spacer(),
           SizedBox(
             height: _controlHeight,
@@ -924,6 +909,8 @@ class _RosterHeaderBar extends StatelessWidget {
             tokens: tokens,
             onTap: onSortDirection,
           ),
+          if (onEditRosters != null)
+            PlayerGearMenu(onEditTeam: onEditRosters),
         ],
       ),
     );
@@ -963,12 +950,15 @@ class _RosterGhostIconState extends State<_RosterGhostIcon> {
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
         cursor: SystemMouseCursors.click,
+        hitTestBehavior: HitTestBehavior.opaque,
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: widget.onTap,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 120),
-            width: 26,
             height: 26,
+            constraints: const BoxConstraints(minWidth: 16, minHeight: 26),
+            padding: const EdgeInsets.symmetric(horizontal: 2),
             alignment: Alignment.center,
             decoration: BoxDecoration(
               color: _hovered ? widget.tokens.hover : Colors.transparent,

@@ -1627,13 +1627,13 @@ class PreferencesService {
   Future<int> getVerbCascadeLimit() async {
     final prefs = await _getPrefs();
     final stored = prefs.getInt(_keyVerbCascadeLimit);
-    if (stored != null && stored >= 1) return stored;
+    if (stored != null && stored >= 0) return stored;
     return (prefs.getBool(_keyVerbMultiOpen) ?? false) ? 99 : 1;
   }
 
   Future<void> saveVerbCascadeLimit(int value) async {
     final prefs = await _getPrefs();
-    await prefs.setInt(_keyVerbCascadeLimit, value < 1 ? 1 : value);
+    await prefs.setInt(_keyVerbCascadeLimit, value < 0 ? 0 : value);
     _afterLocalPreferencesChanged();
   }
 

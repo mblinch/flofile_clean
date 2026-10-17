@@ -94,6 +94,9 @@ const ffMenuTextStyle = TextStyle(
   color: FfTokens.sessionTx,
 );
 
+/// Where a menu sits relative to [showFfMenu]'s anchor.
+enum FfMenuPlace { below, left, right }
+
 /// Opens a menu anchored under [anchorGlobal], matching the session team menu.
 Future<FfMenuResult<T>?> showFfMenu<T>({
   required BuildContext context,
@@ -103,6 +106,7 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
   double maxHeight = 300,
   bool scrollable = true,
   Color? color,
+  FfMenuPlace place = FfMenuPlace.below,
 }) {
   final overlayState = Overlay.of(context);
   final overlayBox =
@@ -114,11 +118,24 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
   final menuWidth = width ?? anchorGlobal.width;
   final spaceBelow =
       overlaySize.height - (topLeft.dy + anchorGlobal.height) - 8;
-  final openUp = spaceBelow < 160 && topLeft.dy > spaceBelow;
+  final openUp = place == FfMenuPlace.below &&
+      spaceBelow < 160 &&
+      topLeft.dy > spaceBelow;
   var left = topLeft.dx;
+  if (place == FfMenuPlace.left) {
+    left = topLeft.dx - menuWidth - 6;
+  } else if (place == FfMenuPlace.right) {
+    left = topLeft.dx + anchorGlobal.width + 6;
+  }
+  if (left < 8) left = 8;
   if (left + menuWidth > overlaySize.width - 8) {
     left = (overlaySize.width - 8 - menuWidth).clamp(8.0, overlaySize.width);
   }
+  final beside = place != FfMenuPlace.below;
+  final top = openUp
+      ? null
+      : (beside ? topLeft.dy : topLeft.dy + anchorGlobal.height + 4);
+  final bottom = openUp ? overlaySize.height - topLeft.dy + 4 : null;
 
   final completer = Completer<FfMenuResult<T>?>();
   late OverlayEntry entry;
@@ -144,8 +161,8 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
           Positioned(
             left: left,
             width: menuWidth,
-            top: openUp ? null : topLeft.dy + anchorGlobal.height + 4,
-            bottom: openUp ? overlaySize.height - topLeft.dy + 4 : null,
+            top: top,
+            bottom: bottom,
             child: Focus(
               autofocus: true,
               onKeyEvent: (node, event) {

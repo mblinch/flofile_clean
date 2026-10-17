@@ -37,6 +37,8 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.ftpActive = false,
     this.ftpThumbPath,
     this.ftpQueued = 0,
+    this.ftpBatchIndex = 0,
+    this.ftpBatchTotal = 0,
     this.onFtpCancel,
   });
 
@@ -62,548 +64,222 @@ class CaptionV2ActionRow extends StatelessWidget {
 
   /// Photos waiting behind the one currently uploading.
   final int ftpQueued;
+
+  /// 1-based place of the file on the wire, and the batch size.
+  final int ftpBatchIndex;
+  final int ftpBatchTotal;
   final VoidCallback? onFtpCancel;
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ActionButton(
-              icon: PhosphorIconsRegular.caretLeft,
-              label: 'Save & Prev',
-              tooltip: 'Save & Prev',
-              tokens: t,
-              primary: true,
-              iconAtEnd: false,
-              onPressed: onSavePrevious,
-            ),
-            const SizedBox(width: 6),
-            _ActionGroup(
-              tokens: t,
-              onCopy: onCopy,
-              onPaste: onPaste,
-              onPasteLast: onPastePrevious,
-              pasteEnabled: pasteEnabled,
-            ),
-            const SizedBox(width: 6),
-            _ActionButton(
-              icon: PhosphorIconsRegular.caretRight,
-              label: 'Save & Next',
-              tooltip: 'Save & Next  ·  ⌘S',
-              tokens: t,
-              primary: true,
-              onPressed: onSaveNext,
-              enabled: saveNextEnabled,
-            ),
-            if (showTransmit)
-              Padding(
-                padding: const EdgeInsets.only(left: 18),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _AccentActionButton(
-                      icon: PhosphorIconsRegular.cloudArrowUp,
-                      label: transmitLabel,
-                      tooltip: 'FTP · $transmitLabel',
-                      enabled: transmitEnabled,
-                      onPressed: onTransmit,
-                    ),
-                    if (onFtpHistory != null) ...[
-                      const SizedBox(width: 6),
-                      _FtpTrailingSlot(
-                        active: ftpActive,
-                        history: _ActionButton(
-                          icon: PhosphorIconsRegular.clockCounterClockwise,
-                          label: 'FTP history',
-                          tooltip: 'FTP history',
-                          tokens: t,
-                          iconAtEnd: false,
-                          onPressed: onFtpHistory,
-                        ),
-                        bar: _FtpProgressBar(
-                          progress: ftpProgress ?? 0,
-                          active: ftpActive,
-                          thumbPath: ftpThumbPath,
-                          queued: ftpQueued,
-                          tokens: t,
-                          onCancel: onFtpCancel,
-                        ),
-                      ),
-                    ] else if (ftpActive) ...[
-                      const SizedBox(width: 6),
-                      _FtpProgressBar(
-                        progress: ftpProgress ?? 0,
-                        active: true,
-                        thumbPath: ftpThumbPath,
-                        queued: ftpQueued,
-                        tokens: t,
-                        onCancel: onFtpCancel,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FtpTrailingSlot extends StatelessWidget {
-  const _FtpTrailingSlot({
-    required this.active,
-    required this.history,
-    required this.bar,
-  });
-
-  final bool active;
-  final Widget history;
-  final Widget bar;
-
-  @override
-  Widget build(BuildContext context) {
-    // History sets the slot size. Progress draws inside it so starting or
-    // finishing an upload cannot change the FTP button's size.
-    return Stack(
-      alignment: Alignment.centerLeft,
-      children: [
-        Visibility(
-          visible: !active,
-          maintainSize: true,
-          maintainAnimation: true,
-          maintainState: true,
-          child: history,
-        ),
-        if (active)
-          Positioned.fill(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: bar,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _FtpProgressBar extends StatefulWidget {
-  const _FtpProgressBar({
-    required this.progress,
-    required this.active,
-    required this.tokens,
-    this.thumbPath,
-    this.queued = 0,
-    this.onCancel,
-  });
-
-  final double progress;
-  final bool active;
-  final FfTokens tokens;
-  final String? thumbPath;
-  final int queued;
-  final VoidCallback? onCancel;
-
-  @override
-  State<_FtpProgressBar> createState() => _FtpProgressBarState();
-}
-
-class _FtpProgressBarState extends State<_FtpProgressBar>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _anim;
-  double _from = 0;
-  double _to = 0;
-  String? _thumbPath;
-  int _run = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _anim = AnimationController(vsync: this)
-      ..addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _anim.dispose();
-    super.dispose();
-  }
-
-  double get _shown =>
-      _from + (_to - _from) * Curves.easeOut.transform(_anim.value);
-
-  @override
-  void didUpdateWidget(covariant _FtpProgressBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final incoming = widget.thumbPath;
-    final pathChanged = incoming != null &&
-        incoming.isNotEmpty &&
-        incoming != _thumbPath;
-    if (incoming != null && incoming.isNotEmpty) _thumbPath = incoming;
-    final next = widget.progress.clamp(0.0, 1.0);
-    if (pathChanged) {
-      _from = 0;
-      _to = next;
-      _anim.value = 1;
-      setState(() {});
-    }
-    if (widget.active && !oldWidget.active) {
-      _run++;
-      _from = 0;
-      _to = 0;
-      _anim.value = 1;
-      _animateTo(next);
-    } else if (widget.active) {
-      _animateTo(next);
-    } else if (oldWidget.active) {
-      final run = ++_run;
-      if (_shown > 0.02 || oldWidget.progress > 0.02) {
-        _animateTo(1);
-        Future<void>.delayed(const Duration(milliseconds: 600), () {
-          if (!mounted || run != _run || widget.active) return;
-          _animateTo(0);
-          setState(() => _thumbPath = null);
-        });
-      } else {
-        _animateTo(0);
-        _thumbPath = null;
-      }
-    }
-  }
-
-  void _animateTo(double target) {
-    final shown = _shown;
-    if ((target - shown).abs() < 0.004) {
-      _from = target;
-      _to = target;
-      _anim.value = 1;
-      return;
-    }
-    _from = shown;
-    _to = target;
-    final ms = ((target - shown).abs() * 800).round().clamp(160, 800);
-    _anim.duration = Duration(milliseconds: ms);
-    _anim.forward(from: 0);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = widget.tokens;
-    final shown = _shown;
-    final pct = (shown * 100).round();
-    final thumb = _thumbPath;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (thumb != null && thumb.isNotEmpty) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: SizedBox(
-              width: 40,
-              height: 40,
-              child: OrientedFilePreview(
-                key: ValueKey(thumb),
-                path: thumb,
-                fit: BoxFit.cover,
-                cacheWidth: 132,
-                filterQuality: FilterQuality.low,
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-        ],
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: SizedBox(
-            width: 64,
-            height: 10,
-            child: LinearProgressIndicator(
-              value: shown,
-              backgroundColor: tokens.sunken,
-              color: tokens.accent,
-            ),
-          ),
-        ),
-        const SizedBox(width: 4),
-        SizedBox(
-          width: 28,
-          child: Text(
-            widget.active || shown > 0 ? '$pct%' : '',
-            textAlign: TextAlign.left,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              fontFeatures: const [FontFeature.tabularFigures()],
-              color: tokens.text,
-            ),
-          ),
-        ),
-        if (widget.queued > 0) ...[
-          const SizedBox(width: 6),
-          Text(
-            '${widget.queued} queued',
-            style: TextStyle(
-              fontFamily: FfTokens.labelFamily,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: tokens.text.withValues(alpha: 0.72),
-            ),
-          ),
-        ],
-        if (widget.active && widget.onCancel != null) ...[
-          const SizedBox(width: 4),
-          TextButton(
-            onPressed: widget.onCancel,
-            style: TextButton.styleFrom(
-              foregroundColor: tokens.text,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              minimumSize: const Size(0, 28),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(
-                fontFamily: FfTokens.labelFamily,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.tooltip,
-    required this.tokens,
-    required this.onPressed,
-    this.hint,
-    this.primary = false,
-    this.iconAtEnd = true,
-    this.iconOnly = false,
-    this.enabled = true,
-  });
-
-  final IconData icon;
-  final String label;
-  final String tooltip;
-  final String? hint;
-  final FfTokens tokens;
-  final VoidCallback? onPressed;
-  final bool primary;
-
-  /// Caret sits after the label. Save & Prev keeps it on the left.
-  final bool iconAtEnd;
-  final bool iconOnly;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = primary ? Colors.white : tokens.textSecondary;
-    final leadingIcon = !iconAtEnd || !primary;
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: primary ? const Color(0xFF272D34) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          borderRadius: BorderRadius.circular(8),
-          hoverColor: primary ? const Color(0xFF343C45) : tokens.surface,
-          child: Container(
-            height: 40,
-            padding: EdgeInsets.symmetric(horizontal: iconOnly ? 14 : 16),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (leadingIcon) Icon(icon, size: 14, color: fg),
-                if (!iconOnly) ...[
-                  if (leadingIcon) const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: fg,
-                    ),
-                  ),
-                ],
-                if (hint != null) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      hint!,
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white.withValues(alpha: 0.85),
-                      ),
-                    ),
-                  ),
-                ],
-                if (!leadingIcon) ...[
-                  const SizedBox(width: 4),
-                  Icon(icon, size: 14, color: fg),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Same teal fill as the serial-list Add button.
-class _AccentActionButton extends StatefulWidget {
-  const _AccentActionButton({
-    required this.icon,
-    required this.label,
-    required this.tooltip,
-    required this.onPressed,
-    this.enabled = true,
-  });
-
-  final IconData icon;
-  final String label;
-  final String tooltip;
-  final VoidCallback? onPressed;
-  final bool enabled;
-
-  @override
-  State<_AccentActionButton> createState() => _AccentActionButtonState();
-}
-
-class _AccentActionButtonState extends State<_AccentActionButton> {
-  bool _hovered = false;
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = widget.enabled && widget.onPressed != null;
-    final border = !enabled
-        ? FfTokens.nocturneLn
-        : _hovered
-            ? Colors.white.withValues(alpha: 0.92)
-            : FfTokens.nocturneAc.withValues(alpha: 0.95);
-    final gradient = !enabled
-        ? null
-        : _pressed
-            ? const LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0xFF1A2A36),
-                  Color(0xFF0C141A),
-                  Color(0xFF080E12),
-                ],
-                stops: [0.0, 0.45, 1.0],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final compact = width <= 1060;
+        final narrow = width <= 640;
+        final pad = compact ? 12.0 : 16.0;
+        final prev = _NavButton(
+          label: 'Save & Prev',
+          tooltip: 'Save & Prev',
+          icon: PhosphorIconsRegular.caretLeft,
+          iconAtEnd: false,
+          padding: EdgeInsets.symmetric(horizontal: pad),
+          leadingPad: compact ? pad : 12,
+          onPressed: onSavePrevious,
+        );
+        final clip = _ClipGroup(
+          compact: compact,
+          onCopy: onCopy,
+          onPaste: onPaste,
+          onPasteLast: onPastePrevious,
+          pasteEnabled: pasteEnabled,
+        );
+        final next = _NavButton(
+          label: 'Save & Next',
+          tooltip: 'Save & Next  ·  ⌘S',
+          icon: PhosphorIconsBold.caretRight,
+          enabled: saveNextEnabled,
+          padding: EdgeInsets.symmetric(horizontal: pad),
+          trailingPad: compact ? pad : 12,
+          onPressed: onSaveNext,
+        );
+        final ftp = showTransmit
+            ? _FtpGroup(
+                narrow: narrow,
+                label: transmitLabel,
+                enabled: transmitEnabled,
+                onTransmit: onTransmit,
+                onHistory: ftpActive ? null : onFtpHistory,
               )
-            : _hovered
-                ? const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xFF2E4658),
-                      Color(0xFF1A2E3A),
-                      Color(0xFF121F28),
+            : null;
+
+        final progress = showTransmit
+            ? _FtpProgressTrack(
+                active: ftpActive,
+                progress: ftpProgress,
+                queued: ftpQueued,
+                batchIndex: ftpBatchIndex,
+                batchTotal: ftpBatchTotal,
+              )
+            : null;
+        final bar = narrow
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      prev,
+                      clip,
+                      next,
+                      if (ftp != null) ftp,
+                      if (ftpActive &&
+                          ftpThumbPath != null &&
+                          ftpThumbPath!.trim().isNotEmpty)
+                        _FtpUploadPreview(path: ftpThumbPath!.trim()),
                     ],
-                    stops: [0.0, 0.45, 1.0],
-                  )
-                : _kActionTealGradient;
-    final fg = enabled ? Colors.white : Colors.white.withValues(alpha: 0.4);
-    return Tooltip(
-      message: widget.tooltip,
-      child: MouseRegion(
-        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
-        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
-        onExit: enabled
-            ? (_) => setState(() {
-                  _hovered = false;
-                  _pressed = false;
-                })
-            : null,
-        child: GestureDetector(
-          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
-          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
-          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
-          onTap: enabled ? widget.onPressed : null,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 100),
-            height: 40,
-            padding: const EdgeInsets.symmetric(horizontal: 17),
-            decoration: BoxDecoration(
-              color: enabled
-                  ? null
-                  : const Color(0xFF15242E).withValues(alpha: 0.55),
-              gradient: gradient,
-              borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-              border: Border.all(color: border),
-              boxShadow: enabled
-                  ? FfTokens.accentButtonGlow(
-                      _hovered ? Colors.white : FfTokens.nocturneAc,
-                    )
-                  : null,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(widget.icon, size: 14, color: fg),
-                const SizedBox(width: 6),
-                Text(
-                  widget.label,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: -0.3,
-                    color: fg,
                   ),
-                ),
-              ],
-            ),
+                  if (progress != null) ...[
+                    const SizedBox(height: 8),
+                    progress,
+                  ],
+                ],
+              )
+            : Row(
+                children: [
+                  prev,
+                  const SizedBox(width: 8),
+                  clip,
+                  const SizedBox(width: 8),
+                  next,
+                  if (ftp != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, slot) {
+                          final thumb = ftpActive &&
+                              ftpThumbPath != null &&
+                              ftpThumbPath!.trim().isNotEmpty;
+                          // Leave room for the preview and the percent so
+                          // the profile name ellipsizes before the row spills.
+                          final reserve = (thumb ? 48.0 : 0) +
+                              (ftpActive ? 128.0 : 0);
+                          final ftpMax =
+                              (slot.maxWidth - reserve).clamp(0.0, slot.maxWidth);
+                          return Row(
+                            children: [
+                              ConstrainedBox(
+                                constraints: BoxConstraints(maxWidth: ftpMax),
+                                child: ftp,
+                              ),
+                              if (thumb) ...[
+                                const SizedBox(width: 8),
+                                _FtpUploadPreview(path: ftpThumbPath!.trim()),
+                              ],
+                              if (ftpActive && progress != null) ...[
+                                const SizedBox(width: 8),
+                                Flexible(child: progress),
+                              ],
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ],
+              );
+
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: FfTokens.nocturneEl,
+            borderRadius: BorderRadius.circular(14),
           ),
-        ),
-      ),
+          child: bar,
+        );
+      },
     );
   }
 }
 
-class _ActionGroup extends StatelessWidget {
-  const _ActionGroup({
-    required this.tokens,
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.label,
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+    required this.padding,
+    this.iconAtEnd = true,
+    this.filled = false,
+    this.enabled = true,
+    this.leadingPad,
+    this.trailingPad,
+  });
+
+  final String label;
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback? onPressed;
+  final EdgeInsets padding;
+  final bool iconAtEnd;
+  final bool filled;
+  final bool enabled;
+  final double? leadingPad;
+  final double? trailingPad;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = padding.copyWith(
+      left: leadingPad ?? padding.left,
+      right: trailingPad ?? padding.right,
+    );
+    return _BarTap(
+      tooltip: tooltip,
+      enabled: enabled && onPressed != null,
+      onTap: onPressed,
+      builder: (hovered, pressed) {
+        final bg = filled
+            ? (hovered ? FfTokens.accentHover : FfTokens.nocturneAc)
+            : (hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken);
+        final fg = filled ? FfTokens.nocturneBg : FfTokens.nocturneTx;
+        return _BarShell(
+          height: 44,
+          padding: resolved,
+          background: bg,
+          pressed: pressed,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!iconAtEnd) ...[
+                Icon(icon, size: 18, color: fg),
+                const SizedBox(width: 8),
+              ],
+              Text(label, style: _barLabel(fg)),
+              if (iconAtEnd) ...[
+                const SizedBox(width: 8),
+                Icon(icon, size: 18, color: fg),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ClipGroup extends StatelessWidget {
+  const _ClipGroup({
+    required this.compact,
     required this.onCopy,
     required this.onPaste,
     required this.onPasteLast,
     required this.pasteEnabled,
   });
 
-  final FfTokens tokens;
+  final bool compact;
   final VoidCallback? onCopy;
   final VoidCallback? onPaste;
   final VoidCallback? onPasteLast;
@@ -611,77 +287,427 @@ class _ActionGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final pad = compact ? 10.0 : 12.0;
+    final gap = compact ? 6.0 : 8.0;
     Widget item({
       required IconData icon,
       required String label,
-      required String tooltip,
       required VoidCallback? onPressed,
       required bool enabled,
     }) {
-      return Tooltip(
-        message: tooltip,
-        child: InkWell(
-          onTap: enabled ? onPressed : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+      return _BarTap(
+        tooltip: label,
+        enabled: enabled && onPressed != null,
+        onTap: onPressed,
+        builder: (hovered, pressed) {
+          final fg = hovered ? FfTokens.nocturneTx : FfTokens.nocturneT2;
+          final iconColor = hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
+          return _BarShell(
+            height: 40,
+            padding: EdgeInsets.symmetric(horizontal: pad),
+            background: hovered ? FfTokens.nocturneHv : Colors.transparent,
+            pressed: pressed,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 14, color: tokens.textSecondary),
-                const SizedBox(width: 6),
+                Icon(icon, size: 18, color: iconColor),
+                SizedBox(width: gap),
                 Text(
                   label,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: tokens.textSecondary,
-                  ),
+                  style: _barLabel(fg, weight: FontWeight.w500),
                 ),
               ],
             ),
-          ),
-        ),
+          );
+        },
       );
     }
 
-    return Material(
-      color: tokens.surface,
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneBg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          item(
+            icon: PhosphorIconsRegular.copy,
+            label: 'Copy',
+            onPressed: onCopy,
+            enabled: true,
+          ),
+          const SizedBox(width: 2),
+          item(
+            icon: PhosphorIconsRegular.clipboardText,
+            label: 'Paste',
+            onPressed: onPaste,
+            enabled: pasteEnabled,
+          ),
+          const SizedBox(width: 2),
+          item(
+            icon: PhosphorIconsRegular.clockCounterClockwise,
+            label: 'Paste last',
+            onPressed: onPasteLast,
+            enabled: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FtpGroup extends StatelessWidget {
+  const _FtpGroup({
+    required this.narrow,
+    required this.label,
+    required this.enabled,
+    required this.onTransmit,
+    this.onHistory,
+  });
+
+  final bool narrow;
+  final String label;
+  final bool enabled;
+  final VoidCallback? onTransmit;
+  final VoidCallback? onHistory;
+
+  @override
+  Widget build(BuildContext context) {
+    final send = _FtpSendButton(
+      label: label,
+      enabled: enabled,
+      expand: narrow,
+      onPressed: onTransmit,
+    );
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneBg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: narrow ? MainAxisSize.max : MainAxisSize.min,
+        children: [
+          if (narrow) Expanded(child: send) else send,
+          if (onHistory != null) ...[
+            const SizedBox(width: 2),
+            _BarTap(
+              tooltip: 'FTP history',
+              enabled: true,
+              onTap: onHistory,
+              builder: (hovered, pressed) {
+                final color =
+                    hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
+                return _BarShell(
+                  height: 40,
+                  width: 40,
+                  padding: EdgeInsets.zero,
+                  background: hovered ? FfTokens.nocturneHv : Colors.transparent,
+                  pressed: pressed,
+                  child: Icon(
+                    PhosphorIconsRegular.clockCounterClockwise,
+                    size: 18,
+                    color: color,
+                  ),
+                );
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FtpUploadPreview extends StatelessWidget {
+  const _FtpUploadPreview({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
       borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
       child: SizedBox(
+        width: 40,
         height: 40,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: OrientedFilePreview(
+          path: path,
+          fit: BoxFit.cover,
+          cacheWidth: 120,
+          filterQuality: FilterQuality.medium,
+        ),
+      ),
+    );
+  }
+}
+
+class _FtpProgressTrack extends StatelessWidget {
+  const _FtpProgressTrack({
+    required this.active,
+    required this.queued,
+    this.progress,
+    this.batchIndex = 0,
+    this.batchTotal = 0,
+  });
+
+  final bool active;
+  final double? progress;
+  final int queued;
+  final int batchIndex;
+  final int batchTotal;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!active) return const SizedBox(height: 40);
+    final value = (progress ?? 0).clamp(0.0, 1.0);
+    final percent = '${(value * 100).round()}%';
+    final showQueue = queued > 0 && batchTotal > 1 && batchIndex > 0;
+    const sendingStyle = TextStyle(
+      fontFamily: FfTokens.fontFamily,
+      fontSize: 13,
+      fontWeight: FontWeight.w500,
+      color: FfTokens.nocturneT2,
+      height: 1,
+    );
+    const percentStyle = TextStyle(
+      fontFamily: FfTokens.fontFamily,
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      color: FfTokens.nocturneTx,
+      height: 1,
+    );
+    return SizedBox(
+      height: 40,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            item(
-              icon: PhosphorIconsRegular.copy,
-              label: 'Copy',
-              tooltip: 'Copy',
-              onPressed: onCopy,
-              enabled: true,
+            Text.rich(
+              TextSpan(
+                children: [
+                  const TextSpan(text: 'Sending', style: sendingStyle),
+                  const TextSpan(text: '  '),
+                  TextSpan(text: percent, style: percentStyle),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            Container(width: 1, height: 40, color: tokens.divider),
-            item(
-              icon: PhosphorIconsRegular.clipboardText,
-              label: 'Paste',
-              tooltip: 'Paste',
-              onPressed: onPaste,
-              enabled: pasteEnabled,
-            ),
-            Container(width: 1, height: 40, color: tokens.divider),
-            item(
-              icon: PhosphorIconsRegular.clockCounterClockwise,
-              label: 'Paste last',
-              tooltip: 'Paste last',
-              onPressed: onPasteLast,
-              enabled: true,
-            ),
+            if (showQueue) ...[
+              const SizedBox(height: 3),
+              Text(
+                'Picture $batchIndex of $batchTotal',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: FfTokens.nocturneT3,
+                  height: 1,
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
+}
+
+class _FtpSendButton extends StatelessWidget {
+  const _FtpSendButton({
+    required this.label,
+    required this.enabled,
+    required this.expand,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool enabled;
+  final bool expand;
+  final VoidCallback? onPressed;
+
+  String get _destination {
+    final trimmed = label.trim();
+    final lower = trimmed.toLowerCase();
+    if (lower == 'ftp') return '';
+    if (lower.startsWith('ftp:')) return trimmed.substring(4).trim();
+    if (lower.startsWith('ftp ')) return trimmed.substring(4).trim();
+    return trimmed;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final canSend = enabled && onPressed != null;
+    final outline = FfTokens.nocturneAc.withValues(alpha: 0.45);
+    final idleFill = FfTokens.nocturneAccentSoft;
+    final hoverFill = FfTokens.nocturneAccentDeep;
+    final status = _destination;
+
+    return _BarTap(
+      tooltip: 'FTP · $label',
+      enabled: canSend,
+      onTap: onPressed,
+      builder: (hovered, pressed) {
+        return _BarShell(
+          height: 40,
+          width: expand ? double.infinity : null,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          background: hovered ? hoverFill : idleFill,
+          pressed: pressed,
+          nudge: false,
+          outline: outline,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final destination = Text(
+                status,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: _barLabel(FfTokens.nocturneTx),
+              );
+              return Row(
+                mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
+                mainAxisAlignment: expand
+                    ? MainAxisAlignment.center
+                    : MainAxisAlignment.start,
+                children: [
+                  const Icon(
+                    PhosphorIconsRegular.cloudArrowUp,
+                    size: 18,
+                    color: FfTokens.nocturneAc,
+                  ),
+                  const SizedBox(width: 8),
+                  Text('FTP:', style: _ftpMarkStyle),
+                  if (status.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    if (constraints.maxWidth.isFinite)
+                      Flexible(child: destination)
+                    else
+                      destination,
+                  ],
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+}
+
+const _ftpMarkStyle = TextStyle(
+  fontFamily: FfTokens.fontFamily,
+  fontSize: 14,
+  fontWeight: FontWeight.w600,
+  color: FfTokens.nocturneTx,
+  height: 1,
+);
+
+class _BarTap extends StatefulWidget {
+  const _BarTap({
+    required this.tooltip,
+    required this.enabled,
+    required this.onTap,
+    required this.builder,
+    this.dimWhenDisabled = true,
+  });
+
+  final String tooltip;
+  final bool enabled;
+  final bool dimWhenDisabled;
+  final VoidCallback? onTap;
+  final Widget Function(bool hovered, bool pressed) builder;
+
+  @override
+  State<_BarTap> createState() => _BarTapState();
+}
+
+class _BarTapState extends State<_BarTap> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.enabled;
+    return Tooltip(
+      message: widget.tooltip,
+      child: Opacity(
+        opacity: enabled || !widget.dimWhenDisabled ? 1 : 0.4,
+        child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+        onEnter: enabled ? (_) => setState(() => _hovered = true) : null,
+        onExit: (_) => setState(() {
+          _hovered = false;
+          _pressed = false;
+        }),
+        child: GestureDetector(
+          onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+          onTap: enabled ? widget.onTap : null,
+          child: widget.builder(enabled && _hovered, enabled && _pressed),
+        ),
+      ),
+      ),
+    );
+  }
+}
+
+class _BarShell extends StatelessWidget {
+  const _BarShell({
+    required this.height,
+    required this.padding,
+    required this.background,
+    required this.pressed,
+    required this.child,
+    this.width,
+    this.outline,
+    this.nudge = true,
+  });
+
+  final double height;
+  final double? width;
+  final EdgeInsets padding;
+  final Color background;
+  final bool pressed;
+  final Widget child;
+  final Color? outline;
+  final bool nudge;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOut,
+      transform: Matrix4.translationValues(0, pressed && nudge ? 1 : 0, 0),
+      height: height,
+      width: width,
+      padding: padding,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(10),
+        border: outline == null ? null : Border.all(color: outline!),
+      ),
+      child: child,
+    );
+  }
+}
+
+TextStyle _barLabel(Color color, {FontWeight weight = FontWeight.w600}) {
+  return TextStyle(
+    fontFamily: FfTokens.fontFamily,
+    fontSize: 14,
+    fontWeight: weight,
+    color: color,
+    height: 1,
+  );
 }
 
 class FtpModeToggle extends StatelessWidget {

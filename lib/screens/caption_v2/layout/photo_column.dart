@@ -2946,6 +2946,67 @@ class _ThumbnailToolbar extends StatelessWidget {
   }
 }
 
+class _ThumbnailMenuButton extends StatelessWidget {
+  const _ThumbnailMenuButton({
+    required this.tokens,
+    required this.onTap,
+    this.label,
+    this.leading,
+    this.tooltip,
+  });
+
+  final FfTokens tokens;
+  final VoidCallback onTap;
+  final String? label;
+  final Widget? leading;
+  final String? tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final button = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(7),
+      child: Container(
+        height: 30,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: tokens.sunken,
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (leading != null) ...[
+              leading!,
+              if (label != null) const SizedBox(width: 6),
+            ],
+            if (label != null)
+              Text(
+                label!,
+                softWrap: false,
+                style: TextStyle(
+                  color: tokens.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  height: 1.1,
+                ),
+              ),
+            if (label != null) const SizedBox(width: 4),
+            PhosphorIcon(
+              PhosphorIconsRegular.caretDown,
+              size: 12,
+              color: tokens.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    );
+    if (tooltip == null) return button;
+    return Tooltip(message: tooltip!, child: button);
+  }
+}
+
 class _ThumbnailSortDropdown extends StatelessWidget {
   const _ThumbnailSortDropdown({
     required this.tokens,
@@ -2985,100 +3046,40 @@ class _ThumbnailSortDropdown extends StatelessWidget {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<_BrowseSort>(
-      tooltip: 'Sort thumbnails',
-      color: FfTokens.sessionEl,
-      surfaceTintColor: Colors.transparent,
-      position: PopupMenuPosition.under,
-      elevation: 16,
-      shadowColor: FfTokens.sessionMenuShadow,
-      shape: FfMenuSurface.shape,
-      onSelected: onChanged,
-      itemBuilder: (context) => [
+  Future<void> _openMenu(BuildContext context) async {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final origin = box.localToGlobal(Offset.zero);
+    final picked = await showFfMenu<_BrowseSort>(
+      context: context,
+      anchorGlobal: origin & box.size,
+      width: 200,
+      choices: [
         for (final value in _BrowseSort.values)
-          PopupMenuItem<_BrowseSort>(
+          FfMenuChoice<_BrowseSort>(
             value: value,
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            child: Container(
-              width: 180,
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-              decoration: BoxDecoration(
-                color: value == sort
-                    ? tokens.accent.withValues(alpha: 0.16)
-                    : tokens.surface,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 17,
-                    child: value == sort
-                        ? PhosphorIcon(
-                            PhosphorIconsRegular.check,
-                            size: 14,
-                            color: tokens.accent,
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: 3),
-                  Expanded(
-                    child: Text(
-                      _menuLabel(value),
-                      softWrap: false,
-                      style: TextStyle(
-                        color: value == sort ? tokens.accent : tokens.text,
-                        fontSize: 10,
-                        fontWeight:
-                            value == sort ? FontWeight.w600 : FontWeight.w400,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            selected: value == sort,
+            child: Text(_menuLabel(value)),
           ),
       ],
-      child: Container(
-        height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: tokens.sunken,
-          borderRadius: BorderRadius.circular(7),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            PhosphorIcon(
-              PhosphorIconsRegular.sortAscending,
-              size: 14,
-              color: tokens.textSecondary,
-            ),
-            if (!iconOnly) ...[
-              const SizedBox(width: 6),
-              Text(
-                _label(sort),
-                softWrap: false,
-                style: TextStyle(
-                  color: tokens.textSecondary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  height: 1.1,
-                ),
-              ),
-              const SizedBox(width: 4),
-              PhosphorIcon(
-                PhosphorIconsRegular.caretDown,
-                size: 12,
-                color: tokens.textSecondary,
-              ),
-            ],
-          ],
-        ),
+    );
+    final value = picked?.value;
+    if (value == null) return;
+    onChanged(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _ThumbnailMenuButton(
+      tokens: tokens,
+      tooltip: 'Sort thumbnails',
+      label: iconOnly ? null : _label(sort),
+      leading: PhosphorIcon(
+        PhosphorIconsRegular.sortAscending,
+        size: 14,
+        color: tokens.textSecondary,
       ),
+      onTap: () => _openMenu(context),
     );
   }
 }
@@ -3109,7 +3110,6 @@ class _ThumbnailScopeDropdown extends StatefulWidget {
 
 class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
   final FocusNode _focusNode = FocusNode(debugLabel: 'Thumbnail scope');
-  bool _focused = false;
 
   String _label(_BrowseScope scope) {
     switch (scope) {
@@ -3202,52 +3202,14 @@ class _ThumbnailScopeDropdownState extends State<_ThumbnailScopeDropdown> {
     return Focus(
       focusNode: _focusNode,
       onKeyEvent: _handleKey,
-      onFocusChange: (value) => setState(() => _focused = value),
-      child: Tooltip(
-        message: 'Choose thumbnail scope',
-        child: InkWell(
-          onTap: () {
-            _focusNode.requestFocus();
-            _openMenu();
-          },
-          borderRadius: BorderRadius.circular(5),
-          child: Container(
-            width: 108,
-            height: 22,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: tokens.bg,
-              borderRadius: BorderRadius.circular(5),
-              border: Border.all(
-                color: _focused ? tokens.accent : tokens.divider,
-                width: _focused ? FfTokens.focusOutlineWidth : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _label(widget.scope),
-                    softWrap: false,
-                    style: TextStyle(
-                      color: tokens.text,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w400,
-                      height: 1.1,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                PhosphorIcon(
-                  PhosphorIconsRegular.caretDown,
-                  size: 14,
-                  color: tokens.textSecondary,
-                ),
-              ],
-            ),
-          ),
-        ),
+      child: _ThumbnailMenuButton(
+        tokens: tokens,
+        tooltip: 'Choose thumbnail scope',
+        label: widget.iconOnly ? null : _label(widget.scope),
+        onTap: () {
+          _focusNode.requestFocus();
+          _openMenu();
+        },
       ),
     );
   }

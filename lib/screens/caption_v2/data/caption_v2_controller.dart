@@ -467,24 +467,30 @@ class CaptionV2Controller extends ChangeNotifier {
   int _verbPreviewToken = 0;
   VerbSortMode verbSortMode = VerbSortMode.alphabetical;
 
-  /// How many verb categories can stay open at once. 1 closes the previous.
+  /// How many verb categories can stay open at once.
+  /// 0 is none, [verbCascadeAll] is every category.
   int verbCascadeLimit = 1;
+
+  static const int verbCascadeNone = 0;
+  static const int verbCascadeAll = 99;
 
   bool get verbMultiOpen => verbCascadeLimit > 1;
 
   int cascadeLimitFor(int categoryCount) {
     final max = categoryCount < 1 ? 1 : categoryCount;
-    final stored = verbCascadeLimit < 1 ? 1 : verbCascadeLimit;
-    return stored > max ? max : stored;
+    if (verbCascadeLimit <= verbCascadeNone) return 0;
+    if (verbCascadeLimit >= verbCascadeAll) return max;
+    return verbCascadeLimit > max ? max : verbCascadeLimit;
   }
 
-  /// Steps from the default verb-menu type size. Negative is smaller.
+  /// Steps from the default verb-menu type size. Each step is 10%.
+  /// Range is 80%–140% (default 100%).
   int verbFontStep = 0;
 
-  static const int verbFontStepMin = -3;
+  static const int verbFontStepMin = -2;
   static const int verbFontStepMax = 4;
 
-  double get verbFontScale => 1 + verbFontStep * 0.12;
+  double get verbFontScale => 1 + verbFontStep * 0.10;
   Map<String, int> _verbUsageCounts = {};
 
   // --- Game / teams ---
@@ -1178,18 +1184,52 @@ class CaptionV2Controller extends ChangeNotifier {
       );
     }
 
+    final nameFill =
+        manualCaptionOverride == null ? captionPlayerHighlight : null;
+    // One span for the whole subject clause ("Name #29 of the Team"), so the
+    // fill is continuous through the jersey and "of the" instead of stopping
+    // after the name.
+    if (nameFill != null && hasCaptionSubject) {
+      final lead = (hasTeamPlayersSubject
+              ? _teamPlayersLead(captionTemplate)
+              : _playerLead(captionTemplate))
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+      final subjectTip = subjectPlayers
+          .map(_playerProvenanceTip)
+          .toSet()
+          .join('\n');
+      add(
+        lead,
+        subjectTip.isEmpty ? 'Session · Team' : subjectTip,
+        background: nameFill,
+      );
+      if (opposingPlayers.isNotEmpty) {
+        final opponents =
+            _formatPlayersWithTeam(opposingPlayers, captionTemplate)
+                .replaceAll(RegExp(r'\s+'), ' ')
+                .trim();
+        final opponentTip = opposingPlayers
+            .map(_playerProvenanceTip)
+            .toSet()
+            .join('\n');
+        add(opponents, opponentTip, background: nameFill);
+      }
+    }
     for (final row in selectedPlayers) {
       var name = row.player.fullName.trim();
       if (name.isEmpty) continue;
       if (captionTemplate.removeDiacritics) {
         name = CaptionTextNormalize.stripDiacritics(name);
       }
-      add(
-        name,
-        _playerProvenanceTip(row),
-        background:
-            manualCaptionOverride == null ? captionPlayerHighlight : null,
-      );
+      add(name, _playerProvenanceTip(row), background: nameFill);
+      final jersey = row.player.jerseyNumber?.trim() ?? '';
+      if (jersey.isNotEmpty) {
+        final numText = captionTemplate.numberFormat == NumberFormatStyle.hash
+            ? '#$jersey'
+            : '($jersey)';
+        add(numText, _playerProvenanceTip(row), background: nameFill);
+      }
     }
 
     final verbFill =
@@ -1217,12 +1257,17 @@ class CaptionV2Controller extends ChangeNotifier {
       }
     }
 
-    if (homeTeam.trim().isNotEmpty) {
-      add(homeTeam, 'Session · Home team');
+    void addTeam(String raw, String tip) {
+      var team = raw.trim();
+      if (team.isEmpty) return;
+      if (captionTemplate.removeDiacritics) {
+        team = CaptionTextNormalize.stripDiacritics(team);
+      }
+      add(team, tip, background: nameFill);
     }
-    if (awayTeam.trim().isNotEmpty) {
-      add(awayTeam, 'Session · Away team');
-    }
+
+    addTeam(homeTeam, 'Session · Home team');
+    addTeam(awayTeam, 'Session · Away team');
 
     return spans;
   }
@@ -1235,8 +1280,9 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<void> setVerbCascadeLimit(int value) async {
-    final max = verbCategories.isEmpty ? 1 : verbCategories.length;
-    final next = value.clamp(1, max);
+    final next = value <= verbCascadeNone
+        ? verbCascadeNone
+        : (value >= verbCascadeAll ? verbCascadeAll : value);
     if (next == verbCascadeLimit) return;
     verbCascadeLimit = next;
     notifyListeners();
@@ -1534,6 +1580,17 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Path shown on the dock thumbnail while an upload is running.
   String? get transmittingPath => ftpPreviewPath;
+
+  /// Files in the current send, including the one on the wire.
+  int get ftpBatchTotal => transmitting ? _ftpSessionTotal : 0;
+
+  /// 1-based place of the file currently uploading.
+  int get ftpBatchIndex {
+    if (!transmitting || _ftpSessionTotal <= 0) return 0;
+    final shown = _ftpSessionDone + ftpActiveProgress.length;
+    if (shown <= 0) return 1;
+    return shown.clamp(1, _ftpSessionTotal);
+  }
 
   FtpCancelToken? _ftpCancelToken;
   bool _ftpUserCancelled = false;
@@ -2575,11 +2632,6 @@ class CaptionV2Controller extends ChangeNotifier {
         .clamp(verbFontStepMin, verbFontStepMax);
     _verbUsageCounts = await _prefs!.getVerbUsageCountsForSport(sport);
     await _loadVerbCatalog();
-    final cascadeMax = verbCategories.isEmpty ? 1 : verbCategories.length;
-    if (verbCascadeLimit > cascadeMax) {
-      verbCascadeLimit = cascadeMax;
-      await _prefs!.saveVerbCascadeLimit(verbCascadeLimit);
-    }
     captionTemplate = await _prefs!.getCaptionTemplate();
     gettyNoteIsNbae = await _prefs!.getGettyNoteIsNbae();
     mlbTimestampEnabled = await _prefs!.getMlbInningFromClockEnabled();
@@ -4558,6 +4610,52 @@ class CaptionV2Controller extends ChangeNotifier {
     return null;
   }
 
+  /// Drops [player] from the home or away roster for this session.
+  ///
+  /// A player with no jersey lives in the number view's "No number" band.
+  /// Removing one clears every unnumbered player on that team, so the band
+  /// goes away with them.
+  void removePlayer({
+    required bool isHome,
+    required Player player,
+  }) {
+    final clearUnnumbered = !_hasRosterJersey(player);
+    bool drop(Player candidate) {
+      if (clearUnnumbered && !_hasRosterJersey(candidate)) return true;
+      return _samePlayer(candidate, player);
+    }
+
+    final roster = isHome ? homeRoster : awayRoster;
+    final next = [for (final item in roster) if (!drop(item)) item];
+    if (isHome) {
+      homeRoster = next;
+    } else {
+      awayRoster = next;
+    }
+    selectedPlayers.removeWhere(
+      (row) => row.isHome == isHome && drop(row.player),
+    );
+    final pinned = pinnedPlayer;
+    if (pinned != null && pinned.isHome == isHome && drop(pinned.player)) {
+      pinnedPlayer = null;
+    }
+    manualCaptionOverride = null;
+    _syncPrimaryPlayer();
+    _dropTeammatesIfSubjectLeft();
+    _syncKeywords();
+    notifyListeners();
+  }
+
+  /// Jersey the number grid can place in a numbered row (0–99).
+  bool _hasRosterJersey(Player player) {
+    var raw = player.jerseyNumber?.trim() ?? '';
+    while (raw.startsWith('#')) {
+      raw = raw.substring(1).trim();
+    }
+    final number = int.tryParse(raw);
+    return number != null && number >= 0 && number <= 99;
+  }
+
   void _syncPrimaryPlayer() {
     if (selectedPlayers.isEmpty) {
       selectedPlayer = null;
@@ -6521,25 +6619,39 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Cycles # → First → Last → # (direction unchanged).
   void cycleRosterSortField() {
-    switch (rosterSort) {
-      case RosterSortMode.number:
-        rosterSort = RosterSortMode.firstName;
-        break;
-      case RosterSortMode.firstName:
-        rosterSort = RosterSortMode.lastName;
-        break;
-      case RosterSortMode.lastName:
-        rosterSort = RosterSortMode.number;
-        break;
-    }
-    homeRoster = _sortPlayers(homeRoster);
-    awayRoster = _sortPlayers(awayRoster);
-    notifyListeners();
+    const order = RosterSortMode.values;
+    final index = order.indexOf(rosterSort);
+    _applyRosterSort(order[(index + 1) % order.length], rosterSortAscending);
+  }
+
+  /// Steps the sort field without wrapping. Negative moves toward jersey number.
+  void stepRosterSortField(int delta) {
+    if (delta == 0) return;
+    const order = RosterSortMode.values;
+    final index = order.indexOf(rosterSort);
+    final next = (index + delta).clamp(0, order.length - 1);
+    if (next == index) return;
+    _applyRosterSort(order[next], rosterSortAscending);
   }
 
   /// Toggles ascending ↔ descending without changing the sort field.
   void toggleRosterSortDirection() {
-    rosterSortAscending = !rosterSortAscending;
+    _applyRosterSort(rosterSort, !rosterSortAscending);
+  }
+
+  void setRosterSortAscending(bool ascending) {
+    if (rosterSortAscending == ascending) return;
+    _applyRosterSort(rosterSort, ascending);
+  }
+
+  void resetRosterSort() {
+    if (rosterSort == RosterSortMode.number && rosterSortAscending) return;
+    _applyRosterSort(RosterSortMode.number, true);
+  }
+
+  void _applyRosterSort(RosterSortMode mode, bool ascending) {
+    rosterSort = mode;
+    rosterSortAscending = ascending;
     homeRoster = _sortPlayers(homeRoster);
     awayRoster = _sortPlayers(awayRoster);
     notifyListeners();
