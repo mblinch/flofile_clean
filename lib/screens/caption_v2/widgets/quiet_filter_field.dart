@@ -22,8 +22,7 @@ class QuietFilterField extends StatefulWidget {
   final double height;
   final String hint;
 
-  /// Empty width kept at the start of the field so a pinned jersey can sit
-  /// there without changing the field's size.
+  /// Empty width kept at the start of the field before the magnifying glass.
   final double leadingInset;
 
   /// Player search: drop the magnifying glass and [leadingInset] once the

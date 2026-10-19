@@ -409,6 +409,7 @@ class VerbDefaultsBundle {
   }
 
   /// Keep wantsOpponent / omitAgainst aligned with opponentJoiner text.
+  /// A blank joiner drops the connector word and still names the other team.
   /// Post Game Win/Loss stay opponent-free even when a legacy joiner remains.
   static void _normalizeOpponentFields(String key, Map<String, dynamic> merged) {
     if (key == 'Post Game Win' || key == 'Post Game Loss') {
@@ -422,7 +423,7 @@ class VerbDefaultsBundle {
       merged['omitAgainst'] = false;
     } else {
       merged['opponentJoiner'] = '';
-      merged['wantsOpponent'] = false;
+      merged['wantsOpponent'] = true;
       merged['omitAgainst'] = true;
     }
   }

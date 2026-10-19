@@ -326,126 +326,145 @@ class _FirebarVerbReference extends StatefulWidget {
 }
 
 class _FirebarVerbReferenceState extends State<_FirebarVerbReference> {
-  final _scrollController = ScrollController();
-  String? _lastSelectedKey;
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
+  static const int _columnCount = 2;
+  static const double _preferredRow = 18;
 
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
     final tokens = widget.tokens;
     final matches = controller.firebarVerbResults;
-    final matchKeys = matches.map((result) => result.verbKey).toSet();
-    final entries = <_FirebarVerbEntry>[];
-    for (final category in widget.categories) {
-      if (category == 'Favorites') continue;
-      final verbs = (controller.verbDefinitionsByCategory[category] ??
-              const <EffectiveVerb>[])
-          .where((verb) => matchKeys.contains(verb.key))
-          .toList();
+    final matchByKey = {
+      for (final result in matches)
+        if (result.verbKey != null) result.verbKey!: result,
+    };
+    final groups = <_FirebarVerbGroup>[];
+    for (final category in verbCategoriesForDisplay(widget.categories)) {
+      if (category == 'Favorites' || category == 'All') continue;
+      final verbs = controller.verbDefinitionsByCategory[category] ??
+          const <EffectiveVerb>[];
       if (verbs.isEmpty) continue;
-      entries.add(_FirebarVerbEntry.heading(category));
-      entries.addAll(verbs.map(_FirebarVerbEntry.verb));
+      groups.add(_FirebarVerbGroup(category, verbs));
+    }
+    final columns = List.generate(_columnCount, (_) => <_FirebarVerbGroup>[]);
+    final weights = List.filled(_columnCount, 0);
+    for (final group in groups) {
+      var target = 0;
+      for (var i = 1; i < _columnCount; i++) {
+        if (weights[i] < weights[target]) target = i;
+      }
+      columns[target].add(group);
+      weights[target] += 1 + group.verbs.length;
     }
     final selected = controller.firebarSelectedResult;
-    if (selected?.kind == FirebarResultKind.verb &&
-        selected?.key != _lastSelectedKey) {
-      _lastSelectedKey = selected!.key;
-      var selectedOffset = 0.0;
-      for (final entry in entries) {
-        if (entry.verb?.key == selected.verbKey) break;
-        selectedOffset += entry.verb == null ? 24 : 26;
-      }
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _scrollController.hasClients) {
-          _scrollController.animateTo(
-            selectedOffset.clamp(
-              0,
-              _scrollController.position.maxScrollExtent,
-            ),
-            duration: const Duration(milliseconds: 120),
-            curve: Curves.easeOut,
-          );
-        }
-      });
-    }
+    final query = controller.searchQuery.trim();
+    final dimUnmatched = query.isNotEmpty && matchByKey.isNotEmpty;
+    final tallest = weights.fold<int>(0, (max, value) => value > max ? value : max);
 
     return Semantics(
       label: 'Verb shortcut reference',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Divider(height: 1, color: tokens.divider),
-          Expanded(
-            child: entries.isEmpty
-                ? Center(
-                    child: Text(
-                      'No match',
-                      style: tokens.metaStyle.copyWith(
-                        color: tokens.text.withValues(alpha: 0.34),
+      child: groups.isEmpty
+          ? Center(
+              child: Text(
+                'No verbs',
+                style: tokens.metaStyle.copyWith(
+                  color: tokens.text.withValues(alpha: 0.34),
+                ),
+              ),
+            )
+          : LayoutBuilder(
+              builder: (context, constraints) {
+                final fitted = tallest == 0
+                    ? _preferredRow
+                    : constraints.maxHeight / tallest - 0.01;
+                final rowHeight = fitted.clamp(1.0, _preferredRow);
+                final filled =
+                    columns.where((column) => column.isNotEmpty).toList();
+                return Row(
+                  key: const ValueKey('firebar-verb-reference'),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    for (var i = 0; i < filled.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 4),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (final group in filled[i]) ...[
+                              _categoryLabel(group.category, tokens, rowHeight),
+                              for (final verb in group.verbs)
+                                _verbRow(
+                                  verb,
+                                  match: matchByKey[verb.key],
+                                  selectedKey: selected?.key,
+                                  dimUnmatched: dimUnmatched,
+                                  rowHeight: rowHeight,
+                                ),
+                            ],
+                          ],
+                        ),
                       ),
-                    ),
-                  )
-                : ListView.builder(
-                    key: const ValueKey('firebar-verb-reference'),
-                    controller: _scrollController,
-                    padding: const EdgeInsets.only(top: 2),
-                    itemCount: entries.length,
-                    itemBuilder: (context, index) {
-                      final entry = entries[index];
-                      if (entry.verb == null) {
-                        final category = entry.category!;
-                        return Container(
-                          height: 24,
-                          alignment: Alignment.centerLeft,
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: Text(
-                            category == 'Non Game-Action'
-                                ? 'NON GAME-ACTION'
-                                : category.toUpperCase(),
-                            style: tokens.microStyle.copyWith(fontSize: 10),
-                          ),
-                        );
-                      }
-                      final verb = entry.verb!;
-                      final result = matches.firstWhere(
-                        (candidate) => candidate.verbKey == verb.key,
-                      );
-                      return VerbTile(
-                        code: '',
-                        label: verb.label,
-                        selected: false,
-                        firebarSelected: result.key == selected?.key,
-                        highlightQuery: controller.firebarVerbHighlightQuery,
-                        pinned: controller.isVerbPinned(verb.key),
-                        dimmed: controller.isVerbPinned(verb.key) &&
-                            controller.searchQuery.trim().isNotEmpty &&
-                            result.key != selected?.key,
-                        height: 26,
-                        onTap: () =>
-                            controller.commitFirebarResultAndClose(result),
-                        onPinTap: () => controller.toggleVerbPin(verb.key),
-                      );
-                    },
-                  ),
+                    ],
+                  ],
+                );
+              },
+            ),
+    );
+  }
+
+  Widget _categoryLabel(String category, FfTokens tokens, double rowHeight) {
+    final label =
+        category == 'Non Game-Action' ? 'NON GAME-ACTION' : category.toUpperCase();
+    return SizedBox(
+      height: rowHeight,
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: tokens.microStyle.copyWith(
+            color: FfTokens.firebar,
+            fontSize: (rowHeight * 0.5).clamp(6.0, 10.0),
+            height: 1,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
           ),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _verbRow(
+    EffectiveVerb verb, {
+    required FirebarResult? match,
+    required String? selectedKey,
+    required bool dimUnmatched,
+    required double rowHeight,
+  }) {
+    final controller = widget.controller;
+    return VerbTile(
+      code: '',
+      label: verb.label,
+      selected: false,
+      firebarSelected: match != null && match.key == selectedKey,
+      highlightQuery: controller.firebarVerbHighlightQuery,
+      pinned: false,
+      dimmed: dimUnmatched && match == null,
+      height: rowHeight,
+      onTap: match == null
+          ? null
+          : () => controller.commitFirebarResultAndClose(match),
     );
   }
 }
 
-class _FirebarVerbEntry {
-  const _FirebarVerbEntry.heading(this.category) : verb = null;
-  const _FirebarVerbEntry.verb(this.verb) : category = null;
+class _FirebarVerbGroup {
+  const _FirebarVerbGroup(this.category, this.verbs);
 
-  final String? category;
-  final EffectiveVerb? verb;
+  final String category;
+  final List<EffectiveVerb> verbs;
 }
 
 class _CascadeCategory extends StatefulWidget {

@@ -41,6 +41,7 @@ import 'layout/roster_column.dart';
 import 'layout/roster_import_dialog.dart';
 import 'layout/verbs_column.dart';
 import 'widgets/caption_strip.dart';
+import 'widgets/ftp_active_dialog.dart';
 import 'widgets/ftp_history_dialog.dart';
 import 'widgets/mobile_photo_filmstrip.dart';
 import 'widgets/transmit_dock.dart';
@@ -125,8 +126,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
   void _onController() {
     if (!mounted) return;
-    if (_controller.searchQuery.isEmpty && _searchText.text.isNotEmpty) {
-      _searchText.clear();
+    if (_searchText.text != _controller.searchQuery) {
+      final query = _controller.searchQuery;
+      _searchText.value = TextEditingValue(
+        text: query,
+        selection: TextSelection.collapsed(offset: query.length),
+      );
     }
     _clearPendingBurstIfPastChain();
     final status = _controller.statusMessage;
@@ -429,6 +434,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (_finishCropOnEnter(event)) return true;
     if (_handleSaveShortcut(event)) return true;
     if (_handleBurstReviewShortcut(event)) return true;
+    if (_handleFirebarFocusShortcut(event)) return true;
+    if (_searchFocus.hasFocus && _handleFirebarMenuKey(event)) return true;
+    if (_handleJerseySideChoiceKey(event)) return true;
 
     if (_controller.searchOpen) return false;
     if (event is! KeyUpEvent || _jerseyBuffer.isEmpty) return false;
@@ -480,10 +488,89 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     return true;
   }
 
-  /// Global ⌘S / Ctrl+S / Shift+Enter / ⌘⇧Enter — same reliability as V1.
+  /// ⌘K / Ctrl+K focuses Firebar even when another text field has focus.
+  bool _handleFirebarFocusShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final keys = HardwareKeyboard.instance;
+    final chord = (keys.isMetaPressed || keys.isControlPressed) &&
+        !keys.isAltPressed &&
+        event.logicalKey == LogicalKeyboardKey.keyK;
+    if (!chord) return false;
+    _openSearch();
+    return true;
+  }
+
+  /// Menu keys run before the text field so arrows move the menu instead of
+  /// editing the query. A chip is committed only with Enter.
+  bool _handleFirebarMenuKey(KeyEvent event) {
+    final pressed = event is KeyDownEvent || event is KeyRepeatEvent;
+    if (!pressed || _controller.firebarOptions.isNotEmpty) {
+      return false;
+    }
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed || keys.isControlPressed || keys.isAltPressed) {
+      return false;
+    }
+    final key = event.logicalKey;
+    final query = _controller.searchQuery;
+    if (_controller.firebarMenuOpen &&
+        key == LogicalKeyboardKey.arrowUp) {
+      _controller.moveFirebarMenu(-1);
+      return true;
+    }
+    if (_controller.firebarMenuOpen &&
+        key == LogicalKeyboardKey.arrowDown) {
+      _controller.moveFirebarMenu(1);
+      return true;
+    }
+    if (query.isEmpty && key == LogicalKeyboardKey.arrowLeft) {
+      _controller.moveFirebarChipCursor(-1);
+      return true;
+    }
+    if (query.isEmpty && key == LogicalKeyboardKey.arrowRight) {
+      _controller.moveFirebarChipCursor(1);
+      return true;
+    }
+    if (query.isEmpty && key == LogicalKeyboardKey.backspace) {
+      _controller.backspaceFirebarChip();
+      return true;
+    }
+    if (key == LogicalKeyboardKey.escape) {
+      _closeSearch();
+      return true;
+    }
+    return false;
+  }
+
+  /// While two players share the typed number, h/v picks a side before the
+  /// letter can land in the text field. Arrows move the menu instead.
+  bool _handleJerseySideChoiceKey(KeyEvent event) {
+    if (event is! KeyDownEvent || !_controller.firebarJerseySideChoiceOpen) {
+      return false;
+    }
+    final keys = HardwareKeyboard.instance;
+    if (keys.isMetaPressed || keys.isControlPressed || keys.isAltPressed) {
+      return false;
+    }
+    if (keys.isShiftPressed) return false;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.keyH) {
+      _controller.chooseFirebarJerseySide(isHome: true);
+      return true;
+    }
+    if (key == LogicalKeyboardKey.keyV) {
+      _controller.chooseFirebarJerseySide(isHome: false);
+      return true;
+    }
+    return false;
+  }
+
+  /// Global ⌘S / Ctrl+S / Shift+Enter / ⌘Enter / ⌘⇧Enter.
   ///
-  /// Flutter [Shortcuts] only fire when focus is inside that subtree; this
-  /// handler still works when focus is in a text field, drum lane, or lost.
+  /// With FTP on, Shift+Enter and ⌘Enter (Ctrl+Enter too) save and FTP. ⌘S
+  /// still saves only. Plain Enter stays insert. Flutter [Shortcuts] only
+  /// fire when focus is inside that subtree; this handler still works when
+  /// focus is in a text field, drum lane, or lost.
   bool _handleSaveShortcut(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
 
@@ -513,17 +600,27 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
     if (!_controller.sessionReady || _controller.sessionLoading) return false;
 
-    final saveTransmit = isEnter &&
+    final chord = captionV2SaveChord(
+      key: event.logicalKey,
+      shift: keys.isShiftPressed,
+      meta: keys.isMetaPressed,
+      control: keys.isControlPressed,
+      alt: keys.isAltPressed,
+      ftpMode: _controller.ftpModeEnabled,
+    );
+    if (chord == CaptionV2SaveChord.none) return false;
+
+    final cmdShiftEnter = isEnter &&
         keys.isShiftPressed &&
         (keys.isMetaPressed || keys.isControlPressed);
-    if (saveTransmit) {
+    if (cmdShiftEnter) {
       if (_controller.searchOpen &&
           (_controller.firebarCanQuickSavePlayer ||
               _controller.firebarCanQuickSaveVerb)) {
         _controller.commitSelectedFirebarResult();
         _searchText.clear();
       }
-      if (_controller.ftpModeEnabled) {
+      if (chord == CaptionV2SaveChord.transmit) {
         unawaited(_saveTransmitAndNext());
       } else {
         unawaited(_saveAndNext());
@@ -531,28 +628,23 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       return true;
     }
 
-    final shiftEnter = isEnter &&
-        keys.isShiftPressed &&
-        !keys.isMetaPressed &&
-        !keys.isControlPressed &&
-        !keys.isAltPressed;
-    final cmdS = isS &&
-        (keys.isMetaPressed || keys.isControlPressed) &&
-        !keys.isShiftPressed &&
-        !keys.isAltPressed;
-    if (!shiftEnter && !cmdS) return false;
-
-    // Firebar: Shift+Enter commits the highlighted player before save, or
-    // picks Save from the destination chips (which already triggers save).
-    if (shiftEnter && _controller.searchOpen) {
+    // Firebar: Shift+Enter and ⌘Enter commit the highlighted player or verb
+    // first, or pick FTP from the destination chips (which already uploads).
+    if (isEnter && _controller.searchOpen) {
       if (_controller.firebarShowShiftEnterSaveHint) {
-        final fullyHandled = _controller.commitFirebarForShiftEnterSave();
+        final fullyHandled = _controller.commitFirebarForShiftEnterSave(
+          transmit: chord == CaptionV2SaveChord.transmit,
+        );
         _searchText.clear();
         if (fullyHandled) return true;
       }
     }
 
-    unawaited(_saveAndNext());
+    if (chord == CaptionV2SaveChord.transmit) {
+      unawaited(_saveTransmitAndNext());
+    } else {
+      unawaited(_saveAndNext());
+    }
     return true;
   }
 
@@ -687,6 +779,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       headline: _controller.headline,
       keywords: _controller.keywords,
       photographerName: _controller.photographerName,
+      clicks: _controller.currentPath == null
+          ? null
+          : _controller.clicksForTransfer(_controller.currentPath!),
     );
     await Clipboard.setData(ClipboardData(text: payload.encode()));
     if (!mounted) return;
@@ -1438,7 +1533,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     const pad = 10.0;
     final inner = math.max(0.0, workspaceWidth - pad * 2 - _gap);
     final maxPhotoWidth = inner * 0.40;
-    final minPhotoWidth = math.min(300.0, maxPhotoWidth);
+    final minPhotoWidth = math.min(350.0, maxPhotoWidth);
     final defaultPhotoWidth =
         (inner * 0.30).clamp(minPhotoWidth, maxPhotoWidth);
     final photoWidth =
@@ -1476,7 +1571,6 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             ),
           ),
           _WorkspaceResizeHandle(
-            tokens: t,
             onDrag: (delta) => setState(() {
               _photoWidth =
                   (photoWidth + delta).clamp(minPhotoWidth, maxPhotoWidth);
@@ -1589,6 +1683,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         transmitLabel: c.ftpButtonLabel,
         transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
         showTransmit: c.ftpModeEnabled,
+        hideOrangeActions: false,
         ftpActive: c.transmitting,
         ftpProgress: c.ftpFileProgress,
         ftpThumbPath: c.ftpPreviewPath,
@@ -1598,6 +1693,9 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         ftpBatchTotal: c.ftpBatchTotal,
         onFtpHistory: c.ftpModeEnabled
             ? () => showFtpHistoryDialog(context, c)
+            : null,
+        onFtpProgress: c.transmitting
+            ? () => showFtpActiveDialog(context, c)
             : null,
       );
   }
@@ -1671,16 +1769,29 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       onEditTap: () => _openCaptionStyleEditor(c),
       footer: c.hideFirebar
           ? null
-          : SizedBox(
-        height: c.searchOpen ? 72 : 32,
-        child: CaptionV2SearchBar(
+          : CaptionV2SearchBar(
           controller: c,
           focusNode: _searchFocus,
           textController: _searchText,
           onActivate: _openSearch,
           onExit: _closeSearch,
+          onSave: () {
+            if (c.searchOpen &&
+                (c.firebarCanQuickSavePlayer || c.firebarCanQuickSaveVerb)) {
+              c.commitSelectedFirebarResult();
+              _searchText.clear();
+            }
+            unawaited(_saveAndNext());
+          },
+          onTransmit: () {
+            if (c.searchOpen && c.firebarShowShiftEnterSaveHint) {
+              final handled = c.commitFirebarForShiftEnterSave(transmit: true);
+              _searchText.clear();
+              if (handled) return;
+            }
+            unawaited(_saveTransmitAndNext());
+          },
         ),
-      ),
       inningLabel: c.inningLabel,
       timingUnitLabel: c.timingUnitTitle,
       inning: c.inning,
@@ -1923,11 +2034,11 @@ class _CaptionResizeHandle extends StatelessWidget {
           message: 'Drag to resize the caption. Double-click to reset.',
           waitDuration: const Duration(milliseconds: 400),
           child: Padding(
-            padding: const EdgeInsets.only(top: 6, bottom: 10),
+            padding: const EdgeInsets.symmetric(vertical: 2),
             child: Center(
               child: Container(
                 width: 56,
-                height: 4,
+                height: 3,
                 decoration: BoxDecoration(
                   color: FfTokens.sessionLn2,
                   borderRadius: BorderRadius.circular(2),
@@ -1943,12 +2054,10 @@ class _CaptionResizeHandle extends StatelessWidget {
 
 class _WorkspaceResizeHandle extends StatelessWidget {
   const _WorkspaceResizeHandle({
-    required this.tokens,
     required this.onDrag,
     required this.onReset,
   });
 
-  final FfTokens tokens;
   final ValueChanged<double> onDrag;
   final VoidCallback onReset;
 
@@ -1960,7 +2069,29 @@ class _WorkspaceResizeHandle extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onHorizontalDragUpdate: (details) => onDrag(details.delta.dx),
         onDoubleTap: onReset,
-        child: const SizedBox(width: 10),
+        child: Tooltip(
+          message: 'Drag to resize the preview. Double-click to reset.',
+          waitDuration: const Duration(milliseconds: 400),
+          child: SizedBox(
+            width: 22,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(width: 10),
+                const SizedBox(
+                  width: 2,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: FfTokens.sessionLn2,
+                      borderRadius: BorderRadius.all(Radius.circular(1)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

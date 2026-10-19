@@ -60,6 +60,42 @@ class JerseyDigitIntent extends Intent {
   final bool isHome;
 }
 
+/// What [CaptionV2Screen]'s hardware save handler should do for one key-down.
+enum CaptionV2SaveChord { none, save, transmit }
+
+/// Maps a key-down to save or FTP.
+///
+/// ⌘S / Ctrl+S always save. Shift+Enter saves, and FTPs when [ftpMode] is on.
+/// ⌘Enter / Ctrl+Enter FTP only when [ftpMode] is on. Plain Enter is not a
+/// save chord, so Firebar can keep using it to insert.
+CaptionV2SaveChord captionV2SaveChord({
+  required LogicalKeyboardKey key,
+  required bool shift,
+  required bool meta,
+  required bool control,
+  required bool alt,
+  required bool ftpMode,
+}) {
+  final isEnter = key == LogicalKeyboardKey.enter ||
+      key == LogicalKeyboardKey.numpadEnter;
+  final isS = key == LogicalKeyboardKey.keyS;
+  final metaOrControl = meta || control;
+
+  if (isEnter && shift && metaOrControl) {
+    return ftpMode ? CaptionV2SaveChord.transmit : CaptionV2SaveChord.save;
+  }
+  if (isEnter && shift && !metaOrControl && !alt) {
+    return ftpMode ? CaptionV2SaveChord.transmit : CaptionV2SaveChord.save;
+  }
+  if (isEnter && !shift && metaOrControl && !alt && ftpMode) {
+    return CaptionV2SaveChord.transmit;
+  }
+  if (isS && metaOrControl && !shift && !alt) {
+    return CaptionV2SaveChord.save;
+  }
+  return CaptionV2SaveChord.none;
+}
+
 /// An action which leaves the key available to an [EditableText].
 ///
 /// Local roster, verb, and thumbnail focus handlers run before this ancestor
@@ -94,8 +130,9 @@ Map<ShortcutActivator, Intent> buildCaptionV2Shortcuts() {
         const OpenSearchIntent(),
     const SingleActivator(LogicalKeyboardKey.keyK, control: true):
         const OpenSearchIntent(),
-    // ⌘S / Shift+Enter / ⌘⇧Enter are handled by CaptionV2Screen's hardware
-    // key handler so they still work when focus is outside the Shortcuts tree.
+    // ⌘S / Shift+Enter / ⌘Enter (FTP) / ⌘⇧Enter are handled by
+    // CaptionV2Screen's hardware key handler so they still work when focus
+    // is outside the Shortcuts tree.
     const SingleActivator(
       LogicalKeyboardKey.keyV,
       meta: true,

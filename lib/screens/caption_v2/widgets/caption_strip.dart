@@ -562,21 +562,16 @@ TextSpan _captionAnnotatedSpan(
   if (ranges.isEmpty) {
     final tip = unmatchedTip?.trim() ?? '';
     if (!interactiveTips || tip.isEmpty || text.isEmpty) {
-      return TextSpan(text: text, style: base);
+      return TextSpan(text: _captionWithoutDisplayGaps(text), style: base);
     }
     return TextSpan(
       style: base,
-      children: [
-        WidgetSpan(
-          alignment: PlaceholderAlignment.baseline,
-          baseline: TextBaseline.alphabetic,
-          child: _ProvenanceTip(
-            tip: tip,
-            tokens: tokens,
-            child: Text(text, style: base),
-          ),
-        ),
-      ],
+      children: _captionFlowingPieces(
+        _captionWithoutDisplayGaps(text),
+        base: base,
+        tip: tip,
+        tokens: tokens,
+      ),
     );
   }
 
@@ -632,20 +627,13 @@ TextSpan _captionAnnotatedSpan(
     ..clear()
     ..addAll(glued);
 
-  InlineSpan piece(String phrase, {String? tip, TextStyle? style}) {
-    final painted = style ?? base;
-    if (interactiveTips && tip != null && tip.isNotEmpty && phrase.isNotEmpty) {
-      return WidgetSpan(
-        alignment: PlaceholderAlignment.baseline,
-        baseline: TextBaseline.alphabetic,
-        child: _ProvenanceTip(
-          tip: tip,
-          tokens: tokens,
-          child: Text(phrase, style: painted),
-        ),
-      );
-    }
-    return TextSpan(text: phrase, style: painted);
+  List<InlineSpan> piece(String phrase, {String? tip, TextStyle? style}) {
+    return _captionFlowingPieces(
+      phrase,
+      base: style ?? base,
+      tip: interactiveTips ? tip : null,
+      tokens: tokens,
+    );
   }
 
   final children = <InlineSpan>[];
@@ -653,7 +641,7 @@ TextSpan _captionAnnotatedSpan(
   for (final range in merged) {
     if (range.start < cursor) continue;
     if (range.start > cursor) {
-      children.add(piece(
+      children.addAll(piece(
         text.substring(cursor, range.start),
         tip: unmatchedTip,
       ));
@@ -675,14 +663,56 @@ TextSpan _captionAnnotatedSpan(
     } else {
       style = base;
     }
-    children.add(piece(phrase, tip: range.tip, style: style));
+    children.addAll(piece(phrase, tip: range.tip, style: style));
     cursor = range.end;
   }
   if (cursor < text.length) {
-    children.add(piece(text.substring(cursor), tip: unmatchedTip));
+    children.addAll(piece(text.substring(cursor), tip: unmatchedTip));
   }
   if (children.isEmpty) return TextSpan(text: text, style: base);
   return TextSpan(style: base, children: children);
+}
+
+/// Newlines and blank lines in a caption become a single space on screen.
+String _captionWithoutDisplayGaps(String text) {
+  return text.replaceAll(RegExp(r'[ \t]*\r?\n+[ \t]*'), ' ');
+}
+
+/// Hoverable caption words that stay on one line each, so a long phrase
+/// wraps between words instead of opening a blank band in the paragraph.
+List<InlineSpan> _captionFlowingPieces(
+  String phrase, {
+  required TextStyle base,
+  required FfTokens tokens,
+  String? tip,
+}) {
+  final shown = _captionWithoutDisplayGaps(phrase);
+  final hover = tip?.trim() ?? '';
+  if (hover.isEmpty || shown.isEmpty) {
+    return [TextSpan(text: shown, style: base)];
+  }
+  final spans = <InlineSpan>[];
+  for (final match in RegExp(r'\s+|\S+').allMatches(shown)) {
+    final part = match.group(0)!;
+    if (RegExp(r'^\s+$').hasMatch(part)) {
+      spans.add(TextSpan(text: part, style: base));
+      continue;
+    }
+    spans.add(WidgetSpan(
+      alignment: PlaceholderAlignment.baseline,
+      baseline: TextBaseline.alphabetic,
+      child: _ProvenanceTip(
+        tip: hover,
+        tokens: tokens,
+        child: Text(
+          part,
+          softWrap: false,
+          style: base,
+        ),
+      ),
+    ));
+  }
+  return spans;
 }
 
 /// Dark, compact hover card for caption field provenance.

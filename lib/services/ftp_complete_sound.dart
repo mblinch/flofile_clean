@@ -2,6 +2,8 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'preferences_service.dart';
+
 /// Clean G–C–G chime played when an FTP batch finishes successfully.
 class FtpCompleteSound {
   static Uint8List? _wav;
@@ -21,27 +23,37 @@ class FtpCompleteSound {
 
   static Future<void> _play() async {
     try {
+      final prefs = await PreferencesService.getInstance();
+      final custom = await prefs.getFtpCompleteSoundPath();
+      if (custom != null && File(custom).existsSync()) {
+        await _playFile(custom);
+        return;
+      }
       final file = File(
         '${Directory.systemTemp.path}${Platform.pathSeparator}quickcap_ftp_complete.wav',
       );
       await file.writeAsBytes(wavBytes(), flush: true);
-      if (Platform.isMacOS) {
-        await Process.run('afplay', [file.path]);
-      } else if (Platform.isWindows) {
-        final escaped = file.path.replaceAll("'", "''");
-        await Process.run('powershell', [
-          '-NoProfile',
-          '-Command',
-          "(New-Object System.Media.SoundPlayer '$escaped').PlaySync()",
-        ]);
-      } else if (Platform.isLinux) {
-        final pulse = await Process.run('paplay', [file.path]);
-        if (pulse.exitCode != 0) {
-          await Process.run('aplay', [file.path]);
-        }
-      }
+      await _playFile(file.path);
     } catch (e) {
       print('FTP complete sound failed: $e');
+    }
+  }
+
+  static Future<void> _playFile(String path) async {
+    if (Platform.isMacOS) {
+      await Process.run('afplay', [path]);
+    } else if (Platform.isWindows) {
+      final escaped = path.replaceAll("'", "''");
+      await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        "(New-Object System.Media.SoundPlayer '$escaped').PlaySync()",
+      ]);
+    } else if (Platform.isLinux) {
+      final pulse = await Process.run('paplay', [path]);
+      if (pulse.exitCode != 0) {
+        await Process.run('aplay', [path]);
+      }
     }
   }
 }

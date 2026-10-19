@@ -1,7 +1,10 @@
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import '../caption_style/caption_template.dart';
 import '../caption_style/game_info.dart';
@@ -55,6 +58,20 @@ List<Map<String, dynamic>> _withoutHockeyAnimalVerbs(
   return verbs;
 }
 
+class AdminVerbChoice {
+  const AdminVerbChoice({
+    required this.key,
+    required this.added,
+    required this.takeAdmin,
+  });
+
+  final String key;
+  final bool added;
+
+  /// Added: put the verb on the list. Changed: replace the personal copy.
+  final bool takeAdmin;
+}
+
 class PreferencesService {
   static const String _keyCategoryOrder = 'category_order';
   static const String _keyCategoryOrderBaseball = 'category_order_baseball';
@@ -104,6 +121,8 @@ class PreferencesService {
   static const String _keyVerbMultiOpen = 'verb_multi_open';
   static const String _keyVerbCascadeLimit = 'verb_cascade_limit';
   static const String _keyVerbFontStep = 'verb_font_step';
+  /// Verb panel layout: false is category cascade, true is one A–Z list.
+  static const String _keyVerbListAll = 'verb_list_all';
   /// Per-sport map of verb key → usage count (synced via user Firebase prefs).
   static const String _keyVerbUsageCounts = 'verb_usage_counts';
   static const String _keySportDefaultPrefix = 'sport_default_'; // Per-sport "Set as default" bundle
@@ -140,6 +159,7 @@ class PreferencesService {
   static const String _keyJerseyOcrEnabled = 'jersey_ocr_enabled';
   /// When false, caption V2 hides FTP buttons/shortcuts for the session.
   static const String _keyFtpModeEnabled = 'ftp_mode_enabled';
+  static const String _keyFtpCompleteSoundPath = 'ftp_complete_sound_path';
   static const String _keyHideFirebar = 'hide_firebar';
   /// JSON list of recent `{away,home}` matchups per sport (startup screen).
   static const String _keyRecentMatchupsPrefix = 'startup_recent_matchups_';
@@ -380,6 +400,71 @@ class PreferencesService {
     await prefs.setBool(_keyFtpModeEnabled, enabled);
     applicationModesRevision.value = applicationModesRevision.value + 1;
     _afterLocalPreferencesChanged();
+  }
+
+  /// Local copy played when an FTP batch finishes. Empty uses the built-in chime.
+  Future<String?> getFtpCompleteSoundPath() async {
+    final prefs = await _getPrefs();
+    final path = prefs.getString(_keyFtpCompleteSoundPath)?.trim();
+    if (path == null || path.isEmpty) return null;
+    final file = File(path);
+    if (!file.existsSync()) {
+      await prefs.remove(_keyFtpCompleteSoundPath);
+      return null;
+    }
+    final dir = await _ftpChimeDirectory();
+    if (!p.isWithin(dir.path, file.absolute.path)) {
+      await saveFtpCompleteSoundPath(file.path);
+      return getFtpCompleteSoundPath();
+    }
+    return file.path;
+  }
+
+  Future<void> saveFtpCompleteSoundPath(String? path) async {
+    final prefs = await _getPrefs();
+    final dir = await _ftpChimeDirectory();
+    final trimmed = path?.trim();
+    final source = trimmed == null || trimmed.isEmpty ? null : File(trimmed);
+    if (source == null || !source.existsSync()) {
+      if (dir.existsSync()) {
+        for (final entity in dir.listSync()) {
+          if (entity is File) await entity.delete();
+        }
+      }
+      await prefs.remove(_keyFtpCompleteSoundPath);
+      _afterLocalPreferencesChanged();
+      return;
+    }
+
+    final dest = File(p.join(dir.path, _ftpChimeFileName(source.path)));
+    final sameFile = p.normalize(source.absolute.path) ==
+        p.normalize(dest.absolute.path);
+    if (dir.existsSync()) {
+      for (final entity in dir.listSync()) {
+        if (entity is! File) continue;
+        if (p.normalize(entity.absolute.path) ==
+            p.normalize(dest.absolute.path)) {
+          continue;
+        }
+        await entity.delete();
+      }
+    }
+    if (!sameFile) await source.copy(dest.path);
+    await prefs.setString(_keyFtpCompleteSoundPath, dest.path);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<Directory> _ftpChimeDirectory() async {
+    final support = await getApplicationSupportDirectory();
+    final dir = Directory(p.join(support.path, 'ftp_chime'));
+    if (!dir.existsSync()) await dir.create(recursive: true);
+    return dir;
+  }
+
+  String _ftpChimeFileName(String sourcePath) {
+    final base = p.basename(sourcePath).replaceAll(RegExp(r'[\\/]'), '');
+    if (base.isEmpty || base == '.' || base == '..') return 'chime.wav';
+    return base;
   }
 
   /// When true, the caption Firebar is hidden.
@@ -842,6 +927,12 @@ class PreferencesService {
     if (fromAppDefaults != null && fromAppDefaults.isNotEmpty) {
       return fromAppDefaults;
     }
+    return getStoredSportDefault(sport);
+  }
+
+  /// This device's saved sport catalog. Unlike [getSportDefault], this does
+  /// not substitute the published app-default catalog.
+  Future<Map<String, dynamic>?> getStoredSportDefault(String sport) async {
     final prefs = await _getPrefs();
     final raw = prefs.getString(_getSportDefaultKey(sport));
     if (raw == null) return null;
@@ -850,6 +941,11 @@ class PreferencesService {
     } catch (_) {
       return null;
     }
+  }
+
+  Future<bool> hasExplicitDeletedVerbs({String sport = 'hockey'}) async {
+    final prefs = await _getPrefs();
+    return prefs.containsKey(_getDeletedVerbsKey(sport));
   }
 
   Future<bool> hasSportDefault(String sport) async {
@@ -1358,6 +1454,108 @@ class PreferencesService {
     await prefs.setString(_verbAdminAckKey(sport), fingerprint);
   }
 
+  String _verbAdminSnapshotKey(String sport) =>
+      'verb_admin_snapshot_${sport.toLowerCase().trim()}';
+
+  /// Last published verb signatures the user already reviewed.
+  Future<Map<String, String>?> getVerbAdminSnapshot(String sport) async {
+    final prefs = await _getPrefs();
+    final raw = prefs.getString(_verbAdminSnapshotKey(sport));
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! Map) return null;
+      return decoded.map(
+        (key, value) => MapEntry(key.toString(), value.toString()),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> saveVerbAdminSnapshot(
+    String sport,
+    Map<String, String> snapshot,
+  ) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(
+      _verbAdminSnapshotKey(sport),
+      json.encode(snapshot),
+    );
+  }
+
+  /// Apply per-verb answers after an admin catalog publish.
+  ///
+  /// [takeAdmin] for an added verb puts it on the list. For a changed verb it
+  /// replaces the personal copy with the published record. Otherwise an added
+  /// admin verb is hidden, and a changed verb is left as the user saved it.
+  Future<void> applyAdminVerbChoices({
+    required String sport,
+    required Map<String, dynamic> published,
+    required List<AdminVerbChoice> choices,
+  }) async {
+    final normalized = sport.toLowerCase().trim();
+    if (choices.isEmpty) return;
+    final publishedCustoms = <String, Map<String, dynamic>>{};
+    for (final raw in ((published['customVerbs'] as List?) ?? const [])) {
+      if (raw is! Map) continue;
+      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
+      if (key.isEmpty) continue;
+      publishedCustoms[key] = Map<String, dynamic>.from(raw);
+    }
+
+    final overrides = await _localVerbOverrides(sport: normalized);
+    final pins = await getVerbCategoryOverrides(sport: normalized);
+    final hasCustoms = await hasLocalCustomVerbs(sport: normalized);
+    final customs = hasCustoms
+        ? await getCustomVerbs(sport: normalized)
+        : <Map<String, dynamic>>[];
+    final hidden = await hasExplicitDeletedVerbs(sport: normalized)
+        ? await getDeletedVerbs(sport: normalized)
+        : <String>{};
+    var overridesChanged = false;
+    var pinsChanged = false;
+    var customsChanged = false;
+    var hiddenChanged = false;
+
+    for (final choice in choices) {
+      final key = choice.key.trim();
+      if (key.isEmpty) continue;
+      if (choice.added && !choice.takeAdmin) {
+        if (hidden.add(key)) hiddenChanged = true;
+        continue;
+      }
+      if (choice.added && choice.takeAdmin) {
+        if (hidden.remove(key)) hiddenChanged = true;
+        continue;
+      }
+      if (!choice.takeAdmin) continue;
+      if (hidden.remove(key)) hiddenChanged = true;
+      if (pins.remove(key) != null) pinsChanged = true;
+      if (overrides.remove(key) != null) overridesChanged = true;
+      final custom = publishedCustoms[key];
+      if (custom != null && hasCustoms) {
+        customs.removeWhere(
+          (item) =>
+              (item['key'] ?? item['label'] ?? '').toString().trim() == key,
+        );
+        customs.add(Map<String, dynamic>.from(custom));
+        customsChanged = true;
+      }
+    }
+
+    if (overridesChanged) {
+      await saveVerbOverrides(overrides, sport: normalized);
+    }
+    if (pinsChanged) {
+      await saveVerbCategoryOverrides(pins, sport: normalized);
+    }
+    if (customsChanged) {
+      await saveCustomVerbs(customs, sport: normalized);
+    }
+    if (hiddenChanged) await saveDeletedVerbs(hidden, sport: normalized);
+  }
+
   /// Drop personal verb copies for [sport] so the published admin catalog shows.
   /// Favorites, category order, and usage counts stay.
   Future<void> adoptPublishedVerbs(String sport) async {
@@ -1645,6 +1843,17 @@ class PreferencesService {
   Future<void> saveVerbFontStep(int step) async {
     final prefs = await _getPrefs();
     await prefs.setInt(_keyVerbFontStep, step);
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<bool> getVerbListAll() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyVerbListAll) ?? false;
+  }
+
+  Future<void> saveVerbListAll(bool value) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyVerbListAll, value);
     _afterLocalPreferencesChanged();
   }
 
@@ -2015,6 +2224,7 @@ class PreferencesService {
       'burstDetectionEnabled': await getBurstDetectionEnabled(),
       'serialNumberBylines': await getSerialNumberBylines(),
       'ftpModeEnabled': await getFtpModeEnabled(),
+      'ftpCompleteSoundPath': await getFtpCompleteSoundPath(),
       'hideFirebar': await getHideFirebar(),
       'jerseyOcrEnabled': await getJerseyOcrEnabled(),
       'resolutionWarningThreshold': await getResolutionWarningThreshold(),
@@ -2263,6 +2473,10 @@ class PreferencesService {
     }
     if (preferences.containsKey('ftpModeEnabled')) {
       await saveFtpModeEnabled(preferences['ftpModeEnabled'] as bool);
+    }
+    if (preferences.containsKey('ftpCompleteSoundPath')) {
+      final raw = preferences['ftpCompleteSoundPath'];
+      await saveFtpCompleteSoundPath(raw is String ? raw : null);
     }
     if (preferences.containsKey('hideFirebar')) {
       await saveHideFirebar(preferences['hideFirebar'] as bool);

@@ -693,7 +693,7 @@ class _IptcApplyModeHelpButton extends StatelessWidget {
               _HelpOptionBlock(
                 title: 'On import',
                 body:
-                    'When you open a folder, template fields are written to each image as it loads. Caption and Personality are skipped — those are generated in the app.',
+                    'When you open a folder, existing IPTC on each photo is cleared, then the template is written, including Caption and Personality.',
               ),
               SizedBox(height: 10),
               _HelpOptionBlock(

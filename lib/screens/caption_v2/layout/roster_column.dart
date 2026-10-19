@@ -8,7 +8,6 @@ import '../data/caption_v2_controller.dart';
 import '../widgets/custom_name_entry.dart';
 import '../widgets/pinned_player_bar.dart';
 import '../widgets/team_players_button.dart';
-import '../widgets/use_last_clicked_bar.dart';
 import '../widgets/player_row.dart';
 import '../widgets/quiet_filter_field.dart';
 import 'caption_v2_verb_editor.dart';
@@ -47,7 +46,6 @@ class _RosterColumnState extends State<RosterColumn> {
   final _columnFocusNode = FocusNode(debugLabel: 'Roster column');
   final _scrollController = ScrollController();
   RosterViewMode _viewMode = RosterViewMode.classic;
-  String? _lastFirebarSelectionKey;
   int _seenPlayerSearchClearGeneration = -1;
 
   @override
@@ -172,22 +170,15 @@ class _RosterColumnState extends State<RosterColumn> {
     final firebarActive = c.searchOpen;
     final abbr = widget.isHome ? c.homeAbbr : c.awayAbbr;
     final roster = widget.isHome ? c.homeRoster : c.awayRoster;
-    final firebarResults =
-        widget.isHome ? c.firebarHomeResults : c.firebarAwayResults;
     final q = _filter.text.trim();
-    final List<Player> filtered;
-    if (firebarActive) {
-      final players = firebarResults.map((result) => result.player!).toList();
-      filtered = q.isEmpty ? players : c.filterAndRankPlayers(players, q);
-    } else {
-      filtered = c.filterAndRankPlayers(roster, q);
-    }
+    final filtered = c.filterAndRankPlayers(roster, q);
 
     return Focus(
       focusNode: _columnFocusNode,
       child: CaptionV2ColumnCard(
         focused: widget.focused,
         accentOutline: true,
+        showHeader: !firebarActive,
         header: _RosterHeaderBar(
           abbr: abbr,
           tokens: t,
@@ -222,19 +213,25 @@ class _RosterColumnState extends State<RosterColumn> {
           onSortDirection: c.toggleRosterSortDirection,
           sortDirectionLabel: c.rosterSortDirectionLabel(),
         ),
-        child: Column(
+        child: firebarActive
+            ? _FirebarRosterReference(
+                controller: c,
+                isHome: widget.isHome,
+                abbr: abbr,
+                roster: roster,
+                tokens: t,
+              )
+            : Column(
           children: [
             Expanded(
               child: Listener(
                 onPointerDown: (_) {
-                  if (firebarActive) return;
                   _columnFocusNode.requestFocus();
                   c.setColumnFocus(widget.isHome ? 0 : 2);
                 },
                 child: Column(
                   children: [
-                    if (!firebarActive)
-                      PinnedPlayerBar(
+                    PinnedPlayerBar(
                         controller: c,
                         isHome: widget.isHome,
                         tokens: t,
@@ -246,8 +243,7 @@ class _RosterColumnState extends State<RosterColumn> {
                           onChanged: (_) => setState(() {}),
                         ),
                       ),
-                    if (!firebarActive)
-                      _RosterPlayerIssuesBar(
+                    _RosterPlayerIssuesBar(
                         roster: roster,
                         tokens: t,
                         onEditPlayer: (player) async {
@@ -276,12 +272,6 @@ class _RosterColumnState extends State<RosterColumn> {
                           }
                         },
                       ),
-                    if (widget.isHome && c.hasLastClicked)
-                      UseLastClickedBar(
-                        tokens: t,
-                        onTap: c.useLastClicked,
-                        onClear: c.clearLastClicked,
-                      ),
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, constraints) {
@@ -291,11 +281,9 @@ class _RosterColumnState extends State<RosterColumn> {
                           glowW: 240,
                           glowH: 150,
                           child: Text(
-                            firebarActive || q.isNotEmpty
-                                ? 'No match'
-                                : 'No players',
+                            q.isNotEmpty ? 'No match' : 'No players',
                             style: t.metaStyle.copyWith(
-                              color: firebarActive || q.isNotEmpty
+                              color: q.isNotEmpty
                                   ? t.text.withValues(alpha: 0.34)
                                   : null,
                             ),
@@ -304,7 +292,7 @@ class _RosterColumnState extends State<RosterColumn> {
                       );
                     }
 
-                    if (!firebarActive && _viewMode == RosterViewMode.wheel) {
+                    if (_viewMode == RosterViewMode.wheel) {
                       return _PlayerWheel(
                         players: filtered,
                         controller: c,
@@ -324,34 +312,6 @@ class _RosterColumnState extends State<RosterColumn> {
                             .clamp(minRowHeight, maxRowHeight);
                     final allFit = fittedHeight * filtered.length <=
                         constraints.maxHeight + 0.5;
-                    final selectedResult =
-                        firebarActive ? c.firebarSelectedResult : null;
-                    final selectedIndex = firebarActive
-                        ? filtered.indexWhere(
-                            (player) =>
-                                selectedResult?.player?.fullName ==
-                                    player.fullName &&
-                                selectedResult?.player?.jerseyNumber ==
-                                    player.jerseyNumber,
-                          )
-                        : -1;
-                    if (selectedIndex >= 0 &&
-                        selectedResult?.key != _lastFirebarSelectionKey) {
-                      _lastFirebarSelectionKey = selectedResult!.key;
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (!mounted || !_scrollController.hasClients) return;
-                        final target = selectedIndex * fittedHeight;
-                        _scrollController.animateTo(
-                          target.clamp(
-                            0,
-                            _scrollController.position.maxScrollExtent,
-                          ),
-                          duration: const Duration(milliseconds: 120),
-                          curve: Curves.easeOut,
-                        );
-                      });
-                    }
-
                     return ListView.builder(
                       controller: _scrollController,
                       itemCount: filtered.length,
@@ -365,16 +325,6 @@ class _RosterColumnState extends State<RosterColumn> {
                           pl,
                           isHome: widget.isHome,
                         );
-                        final firebarResult = firebarActive
-                            ? firebarResults
-                                .where(
-                                  (result) =>
-                                      result.player!.fullName == pl.fullName &&
-                                      result.player!.jerseyNumber ==
-                                          pl.jerseyNumber,
-                                )
-                                .firstOrNull
-                            : null;
                         final selectedRowIndex = c.selectedPlayers.indexWhere(
                             (row) =>
                                 row.isHome == widget.isHome &&
@@ -389,40 +339,25 @@ class _RosterColumnState extends State<RosterColumn> {
                                 .take(selectedRowIndex + 1)
                                 .where((row) => row.isHome == widget.isHome)
                                 .length;
-                        final isPrimarySelected = !firebarActive &&
-                            selectedRowIndex == 0 &&
+                        final isPrimarySelected = selectedRowIndex == 0 &&
                             c.selectedPlayers.isNotEmpty;
                         return PlayerRow(
                           jersey: pl.jerseyNumber ?? '—',
                           name: c.playerListName(pl),
-                          selected: firebarActive ? false : selected,
+                          selected: selected,
                           pinned: c.isPlayerPinned(
                             pl,
                             isHome: widget.isHome,
                           ),
-                          firebarSelected: firebarActive &&
-                              firebarResult?.key == selectedResult?.key,
-                          highlightQuery: firebarActive
-                              ? c.searchQuery.trim().replaceFirst(
-                                    RegExp(r'^[hHvV](?=\d)'),
-                                    '',
-                                  )
-                              : q,
+                          highlightQuery: q,
                           primarySelected: isPrimarySelected,
-                          selectionRole: !firebarActive && selected
+                          selectionRole: selected
                               ? (isOpponent
                                   ? 'OPP $roleIndex'
                                   : 'SUBJ $roleIndex')
                               : null,
                           height: fittedHeight,
-                          onTap: firebarActive
-                              ? () {
-                                  if (firebarResult != null) {
-                                    c.commitFirebarResultAndClose(
-                                        firebarResult);
-                                  }
-                                }
-                              : () => c.selectPlayer(pl, isHome: widget.isHome),
+                          onTap: () => c.selectPlayer(pl, isHome: widget.isHome),
                           onPinTap: () => c.togglePlayerPin(
                                 pl,
                                 isHome: widget.isHome,
@@ -449,8 +384,7 @@ class _RosterColumnState extends State<RosterColumn> {
                 ),
               ),
             ),
-            if (!firebarActive)
-              TeamPlayersButton(
+            TeamPlayersButton(
                 controller: c,
                 isHome: widget.isHome,
                 tokens: t,
@@ -458,6 +392,171 @@ class _RosterColumnState extends State<RosterColumn> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Full roster, packed from the top, while Firebar is open.
+/// One column while names still fit. A second column is only used when a
+/// single column would shrink rows below a readable height.
+class _FirebarRosterReference extends StatelessWidget {
+  const _FirebarRosterReference({
+    required this.controller,
+    required this.isHome,
+    required this.abbr,
+    required this.roster,
+    required this.tokens,
+  });
+
+  final CaptionV2Controller controller;
+  final bool isHome;
+  final String abbr;
+  final List<Player> roster;
+  final FfTokens tokens;
+
+  static const double _preferredRow = 26;
+  static const double _minReadableRow = 18;
+  static const double _minColumnWidth = 196;
+  static const double _teamGap = 8;
+
+  @override
+  Widget build(BuildContext context) {
+    final results =
+        isHome ? controller.firebarHomeResults : controller.firebarAwayResults;
+    final selected = controller.firebarSelectedResult;
+    final query = controller.searchQuery.trim();
+    final highlight = query.replaceFirst(RegExp(r'^[hHvV](?=\d)'), '');
+    final dimUnmatched = query.isNotEmpty && results.isNotEmpty;
+
+    final teamLabel = Text(
+      abbr.toUpperCase(),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: FfTokens.teamAbbrLabel(color: tokens.text)
+          .copyWith(fontSize: 13, height: 1),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final teamWidth = _teamLabelWidth(teamLabel.style!, abbr);
+        final listWidth = (constraints.maxWidth - teamWidth - _teamGap)
+            .clamp(0.0, constraints.maxWidth);
+        if (roster.isEmpty) {
+          return Align(
+            alignment: Alignment.topLeft,
+            child: teamLabel,
+          );
+        }
+        final columnCount = _columnCount(
+          width: listWidth,
+          height: constraints.maxHeight,
+          count: roster.length,
+        );
+        final split = (roster.length / columnCount).ceil();
+        final columns = [
+          for (var i = 0; i < roster.length; i += split)
+            roster.sublist(
+              i,
+              i + split > roster.length ? roster.length : i + split,
+            ),
+        ];
+        final fitted = constraints.maxHeight / split - 0.01;
+        final rowHeight = fitted.clamp(1.0, _preferredRow);
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: teamWidth,
+              height: rowHeight,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: teamLabel,
+              ),
+            ),
+            const SizedBox(width: _teamGap),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < columns.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          for (final player in columns[i])
+                            _row(
+                              player,
+                              results: results,
+                              selectedKey: selected?.key,
+                              highlight: highlight,
+                              dimUnmatched: dimUnmatched,
+                              rowHeight: rowHeight,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  static double _teamLabelWidth(TextStyle style, String abbr) {
+    final painter = TextPainter(
+      text: TextSpan(text: abbr.toUpperCase(), style: style),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return painter.width.clamp(28.0, 72.0);
+  }
+
+  static int _columnCount({
+    required double width,
+    required double height,
+    required int count,
+  }) {
+    if (count <= 1 || !width.isFinite || !height.isFinite || height <= 0) {
+      return 1;
+    }
+    if (height / count >= _minReadableRow) return 1;
+    const gap = 4.0;
+    if (width >= _minColumnWidth * 2 + gap) return 2;
+    return 1;
+  }
+
+  Widget _row(
+    Player player, {
+    required List<FirebarResult> results,
+    required String? selectedKey,
+    required String highlight,
+    required bool dimUnmatched,
+    required double rowHeight,
+  }) {
+    final result = results
+        .where(
+          (candidate) =>
+              candidate.player!.fullName == player.fullName &&
+              candidate.player!.jerseyNumber == player.jerseyNumber,
+        )
+        .firstOrNull;
+    return PlayerRow(
+      jersey: player.jerseyNumber ?? '—',
+      name: controller.playerListName(player),
+      selected: false,
+      pinned: controller.isPlayerPinned(player, isHome: isHome),
+      dimmed: dimUnmatched && result == null,
+      firebarSelected: result != null && result.key == selectedKey,
+      jerseyColor: FfTokens.firebar,
+      highlightQuery: highlight,
+      height: rowHeight,
+      onTap: result == null
+          ? null
+          : () => controller.commitFirebarResultAndClose(result),
     );
   }
 }

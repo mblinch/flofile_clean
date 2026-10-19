@@ -675,7 +675,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       _selectedCategory = categories.first;
     }
     final visible = _selectedCategory == _kAllVerbsCategory
-        ? _allVerbs
+        ? _verbsInSelectedCategory
         : _allVerbs
             .where((verb) => verb.category == _selectedCategory)
             .toList();
@@ -882,7 +882,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
   }
 
   void _stepVerb(int delta) {
-    final list = _allVerbs;
+    final list = _verbsInSelectedCategory;
     if (list.isEmpty) return;
     final index = list.indexWhere((verb) => verb.key == _selectedKey);
     final nextIndex = index < 0
@@ -1563,11 +1563,14 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
     final list = cat == _kAllVerbsCategory
         ? _allVerbs
         : _allVerbs.where((v) => v.category == cat).toList();
-    if (!widget.personalMode) return list;
+    if (cat != _kAllVerbsCategory && !widget.personalMode) return list;
     final sorted = List<_VerbDraft>.from(list);
-    sorted.sort(
-      (a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()),
-    );
+    sorted.sort((a, b) {
+      final byLabel =
+          a.label.toLowerCase().compareTo(b.label.toLowerCase());
+      if (byLabel != 0) return byLabel;
+      return a.category.toLowerCase().compareTo(b.category.toLowerCase());
+    });
     return sorted;
   }
 
@@ -1608,7 +1611,7 @@ class _AdminVerbAuthoringEditorState extends State<AdminVerbAuthoringEditor> {
       _selectedCategory = category;
       _renamingCategory = false;
       final visible = category == _kAllVerbsCategory
-          ? _allVerbs
+          ? _verbsInSelectedCategory
           : _allVerbs.where((v) => v.category == category).toList();
       _selectedKey = visible.isEmpty ? null : visible.first.key;
     });
@@ -3828,28 +3831,24 @@ class _VerbJumpDialogState extends State<_VerbJumpDialog> {
 
   List<_VerbDraft> get _filtered {
     final q = _query.text.trim().toLowerCase();
-    if (q.isEmpty) return widget.verbs;
-    return widget.verbs.where((verb) {
-      final hay = '${verb.label} ${verb.category} ${verb.key}'.toLowerCase();
-      return hay.contains(q);
-    }).toList();
+    final matched = q.isEmpty
+        ? widget.verbs
+        : widget.verbs.where((verb) {
+            final hay =
+                '${verb.label} ${verb.category} ${verb.key}'.toLowerCase();
+            return hay.contains(q);
+          });
+    final list = List<_VerbDraft>.from(matched);
+    list.sort((a, b) {
+      final byLabel =
+          a.label.toLowerCase().compareTo(b.label.toLowerCase());
+      if (byLabel != 0) return byLabel;
+      return a.category.toLowerCase().compareTo(b.category.toLowerCase());
+    });
+    return list;
   }
 
-  /// Category headers plus verbs when the list is unfiltered.
-  List<Object> get _rows {
-    final list = _filtered;
-    if (_query.text.trim().isNotEmpty) return list;
-    final rows = <Object>[];
-    String? lastCategory;
-    for (final verb in list) {
-      if (verb.category != lastCategory) {
-        lastCategory = verb.category;
-        rows.add(lastCategory);
-      }
-      rows.add(verb);
-    }
-    return rows;
-  }
+  List<Object> get _rows => _filtered;
 
   void _move(int delta) {
     final list = _filtered;
@@ -4021,8 +4020,7 @@ class _VerbJumpDialogState extends State<_VerbJumpDialog> {
                                       ],
                                     ),
                                   ),
-                                  if (_query.text.trim().isNotEmpty)
-                                    Text(
+                                  Text(
                                       verb.category,
                                       style: t.metaStyle.copyWith(
                                         fontSize: 11,

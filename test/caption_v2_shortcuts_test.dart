@@ -119,6 +119,47 @@ void main() {
     expect(searchHit, 4);
   });
 
+  test('FTP chords match the Firebar hints', () {
+    CaptionV2SaveChord chord({
+      LogicalKeyboardKey key = LogicalKeyboardKey.enter,
+      bool shift = false,
+      bool meta = false,
+      bool control = false,
+      bool alt = false,
+      bool ftpMode = true,
+    }) {
+      return captionV2SaveChord(
+        key: key,
+        shift: shift,
+        meta: meta,
+        control: control,
+        alt: alt,
+        ftpMode: ftpMode,
+      );
+    }
+
+    expect(chord(meta: true), CaptionV2SaveChord.transmit);
+    expect(
+      chord(key: LogicalKeyboardKey.numpadEnter, meta: true),
+      CaptionV2SaveChord.transmit,
+    );
+    expect(chord(control: true), CaptionV2SaveChord.transmit);
+    expect(chord(shift: true), CaptionV2SaveChord.transmit);
+    expect(chord(shift: true, meta: true), CaptionV2SaveChord.transmit);
+    expect(
+      chord(key: LogicalKeyboardKey.keyS, meta: true),
+      CaptionV2SaveChord.save,
+    );
+    expect(
+      chord(key: LogicalKeyboardKey.keyS, control: true, ftpMode: false),
+      CaptionV2SaveChord.save,
+    );
+    expect(chord(), CaptionV2SaveChord.none);
+    expect(chord(meta: true, ftpMode: false), CaptionV2SaveChord.none);
+    expect(chord(shift: true, ftpMode: false), CaptionV2SaveChord.save);
+    expect(chord(meta: true, alt: true), CaptionV2SaveChord.none);
+  });
+
   testWidgets('save shortcut works while editable text is focused',
       (tester) async {
     var saves = 0;

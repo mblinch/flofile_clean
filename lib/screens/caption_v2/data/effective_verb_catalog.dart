@@ -416,22 +416,19 @@ class EffectiveVerbCatalog {
     return key == 'Celebrates a Goal';
   }
 
-  /// Opponent joiner text is the source of truth for most verbs: a non-empty
-  /// joiner (usually `against`) means attach an opponent clause. Post Game
-  /// Win/Loss never take an opponent unless explicitly enabled.
+  /// A joiner is only the connector word. Blank still attaches the opposing
+  /// team (`scores the Ottawa Senators`). Post Game Win/Loss never take an
+  /// opponent unless explicitly enabled.
   ///
-  /// This also heals poisoned overrides that kept `opponentJoiner: against`
-  /// while `wantsOpponent` was left `false` (e.g. Stands in Net, Walks to the
-  /// Ice), which previously dropped the against-team clause.
+  /// Records that stored `opponentJoiner: against` with `wantsOpponent: false`
+  /// (e.g. Stands in Net) are healed the same way: the team clause stays.
   static bool _wantsOpponentFromRecord(Map raw, String key) {
     if (key == 'Post Game Win' || key == 'Post Game Loss') {
       return raw['wantsOpponent'] == true;
     }
-    if (raw.containsKey('opponentJoiner')) {
-      return (raw['opponentJoiner'] ?? '').toString().trim().isNotEmpty;
-    }
+    if (raw.containsKey('opponentJoiner')) return true;
     if (raw['wantsOpponent'] is bool) return raw['wantsOpponent'] as bool;
-    return _opponentJoinerFromRecord(raw).trim().isNotEmpty;
+    return true;
   }
 }
 

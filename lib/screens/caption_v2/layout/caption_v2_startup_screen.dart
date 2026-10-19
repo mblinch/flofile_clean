@@ -283,11 +283,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       await _prefs!.ensureAppDefaultsHydrated();
       _useOfficialLeagueApis = await _prefs!.getUseOfficialLeagueApis();
       _isAdmin = await AdminService.isCurrentUserAdmin();
-      _iptcMode = await _prefs!.getIptcApplyMode();
-      if (_iptcMode == IptcApplyMode.onSave) {
-        _iptcMode = IptcApplyMode.onImport;
-        await _prefs!.saveIptcApplyMode(_iptcMode);
-      }
+      // Write IPTC starts off every visit. It turns on only after the user
+      // opens the IPTC dialog from the switch and finishes it.
+      _iptcMode = IptcApplyMode.none;
+      await _prefs!.saveIptcApplyMode(_iptcMode);
       _iptcStatus = await _iptcStatusFromPrefs();
       _ftpModeEnabled = await _prefs!.getFtpModeEnabled();
       await _loadFtpProfiles();
@@ -631,13 +630,37 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   Future<void> _setWriteIptc(bool enabled) async {
     if (enabled == _writeIptc) return;
-    final mode = enabled ? IptcApplyMode.onImport : IptcApplyMode.none;
-    await _prefs?.saveIptcApplyMode(mode);
-    final status = await _iptcStatusFromPrefs();
+    if (!enabled) {
+      await _prefs?.saveIptcApplyMode(IptcApplyMode.none);
+      if (!mounted) return;
+      setState(() {
+        _iptcMode = IptcApplyMode.none;
+        _iptcStatus = "Don't write IPTC";
+      });
+      await _refreshIptcCaptionWarning();
+      return;
+    }
+
+    final summary = await showCaptionV2IptcDialog(
+      context,
+      folderPath: _folderPath,
+      enableWriting: true,
+    );
+    if (!mounted) return;
+    if (summary == null) {
+      await _prefs?.saveIptcApplyMode(IptcApplyMode.none);
+      if (!mounted) return;
+      setState(() {
+        _iptcMode = IptcApplyMode.none;
+        _iptcStatus = "Don't write IPTC";
+      });
+      return;
+    }
+    await _prefs?.saveIptcApplyMode(IptcApplyMode.onImport);
     if (!mounted) return;
     setState(() {
-      _iptcMode = mode;
-      _iptcStatus = status;
+      _iptcMode = IptcApplyMode.onImport;
+      _iptcStatus = summary.statusLine;
     });
     await _refreshIptcCaptionWarning();
   }
@@ -771,6 +794,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       context: anchorContext,
       anchorGlobal: origin & box.size,
       width: 220,
+      colors: FfMenuColors.session,
       choices: [
         for (final name in _ftpProfileNames)
           FfMenuChoice<String>(
@@ -904,6 +928,117 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     await _refreshIptcCaptionWarning();
   }
 
+  Future<bool> _confirmWriteIptc() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.55),
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: FfTokens.sessionPanel,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: FfTokens.sessionLn),
+          ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Write IPTC?',
+                          style: TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: FfTokens.sessionTx,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => Navigator.pop(ctx, false),
+                        icon: const PhosphorIcon(
+                          PhosphorIconsRegular.x,
+                          size: 16,
+                          color: FfTokens.sessionT2,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: Text(
+                      'Existing IPTC on these photos will be cleared, then the template — including captions — will be written.',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        height: 1.45,
+                        color: FfTokens.danger,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _Pressable(
+                          height: 34,
+                          radius: 8,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          color: FfTokens.sessionEl,
+                          hoverColor: FfTokens.sessionHv,
+                          borderColor: FfTokens.sessionLn2,
+                          borderWidth: 1,
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: FfTokens.sessionTx,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _Pressable(
+                          height: 34,
+                          radius: 8,
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          color: FfTokens.sessionTx,
+                          hoverColor: FfTokens.sessionGoHover,
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text(
+                            'Write IPTC',
+                            style: TextStyle(
+                              fontFamily: FfTokens.fontFamily,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: FfTokens.nocturneBg,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    return confirmed == true;
+  }
+
   Future<void> _goTime() async {
     if (!_canGo) return;
 
@@ -922,14 +1057,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
 
     if (_writeIptc) {
-      final confirmed = await showAppConfirmDialog(
-        context: context,
-        title: 'Write IPTC?',
-        message:
-            'Are you sure you want the IPTC to be written to all these photos?',
-        cancelLabel: 'Cancel',
-        confirmLabel: 'Write IPTC',
-      );
+      final confirmed = await _confirmWriteIptc();
       if (confirmed != true || !mounted) return;
     }
 
@@ -1585,10 +1713,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             icon: PhosphorIconsRegular.pencilSimple,
             title: 'Write IPTC',
             description: iptcWarning
-                ? (_iptcWarningText ??
-                    'When on, writes over IPTC on every photo when the folder loads')
-                : 'When on, writes over IPTC on every photo when the folder loads',
+                ? '${_iptcWarningText ?? 'When on, writes over IPTC on every photo when the folder loads.'} Existing IPTC will be permanently written over top.'
+                : 'When on, writes over IPTC on every photo when the folder loads. Existing IPTC will be permanently written over top.',
             warn: iptcWarning,
+            descriptionColor: FfTokens.sessionTx,
             value: _writeIptc,
             onChanged: (next) => unawaited(_setWriteIptc(next)),
             trailing: _writeIptc
@@ -2482,6 +2610,7 @@ class _SessionSelect extends StatelessWidget {
       context: context,
       anchorGlobal: origin & box.size,
       width: box.size.width < 180 ? 180 : box.size.width,
+      colors: FfMenuColors.session,
       choices: [
         for (final option in options)
           FfMenuChoice<String>(
@@ -2542,6 +2671,7 @@ class _SessionLeadOption extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.warn = false,
+    this.descriptionColor,
     this.trailing,
   });
 
@@ -2551,6 +2681,7 @@ class _SessionLeadOption extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
   final bool warn;
+  final Color? descriptionColor;
   final Widget? trailing;
 
   @override
@@ -2584,12 +2715,12 @@ class _SessionLeadOption extends StatelessWidget {
           Expanded(
             child: Text(
               description,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              maxLines: 3,
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
                 fontSize: 12,
-                color: warn ? FfTokens.danger : FfTokens.sessionT3,
+                color: descriptionColor ??
+                    (warn ? FfTokens.danger : FfTokens.sessionT3),
               ),
             ),
           ),

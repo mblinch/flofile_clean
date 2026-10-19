@@ -195,8 +195,9 @@ void main() {
     );
 
     expect(find.text('Visible Player'), findsOneWidget);
-    expect(find.text('1'), findsOneWidget);
-    expect(find.byType(TextField), findsWidgets);
+    expect(find.text('Single'), findsOneWidget);
+    expect(find.text('OFFENSE'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
     expect(find.byKey(const ValueKey('roster-wheel')), findsNothing);
     expect(
       find.byKey(const ValueKey('firebar-verb-reference')),
@@ -363,8 +364,10 @@ void main() {
     );
 
     expect(find.text('Myles Straw'), findsOneWidget);
-    expect(find.text('Other Player'), findsNothing);
-    expect(find.text('1 / 2'), findsOneWidget);
-    expect(find.text('No match'), findsOneWidget);
+    expect(find.text('Other Player'), findsOneWidget);
+    expect(find.text('No Result Here'), findsOneWidget);
+    expect(find.text('HOME TEAM'), findsOneWidget);
+    expect(find.byKey(const ValueKey('roster-wheel')), findsNothing);
+    expect(find.byType(Scrollable), findsNothing);
   });
 }

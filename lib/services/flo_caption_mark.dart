@@ -53,6 +53,8 @@ class FloCaptionMark {
 1;
 ''';
 
+  static Future<String> configPath() => _configPath();
+
   static Future<String> _configPath() async {
     final file = File(
       '${Directory.systemTemp.path}${Platform.pathSeparator}flofile_exiftool.config',
@@ -77,6 +79,24 @@ class FloCaptionMark {
           '-$tag=$value',
           '-overwrite_original',
           '-P',
+          path,
+        ]);
+      }
+    } catch (_) {}
+  }
+
+  /// Removes the caption-saved mark so a wiped file is not treated as captioned.
+  static Future<void> clearSaved(Iterable<String> paths) async {
+    final files = paths.where((path) => path.trim().isNotEmpty).toList();
+    if (files.isEmpty) return;
+    try {
+      final config = await _configPath();
+      for (final path in files) {
+        await ExiftoolHelper.run([
+          '-config',
+          config,
+          '-$tag=',
+          '-overwrite_original',
           path,
         ]);
       }

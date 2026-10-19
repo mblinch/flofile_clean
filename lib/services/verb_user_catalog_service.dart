@@ -7,6 +7,14 @@ import 'preferences_service.dart';
 /// Merges app-default catalog with the user's prefs. Persisting writes only to
 /// [PreferencesService] (which syncs to `users/{uid}/preferences/current`) and
 /// never to app-default Firebase originals.
+List<Map<String, dynamic>> _verbRecordList(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final item in raw)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
+}
+
 bool _hockeyTextBanned(Object? value) {
   const phrase = 'skates like an animal';
   if (value is String) return value.toLowerCase().contains(phrase);
@@ -88,6 +96,49 @@ class VerbUserCatalogService {
         if (label.isNotEmpty) deleted.add(label);
       }
     }
+    // getSportDefault prefers the published catalog, whose deleted list
+    // includes verbs this device still has in its own saved catalog.
+    // "Hops the Boards" is one of those: shared hockey deleted it, so the
+    // name stayed taken and the saved verb never appeared.
+    final storedDefault = await prefs.getStoredSportDefault(sport);
+    final storedCustoms = _verbRecordList(storedDefault?['customVerbs']);
+    final personalCustoms =
+        hasLocalCustoms ? localCustoms : storedCustoms;
+    final personalDeleted = <String>{
+      if (await prefs.hasExplicitDeletedVerbs(sport: sport))
+        ...localDeleted
+      else
+        for (final value
+            in ((storedDefault?['deletedVerbs'] as List?) ?? const []))
+          value.toString(),
+    };
+    final personalDeletedLower = {
+      for (final value in personalDeleted) value.trim().toLowerCase(),
+    };
+    bool personallyDeleted(String value) {
+      final trimmed = value.trim().toLowerCase();
+      return trimmed.isNotEmpty && personalDeletedLower.contains(trimmed);
+    }
+
+    for (final raw in personalCustoms) {
+      if (sport.trim().toLowerCase() == 'hockey' && _hockeyTextBanned(raw)) {
+        continue;
+      }
+      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
+      final label = (raw['label'] ?? '').toString().trim();
+      final phrase = (raw['verbPhrase'] ?? '').toString().trim();
+      if (personallyDeleted(key) ||
+          personallyDeleted(label) ||
+          personallyDeleted(phrase)) {
+        continue;
+      }
+      deleted.removeWhere((value) {
+        final lower = value.trim().toLowerCase();
+        return lower == key.toLowerCase() ||
+            (label.isNotEmpty && lower == label.toLowerCase()) ||
+            (phrase.isNotEmpty && lower == phrase.toLowerCase());
+      });
+    }
     final deletedLower = {
       for (final value in deleted) value.trim().toLowerCase(),
     };
@@ -124,6 +175,11 @@ class VerbUserCatalogService {
         if (key.isEmpty || customRecordDeleted(raw)) continue;
         customsByKey[key] = Map<String, dynamic>.from(raw);
       }
+    }
+    for (final raw in personalCustoms) {
+      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
+      if (key.isEmpty || customRecordDeleted(raw)) continue;
+      customsByKey[key] = Map<String, dynamic>.from(raw);
     }
     base['customVerbs'] = customsByKey.values.toList();
 

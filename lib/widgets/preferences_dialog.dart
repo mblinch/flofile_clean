@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ import 'package:dropdown_flutter/custom_dropdown.dart';
 import '../services/admin_service.dart';
 import '../services/auth_service.dart';
 import '../services/camera_serial_service.dart';
+import '../services/ftp_complete_sound.dart';
 import '../services/preferences_service.dart';
 import '../theme/ff_tokens.dart';
 import '../utils/native_file_picker.dart';
@@ -935,14 +937,86 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
   }
 
   Widget _buildFtpContent() {
+    final soundPath =
+        _currentPreferences?['ftpCompleteSoundPath']?.toString().trim();
+    final custom = soundPath != null && soundPath.isNotEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Full FTP Server Settings panel (same as the FTP settings dialog)
         FtpSettingsPanel(
           key: _ftpPanelKey,
           embedded: true,
         ),
+        const SizedBox(height: 12),
+        Text(
+          'FTP Chime',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: _t.text,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Row(
+            children: [
+              ElevatedGreyButton(
+                label: 'Play',
+                fontSize: 11,
+                onPressed: () {
+                  unawaited(FtpCompleteSound.play());
+                },
+              ),
+              const SizedBox(width: 8),
+              ElevatedGreyButton(
+                label: 'Choose',
+                fontSize: 11,
+                onPressed: () async {
+                  final path = await NativeFilePicker.pickFile(
+                    allowedExtensions:
+                        defaultTargetPlatform == TargetPlatform.macOS
+                            ? const ['public.audio']
+                            : const [
+                                'wav',
+                                'mp3',
+                                'm4a',
+                                'aiff',
+                                'aif',
+                                'caf',
+                                'aac',
+                              ],
+                  );
+                  if (path == null || path.isEmpty || !mounted) return;
+                  await _preferencesService.saveFtpCompleteSoundPath(path);
+                  await _loadCurrentPreferences();
+                  unawaited(FtpCompleteSound.play());
+                },
+              ),
+              if (custom) ...[
+                const SizedBox(width: 8),
+                ElevatedGreyButton(
+                  label: 'Built-in',
+                  fontSize: 11,
+                  onPressed: () async {
+                    await _preferencesService.saveFtpCompleteSoundPath(null);
+                    await _loadCurrentPreferences();
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (custom) ...[
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SelectableText(
+              soundPath,
+              style: TextStyle(fontSize: 11, color: _t.textSecondary),
+            ),
+          ),
+        ],
       ],
     );
   }

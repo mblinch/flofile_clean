@@ -15,10 +15,12 @@ Future<void> showFtpHistoryDialog(
     context: context,
     barrierColor: Colors.black.withValues(alpha: 0.55),
     builder: (context) {
-      final started = ftpSessionStartedAt();
-      final entries = controller.ftpHistory
-          .where((entry) => !entry.at.isBefore(started))
-          .toList();
+      final entries = ftpHistoryForSession(
+        controller.ftpHistory,
+        sessionId: controller.ftpSessionId,
+        sessionStartedAt: controller.ftpSessionStartedAt,
+        imagePaths: controller.imagePaths.toSet(),
+      );
       return Center(
         child: Material(
           color: Colors.transparent,

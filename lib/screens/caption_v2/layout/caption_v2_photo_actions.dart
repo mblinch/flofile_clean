@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -11,9 +10,9 @@ import '../../../theme/ff_tokens.dart';
 import '../../../widgets/app_styled_dialogs.dart';
 import '../../../widgets/ff_menu.dart';
 import '../../../widgets/oriented_file_preview.dart';
-import '../../../widgets/teal_action_button.dart';
 import '../data/caption_transfer_payload.dart';
 import '../data/caption_v2_controller.dart';
+import 'iptc_template_editor.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
 enum _PhotoAction {
@@ -189,13 +188,14 @@ Future<void> showCaptionV2PhotoMenu({
     case _PhotoAction.copyCaption:
       final values = await controller.readIptcPanelValues(imagePath);
       final photographer = await controller.photographerNameForPath(imagePath);
-      final captionValues = <String, String>{
-        'Caption': values['Caption'] ?? '',
-        'Personality': values['Personality'] ?? '',
-        'Keywords': values['Keywords'] ?? '',
-        if (photographer.trim().isNotEmpty) 'photographerName': photographer,
-      };
-      await Clipboard.setData(ClipboardData(text: jsonEncode(captionValues)));
+      final payload = CaptionTransferPayload(
+        caption: values['Caption'] ?? '',
+        personality: values['Personality'] ?? '',
+        keywords: values['Keywords'] ?? '',
+        photographerName: photographer,
+        clicks: controller.clicksForTransfer(imagePath),
+      );
+      await Clipboard.setData(ClipboardData(text: payload.encode()));
       if (context.mounted) _message(context, 'Caption copied');
       break;
     case _PhotoAction.pasteCaption:
@@ -261,6 +261,12 @@ Future<void> _pasteCaption(
     var pastedCount = 0;
     String? openCaption;
     final current = controller.currentPath;
+    final includesCurrent = current != null && imagePaths.contains(current);
+    controller.rememberClicks(imagePaths, payload.clicks);
+    final clicksApplied = includesCurrent &&
+        payload.clicks != null &&
+        controller.applyCaptionClicks(payload.clicks!);
+    if (clicksApplied) controller.notifyListeners();
     for (final imagePath in imagePaths) {
       final destinationPhotographer =
           await controller.photographerNameForPath(imagePath);
@@ -270,9 +276,11 @@ Future<void> _pasteCaption(
         destinationPhotographer: destinationPhotographer,
         removeDiacritics: controller.captionTemplate.removeDiacritics,
       );
-      if (imagePath == current) openCaption = caption;
+      if (imagePath == current) {
+        openCaption = clicksApplied ? controller.displayedCaption : caption;
+      }
       final values = <String, String>{
-        'Caption': caption,
+        'Caption': imagePath == current ? (openCaption ?? caption) : caption,
         if (payload.personality.trim().isNotEmpty)
           'Personality': payload.personality,
         if (payload.keywords.trim().isNotEmpty) 'Keywords': payload.keywords,
@@ -283,7 +291,7 @@ Future<void> _pasteCaption(
 
     final appliesToOpenPreview =
         current != null && imagePaths.contains(current);
-    if (appliesToOpenPreview) {
+    if (appliesToOpenPreview && !clicksApplied) {
       controller.applyPastedPhotoCaption(
         caption: openCaption ?? payload.caption,
         personality: payload.personality,
@@ -405,7 +413,8 @@ class _CaptionV2MetadataEditor extends StatefulWidget {
 }
 
 class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
-  final Map<String, TextEditingController> _fields = {};
+  Map<String, String> _values = const {};
+  int _revision = 0;
   bool _loading = true;
   bool _saving = false;
 
@@ -419,33 +428,44 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
     final values =
         await widget.controller.readIptcPanelValues(widget.imagePath);
     if (!mounted) return;
-    for (final spec in WireIptcSpecs.fieldsForPanel(
-        widget.controller.captionTemplate.wireStyle)) {
-      _fields[spec.storageKey] =
-          TextEditingController(text: values[spec.storageKey] ?? '');
-    }
-    setState(() => _loading = false);
+    setState(() {
+      _values = values;
+      _loading = false;
+    });
   }
 
-  @override
-  void dispose() {
-    for (final controller in _fields.values) {
-      controller.dispose();
-    }
-    super.dispose();
+  void _onValueChanged(String key, String value) {
+    setState(() {
+      final next = Map<String, String>.from(_values);
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) {
+        next.remove(key);
+      } else {
+        next[key] = trimmed;
+      }
+      _values = next;
+    });
+  }
+
+  void _clear() {
+    setState(() {
+      _values = const {};
+      _revision++;
+    });
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     setState(() => _saving = true);
     final values = <String, String>{
-      for (final entry in _fields.entries)
-        if (entry.value.text.trim().isNotEmpty)
-          entry.key: entry.value.text.trim(),
+      for (final entry in _values.entries)
+        if (entry.value.trim().isNotEmpty) entry.key: entry.value.trim(),
     };
-    final fieldsToClear = _fields.entries
-        .where((entry) =>
-            entry.key != 'Time and Date' && entry.value.text.trim().isEmpty)
-        .map((entry) => entry.key)
+    final fieldsToClear = WireIptcSpecs.fieldsForPanel(
+      widget.controller.captionTemplate.wireStyle,
+    )
+        .map((spec) => spec.storageKey)
+        .where((key) => key != 'Time and Date' && !values.containsKey(key))
         .toSet();
     final ok = await widget.controller.writeIptcPanelValues(
       widget.imagePath,
@@ -464,275 +484,81 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
-    final specs = WireIptcSpecs.fieldsForPanel(
-        widget.controller.captionTemplate.wireStyle);
     final size = MediaQuery.sizeOf(context);
+    final wire = widget.controller.captionTemplate.wireStyle;
     return Dialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
-      backgroundColor: t.bg,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      backgroundColor: FfTokens.nocturneBg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(FfTokens.radiusWindow),
-        side: BorderSide(color: FfTokens.nocturneLn2),
+        side: const BorderSide(color: FfTokens.nocturneLn2),
       ),
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        width: (size.width * 0.84).clamp(760, 1180),
-        height: (size.height * 0.94).clamp(640, 1080),
-        child: Column(
-          children: [
-            _DialogHeader(
-              title: 'Edit IPTC',
-              subtitle: p.basename(widget.imagePath),
-              tokens: t,
-              onClose: _saving ? null : () => Navigator.of(context).pop(),
-            ),
-            Expanded(
-              child: _loading
-                  ? Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: t.accent,
+        width: (size.width - 32).clamp(0.0, 1240.0),
+        height: size.height - 32,
+        child: _loading
+            ? const Center(
+                child: SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: FfTokens.nocturneAc,
+                  ),
+                ),
+              )
+            : IptcTemplateEditor(
+                wire: wire,
+                templates: const [],
+                selectedTemplateId: '',
+                values: _values,
+                foundInFilesKeys: const {},
+                revision: _revision,
+                fieldsEnabled: !_saving,
+                onTemplateSelected: (_) {},
+                onValueChanged: _onValueChanged,
+                onLoadTemplate: null,
+                onClearTemplate: _saving ? null : _clear,
+                onSaveTemplate: null,
+                loadEnabled: false,
+                clearEnabled: !_saving,
+                onCancel: () {
+                  if (_saving) return;
+                  Navigator.of(context).pop();
+                },
+                onDone: _save,
+                title: 'Edit IPTC',
+                subtitle: p.basename(widget.imagePath),
+                doneLabel: _saving ? 'Saving' : 'Save',
+                showTemplateControls: false,
+                workspacePalette: true,
+                leading: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 0, 12),
+                  child: SizedBox(
+                    width: 280,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: FfTokens.nocturneSunken,
+                        borderRadius:
+                            BorderRadius.circular(FfTokens.radiusCard),
+                        border: Border.all(color: FfTokens.nocturneLn2),
                       ),
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          width: 300,
-                          child: Container(
-                            margin: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: FfTokens.nocturneSunken,
-                              borderRadius:
-                                  BorderRadius.circular(FfTokens.radiusCard),
-                              border: Border.all(color: FfTokens.nocturneLn2),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: OrientedFilePreview(
-                              path: widget.imagePath,
-                              version: widget.controller
-                                  .imageContentStamp(widget.imagePath),
-                              fit: BoxFit.contain,
-                              cacheWidth: 1000,
-                            ),
-                          ),
+                      child: ClipRRect(
+                        borderRadius:
+                            BorderRadius.circular(FfTokens.radiusCard),
+                        child: OrientedFilePreview(
+                          path: widget.imagePath,
+                          version: widget.controller
+                              .imageContentStamp(widget.imagePath),
+                          fit: BoxFit.contain,
+                          cacheWidth: 1000,
                         ),
-                        Expanded(
-                          child: ListView(
-                            padding: const EdgeInsets.fromLTRB(0, 8, 14, 8),
-                            children: [
-                              for (var i = 0; i < specs.length; i += 2)
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 4),
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Expanded(
-                                        child: _IptcField(
-                                          spec: specs[i],
-                                          controller:
-                                              _fields[specs[i].storageKey]!,
-                                          tokens: t,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: i + 1 < specs.length
-                                            ? _IptcField(
-                                                spec: specs[i + 1],
-                                                controller: _fields[specs[i + 1]
-                                                        .storageKey]!,
-                                                tokens: t,
-                                              )
-                                            : const SizedBox.shrink(),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-              decoration: BoxDecoration(
-                color: t.surface,
-                border: const Border(top: BorderSide(color: FfTokens.nocturneLn2)),
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    widget.controller.captionStyleLabel,
-                    style: t.metaStyle,
-                  ),
-                  const Spacer(),
-                  TextButton(
-                    onPressed:
-                        _saving ? null : () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      foregroundColor: t.textSecondary,
-                    ),
-                    child: Text(
-                      'Cancel',
-                      style: t.labelStyle.copyWith(color: t.textSecondary),
+                      ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  TealActionButton(
-                    label: 'Save IPTC',
-                    enabled: !_saving,
-                    onPressed: _save,
-                    icon: _saving
-                        ? const SizedBox.square(
-                            dimension: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const PhosphorIcon(
-                            PhosphorIconsRegular.floppyDisk,
-                            size: 14,
-                            color: Colors.white,
-                          ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _IptcField extends StatelessWidget {
-  const _IptcField({
-    required this.spec,
-    required this.controller,
-    required this.tokens,
-  });
-
-  final WireIptcFieldSpec spec;
-  final TextEditingController controller;
-  final FfTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    String level;
-    switch (spec.level) {
-      case IptcFieldLevel.required:
-        level = 'REQUIRED';
-        break;
-      case IptcFieldLevel.recommended:
-        level = 'RECOMMENDED';
-        break;
-      case IptcFieldLevel.optional:
-        level = 'OPTIONAL';
-        break;
-    }
-    final multiline = spec.storageKey == 'Caption';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(child: Text(spec.label, style: tokens.metaStyle)),
-            Text(
-              level,
-              style: tokens.microStyle.copyWith(
-                fontSize: 9,
-                letterSpacing: 0.4,
-                color: spec.level == IptcFieldLevel.required
-                    ? tokens.accent
-                    : tokens.textTertiary,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 2),
-        TextField(
-          controller: controller,
-          style: tokens.bodyStyle.copyWith(fontSize: 13, height: 1.25),
-          maxLines: multiline ? 2 : 1,
-          minLines: 1,
-          cursorColor: tokens.accent,
-          decoration: InputDecoration(
-            isDense: true,
-            filled: true,
-            fillColor: FfTokens.nocturneSunken,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-            border: _iptcFieldBorder(FfTokens.nocturneLn2),
-            enabledBorder: _iptcFieldBorder(FfTokens.nocturneLn2),
-            focusedBorder: _iptcFieldBorder(tokens.accent, width: 1.5),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-OutlineInputBorder _iptcFieldBorder(Color color, {double width = 1}) {
-  return OutlineInputBorder(
-    borderRadius: BorderRadius.circular(FfTokens.radiusChip),
-    borderSide: BorderSide(color: color, width: width),
-  );
-}
-
-class _DialogHeader extends StatelessWidget {
-  const _DialogHeader({
-    required this.title,
-    required this.subtitle,
-    required this.tokens,
-    required this.onClose,
-  });
-
-  final String title;
-  final String subtitle;
-  final FfTokens tokens;
-  final VoidCallback? onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 52,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: const BoxDecoration(
-        color: FfTokens.nocturneEl,
-        border: Border(bottom: BorderSide(color: FfTokens.nocturneLn2)),
-      ),
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: tokens.labelStyle.copyWith(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.4,
-              color: FfTokens.nocturneT2,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: tokens.monoMetaStyle,
-            ),
-          ),
-          IconButton(
-            onPressed: onClose,
-            icon: const PhosphorIcon(PhosphorIconsRegular.x),
-            color: tokens.textSecondary,
-            tooltip: 'Close',
-          ),
-        ],
       ),
     );
   }

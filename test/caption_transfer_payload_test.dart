@@ -17,6 +17,36 @@ void main() {
     expect(decoded?.headline, original.headline);
     expect(decoded?.keywords, original.keywords);
     expect(decoded?.photographerName, '');
+    expect(decoded?.clicks, isNull);
+  });
+
+  test('round trips the buttons that built the caption', () {
+    const original = CaptionTransferPayload(
+      caption: 'Bo Bichette singles.',
+      clicks: CaptionClickSnapshot(
+        players: [
+          CaptionClickPlayer(
+            fullName: 'Bo Bichette',
+            jerseyNumber: '11',
+            isHome: true,
+            primary: true,
+          ),
+        ],
+        verb: 'Single',
+        rbi: 1,
+        preGame: false,
+        inning: 4,
+      ),
+    );
+
+    final decoded = CaptionTransferPayload.decode(original.encode());
+
+    expect(decoded?.clicks?.players.single.fullName, 'Bo Bichette');
+    expect(decoded?.clicks?.players.single.jerseyNumber, '11');
+    expect(decoded?.clicks?.players.single.primary, isTrue);
+    expect(decoded?.clicks?.verb, 'Single');
+    expect(decoded?.clicks?.rbi, 1);
+    expect(decoded?.clicks?.inning, 4);
   });
 
   test('keeps the destination photographer in a pasted caption', () {

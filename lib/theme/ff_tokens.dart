@@ -139,17 +139,17 @@ class FfTokens extends ThemeExtension<FfTokens> {
   /// Favorites gold (stars, Admin badge) (--badge / --gold).
   static const favorites = gold;
 
-  /// Favorites category label and star. Warm stone, not gold.
-  static const favoritesLight = Color(0xFFDDD6CC);
+  /// Favorites category label and star. Softer than [gold].
+  static const favoritesLight = Color(0xFFE4D4A0);
 
   /// Favorite-category verb text.
-  static const favoritesVerb = Color(0xFFC8BFB2);
+  static const favoritesVerb = Color(0xFFD2C090);
 
   /// Favorites header fill.
-  static const favoritesFill = Color(0x14C8BFB2); // rgba(200,191,178,0.08)
+  static const favoritesFill = Color(0x24D2C090); // rgba(210,192,144,0.14)
 
   /// Favorites header bottom border.
-  static const favoritesBorder = Color(0x2EC8BFB2); // rgba(200,191,178,0.18)
+  static const favoritesBorder = Color(0x47D2C090); // rgba(210,192,144,0.28)
 
   /// Saved check on viewer / thumbnails (cool status, not warm).
   static const statusSaved = Color(0xFF7FB88A);

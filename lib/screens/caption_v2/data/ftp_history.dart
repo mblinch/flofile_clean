@@ -1,64 +1,40 @@
-import 'dart:io';
-
-/// Start of this app process. The history panel shows transfers from this
-/// run only. Persisted history stays on disk for sent-state restore.
+/// Uploads to show in the history panel.
 ///
-/// Computed from process uptime so a reload cannot move the cutoff forward
-/// and hide uploads that already happened.
-DateTime ftpSessionStartedAt() {
-  return _ftpSessionStartedAt ??= _processStartedAt();
+/// Tagged entries belong to one caption session. Untagged entries are older
+/// saves from before sessions were marked: they stay visible only for the
+/// session already open when that change landed, and only if that file is
+/// still in the session. A new session ([sessionStartedAt] set) leaves them out.
+List<FtpHistoryEntry> ftpHistoryForSession(
+  List<FtpHistoryEntry> entries, {
+  required String? sessionId,
+  required DateTime? sessionStartedAt,
+  required Set<String> imagePaths,
+}) {
+  return [
+    for (final entry in entries)
+      if (_entryInSession(
+        entry,
+        sessionId: sessionId,
+        sessionStartedAt: sessionStartedAt,
+        imagePaths: imagePaths,
+      ))
+        entry,
+  ];
 }
 
-DateTime? _ftpSessionStartedAt;
-
-DateTime _processStartedAt() {
-  final elapsed = _processElapsed();
-  if (elapsed == null) return DateTime.now();
-  // etime is truncated to seconds; include that second.
-  return DateTime.now().subtract(elapsed + const Duration(seconds: 1));
-}
-
-Duration? _processElapsed() {
-  if (!Platform.isMacOS && !Platform.isLinux) return null;
-  try {
-    final result = Process.runSync('ps', ['-o', 'etime=', '-p', '$pid']);
-    if (result.exitCode != 0) return null;
-    return parseProcessEtime(result.stdout.toString());
-  } catch (_) {
-    return null;
+bool _entryInSession(
+  FtpHistoryEntry entry, {
+  required String? sessionId,
+  required DateTime? sessionStartedAt,
+  required Set<String> imagePaths,
+}) {
+  final tagged = entry.sessionId;
+  if (tagged != null && tagged.isNotEmpty) {
+    return sessionId != null && tagged == sessionId;
   }
-}
-
-/// Parses `ps -o etime`: `mm:ss`, `hh:mm:ss`, or `dd-hh:mm:ss`.
-Duration? parseProcessEtime(String raw) {
-  final text = raw.trim();
-  if (text.isEmpty) return null;
-  var days = 0;
-  var clock = text;
-  final daySplit = text.split('-');
-  if (daySplit.length == 2) {
-    final parsedDays = int.tryParse(daySplit[0]);
-    if (parsedDays == null) return null;
-    days = parsedDays;
-    clock = daySplit[1];
-  } else if (daySplit.length != 1) {
-    return null;
-  }
-  final parts = clock.split(':');
-  if (parts.any((part) => int.tryParse(part.trim()) == null)) return null;
-  final numbers = parts.map((part) => int.parse(part.trim())).toList();
-  if (numbers.length == 2) {
-    return Duration(days: days, minutes: numbers[0], seconds: numbers[1]);
-  }
-  if (numbers.length == 3) {
-    return Duration(
-      days: days,
-      hours: numbers[0],
-      minutes: numbers[1],
-      seconds: numbers[2],
-    );
-  }
-  return null;
+  if (!imagePaths.contains(entry.path)) return false;
+  if (sessionStartedAt == null) return true;
+  return !entry.at.isBefore(sessionStartedAt);
 }
 
 class FtpHistoryEntry {
@@ -69,6 +45,7 @@ class FtpHistoryEntry {
     required this.profile,
     required this.success,
     this.error,
+    this.sessionId,
   });
 
   final DateTime at;
@@ -77,6 +54,7 @@ class FtpHistoryEntry {
   final String profile;
   final bool success;
   final String? error;
+  final String? sessionId;
 
   Map<String, dynamic> toJson() => {
         'at': at.toIso8601String(),
@@ -85,9 +63,11 @@ class FtpHistoryEntry {
         'profile': profile,
         'success': success,
         if (error != null && error!.isNotEmpty) 'error': error,
+        if (sessionId != null && sessionId!.isNotEmpty) 'sessionId': sessionId,
       };
 
   factory FtpHistoryEntry.fromJson(Map<String, dynamic> json) {
+    final sessionId = json['sessionId']?.toString();
     return FtpHistoryEntry(
       at: DateTime.tryParse(json['at']?.toString() ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
@@ -96,6 +76,7 @@ class FtpHistoryEntry {
       profile: json['profile']?.toString() ?? '',
       success: json['success'] == true,
       error: json['error']?.toString(),
+      sessionId: sessionId == null || sessionId.isEmpty ? null : sessionId,
     );
   }
 }

@@ -26398,7 +26398,7 @@ class _CaptionFieldsWidgetState extends State<CaptionFieldsWidget> {
           const SizedBox(height: 7),
           _shortcutRow('⌘S', 'Save & next'),
           const SizedBox(height: 5),
-          _shortcutRow('⌘↵', 'Save, FTP & next'),
+          _shortcutRow('⇧↵', 'Save, FTP & next'),
           const SizedBox(height: 5),
           _shortcutRow('⌘⇧V', 'Paste prev'),
         ],

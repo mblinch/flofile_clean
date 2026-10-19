@@ -17,6 +17,13 @@ const LinearGradient _kActionTealGradient = LinearGradient(
   stops: [0.0, 0.45, 1.0],
 );
 
+/// Outer height of Save / Copy / FTP. Inner chips sit inside a 2px shell.
+const double _kActionRowHeight = 38;
+const double _kActionChipHeight = 34;
+
+/// FTP stays content-sized up to this width as the window grows.
+const double _kFtpButtonMaxWidth = 280;
+
 /// Compact caption actions shown beneath the all-at-once search field.
 class CaptionV2ActionRow extends StatelessWidget {
   const CaptionV2ActionRow({
@@ -32,7 +39,9 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.saveNextEnabled = true,
     this.transmitEnabled = true,
     this.showTransmit = true,
+    this.hideOrangeActions = false,
     this.onFtpHistory,
+    this.onFtpProgress,
     this.ftpProgress,
     this.ftpActive = false,
     this.ftpThumbPath,
@@ -53,7 +62,13 @@ class CaptionV2ActionRow extends StatelessWidget {
   final bool saveNextEnabled;
   final bool transmitEnabled;
   final bool showTransmit;
+
+  /// Firebar is open, so Save & Next and FTP stay off this row.
+  final bool hideOrangeActions;
   final VoidCallback? onFtpHistory;
+
+  /// Opens the live list of files on the wire and waiting behind them.
+  final VoidCallback? onFtpProgress;
 
   /// 0.0–1.0 while an upload is running. Shown to the right of the FTP button.
   final double? ftpProgress;
@@ -94,16 +109,18 @@ class CaptionV2ActionRow extends StatelessWidget {
           onPasteLast: onPastePrevious,
           pasteEnabled: pasteEnabled,
         );
-        final next = _NavButton(
+        final next = hideOrangeActions
+            ? null
+            : _NavButton(
           label: 'Save & Next',
-          tooltip: 'Save & Next  ·  ⌘S',
-          icon: PhosphorIconsBold.caretRight,
+          tooltip: 'Save & Next',
+          icon: PhosphorIconsRegular.caretRight,
           enabled: saveNextEnabled,
           padding: EdgeInsets.symmetric(horizontal: pad),
           trailingPad: compact ? pad : 12,
           onPressed: onSaveNext,
         );
-        final ftp = showTransmit
+        final ftp = showTransmit && !hideOrangeActions
             ? _FtpGroup(
                 narrow: narrow,
                 label: transmitLabel,
@@ -113,6 +130,7 @@ class CaptionV2ActionRow extends StatelessWidget {
               )
             : null;
 
+        final openActive = ftpActive ? onFtpProgress : null;
         final progress = showTransmit
             ? _FtpProgressTrack(
                 active: ftpActive,
@@ -120,6 +138,7 @@ class CaptionV2ActionRow extends StatelessWidget {
                 queued: ftpQueued,
                 batchIndex: ftpBatchIndex,
                 batchTotal: ftpBatchTotal,
+                onTap: openActive,
               )
             : null;
         final bar = narrow
@@ -133,12 +152,15 @@ class CaptionV2ActionRow extends StatelessWidget {
                     children: [
                       prev,
                       clip,
-                      next,
+                      if (next != null) next,
                       if (ftp != null) ftp,
                       if (ftpActive &&
                           ftpThumbPath != null &&
                           ftpThumbPath!.trim().isNotEmpty)
-                        _FtpUploadPreview(path: ftpThumbPath!.trim()),
+                        _FtpUploadPreview(
+                          path: ftpThumbPath!.trim(),
+                          onTap: openActive,
+                        ),
                     ],
                   ),
                   if (progress != null) ...[
@@ -152,8 +174,10 @@ class CaptionV2ActionRow extends StatelessWidget {
                   prev,
                   const SizedBox(width: 8),
                   clip,
-                  const SizedBox(width: 8),
-                  next,
+                  if (next != null) ...[
+                    const SizedBox(width: 8),
+                    next,
+                  ],
                   if (ftp != null) ...[
                     const SizedBox(width: 8),
                     Expanded(
@@ -162,21 +186,28 @@ class CaptionV2ActionRow extends StatelessWidget {
                           final thumb = ftpActive &&
                               ftpThumbPath != null &&
                               ftpThumbPath!.trim().isNotEmpty;
-                          // Leave room for the preview and the percent so
-                          // the profile name ellipsizes before the row spills.
-                          final reserve = (thumb ? 48.0 : 0) +
-                              (ftpActive ? 128.0 : 0);
-                          final ftpMax =
-                              (slot.maxWidth - reserve).clamp(0.0, slot.maxWidth);
+                          // The profile name gives up space first. The photo
+                          // drops next so Sending and the thumbnail never
+                          // paint on top of the button.
+                          final showThumb = thumb && slot.maxWidth >= 168;
                           return Row(
                             children: [
-                              ConstrainedBox(
-                                constraints: BoxConstraints(maxWidth: ftpMax),
-                                child: ftp,
+                              Flexible(
+                                fit: FlexFit.loose,
+                                child: _FtpGroup(
+                                  narrow: true,
+                                  label: transmitLabel,
+                                  enabled: transmitEnabled,
+                                  onTransmit: onTransmit,
+                                  onHistory: ftpActive ? null : onFtpHistory,
+                                ),
                               ),
-                              if (thumb) ...[
+                              if (showThumb) ...[
                                 const SizedBox(width: 8),
-                                _FtpUploadPreview(path: ftpThumbPath!.trim()),
+                                _FtpUploadPreview(
+                                  path: ftpThumbPath!.trim(),
+                                  onTap: openActive,
+                                ),
                               ],
                               if (ftpActive && progress != null) ...[
                                 const SizedBox(width: 8),
@@ -187,6 +218,9 @@ class CaptionV2ActionRow extends StatelessWidget {
                         },
                       ),
                     ),
+                  ] else if (ftpActive && progress != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(child: progress),
                   ],
                 ],
               );
@@ -212,20 +246,24 @@ class _NavButton extends StatelessWidget {
     required this.icon,
     required this.onPressed,
     required this.padding,
+    this.shortcut,
     this.iconAtEnd = true,
     this.filled = false,
+    this.fire = false,
     this.enabled = true,
     this.leadingPad,
     this.trailingPad,
   });
 
   final String label;
+  final String? shortcut;
   final String tooltip;
   final IconData icon;
   final VoidCallback? onPressed;
   final EdgeInsets padding;
   final bool iconAtEnd;
   final bool filled;
+  final bool fire;
   final bool enabled;
   final double? leadingPad;
   final double? trailingPad;
@@ -241,12 +279,18 @@ class _NavButton extends StatelessWidget {
       enabled: enabled && onPressed != null,
       onTap: onPressed,
       builder: (hovered, pressed) {
-        final bg = filled
-            ? (hovered ? FfTokens.accentHover : FfTokens.nocturneAc)
-            : (hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken);
-        final fg = filled ? FfTokens.nocturneBg : FfTokens.nocturneTx;
+        final bg = fire
+            ? (hovered ? const Color(0xFFFF7340) : FfTokens.firebar)
+            : filled
+                ? (hovered ? FfTokens.accentHover : FfTokens.nocturneAc)
+                : (hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken);
+        final fg = fire
+            ? Colors.white
+            : filled
+                ? FfTokens.nocturneBg
+                : FfTokens.nocturneTx;
         return _BarShell(
-          height: 44,
+          height: _kActionRowHeight,
           padding: resolved,
           background: bg,
           pressed: pressed,
@@ -258,6 +302,10 @@ class _NavButton extends StatelessWidget {
                 const SizedBox(width: 8),
               ],
               Text(label, style: _barLabel(fg)),
+              if (shortcut != null) ...[
+                const SizedBox(width: 8),
+                Text(shortcut!, style: _shortcutStyle(fg)),
+              ],
               if (iconAtEnd) ...[
                 const SizedBox(width: 8),
                 Icon(icon, size: 18, color: fg),
@@ -303,7 +351,7 @@ class _ClipGroup extends StatelessWidget {
           final fg = hovered ? FfTokens.nocturneTx : FfTokens.nocturneT2;
           final iconColor = hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
           return _BarShell(
-            height: 40,
+            height: _kActionChipHeight,
             padding: EdgeInsets.symmetric(horizontal: pad),
             background: hovered ? FfTokens.nocturneHv : Colors.transparent,
             pressed: pressed,
@@ -381,58 +429,56 @@ class _FtpGroup extends StatelessWidget {
       expand: narrow,
       onPressed: onTransmit,
     );
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: FfTokens.nocturneBg,
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: _kFtpButtonMaxWidth),
       child: Row(
-        mainAxisSize: narrow ? MainAxisSize.max : MainAxisSize.min,
-        children: [
-          if (narrow) Expanded(child: send) else send,
-          if (onHistory != null) ...[
-            const SizedBox(width: 2),
-            _BarTap(
-              tooltip: 'FTP history',
-              enabled: true,
-              onTap: onHistory,
-              builder: (hovered, pressed) {
-                final color =
-                    hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
-                return _BarShell(
-                  height: 40,
-                  width: 40,
-                  padding: EdgeInsets.zero,
-                  background: hovered ? FfTokens.nocturneHv : Colors.transparent,
-                  pressed: pressed,
-                  child: Icon(
-                    PhosphorIconsRegular.clockCounterClockwise,
-                    size: 18,
-                    color: color,
-                  ),
-                );
-              },
-            ),
-          ],
+      mainAxisSize: narrow ? MainAxisSize.max : MainAxisSize.min,
+      children: [
+        if (narrow) Expanded(child: send) else send,
+        if (onHistory != null) ...[
+          const SizedBox(width: 8),
+          _BarTap(
+            tooltip: 'FTP history',
+            enabled: true,
+            onTap: onHistory,
+            builder: (hovered, pressed) {
+              final color =
+                  hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3;
+              return _BarShell(
+                height: _kActionRowHeight,
+                width: _kActionRowHeight,
+                padding: EdgeInsets.zero,
+                background:
+                    hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
+                pressed: pressed,
+                child: Icon(
+                  PhosphorIconsRegular.clockCounterClockwise,
+                  size: 18,
+                  color: color,
+                ),
+              );
+            },
+          ),
         ],
+      ],
       ),
     );
   }
 }
 
 class _FtpUploadPreview extends StatelessWidget {
-  const _FtpUploadPreview({required this.path});
+  const _FtpUploadPreview({required this.path, this.onTap});
 
   final String path;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
+    final thumb = ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: SizedBox(
-        width: 40,
-        height: 40,
+        width: _kActionChipHeight,
+        height: _kActionChipHeight,
         child: OrientedFilePreview(
           path: path,
           fit: BoxFit.cover,
@@ -440,6 +486,11 @@ class _FtpUploadPreview extends StatelessWidget {
           filterQuality: FilterQuality.medium,
         ),
       ),
+    );
+    if (onTap == null) return thumb;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(onTap: onTap, child: thumb),
     );
   }
 }
@@ -451,6 +502,7 @@ class _FtpProgressTrack extends StatelessWidget {
     this.progress,
     this.batchIndex = 0,
     this.batchTotal = 0,
+    this.onTap,
   });
 
   final bool active;
@@ -458,10 +510,11 @@ class _FtpProgressTrack extends StatelessWidget {
   final int queued;
   final int batchIndex;
   final int batchTotal;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    if (!active) return const SizedBox(height: 40);
+    if (!active) return const SizedBox(height: _kActionChipHeight);
     final value = (progress ?? 0).clamp(0.0, 1.0);
     final percent = '${(value * 100).round()}%';
     final showQueue = queued > 0 && batchTotal > 1 && batchIndex > 0;
@@ -479,8 +532,8 @@ class _FtpProgressTrack extends StatelessWidget {
       color: FfTokens.nocturneTx,
       height: 1,
     );
-    return SizedBox(
-      height: 40,
+    final status = SizedBox(
+      height: _kActionChipHeight,
       child: Align(
         alignment: Alignment.centerLeft,
         child: Column(
@@ -517,6 +570,11 @@ class _FtpProgressTrack extends StatelessWidget {
         ),
       ),
     );
+    if (onTap == null) return status;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(onTap: onTap, child: status),
+    );
   }
 }
 
@@ -545,9 +603,6 @@ class _FtpSendButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final canSend = enabled && onPressed != null;
-    final outline = FfTokens.nocturneAc.withValues(alpha: 0.45);
-    final idleFill = FfTokens.nocturneAccentSoft;
-    final hoverFill = FfTokens.nocturneAccentDeep;
     final status = _destination;
 
     return _BarTap(
@@ -555,45 +610,36 @@ class _FtpSendButton extends StatelessWidget {
       enabled: canSend,
       onTap: onPressed,
       builder: (hovered, pressed) {
+        final fg = FfTokens.nocturneTx;
         return _BarShell(
-          height: 40,
+          height: _kActionRowHeight,
           width: expand ? double.infinity : null,
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          background: hovered ? hoverFill : idleFill,
+          background: hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken,
           pressed: pressed,
-          nudge: false,
-          outline: outline,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final destination = Text(
-                status,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: _barLabel(FfTokens.nocturneTx),
-              );
-              return Row(
-                mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-                mainAxisAlignment: expand
-                    ? MainAxisAlignment.center
-                    : MainAxisAlignment.start,
-                children: [
-                  const Icon(
-                    PhosphorIconsRegular.cloudArrowUp,
-                    size: 18,
-                    color: FfTokens.nocturneAc,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                PhosphorIconsRegular.cloudArrowUp,
+                size: 18,
+                color: fg,
+              ),
+              const SizedBox(width: 8),
+              Text('FTP', style: _barLabel(fg)),
+              if (status.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: Text(
+                    status,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _barLabel(fg),
                   ),
-                  const SizedBox(width: 8),
-                  Text('FTP:', style: _ftpMarkStyle),
-                  if (status.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    if (constraints.maxWidth.isFinite)
-                      Flexible(child: destination)
-                    else
-                      destination,
-                  ],
-                ],
-              );
-            },
+                ),
+              ],
+            ],
           ),
         );
       },
@@ -601,13 +647,15 @@ class _FtpSendButton extends StatelessWidget {
   }
 }
 
-const _ftpMarkStyle = TextStyle(
-  fontFamily: FfTokens.fontFamily,
-  fontSize: 14,
-  fontWeight: FontWeight.w600,
-  color: FfTokens.nocturneTx,
-  height: 1,
-);
+TextStyle _shortcutStyle(Color color) {
+  return TextStyle(
+    fontFamily: FfTokens.fontFamily,
+    fontSize: 12,
+    fontWeight: FontWeight.w700,
+    color: color.withValues(alpha: 0.9),
+    height: 1,
+  );
+}
 
 class _BarTap extends StatefulWidget {
   const _BarTap({
@@ -703,7 +751,7 @@ class _BarShell extends StatelessWidget {
 TextStyle _barLabel(Color color, {FontWeight weight = FontWeight.w600}) {
   return TextStyle(
     fontFamily: FfTokens.fontFamily,
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: weight,
     color: color,
     height: 1,
@@ -895,7 +943,7 @@ class TransmitDock extends StatelessWidget {
           const SizedBox(width: 10),
           _OutlinedActionButton(
             label: 'Transmit',
-            hint: isMobile ? null : '⇧F',
+            hint: isMobile ? null : '⇧↵',
             tokens: t,
             minHeight: btnMinH,
             enabled: transmitEnabled,

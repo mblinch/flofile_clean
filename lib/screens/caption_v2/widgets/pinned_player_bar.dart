@@ -73,50 +73,41 @@ class _PinnedPlayerBarState extends State<PinnedPlayerBar> {
               color: hasPlayer ? tokens.textSecondary : tokens.textTertiary,
             ),
           ),
-          if (widget.filter != null) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  widget.filter!,
-                  if (hasPlayer)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: CmdClick(
-                        onTap: () => widget.controller.togglePlayerPin(
-                          player,
-                          isHome: widget.isHome,
-                        ),
-                        onCmdTap: () => widget.controller.togglePlayerPin(
-                          player,
-                          isHome: widget.isHome,
-                        ),
-                        child: SizedBox(
-                          width: 22,
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            softWrap: false,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                              height: 1.0,
-                              color: selected
-                                  ? tokens.text
-                                  : tokens.text.withValues(alpha: 0.78),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+          if (hasPlayer) ...[
+            const SizedBox(width: 6),
+            CmdClick(
+              onTap: () => widget.controller.togglePlayerPin(
+                player,
+                isHome: widget.isHome,
+              ),
+              onCmdTap: () => widget.controller.togglePlayerPin(
+                player,
+                isHome: widget.isHome,
+              ),
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  height: 1.0,
+                  color: selected
+                      ? tokens.text
+                      : tokens.text.withValues(alpha: 0.78),
+                ),
               ),
             ),
           ],
-          if (widget.trailing != null) widget.trailing!,
+          if (widget.filter != null) ...[
+            const SizedBox(width: 8),
+            Expanded(child: widget.filter!),
+          ],
+          if (widget.trailing != null) ...[
+            if (widget.filter != null) const SizedBox(width: 8),
+            widget.trailing!,
+          ],
         ],
       ),
     );

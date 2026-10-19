@@ -12,7 +12,6 @@ import '../widgets/celebration_dropdown.dart';
 import '../widgets/custom_name_entry.dart';
 import '../widgets/pinned_player_bar.dart';
 import '../widgets/team_players_button.dart';
-import '../widgets/use_last_clicked_bar.dart';
 import '../widgets/quiet_filter_field.dart';
 import '../widgets/rbi_row.dart';
 import '../widgets/verb_tile.dart';
@@ -81,8 +80,9 @@ class _DrumPickerState extends State<DrumPicker> {
 
   CaptionV2Controller get controller => widget.controller;
 
-  List<String> get _categories =>
-      verbCategoriesForDisplay(controller.verbCategories);
+  List<String> get _categories => controller.verbListAll
+      ? const ['All']
+      : verbCategoriesForDisplay(controller.verbCategories);
 
   String get _category {
     final categories = _categories;
@@ -201,6 +201,7 @@ class _DrumPickerState extends State<DrumPicker> {
   }
 
   Set<String> get _openVerbCategories {
+    if (controller.verbListAll) return {'All'};
     if (!controller.verbMultiOpen) {
       if (_verbAccordionCollapsed) return {};
       return {_category};
@@ -910,7 +911,6 @@ class _DrumPickerState extends State<DrumPicker> {
             controller: _filterFor(lane),
             tokens: tokens,
             height: 26,
-            leadingInset: 26,
             hideIconWhenFilled: true,
             onChanged: (_) => _onRosterFilterChanged(lane),
           ),
@@ -963,12 +963,6 @@ class _DrumPickerState extends State<DrumPicker> {
             ],
           ),
         ),
-        if (isHome && controller.hasLastClicked)
-          UseLastClickedBar(
-            tokens: tokens,
-            onTap: controller.useLastClicked,
-            onClear: controller.clearLastClicked,
-          ),
         Expanded(
           child: Row(
             children: [
@@ -1105,6 +1099,7 @@ class _DrumPickerState extends State<DrumPicker> {
           child: _VerbAccordion(
             controller: controller,
             categories: _categories,
+            showHeaders: !controller.verbListAll,
             verbsByCategory: orderedVerbsByCategory,
             selectedCategory: _category,
             openCategories: _openVerbCategories,
@@ -1261,6 +1256,7 @@ class _VerbAccordion extends StatelessWidget {
   const _VerbAccordion({
     required this.controller,
     required this.categories,
+    this.showHeaders = true,
     required this.verbsByCategory,
     required this.selectedCategory,
     required this.openCategories,
@@ -1294,6 +1290,7 @@ class _VerbAccordion extends StatelessWidget {
 
   final CaptionV2Controller controller;
   final List<String> categories;
+  final bool showHeaders;
   final Map<String, List<EffectiveVerb>> verbsByCategory;
   final String selectedCategory;
   final Set<String> openCategories;
@@ -1310,6 +1307,15 @@ class _VerbAccordion extends StatelessWidget {
   String _displayCategory(String category) {
     final normalized = category.toLowerCase().replaceAll(RegExp(r'[\s_-]'), '');
     return normalized.contains('nongame') ? 'Non-game' : category;
+  }
+
+  List<EffectiveVerb> _visibleVerbs(String category) {
+    return verbsForOpenCategory(
+      category: category,
+      open: openCategories.contains(category),
+      verbsByCategory: verbsByCategory,
+      openCategories: openCategories,
+    );
   }
 
   double _extrasHeightFor(String? key) {
@@ -1335,9 +1341,7 @@ class _VerbAccordion extends StatelessWidget {
         final scale = controller.verbFontScale;
         final preferredHeader = preferredHeaderHeight * scale;
         final minHeader = minHeaderHeight * scale;
-        final openVerbs = openCategories.contains(selectedCategory)
-            ? (verbsByCategory[selectedCategory] ?? const <EffectiveVerb>[])
-            : const <EffectiveVerb>[];
+        final openVerbs = _visibleVerbs(selectedCategory);
         final selectedInOpen = selectedVerbKey != null &&
             !pinnedSelected &&
             openVerbs.any((verb) => verb.key == selectedVerbKey);
@@ -1353,7 +1357,7 @@ class _VerbAccordion extends StatelessWidget {
         var openBodyHeight = extrasHeight;
         for (final category in categories) {
           if (!openCategories.contains(category)) continue;
-          final verbs = verbsByCategory[category] ?? const <EffectiveVerb>[];
+          final verbs = _visibleVerbs(category);
           for (final verb in verbs) {
             final selected = verb.key == selectedVerbKey;
             openBodyHeight += selected
@@ -1367,7 +1371,10 @@ class _VerbAccordion extends StatelessWidget {
             openBodyHeight += _extrasHeightFor(selectedVerbKey);
           }
         }
-        final minContentHeight = categories.length * minHeader +
+        final headerSlots = showHeaders ? categories.length : 0;
+        final allTitleHeight = showHeaders ? 0.0 : preferredHeaderHeight;
+        final minContentHeight = headerSlots * minHeader +
+            allTitleHeight +
             openBodyHeight +
             pinnedHeight;
         final bounded =
@@ -1376,8 +1383,8 @@ class _VerbAccordion extends StatelessWidget {
             bounded && minContentHeight > constraints.maxHeight + 0.5;
 
         final double headerHeight;
-        if (categories.isEmpty) {
-          headerHeight = preferredHeader;
+        if (!showHeaders || categories.isEmpty) {
+          headerHeight = 0;
         } else if (needsScroll) {
           headerHeight = minHeader;
         } else {
@@ -1390,7 +1397,7 @@ class _VerbAccordion extends StatelessWidget {
         // Re-check with the resolved header height — float/rounding can leave
         // a couple of pixels short of what the Column actually paints.
         final resolvedHeight = pinnedHeight +
-            categories.length * headerHeight +
+            (showHeaders ? categories.length * headerHeight : allTitleHeight) +
             openBodyHeight;
         final stillOverflows =
             bounded && resolvedHeight > constraints.maxHeight + 0.5;
@@ -1429,15 +1436,15 @@ class _VerbAccordion extends StatelessWidget {
                 onCelebrationChanged: controller.setCelebrationType,
                 showBar: showPinnedBar,
               ),
+              if (!showHeaders) _AllVerbsTitle(tokens: tokens),
               for (final category in categories)
                 _VerbAccordionSection(
                   controller: controller,
                   category: category,
                   displayCategory: _displayCategory(category),
-                  verbs: openCategories.contains(category)
-                      ? (verbsByCategory[category] ?? const <EffectiveVerb>[])
-                      : const <EffectiveVerb>[],
+                  verbs: _visibleVerbs(category),
                   headerHeight: headerHeight,
+                  showHeader: showHeaders,
                   open: openCategories.contains(category),
                   fontSize: 12.5 * scale,
                   selectedIndex: selectedIndex,
@@ -1487,13 +1494,15 @@ class _VerbAccordion extends StatelessWidget {
               onCelebrationChanged: controller.setCelebrationType,
               showBar: showPinnedBar,
             ),
+            if (!showHeaders) _AllVerbsTitle(tokens: tokens),
             for (final category in categories)
               _VerbAccordionSection(
                 controller: controller,
                 category: category,
                 displayCategory: _displayCategory(category),
-                verbs: verbsByCategory[category] ?? const <EffectiveVerb>[],
+                verbs: _visibleVerbs(category),
                 headerHeight: stillOverflows ? minHeader : headerHeight,
+                showHeader: showHeaders,
                 open: openCategories.contains(category),
                 fontSize: 12.5 * scale,
                 selectedIndex: selectedIndex,
@@ -1513,6 +1522,28 @@ class _VerbAccordion extends StatelessWidget {
   }
 }
 
+class _AllVerbsTitle extends StatelessWidget {
+  const _AllVerbsTitle({required this.tokens});
+
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: _VerbAccordion.preferredHeaderHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.divider)),
+      ),
+      child: Text(
+        'All verbs',
+        style: FfTokens.categoryLabel(color: tokens.text),
+      ),
+    );
+  }
+}
+
 class _VerbAccordionSection extends StatelessWidget {
   const _VerbAccordionSection({
     required this.controller,
@@ -1520,6 +1551,7 @@ class _VerbAccordionSection extends StatelessWidget {
     required this.displayCategory,
     required this.verbs,
     required this.headerHeight,
+    this.showHeader = true,
     required this.open,
     required this.selectedIndex,
     required this.selectedVerbKey,
@@ -1537,6 +1569,7 @@ class _VerbAccordionSection extends StatelessWidget {
   final String displayCategory;
   final List<EffectiveVerb> verbs;
   final double headerHeight;
+  final bool showHeader;
   final bool open;
   final bool scrollable;
   final int selectedIndex;
@@ -1556,6 +1589,7 @@ class _VerbAccordionSection extends StatelessWidget {
         : (open ? tokens.text : tokens.textTertiary);
     return Column(
       children: [
+        if (showHeader)
         VerbCategoryDropTarget(
           category: category,
           controller: controller,
@@ -1592,16 +1626,6 @@ class _VerbAccordionSection extends StatelessWidget {
                             letterSpacing: 0.6,
                             height: 1,
                             color: labelColor,
-                            shadows: [
-                              Shadow(
-                                color: labelColor.withValues(alpha: 0.75),
-                                blurRadius: 6,
-                              ),
-                              Shadow(
-                                color: labelColor.withValues(alpha: 0.4),
-                                blurRadius: 16,
-                              ),
-                            ],
                           ),
                         ),
                       ),
@@ -1627,7 +1651,9 @@ class _VerbAccordionSection extends StatelessWidget {
             ),
           ),
         ),
-        if (open && scrollable)
+        if (open && verbs.isEmpty)
+          const SizedBox.shrink()
+        else if (open && scrollable)
           Expanded(
             child: _VerbRows(
               controller: controller,
@@ -3604,6 +3630,7 @@ class _PlayerGearMenuState extends State<PlayerGearMenu> {
                         },
                   showReset: false,
                   onReset: widget.onReset,
+                  onClose: _close,
                 ),
                   ),
                 ),
@@ -3699,6 +3726,7 @@ class _PlayerGearCard extends StatelessWidget {
     required this.onEditTeam,
     required this.showReset,
     required this.onReset,
+    required this.onClose,
   });
 
   final bool? numberMode;
@@ -3707,12 +3735,12 @@ class _PlayerGearCard extends StatelessWidget {
   final VoidCallback? onEditTeam;
   final bool showReset;
   final VoidCallback? onReset;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final showLayout = numberMode != null;
     final show = numberMode == false ? _PlayerShow.names : _PlayerShow.numbers;
-    final showHint = show == _PlayerShow.names ? 'Player names' : 'Jersey squares';
 
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -3736,17 +3764,24 @@ class _PlayerGearCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(10, 8, 10, 4),
-              child: Text(
-                'PLAYER PANEL',
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.88,
-                  color: FfTokens.nocturneT3,
-                ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 4, 2, 4),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'PLAYER PANEL',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.88,
+                        color: FfTokens.nocturneT3,
+                      ),
+                    ),
+                  ),
+                  _GearCloseButton(onTap: onClose),
+                ],
               ),
             ),
             if (showLayout) ...[
@@ -3763,15 +3798,6 @@ class _PlayerGearCard extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: FfTokens.nocturneTx,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      showHint,
-                      style: const TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 12,
-                        color: FfTokens.nocturneT3,
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -3943,6 +3969,8 @@ class _GearSettingRow extends StatelessWidget {
               children: [
                 Text(
                   name,
+                  maxLines: 1,
+                  softWrap: false,
                   style: const TextStyle(
                     fontFamily: FfTokens.fontFamily,
                     fontSize: 13,
@@ -3953,6 +3981,8 @@ class _GearSettingRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   hint,
+                  maxLines: 1,
+                  softWrap: false,
                   style: const TextStyle(
                     fontFamily: FfTokens.fontFamily,
                     fontSize: 12,
@@ -4066,6 +4096,46 @@ class _GearStepButtonState extends State<_GearStepButton> {
   }
 }
 
+class _GearCloseButton extends StatefulWidget {
+  const _GearCloseButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  State<_GearCloseButton> createState() => _GearCloseButtonState();
+}
+
+class _GearCloseButtonState extends State<_GearCloseButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 80),
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: _hovered ? FfTokens.nocturneHv : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: PhosphorIcon(
+            PhosphorIconsRegular.x,
+            size: 14,
+            color: _hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _GearLink extends StatefulWidget {
   const _GearLink({
     required this.icon,
@@ -4145,6 +4215,7 @@ class _SquareSizeStepper extends StatelessWidget {
           enabled: canShrink,
           onTap: onShrink,
         ),
+        const SizedBox(width: 6),
         _SquareStepButton(
           icon: PhosphorIconsRegular.plus,
           enabled: canGrow,

@@ -21,7 +21,9 @@ class PlayerRow extends StatefulWidget {
     this.primarySelected = false,
     this.focused = false,
     this.pinned = false,
+    this.dimmed = false,
     this.firebarSelected = false,
+    this.jerseyColor,
     this.highlightQuery = '',
     this.onTap,
     this.onPinTap,
@@ -40,7 +42,9 @@ class PlayerRow extends StatefulWidget {
   final bool primarySelected;
   final bool focused;
   final bool pinned;
+  final bool dimmed;
   final bool firebarSelected;
+  final Color? jerseyColor;
   final String highlightQuery;
   final VoidCallback? onTap;
   final VoidCallback? onPinTap;
@@ -62,7 +66,14 @@ class _PlayerRowState extends State<PlayerRow> {
     final isMobile = MediaQuery.sizeOf(context).width < 1100;
     final rowHeight = widget.height ?? (isMobile ? 44.0 : 28.0);
     final veryCompact = rowHeight < 24;
+    final nameFont = rowHeight >= 26
+        ? 15.0
+        : (rowHeight * 0.62).clamp(6.0, 14.0);
+    final jerseyFont = (nameFont * 0.9).clamp(6.0, 14.0);
     final iconSize = veryCompact ? 15.0 : 17.0;
+    final nameColor = widget.dimmed
+        ? t.text.withValues(alpha: 0.34)
+        : t.text;
     final showActions = _hovered &&
         (widget.onPinTap != null ||
             widget.onGoogleTap != null ||
@@ -93,14 +104,14 @@ class _PlayerRowState extends State<PlayerRow> {
           onCmdTap: widget.onPinTap,
           onSecondaryTapDown: widget.onSecondaryTapDown,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6),
+            padding: EdgeInsets.symmetric(horizontal: veryCompact ? 1 : 6),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
               curve: Curves.easeOut,
               height: rowHeight,
               padding: EdgeInsets.symmetric(
-                horizontal: veryCompact ? 4 : 6,
-                vertical: veryCompact ? 1 : 2,
+                horizontal: veryCompact ? 2 : 6,
+                vertical: rowHeight < 16 ? 0 : (veryCompact ? 1 : 2),
               ),
               decoration: BoxDecoration(
                 color: fill,
@@ -142,27 +153,31 @@ class _PlayerRowState extends State<PlayerRow> {
                   ),
                   SizedBox(width: veryCompact ? 2 : 3),
                   SizedBox(
-                    width: 28,
+                    width: veryCompact ? 22 : 28,
                     child: Text(
                       widget.jersey,
                       textAlign: TextAlign.right,
                       maxLines: 1,
                       softWrap: false,
                       overflow: TextOverflow.ellipsis,
-                      style: FfTokens.rosterJersey(color: t.textTertiary)
-                          .copyWith(fontSize: 14),
+                      style: FfTokens.rosterJersey(
+                        color: widget.dimmed
+                            ? (widget.jerseyColor ?? t.textTertiary)
+                                .withValues(alpha: 0.45)
+                            : (widget.jerseyColor ?? t.textTertiary),
+                      ).copyWith(fontSize: jerseyFont, height: 1),
                     ),
                   ),
-                  SizedBox(width: veryCompact ? 5 : 8),
+                  SizedBox(width: veryCompact ? 4 : 8),
                   Expanded(
                     child: Text.rich(
                       _highlightedText(
                         widget.name,
                         widget.highlightQuery,
                         normal: FfTokens.rosterName(
-                          color: t.text,
+                          color: nameColor,
                           selected: widget.selected,
-                        ).copyWith(fontSize: 15),
+                        ).copyWith(fontSize: nameFont, height: 1),
                       ),
                       maxLines: 1,
                       softWrap: false,

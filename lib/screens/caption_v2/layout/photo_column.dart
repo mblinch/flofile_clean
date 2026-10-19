@@ -106,7 +106,7 @@ class _PhotoColumnState extends State<PhotoColumn> {
   final ValueNotifier<JerseyOcrSuggestion?> _ocrHover =
       ValueNotifier<JerseyOcrSuggestion?>(null);
 
-  static const double _handleHeight = 14;
+  static const double _handleHeight = 7;
 
   /// Keep a usable large preview — never collapse it away.
   static const double _minPreviewFraction = 0.28;
@@ -168,7 +168,6 @@ class _PhotoColumnState extends State<PhotoColumn> {
               ),
             ),
             _PhotoThumbnailResizeHandle(
-              tokens: t,
               onDrag: (delta) {
                 if (availableHeight <= 0) return;
                 final dragMin = (_minPreviewPixels / availableHeight)
@@ -202,12 +201,10 @@ class _PhotoColumnState extends State<PhotoColumn> {
 
 class _PhotoThumbnailResizeHandle extends StatelessWidget {
   const _PhotoThumbnailResizeHandle({
-    required this.tokens,
     required this.onDrag,
     required this.onReset,
   });
 
-  final FfTokens tokens;
   final ValueChanged<double> onDrag;
   final VoidCallback onReset;
 
@@ -219,15 +216,21 @@ class _PhotoThumbnailResizeHandle extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onVerticalDragUpdate: (details) => onDrag(details.delta.dy),
         onDoubleTap: onReset,
-        child: SizedBox(
-          height: _PhotoColumnState._handleHeight,
-          child: Center(
-            child: Container(
-              width: 54,
-              height: 4,
-              decoration: BoxDecoration(
-                color: tokens.text.withValues(alpha: 0.28),
-                borderRadius: BorderRadius.circular(2),
+        child: Tooltip(
+          message: 'Drag to resize the preview. Double-click to reset.',
+          waitDuration: const Duration(milliseconds: 400),
+          child: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 2),
+            child: Center(
+              child: SizedBox(
+                width: 56,
+                height: 3,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: FfTokens.sessionLn2,
+                    borderRadius: BorderRadius.all(Radius.circular(2)),
+                  ),
+                ),
               ),
             ),
           ),
@@ -465,10 +468,7 @@ class _PhotoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = _meta(const ['ImageWidth', 'ExifImageWidth']);
     final height = _meta(const ['ImageHeight', 'ExifImageHeight']);
-    final uploadPath = controller.ftpPreviewPath;
-    final shown = (uploadPath != null && uploadPath.isNotEmpty)
-        ? uploadPath
-        : path;
+    final shown = path;
     final shownIndex = shown == null
         ? controller.currentIndex
         : controller.imagePaths.indexOf(shown);
@@ -604,17 +604,6 @@ class _PhotoCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (shown != null &&
-                      controller.ftpPreviewPath == shown)
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: TransmitProgressOverlay(
-                          progress: controller.ftpFileProgress,
-                          status: controller.transmitStatus,
-                          compact: true,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -2905,12 +2894,16 @@ class _ThumbnailToolbar extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(8, 8, 6, 8),
       child: Row(
         children: [
+          _ThumbnailMenuTitle(label: 'Sort:', tokens: tokens),
+          const SizedBox(width: 6),
           _ThumbnailSortDropdown(
             tokens: tokens,
             sort: sort,
             iconOnly: iconOnly,
             onChanged: onSortChanged,
           ),
+          const SizedBox(width: 10),
+          _ThumbnailMenuTitle(label: 'Filter:', tokens: tokens),
           const SizedBox(width: 6),
           _ThumbnailScopeDropdown(
             tokens: tokens,
@@ -2941,6 +2934,30 @@ class _ThumbnailToolbar extends StatelessWidget {
             onTap: onOpenOverview,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ThumbnailMenuTitle extends StatelessWidget {
+  const _ThumbnailMenuTitle({
+    required this.label,
+    required this.tokens,
+  });
+
+  final String label;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label,
+      softWrap: false,
+      style: TextStyle(
+        color: tokens.textSecondary,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        height: 1.1,
       ),
     );
   }
@@ -3074,11 +3091,13 @@ class _ThumbnailSortDropdown extends StatelessWidget {
       tokens: tokens,
       tooltip: 'Sort thumbnails',
       label: iconOnly ? null : _label(sort),
-      leading: PhosphorIcon(
-        PhosphorIconsRegular.sortAscending,
-        size: 14,
-        color: tokens.textSecondary,
-      ),
+      leading: iconOnly
+          ? PhosphorIcon(
+              PhosphorIconsRegular.sortAscending,
+              size: 14,
+              color: tokens.textSecondary,
+            )
+          : null,
       onTap: () => _openMenu(context),
     );
   }

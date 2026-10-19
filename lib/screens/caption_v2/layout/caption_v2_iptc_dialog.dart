@@ -43,18 +43,30 @@ class CaptionV2IptcSummary {
 Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
   BuildContext context, {
   String? folderPath,
+  bool enableWriting = false,
 }) {
   return showDialog<CaptionV2IptcSummary>(
     context: context,
     barrierDismissible: true,
-    builder: (_) => CaptionV2IptcDialog(folderPath: folderPath),
+    builder: (_) => CaptionV2IptcDialog(
+      folderPath: folderPath,
+      enableWriting: enableWriting,
+    ),
   );
 }
 
 class CaptionV2IptcDialog extends StatefulWidget {
-  const CaptionV2IptcDialog({super.key, this.folderPath});
+  const CaptionV2IptcDialog({
+    super.key,
+    this.folderPath,
+    this.enableWriting = false,
+  });
 
   final String? folderPath;
+
+  /// Opened from the start-menu Write IPTC switch. Fields stay editable, and
+  /// writing is saved only when the user finishes the dialog.
+  final bool enableWriting;
 
   @override
   State<CaptionV2IptcDialog> createState() => _CaptionV2IptcDialogState();
@@ -87,7 +99,8 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     _prefs = await PreferencesService.getInstance();
     // Ensure appDefaults cache is warm (public read) before listing templates.
     await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
-    final mode = await _prefs.getIptcApplyMode();
+    var mode = await _prefs.getIptcApplyMode();
+    if (widget.enableWriting) mode = IptcApplyMode.onImport;
     final hidden = await _prefs.getHiddenIptcTemplateIds();
     final visible = await AppDefaultsFirestoreService.getVisibleIptcTemplates(
       hiddenIds: hidden,
@@ -107,7 +120,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       _selectedTemplateId = '';
       _wire = WireStyle.getty;
       _captionTemplate = captionTemplate;
-      _values = const {'Urgency': '5'};
+      _values = const {};
       _loading = false;
     });
   }
@@ -238,7 +251,10 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       id: id,
       wireStyle: _wire,
       displayName: trimmed,
-      preset: IptcTemplateApplyService.normalizeForPreset(_values),
+      preset: IptcTemplateApplyService.normalizeForPreset(
+        _values,
+        includeInAppGenerated: true,
+      ),
       clearedFields: _computeClearedFields().toList(),
     );
     final next = <IptcTemplateCatalogEntry>[
@@ -545,7 +561,10 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   Future<void> _persist() async {
     _values = _withDefaultUrgency(_values);
     final prefs = await SharedPreferences.getInstance();
-    final preset = IptcTemplateApplyService.normalizeForPreset(_values);
+    final preset = IptcTemplateApplyService.normalizeForPreset(
+      _values,
+      includeInAppGenerated: true,
+    );
     if (preset.isNotEmpty) {
       await prefs.setString('selected_metadata_preset', jsonEncode(preset));
     } else {
@@ -568,6 +587,18 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   }
 
   Future<void> _done() async {
+    if (widget.enableWriting) {
+      final missing =
+          IptcTemplateApplyService.missingRequiredLabels(_wire, _values);
+      if (missing.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Fill in IPTC before writing: ${missing.join(', ')}'),
+          ),
+        );
+        return;
+      }
+    }
     await _persist();
     if (!mounted) return;
     Navigator.of(context).pop(

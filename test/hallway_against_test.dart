@@ -100,6 +100,33 @@ void main() {
     expect(catalog.byKey['Stands in Net']?.opponentJoiner, 'against');
   });
 
+  test('blank opponentJoiner still names the other team', () {
+    final catalog = EffectiveVerbCatalog.merge(
+      sport: 'hockey',
+      categoryOrder: const ['Offense'],
+      verbOrder: const {},
+      favorites: const {},
+      customVerbs: const [],
+      customWordings: const {},
+      overrides: const {
+        'Skates': {
+          'key': 'Skates',
+          'label': 'Skates',
+          'category': 'Offense',
+          'verbPhrase': 'skates',
+          'wantsOpponent': false,
+          'omitAgainst': true,
+          'opponentJoiner': '',
+        },
+      },
+      deletedVerbs: const {},
+      catalogComplete: true,
+    );
+
+    expect(catalog.byKey['Skates']?.wantsOpponent, isTrue);
+    expect(catalog.byKey['Skates']?.opponentJoiner, isEmpty);
+  });
+
   test('Stands in Net caption includes against the other team', () async {
     SharedPreferences.setMockInitialValues({
       'verb_overrides_hockey': jsonEncode({
@@ -136,4 +163,5 @@ void main() {
     final body = controller.buildCaptionBody();
     expect(body, contains('stands in net against the Ottawa Senators'));
   });
+
 }

@@ -7,9 +7,45 @@ import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/app_defaults_firestore_service.dart';
 import '../../../services/iptc_template_apply_service.dart';
 import '../../../theme/ff_tokens.dart';
+import '../../../widgets/teal_action_button.dart';
 
 const Color _warn = Color(0xFFE8B547);
 const Color _warnLine = Color(0x73E8B547);
+
+/// Session colors for the start-menu template. Workspace colors match captioning.
+class IptcEditorColors {
+  const IptcEditorColors.session() : workspace = false;
+  const IptcEditorColors.workspace() : workspace = true;
+
+  final bool workspace;
+
+  Color get group => workspace ? FfTokens.nocturneEl : FfTokens.sessionBg;
+  Color get field => workspace ? FfTokens.nocturneSunken : FfTokens.sessionEl;
+  Color get hover => workspace ? FfTokens.nocturneHv : FfTokens.sessionHv;
+  Color get line => workspace ? FfTokens.nocturneLn : FfTokens.sessionLn;
+  Color get tx => workspace ? FfTokens.nocturneTx : FfTokens.sessionTx;
+  Color get t2 => workspace ? FfTokens.nocturneT2 : FfTokens.sessionT2;
+  Color get t3 => workspace ? FfTokens.nocturneT3 : FfTokens.sessionT3;
+  Color get focus => workspace ? FfTokens.nocturneAc : FfTokens.sessionOn;
+  Color get ok => FfTokens.sessionOk;
+}
+
+class IptcEditorPalette extends InheritedWidget {
+  const IptcEditorPalette({super.key, required this.colors, required super.child});
+
+  final IptcEditorColors colors;
+
+  static IptcEditorColors of(BuildContext context) {
+    return context
+            .dependOnInheritedWidgetOfExactType<IptcEditorPalette>()
+            ?.colors ??
+        const IptcEditorColors.session();
+  }
+
+  @override
+  bool updateShouldNotify(IptcEditorPalette oldWidget) =>
+      colors.workspace != oldWidget.colors.workspace;
+}
 
 /// Layout-only IPTC template editor. Values stay in the parent dialog.
 class IptcTemplateEditor extends StatelessWidget {
@@ -32,6 +68,12 @@ class IptcTemplateEditor extends StatelessWidget {
     this.loadEnabled = true,
     this.clearEnabled = true,
     this.loadingTemplate = false,
+    this.title = 'IPTC template',
+    this.subtitle,
+    this.doneLabel = 'Done',
+    this.showTemplateControls = true,
+    this.workspacePalette = false,
+    this.leading,
   });
 
   final WireStyle wire;
@@ -51,6 +93,18 @@ class IptcTemplateEditor extends StatelessWidget {
   final bool loadEnabled;
   final bool clearEnabled;
   final bool loadingTemplate;
+  final String title;
+  final String? subtitle;
+  final String doneLabel;
+
+  /// Template picker, load, and save. Off when editing one photo's IPTC.
+  final bool showTemplateControls;
+
+  /// Nocturne caption-workspace colors. The start menu keeps the session palette.
+  final bool workspacePalette;
+
+  /// Optional left column, used for the photo in Edit IPTC.
+  final Widget? leading;
 
   static const _monoKeys = {
     'MEID',
@@ -67,26 +121,20 @@ class IptcTemplateEditor extends StatelessWidget {
     final specs = {
       for (final spec in WireIptcSpecs.fieldsForPanel(wire)) spec.label: spec,
     };
-    return LayoutBuilder(
+    final colors = workspacePalette
+        ? const IptcEditorColors.workspace()
+        : const IptcEditorColors.session();
+    return IptcEditorPalette(
+      colors: colors,
+      child: LayoutBuilder(
       builder: (context, constraints) {
         final narrow = constraints.maxWidth < 1100;
         final short = constraints.maxHeight < 700;
         final tight = constraints.maxHeight < 560;
         final fieldH = narrow ? (tight ? 32.0 : 38.0) : (short ? 28.0 : 32.0);
         final padV = short ? 8.0 : 12.0;
-        return Column(
+        final fields = Column(
           children: [
-            _Header(
-              templates: templates,
-              selectedTemplateId: selectedTemplateId,
-              onTemplateSelected: onTemplateSelected,
-              onLoad: loadEnabled ? onLoadTemplate : null,
-              onClear: clearEnabled ? onClearTemplate : null,
-              onSave: fieldsEnabled ? onSaveTemplate : null,
-              loadingTemplate: loadingTemplate,
-              onClose: onCancel,
-              compact: short,
-            ),
             Padding(
               padding: EdgeInsets.fromLTRB(12, 0, 12, 0),
               child: _CaptionBox(
@@ -108,6 +156,7 @@ class IptcTemplateEditor extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: _group(
+                            colors: colors,
                             icon: PhosphorIconsRegular.article,
                             title: 'Story',
                             children: [
@@ -119,6 +168,7 @@ class IptcTemplateEditor extends StatelessWidget {
                           )),
                           const SizedBox(width: 10),
                           Expanded(child: _group(
+                            colors: colors,
                             icon: PhosphorIconsRegular.user,
                             title: 'Credit',
                             children: [
@@ -145,6 +195,7 @@ class IptcTemplateEditor extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(child: _group(
+                            colors: colors,
                             icon: PhosphorIconsRegular.mapPin,
                             title: 'Location',
                             children: [
@@ -162,13 +213,14 @@ class IptcTemplateEditor extends StatelessWidget {
                           )),
                           const SizedBox(width: 10),
                           Expanded(child: _group(
+                            colors: colors,
                             icon: PhosphorIconsRegular.folderSimple,
                             title: 'Filing',
                             children: [
                               _text(specs, 'MEID', narrow, fieldH),
                               _text(specs, 'Object Name', narrow, fieldH, display: 'Object name'),
                               _text(specs, 'Category', narrow, fieldH),
-                              _supp(specs, narrow, fieldH),
+                              _supp(specs, narrow, fieldH, colors),
                               _urgency(specs, narrow, fieldH),
                             ],
                           )),
@@ -179,15 +231,44 @@ class IptcTemplateEditor extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+        );
+        return Column(
+          children: [
+            _Header(
+              title: title,
+              subtitle: subtitle,
+              showTemplateControls: showTemplateControls,
+              templates: templates,
+              selectedTemplateId: selectedTemplateId,
+              onTemplateSelected: onTemplateSelected,
+              onLoad: loadEnabled ? onLoadTemplate : null,
+              onClear: clearEnabled ? onClearTemplate : null,
+              onSave: fieldsEnabled ? onSaveTemplate : null,
+              loadingTemplate: loadingTemplate,
+              onClose: onCancel,
+              compact: short,
+            ),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (leading != null) leading!,
+                  Expanded(child: fields),
+                ],
+              ),
+            ),
             _Footer(
               emptyRequired: _emptyRequiredCount(specs),
               compact: short,
+              doneLabel: doneLabel,
               onCancel: onCancel,
               onDone: onDone,
             ),
           ],
         );
       },
+    ),
     );
   }
 
@@ -294,6 +375,7 @@ class IptcTemplateEditor extends StatelessWidget {
   }
 
   Widget _group({
+    required IptcEditorColors colors,
     required IconData icon,
     required String title,
     required List<Widget> children,
@@ -302,8 +384,11 @@ class IptcTemplateEditor extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
-        color: FfTokens.sessionBg,
+        color: colors.group,
         borderRadius: BorderRadius.circular(10),
+        border: colors.workspace
+            ? Border.all(color: FfTokens.nocturneLn2)
+            : null,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -313,16 +398,16 @@ class IptcTemplateEditor extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
             child: Row(
               children: [
-                PhosphorIcon(icon, size: 14, color: FfTokens.sessionT3),
+                PhosphorIcon(icon, size: 14, color: colors.t3),
                 const SizedBox(width: 6),
                 Text(
                   title.toUpperCase(),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.8,
-                    color: FfTokens.sessionT3,
+                    color: colors.t3,
                   ),
                 ),
               ],
@@ -425,6 +510,7 @@ class IptcTemplateEditor extends StatelessWidget {
     Map<String, WireIptcFieldSpec> specs,
     bool narrow,
     double fieldH,
+    IptcEditorColors colors,
   ) {
     final labels = _suppLabels;
     final shorts = ['Supp 1', 'Supp 2', 'Supp 3'];
@@ -478,7 +564,7 @@ class IptcTemplateEditor extends StatelessWidget {
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.4,
-                            color: empties[i] ? _warn : FfTokens.sessionT3,
+                            color: empties[i] ? _warn : colors.t3,
                           ),
                         ),
                       ),
@@ -522,6 +608,9 @@ class IptcTemplateEditor extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   const _Header({
+    required this.title,
+    required this.subtitle,
+    required this.showTemplateControls,
     required this.templates,
     required this.selectedTemplateId,
     required this.onTemplateSelected,
@@ -533,6 +622,9 @@ class _Header extends StatelessWidget {
     required this.compact,
   });
 
+  final String title;
+  final String? subtitle;
+  final bool showTemplateControls;
   final List<IptcTemplateCatalogEntry> templates;
   final String selectedTemplateId;
   final ValueChanged<IptcTemplateCatalogEntry> onTemplateSelected;
@@ -545,20 +637,45 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     final entries = templates;
     return Padding(
       padding: EdgeInsets.fromLTRB(20, compact ? 8 : 12, 12, compact ? 8 : 12),
       child: Row(
         children: [
-          const Text(
-            'IPTC template',
+          Text(
+            title,
             style: TextStyle(
               fontFamily: FfTokens.fontFamily,
               fontSize: 15,
               fontWeight: FontWeight.w600,
-              color: FfTokens.sessionTx,
+              color: colors.tx,
             ),
           ),
+          if (!showTemplateControls) ...[
+            if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  subtitle!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    color: colors.t3,
+                  ),
+                ),
+              ),
+            ] else
+              const Spacer(),
+            _ClearLink(onTap: onClear),
+            _IconButton(
+              icon: PhosphorIconsRegular.x,
+              tooltip: 'Close',
+              onTap: onClose,
+            ),
+          ] else ...[
           const SizedBox(width: 12),
           _TemplateDropdown(
             entries: entries,
@@ -572,12 +689,12 @@ class _Header extends StatelessWidget {
             tooltip: 'Load from XMP, Getty TXT, or JPG',
             onTap: onLoad,
           ),
-          const Text(
+          Text(
             'XMP, Getty TXT, or JPG',
             style: TextStyle(
               fontFamily: FfTokens.fontFamily,
               fontSize: 12,
-              color: FfTokens.sessionT3,
+              color: colors.t3,
             ),
           ),
           const SizedBox(width: 16),
@@ -590,6 +707,7 @@ class _Header extends StatelessWidget {
           _ClearLink(onTap: onClear),
           const Spacer(),
           _IconButton(icon: PhosphorIconsRegular.x, tooltip: 'Close', onTap: onClose),
+          ],
         ],
       ),
     );
@@ -609,6 +727,7 @@ class _TemplateDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     final ids = entries.map((e) => e.id).toSet();
     final selected = ids.contains(selectedTemplateId) ? selectedTemplateId : null;
     return Container(
@@ -616,7 +735,7 @@ class _TemplateDropdown extends StatelessWidget {
       height: 32,
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: FfTokens.sessionEl,
+        color: colors.field,
         borderRadius: BorderRadius.circular(7),
       ),
       child: DropdownButtonHideUnderline(
@@ -624,17 +743,17 @@ class _TemplateDropdown extends StatelessWidget {
           value: selected,
           isExpanded: true,
           isDense: true,
-          dropdownColor: FfTokens.sessionEl,
-          icon: const PhosphorIcon(
+          dropdownColor: colors.group,
+          icon: PhosphorIcon(
             PhosphorIconsRegular.caretDown,
             size: 12,
-            color: FfTokens.sessionT3,
+            color: colors.t3,
           ),
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: FfTokens.fontFamily,
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: FfTokens.sessionTx,
+            color: colors.tx,
           ),
           items: [
             for (final entry in entries)
@@ -677,17 +796,18 @@ class _LinkButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     return Tooltip(
       message: tooltip,
       child: TextButton.icon(
         onPressed: onTap,
         style: TextButton.styleFrom(
-          foregroundColor: FfTokens.sessionT2,
+          foregroundColor: colors.t2,
           padding: const EdgeInsets.symmetric(horizontal: 10),
           minimumSize: const Size(0, 32),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
-        icon: PhosphorIcon(icon, size: 15, color: FfTokens.sessionT2),
+        icon: PhosphorIcon(icon, size: 15, color: colors.t2),
         label: Text(
           label,
           style: const TextStyle(
@@ -714,9 +834,10 @@ class _ClearLinkState extends State<_ClearLink> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     final enabled = widget.onTap != null;
     final hot = enabled && _hover;
-    final color = hot ? const Color(0xFFF07A7A) : FfTokens.sessionT2;
+    final color = hot ? const Color(0xFFF07A7A) : colors.t2;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -757,6 +878,7 @@ class _IconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -765,7 +887,7 @@ class _IconButton extends StatelessWidget {
         child: SizedBox(
           width: 32,
           height: 32,
-          child: PhosphorIcon(icon, size: 17, color: FfTokens.sessionT2),
+          child: PhosphorIcon(icon, size: 17, color: colors.t2),
         ),
       ),
     );
@@ -828,6 +950,7 @@ class _CaptionBoxState extends State<_CaptionBox> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     final count = _controller.text.trim() ==
             IptcTemplateApplyService.inAppGeneratedPlaceholder
         ? 0
@@ -835,32 +958,35 @@ class _CaptionBoxState extends State<_CaptionBox> {
     return Container(
       padding: EdgeInsets.fromLTRB(14, widget.compact ? 8 : 10, 14, widget.compact ? 8 : 10),
       decoration: BoxDecoration(
-        color: FfTokens.sessionBg,
+        color: colors.group,
         borderRadius: BorderRadius.circular(10),
+        border: colors.workspace
+            ? Border.all(color: FfTokens.nocturneLn2)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'CAPTION',
                 style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.8,
-                  color: FfTokens.sessionT3,
+                  color: colors.t3,
                 ),
               ),
               const Spacer(),
               Text(
                 '$count / 2000',
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
                   fontSize: 11,
-                  color: FfTokens.sessionT3,
-                  fontFeatures: [FontFeature.tabularFigures()],
+                  color: colors.t3,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ],
@@ -877,7 +1003,7 @@ class _CaptionBoxState extends State<_CaptionBox> {
               fontFamily: FfTokens.fontFamily,
               fontSize: widget.compact ? 13 : 14,
               height: widget.compact ? 19 / 13 : 21 / 14,
-              color: FfTokens.sessionTx,
+              color: colors.tx,
             ),
             decoration: const InputDecoration(
               isCollapsed: true,
@@ -916,7 +1042,8 @@ class _FieldSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final labelColor = empty ? _warn : (narrow ? FfTokens.sessionT3 : FfTokens.sessionT2);
+    final colors = IptcEditorPalette.of(context);
+    final labelColor = empty ? _warn : (narrow ? colors.t3 : colors.t2);
     final dot = required
         ? Padding(
             padding: const EdgeInsets.only(left: 5),
@@ -924,7 +1051,7 @@ class _FieldSlot extends StatelessWidget {
               width: narrow ? 4 : 5,
               height: narrow ? 4 : 5,
               decoration: BoxDecoration(
-                color: empty ? _warn : FfTokens.sessionT3,
+                color: empty ? _warn : colors.t3,
                 shape: BoxShape.circle,
               ),
             ),
@@ -1059,6 +1186,7 @@ class _TextInputState extends State<_TextInput> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     final focused = _focus.hasFocus;
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
@@ -1068,14 +1196,16 @@ class _TextInputState extends State<_TextInput> {
         height: widget.height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: _hover && !focused ? FfTokens.sessionHv : FfTokens.sessionEl,
+          color: _hover && !focused ? colors.hover : colors.field,
           borderRadius: BorderRadius.circular(7),
           border: Border.all(
             color: focused
-                ? FfTokens.sessionOn
+                ? colors.focus
                 : widget.missing
                     ? _warnLine
-                    : Colors.transparent,
+                    : colors.workspace
+                        ? FfTokens.nocturneLn
+                        : Colors.transparent,
           ),
         ),
         child: TextField(
@@ -1087,9 +1217,9 @@ class _TextInputState extends State<_TextInput> {
           style: TextStyle(
             fontFamily: widget.mono ? FfTokens.monoFamily : FfTokens.fontFamily,
             fontSize: widget.mono ? 12 : 13,
-            color: FfTokens.sessionTx,
+            color: colors.tx,
           ),
-          cursorColor: FfTokens.sessionOn,
+          cursorColor: colors.focus,
           inputFormatters: widget.maxLength == null
               ? null
               : [LengthLimitingTextInputFormatter(widget.maxLength)],
@@ -1136,6 +1266,7 @@ class _UrgencyInputState extends State<_UrgencyInput> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -1143,8 +1274,11 @@ class _UrgencyInputState extends State<_UrgencyInput> {
         height: widget.height,
         padding: EdgeInsets.fromLTRB(10, widget.narrow ? 12 : 0, 6, 0),
         decoration: BoxDecoration(
-          color: _hover ? FfTokens.sessionHv : FfTokens.sessionEl,
+          color: _hover ? colors.hover : colors.field,
           borderRadius: BorderRadius.circular(7),
+          border: colors.workspace
+              ? Border.all(color: FfTokens.nocturneLn)
+              : null,
         ),
         child: DropdownButtonHideUnderline(
           child: DropdownButton<String>(
@@ -1153,16 +1287,16 @@ class _UrgencyInputState extends State<_UrgencyInput> {
                 : '5',
             isExpanded: true,
             isDense: true,
-            dropdownColor: FfTokens.sessionEl,
-            icon: const PhosphorIcon(
+            dropdownColor: colors.group,
+            icon: PhosphorIcon(
               PhosphorIconsRegular.caretDown,
               size: 12,
-              color: FfTokens.sessionT3,
+              color: colors.t3,
             ),
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: FfTokens.fontFamily,
               fontSize: 13,
-              color: FfTokens.sessionTx,
+              color: colors.tx,
             ),
             items: [
               for (final level in IptcTemplateApplyService.urgencyValues)
@@ -1189,32 +1323,35 @@ class _Footer extends StatelessWidget {
   const _Footer({
     required this.emptyRequired,
     required this.compact,
+    required this.doneLabel,
     required this.onCancel,
     required this.onDone,
   });
 
   final int emptyRequired;
   final bool compact;
+  final String doneLabel;
   final VoidCallback onCancel;
   final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
     final ok = emptyRequired == 0;
     final label = ok
         ? 'All required fields filled'
         : '$emptyRequired required field${emptyRequired == 1 ? '' : 's'} empty';
     return Container(
       padding: EdgeInsets.fromLTRB(20, compact ? 8 : 10, 12, compact ? 8 : 12),
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: FfTokens.sessionLn)),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: colors.line)),
       ),
       child: Row(
         children: [
           PhosphorIcon(
             ok ? PhosphorIconsFill.checkCircle : PhosphorIconsFill.warningCircle,
             size: 16,
-            color: ok ? FfTokens.sessionOk : _warn,
+            color: ok ? colors.ok : _warn,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1222,10 +1359,10 @@ class _Footer extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
                 fontSize: 13,
-                color: FfTokens.sessionT2,
+                color: colors.t2,
               ),
             ),
           ),
@@ -1233,25 +1370,25 @@ class _Footer extends StatelessWidget {
           Container(
             width: 5,
             height: 5,
-            decoration: const BoxDecoration(
-              color: FfTokens.sessionT3,
+            decoration: BoxDecoration(
+              color: colors.t3,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 6),
-          const Text(
+          Text(
             'Required',
             style: TextStyle(
               fontFamily: FfTokens.fontFamily,
               fontSize: 12,
-              color: FfTokens.sessionT3,
+              color: colors.t3,
             ),
           ),
           const SizedBox(width: 16),
           TextButton(
             onPressed: onCancel,
             style: TextButton.styleFrom(
-              foregroundColor: FfTokens.sessionT2,
+              foregroundColor: colors.t2,
               minimumSize: Size(0, compact ? 32 : 36),
               padding: const EdgeInsets.symmetric(horizontal: 16),
             ),
@@ -1264,29 +1401,40 @@ class _Footer extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          FilledButton.icon(
-            onPressed: onDone,
-            icon: const PhosphorIcon(
-              PhosphorIconsBold.check,
-              size: 14,
-              color: FfTokens.sessionBg,
-            ),
-            label: const Text('Done'),
-            style: FilledButton.styleFrom(
-              backgroundColor: FfTokens.sessionTx,
-              foregroundColor: FfTokens.sessionBg,
-              minimumSize: Size(0, compact ? 32 : 36),
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(9),
+          if (colors.workspace)
+            TealActionButton(
+              label: doneLabel,
+              onPressed: onDone,
+              icon: const PhosphorIcon(
+                PhosphorIconsBold.check,
+                size: 14,
+                color: Colors.white,
               ),
-              textStyle: const TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+            )
+          else
+            FilledButton.icon(
+              onPressed: onDone,
+              icon: const PhosphorIcon(
+                PhosphorIconsBold.check,
+                size: 14,
+                color: FfTokens.sessionBg,
+              ),
+              label: Text(doneLabel),
+              style: FilledButton.styleFrom(
+                backgroundColor: FfTokens.sessionTx,
+                foregroundColor: FfTokens.sessionBg,
+                minimumSize: Size(0, compact ? 32 : 36),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                textStyle: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

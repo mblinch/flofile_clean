@@ -120,6 +120,9 @@ class _VerbTileState extends State<VerbTile> {
     final isMobile = MediaQuery.sizeOf(context).width < 1100;
     final tileHeight = widget.height ?? (isMobile ? 44.0 : 28.0);
     final veryCompact = tileHeight < 24;
+    final nameFont = tileHeight >= 26
+        ? 13.5
+        : (tileHeight * 0.62).clamp(6.0, 13.0);
     final labelColor = widget.dimmed
         ? t.text.withValues(alpha: 0.38)
         : t.text;
@@ -146,7 +149,10 @@ class _VerbTileState extends State<VerbTile> {
           onSecondaryTapDown: widget.onSecondaryTapDown,
           child: Padding(
             // Room for the selection glow so parent clips don't shear it off.
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            padding: EdgeInsets.symmetric(
+              horizontal: veryCompact ? 1 : 6,
+              vertical: veryCompact ? 0 : 1,
+            ),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 120),
               curve: Curves.easeOut,
@@ -201,7 +207,7 @@ class _VerbTileState extends State<VerbTile> {
                         normal: FfTokens.rosterName(
                           color: labelColor,
                           selected: widget.selected,
-                        ),
+                        ).copyWith(fontSize: nameFont, height: 1),
                       ),
                       maxLines: 1,
                       softWrap: false,

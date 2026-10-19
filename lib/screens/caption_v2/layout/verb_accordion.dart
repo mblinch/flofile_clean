@@ -26,6 +26,43 @@ List<String> verbCategoriesForDisplay(Iterable<String> categories) {
 bool verbCategoryOrderLocked(String category) =>
     category == 'Favorites' || category == 'All';
 
+/// Verb keys already listed under another open category.
+/// All is the full catalog, so those keys are omitted there.
+Set<String> verbKeysAlreadyShownOutsideAll({
+  required Set<String> openCategories,
+  required Map<String, Iterable<String>> keysByCategory,
+}) {
+  final shown = <String>{};
+  for (final category in openCategories) {
+    if (category == 'All') continue;
+    shown.addAll(keysByCategory[category] ?? const <String>[]);
+  }
+  return shown;
+}
+
+List<EffectiveVerb> verbsForOpenCategory({
+  required String category,
+  required bool open,
+  required Map<String, List<EffectiveVerb>> verbsByCategory,
+  required Set<String> openCategories,
+}) {
+  if (!open) return const <EffectiveVerb>[];
+  final verbs = verbsByCategory[category] ?? const <EffectiveVerb>[];
+  if (category != 'All') return verbs;
+  final hidden = verbKeysAlreadyShownOutsideAll(
+    openCategories: openCategories,
+    keysByCategory: {
+      for (final entry in verbsByCategory.entries)
+        entry.key: entry.value.map((verb) => verb.key),
+    },
+  );
+  if (hidden.isEmpty) return verbs;
+  return [
+    for (final verb in verbs)
+      if (!hidden.contains(verb.key)) verb,
+  ];
+}
+
 /// Drop the oldest open extras so at most [limit] categories stay open.
 /// The current category is not in [extras].
 void trimOpenVerbCategories(Set<String> extras, int limit) {
@@ -253,6 +290,10 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
   }
 
   void _moveVerbSelection(int delta) {
+    if (controller.verbListAll) {
+      _moveFlatVerbSelection(delta);
+      return;
+    }
     final categories = _categories;
     if (categories.isEmpty) return;
     var catIndex = categories.indexOf(_openCategory);
@@ -292,7 +333,24 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
     widget.onVerbArmed?.call();
   }
 
+  void _moveFlatVerbSelection(int delta) {
+    final verbs = _verbsFor('All');
+    if (verbs.isEmpty) return;
+    final selected = controller.selectedVerb;
+    var index = verbs.indexWhere((verb) => verb.key == selected);
+    if (index < 0) {
+      index = delta > 0 ? 0 : verbs.length - 1;
+    } else {
+      final next = (index + delta).clamp(0, verbs.length - 1);
+      if (next == index) return;
+      index = next;
+    }
+    controller.selectVerb(verbs[index].key);
+    widget.onVerbArmed?.call();
+  }
+
   void _stepCategory(int delta) {
+    if (controller.verbListAll) return;
     final categories = _categories;
     if (categories.isEmpty) return;
     final current = categories.indexOf(_openCategory);
@@ -391,6 +449,42 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                 return true;
               }());
 
+              if (controller.verbListAll) {
+                final verbs = _verbsFor('All');
+                final verbRow =
+                    DefaultVerbAccordion.verbRowH * controller.verbFontScale;
+                return Column(
+                  children: [
+                    _PinnedVerbSlot(
+                      height: DefaultVerbAccordion.pinnedBarH,
+                      tokens: t,
+                      controller: controller,
+                      verb: pinned,
+                      onEditVerb: widget.onEditVerb,
+                      onVerbArmed: widget.onVerbArmed,
+                    ),
+                    _AllVerbsTitle(tokens: t),
+                    Expanded(
+                      child: Scrollbar(
+                        child: SingleChildScrollView(
+                          child: _VerbBoard(
+                            category: 'All',
+                            verbs: verbs,
+                            rowHeight: verbRow,
+                            twoUp: false,
+                            rearrangeable: false,
+                            tokens: t,
+                            controller: controller,
+                            onEditVerb: widget.onEditVerb,
+                            onVerbArmed: widget.onVerbArmed,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
               if (controller.verbMultiOpen) {
                 return Column(
                   children: [
@@ -412,9 +506,18 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                               open: _isOpen(category),
                               headerH: headerH,
                               verbRowH: verbRowH * controller.verbFontScale,
-                              verbs: _isOpen(category)
-                                  ? _verbsFor(category)
-                                  : const <EffectiveVerb>[],
+                              verbs: verbsForOpenCategory(
+                                category: category,
+                                open: _isOpen(category),
+                                verbsByCategory: {
+                                  for (final name in categories)
+                                    name: _verbsFor(name),
+                                },
+                                openCategories: {
+                                  for (final name in categories)
+                                    if (_isOpen(name)) name,
+                                },
+                              ),
                               twoUp: false,
                               rearrangeable: false,
                               tokens: t,
@@ -504,7 +607,50 @@ class VerbMenuTools extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _VerbCascadeLimitMenu(controller: controller);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _VerbTextSizeControl(controller: controller),
+        const SizedBox(width: 2),
+        _VerbCascadeLimitMenu(controller: controller),
+      ],
+    );
+  }
+}
+
+/// Compact minus and plus for verb text size, shown beside the gear.
+class _VerbTextSizeControl extends StatelessWidget {
+  const _VerbTextSizeControl({required this.controller});
+
+  final CaptionV2Controller controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: controller,
+      builder: (context, _) {
+        final step = controller.verbFontStep.clamp(
+          CaptionV2Controller.verbFontStepMin,
+          CaptionV2Controller.verbFontStepMax,
+        );
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _HeaderStepButton(
+              icon: PhosphorIconsRegular.minus,
+              enabled: step > CaptionV2Controller.verbFontStepMin,
+              onTap: () => controller.nudgeVerbFont(-1),
+            ),
+            const SizedBox(width: 6),
+            _HeaderStepButton(
+              icon: PhosphorIconsRegular.plus,
+              enabled: step < CaptionV2Controller.verbFontStepMax,
+              onTap: () => controller.nudgeVerbFont(1),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -518,7 +664,7 @@ class _VerbCascadeLimitMenu extends StatefulWidget {
 }
 
 class _VerbCascadeLimitMenuState extends State<_VerbCascadeLimitMenu> {
-  static const _menuWidth = 280.0;
+  static const _menuWidth = 360.0;
 
   OverlayEntry? _entry;
   bool _open = false;
@@ -701,21 +847,8 @@ class _VerbSettingsCard extends StatelessWidget {
     return 'Oldest closes after $_shownOpen';
   }
 
-  int get _fontStep => controller.verbFontStep.clamp(
-        CaptionV2Controller.verbFontStepMin,
-        CaptionV2Controller.verbFontStepMax,
-      );
-
-  int get _percent => 100 + _fontStep * 10;
-
-  String get _sizeHint {
-    if (_percent == 100) return 'Default';
-    if (_percent < 100) return 'Smaller';
-    return 'Larger';
-  }
-
   bool get _isDefault =>
-      controller.verbCascadeLimit == 1 && controller.verbFontStep == 0;
+      controller.verbCascadeLimit == 1 && !controller.verbListAll;
 
   void _fewerCategories() {
     if (_allOpen) {
@@ -736,8 +869,8 @@ class _VerbSettingsCard extends StatelessWidget {
   }
 
   Future<void> _reset() async {
+    await controller.setVerbListAll(false);
     await controller.setVerbCascadeLimit(1);
-    await controller.nudgeVerbFont(-controller.verbFontStep);
   }
 
   @override
@@ -747,8 +880,6 @@ class _VerbSettingsCard extends StatelessWidget {
       builder: (context, _) {
         final atOpenMin = !_allOpen && _shownOpen <= 1;
         final atOpenMax = _allOpen;
-        final atSizeMin = _fontStep <= CaptionV2Controller.verbFontStepMin;
-        final atSizeMax = _fontStep >= CaptionV2Controller.verbFontStepMax;
         return DecoratedBox(
           decoration: const BoxDecoration(
             color: FfTokens.nocturneEl,
@@ -787,6 +918,18 @@ class _VerbSettingsCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 _VerbSettingRow(
+                  name: 'Organization',
+                  hint: controller.verbListAll
+                      ? 'Alphabetical'
+                      : 'By category',
+                  child: _VerbOrgSegments(
+                    listAll: controller.verbListAll,
+                    onChanged: controller.setVerbListAll,
+                  ),
+                ),
+                if (!controller.verbListAll) ...[
+                const SizedBox(height: 2),
+                _VerbSettingRow(
                   name: 'Open categories',
                   hint: _openHint,
                   child: _VerbStepper(
@@ -808,20 +951,7 @@ class _VerbSettingsCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 2),
-                _VerbSettingRow(
-                  name: 'Text size',
-                  hint: _sizeHint,
-                  child: _VerbStepper(
-                    atMin: atSizeMin,
-                    atMax: atSizeMax,
-                    onMinus: () => controller.nudgeVerbFont(-1),
-                    onPlus: () => controller.nudgeVerbFont(1),
-                    minus: const Text('A', style: _stepSmallA),
-                    plus: const Text('A', style: _stepLargeA),
-                    value: Text('$_percent%', style: _stepValueStyle),
-                  ),
-                ),
+                ],
                 if (!_isDefault) ...[
                   const SizedBox(height: 2),
                   const Padding(
@@ -855,21 +985,88 @@ const _stepValueStyle = TextStyle(
   fontFeatures: [FontFeature.tabularFigures()],
 );
 
-const _stepSmallA = TextStyle(
-  fontFamily: FfTokens.fontFamily,
-  fontSize: 12,
-  fontWeight: FontWeight.w700,
-  height: 1,
-  decoration: TextDecoration.none,
-);
+class _VerbOrgSegments extends StatelessWidget {
+  const _VerbOrgSegments({
+    required this.listAll,
+    required this.onChanged,
+  });
 
-const _stepLargeA = TextStyle(
-  fontFamily: FfTokens.fontFamily,
-  fontSize: 16,
-  fontWeight: FontWeight.w700,
-  height: 1,
-  decoration: TextDecoration.none,
-);
+  final bool listAll;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 168,
+      height: 28,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: FfTokens.nocturneBg,
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: FfTokens.nocturneLn2),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _VerbOrgSegment(
+              label: 'Cascade',
+              selected: !listAll,
+              onTap: () => onChanged(false),
+            ),
+          ),
+          Expanded(
+            child: _VerbOrgSegment(
+              label: 'All',
+              selected: listAll,
+              onTap: () => onChanged(true),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VerbOrgSegment extends StatelessWidget {
+  const _VerbOrgSegment({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => onTap(),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: 22,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? FfTokens.nocturneHv : Colors.transparent,
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          softWrap: false,
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            color: selected ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+            decoration: TextDecoration.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _VerbSettingRow extends StatelessWidget {
   const _VerbSettingRow({
@@ -888,34 +1085,37 @@ class _VerbSettingRow extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: FfTokens.nocturneTx,
-                    decoration: TextDecoration.none,
-                  ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: FfTokens.nocturneTx,
+                  decoration: TextDecoration.none,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  hint,
-                  style: const TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w400,
-                    color: FfTokens.nocturneT3,
-                    decoration: TextDecoration.none,
-                  ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                hint,
+                maxLines: 1,
+                softWrap: false,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: FfTokens.nocturneT3,
+                  decoration: TextDecoration.none,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+          const Spacer(),
           const SizedBox(width: 12),
           child,
         ],
@@ -970,6 +1170,39 @@ class _VerbStepper extends StatelessWidget {
   }
 }
 
+/// Same bare minus and plus as the roster square-size control.
+class _HeaderStepButton extends StatelessWidget {
+  const _HeaderStepButton({
+    required this.icon,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      hitTestBehavior: HitTestBehavior.opaque,
+      child: Listener(
+        behavior: HitTestBehavior.opaque,
+        onPointerDown: enabled ? (_) => onTap() : null,
+        child: Opacity(
+          opacity: enabled ? 1 : 0.3,
+          child: SizedBox(
+            width: 14,
+            height: 22,
+            child: Icon(icon, size: 12, color: FfTokens.nocturneT2),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StepButton extends StatefulWidget {
   const _StepButton({
     required this.enabled,
@@ -1002,7 +1235,7 @@ class _StepButtonState extends State<_StepButton> {
         onTap: widget.enabled ? widget.onTap : null,
         child: Opacity(
           opacity: widget.enabled ? 1 : 0.3,
-          child: AnimatedContainer(
+            child: AnimatedContainer(
             duration: const Duration(milliseconds: 80),
             width: 30,
             height: 30,
@@ -1215,7 +1448,7 @@ class _AccordionSection extends StatelessWidget {
         ),
       ),
     );
-    if (!open) {
+    if (!open || (category == 'All' && verbs.isEmpty)) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [header],
@@ -1255,6 +1488,28 @@ class _AccordionSection extends StatelessWidget {
                 ),
         ),
       ],
+    );
+  }
+}
+
+class _AllVerbsTitle extends StatelessWidget {
+  const _AllVerbsTitle({required this.tokens});
+
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: DefaultVerbAccordion.headerH,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      alignment: Alignment.centerLeft,
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.divider)),
+      ),
+      child: Text(
+        'All verbs',
+        style: FfTokens.categoryLabel(color: tokens.text),
+      ),
     );
   }
 }
@@ -1446,16 +1701,6 @@ class _CategoryHeaderState extends State<_CategoryHeader> {
                   overflow: TextOverflow.ellipsis,
                   style: FfTokens.categoryLabel(color: labelColor).copyWith(
                     fontSize: widget.fontSize,
-                    shadows: [
-                      Shadow(
-                        color: labelColor.withValues(alpha: 0.75),
-                        blurRadius: 6,
-                      ),
-                      Shadow(
-                        color: labelColor.withValues(alpha: 0.4),
-                        blurRadius: 16,
-                      ),
-                    ],
                   ),
                 ),
               ),

@@ -139,7 +139,14 @@ class NativeFilePicker {
       String script = 'set chosenFile to choose file';
 
       if (allowedExtensions != null && allowedExtensions.isNotEmpty) {
-        final extensions = allowedExtensions.map((ext) => '".$ext"').join(', ');
+        final extensions = allowedExtensions.map((ext) {
+          final token = ext.trim();
+          if (token.contains('.') && !token.startsWith('.')) {
+            return '"$token"';
+          }
+          final dotted = token.startsWith('.') ? token : '.$token';
+          return '"$dotted"';
+        }).join(', ');
         script += ' of type {$extensions}';
       }
 

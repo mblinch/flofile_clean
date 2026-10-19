@@ -3,6 +3,7 @@ import '../caption_style/game_info.dart';
 import '../caption_style/wire_iptc_specs.dart';
 import '../helpers.dart';
 import '../utils/exiftool_helper.dart';
+import 'flo_caption_mark.dart';
 import 'iptc_template_import_service.dart';
 
 /// Fields to write when applying a preset to one image (skip-unchanged path).
@@ -789,6 +790,83 @@ class IptcTemplateApplyService {
     }
   }
 
+  /// IPTC plus the XMP/EXIF aliases this app writes, so a replace does not
+  /// leave an old caption or credit sitting in XMP.
+  static List<String> _replaceClearArgs() {
+    const keys = [
+      'Creator',
+      'MEID',
+      'Description Writers',
+      'Creator\'s Job Title',
+      'Copyright',
+      'Credit',
+      'Source',
+      'Headline',
+      'Category',
+      'Object Name',
+      'Stadium',
+      'City',
+      'Province/State',
+      'Country',
+      'Country Code',
+      'Special Instructions',
+      'Personality',
+      'Caption',
+      'Urgency',
+      'Creator\'s Identity',
+    ];
+    final args = <String>[
+      '-IPTC:all=',
+      '-SupplementalCategories=',
+      '-IPTC:SupplementalCategories=',
+      '-XMP:SupplementalCategories=',
+      '-XMP-photoshop:SupplementalCategories=',
+      '-IPTC:Keywords=',
+      '-Keywords=',
+      '-Subject=',
+      '-XMP-dc:Subject=',
+      '-XMP:Subject=',
+      '-XMP:Keywords=',
+      '-XMP-photoshop:Keywords=',
+      '-${FloCaptionMark.tag}=',
+    ];
+    final seen = args.toSet();
+    for (final key in keys) {
+      for (final arg in clearArgsForPresetKey(key)) {
+        // Bare -Copyright is exiftool's copyright switch, not the IPTC tag.
+        if (arg == '-Copyright=' || arg == '--Copyright=') continue;
+        if (seen.add(arg)) args.add(arg);
+      }
+    }
+    return args;
+  }
+
+  /// Wipes IPTC (and the caption/credit aliases Photo Mechanic reads) so the
+  /// following write is the only metadata left on the file.
+  static Future<bool> _clearIptcForReplace(String imagePath) async {
+    try {
+      final config = await FloCaptionMark.configPath();
+      final args = <String>[
+        '-config',
+        config,
+        ..._replaceClearArgs(),
+        '-overwrite_original',
+        imagePath,
+      ];
+      final proc = await ExiftoolHelper.run(args);
+      if (proc.exitCode > 1) {
+        print(
+          'IPTC clear failed for $imagePath: ${proc.stderrText}',
+        );
+        return false;
+      }
+      return true;
+    } catch (e) {
+      print('IPTC clear error for $imagePath: $e');
+      return false;
+    }
+  }
+
   /// Applies [template] (preset display keys) to [imagePath].
   ///
   /// When [existingMetadata] is supplied, fields that already match the template
@@ -798,6 +876,9 @@ class IptcTemplateApplyService {
   /// [fieldsToClear] is the set of preset keys whose template values are
   /// intentionally blank — if the file currently has a value for any of these,
   /// it will be explicitly cleared.
+  ///
+  /// When [replaceExisting] is true, IPTC already on the file is cleared first,
+  /// then the full template is written, including Caption and Personality.
   static Future<IptcApplyToImageResult> applyToImage(
     String imagePath,
     Map<String, String> template, {
@@ -805,7 +886,12 @@ class IptcTemplateApplyService {
     int? imageIndex,
     Map<String, dynamic>? existingMetadata,
     Set<String>? fieldsToClear,
+    bool replaceExisting = false,
   }) async {
+    if (replaceExisting) {
+      skipInAppGenerated = false;
+      fieldsToClear = null;
+    }
     final preset = normalizeForPreset(
       template,
       includeInAppGenerated: !skipInAppGenerated,
@@ -814,6 +900,14 @@ class IptcTemplateApplyService {
 
     if (preset.isEmpty && !hasClearWork) {
       return const IptcApplyToImageResult(success: true, skipped: true);
+    }
+
+    if (replaceExisting) {
+      final cleared = await _clearIptcForReplace(imagePath);
+      if (!cleared) {
+        return const IptcApplyToImageResult(success: false);
+      }
+      existingMetadata = <String, dynamic>{};
     }
 
     Map<String, dynamic>? meta = existingMetadata;

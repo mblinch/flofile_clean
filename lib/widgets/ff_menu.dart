@@ -5,6 +5,47 @@ import 'package:flutter/services.dart';
 
 import '../theme/ff_tokens.dart';
 
+/// Colors for [showFfMenu]. [session] is the New Session screen.
+/// [of] follows the caption workspace theme.
+class FfMenuColors {
+  const FfMenuColors({
+    required this.fill,
+    required this.hover,
+    required this.selected,
+    required this.text,
+    required this.border,
+    required this.divider,
+  });
+
+  final Color fill;
+  final Color hover;
+  final Color selected;
+  final Color text;
+  final Color border;
+  final Color divider;
+
+  static const session = FfMenuColors(
+    fill: FfTokens.sessionEl,
+    hover: FfTokens.sessionHv,
+    selected: FfTokens.sessionHv,
+    text: FfTokens.sessionTx,
+    border: FfTokens.sessionLn2,
+    divider: FfTokens.sessionLn2,
+  );
+
+  static FfMenuColors of(BuildContext context) {
+    final tokens = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    return FfMenuColors(
+      fill: tokens.surface,
+      hover: tokens.hover,
+      selected: tokens.selected,
+      text: tokens.text,
+      border: tokens.inputBorder,
+      divider: tokens.divider,
+    );
+  }
+}
+
 /// Floating menu card used by the New Session team dropdown.
 class FfMenuSurface extends StatelessWidget {
   const FfMenuSurface({
@@ -12,11 +53,13 @@ class FfMenuSurface extends StatelessWidget {
     required this.child,
     this.maxHeight = 300,
     this.color,
+    this.borderColor = FfTokens.sessionLn2,
   });
 
   final Widget child;
   final double maxHeight;
   final Color? color;
+  final Color borderColor;
 
   static const shape = RoundedRectangleBorder(
     borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -46,7 +89,7 @@ class FfMenuSurface extends StatelessWidget {
           constraints: BoxConstraints(maxHeight: maxHeight),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: FfTokens.sessionLn2),
+            border: Border.all(color: borderColor),
           ),
           child: child,
         ),
@@ -106,6 +149,7 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
   double maxHeight = 300,
   bool scrollable = true,
   Color? color,
+  FfMenuColors? colors,
   FfMenuPlace place = FfMenuPlace.below,
 }) {
   final overlayState = Overlay.of(context);
@@ -113,29 +157,25 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
       overlayState.context.findRenderObject() as RenderBox?;
   if (overlayBox == null || !overlayBox.hasSize) return Future.value();
 
+  final resolved = colors ?? FfMenuColors.of(context);
+  final chrome = color == null
+      ? resolved
+      : FfMenuColors(
+          fill: color,
+          hover: resolved.hover,
+          selected: resolved.selected,
+          text: resolved.text,
+          border: resolved.border,
+          divider: resolved.divider,
+        );
   final topLeft = overlayBox.globalToLocal(anchorGlobal.topLeft);
-  final overlaySize = overlayBox.size;
   final menuWidth = width ?? anchorGlobal.width;
-  final spaceBelow =
-      overlaySize.height - (topLeft.dy + anchorGlobal.height) - 8;
-  final openUp = place == FfMenuPlace.below &&
-      spaceBelow < 160 &&
-      topLeft.dy > spaceBelow;
-  var left = topLeft.dx;
-  if (place == FfMenuPlace.left) {
-    left = topLeft.dx - menuWidth - 6;
-  } else if (place == FfMenuPlace.right) {
-    left = topLeft.dx + anchorGlobal.width + 6;
-  }
-  if (left < 8) left = 8;
-  if (left + menuWidth > overlaySize.width - 8) {
-    left = (overlaySize.width - 8 - menuWidth).clamp(8.0, overlaySize.width);
-  }
-  final beside = place != FfMenuPlace.below;
-  final top = openUp
-      ? null
-      : (beside ? topLeft.dy : topLeft.dy + anchorGlobal.height + 4);
-  final bottom = openUp ? overlaySize.height - topLeft.dy + 4 : null;
+  final anchor = Rect.fromLTWH(
+    topLeft.dx,
+    topLeft.dy,
+    anchorGlobal.width,
+    anchorGlobal.height,
+  );
 
   final completer = Completer<FfMenuResult<T>?>();
   late OverlayEntry entry;
@@ -158,11 +198,12 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
               onTap: () => close(),
             ),
           ),
-          Positioned(
-            left: left,
-            width: menuWidth,
-            top: top,
-            bottom: bottom,
+          CustomSingleChildLayout(
+            delegate: _FfMenuPositionDelegate(
+              anchor: anchor,
+              menuWidth: menuWidth,
+              place: place,
+            ),
             child: Focus(
               autofocus: true,
               onKeyEvent: (node, event) {
@@ -175,24 +216,26 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
               },
               child: FfMenuSurface(
                 maxHeight: scrollable ? maxHeight : double.infinity,
-                color: color,
+                color: chrome.fill,
+                borderColor: chrome.border,
                 child: _FfMenuBody(
-                  scrollable: scrollable,
                   children: [
                     for (final choice in choices)
                       if (choice.divider)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 4),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
                           child: Divider(
                             height: 1,
                             thickness: 1,
-                            color: FfTokens.sessionLn2,
+                            color: chrome.divider,
                           ),
                         )
                       else
                         _FfMenuRow(
                           enabled: choice.enabled,
                           selected: choice.selected,
+                          hoverColor: chrome.hover,
+                          selectedColor: chrome.selected,
                           onTap: choice.enabled
                               ? () => close(FfMenuResult(choice.value))
                               : null,
@@ -201,13 +244,13 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
                             () => close(),
                           ),
                           child: DefaultTextStyle(
-                            style: ffMenuTextStyle,
+                            style: ffMenuTextStyle.copyWith(color: chrome.text),
                             overflow: TextOverflow.ellipsis,
                             maxLines: 1,
                             child: IconTheme(
-                              data: const IconThemeData(
+                              data: IconThemeData(
                                 size: 16,
-                                color: FfTokens.sessionTx,
+                                color: chrome.text,
                               ),
                               child: choice.child,
                             ),
@@ -228,31 +271,80 @@ Future<FfMenuResult<T>?> showFfMenu<T>({
 
 class _FfMenuBody extends StatelessWidget {
   const _FfMenuBody({
-    required this.scrollable,
     required this.children,
   });
 
-  final bool scrollable;
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
-    if (!scrollable) {
-      return Padding(
+    return SingleChildScrollView(
+      primary: false,
+      child: Padding(
         padding: const EdgeInsets.all(6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: children,
         ),
-      );
-    }
-    return ListView(
-      padding: const EdgeInsets.all(6),
-      shrinkWrap: true,
-      primary: false,
-      children: children,
+      ),
     );
+  }
+}
+
+/// Keeps the menu inside the overlay. A menu that would run past the bottom
+/// shifts up; one taller than the screen pins to the top and scrolls.
+class _FfMenuPositionDelegate extends SingleChildLayoutDelegate {
+  const _FfMenuPositionDelegate({
+    required this.anchor,
+    required this.menuWidth,
+    required this.place,
+  });
+
+  final Rect anchor;
+  final double menuWidth;
+  final FfMenuPlace place;
+
+  static const double _pad = 8;
+
+  @override
+  BoxConstraints getConstraintsForChild(BoxConstraints constraints) {
+    final maxWidth = (constraints.maxWidth - _pad * 2).clamp(0.0, double.infinity);
+    final maxHeight =
+        (constraints.maxHeight - _pad * 2).clamp(0.0, double.infinity);
+    final width = menuWidth.clamp(0.0, maxWidth);
+    return BoxConstraints(
+      minWidth: width,
+      maxWidth: width,
+      maxHeight: maxHeight,
+    );
+  }
+
+  @override
+  Offset getPositionForChild(Size size, Size childSize) {
+    var left = switch (place) {
+      FfMenuPlace.left => anchor.left - childSize.width - 6,
+      FfMenuPlace.right => anchor.right + 6,
+      FfMenuPlace.below => anchor.left,
+    };
+    final maxLeft = size.width - _pad - childSize.width;
+    if (maxLeft <= _pad) {
+      left = _pad;
+    } else {
+      left = left.clamp(_pad, maxLeft);
+    }
+
+    final top = place == FfMenuPlace.below ? anchor.bottom + 4 : anchor.top;
+    final maxTop = size.height - _pad - childSize.height;
+    final y = maxTop <= _pad ? _pad : top.clamp(_pad, maxTop);
+    return Offset(left, y);
+  }
+
+  @override
+  bool shouldRelayout(_FfMenuPositionDelegate oldDelegate) {
+    return anchor != oldDelegate.anchor ||
+        menuWidth != oldDelegate.menuWidth ||
+        place != oldDelegate.place;
   }
 }
 
@@ -261,6 +353,8 @@ class _FfMenuRow extends StatefulWidget {
     required this.child,
     required this.enabled,
     required this.selected,
+    required this.hoverColor,
+    required this.selectedColor,
     required this.onTap,
     this.trailing,
   });
@@ -268,6 +362,8 @@ class _FfMenuRow extends StatefulWidget {
   final Widget child;
   final bool enabled;
   final bool selected;
+  final Color hoverColor;
+  final Color selectedColor;
   final VoidCallback? onTap;
   final Widget? trailing;
 
@@ -280,9 +376,11 @@ class _FfMenuRowState extends State<_FfMenuRow> {
 
   @override
   Widget build(BuildContext context) {
-    final fill = _hovered || widget.selected
-        ? FfTokens.sessionHv
-        : Colors.transparent;
+    final fill = widget.selected
+        ? widget.selectedColor
+        : _hovered
+            ? widget.hoverColor
+            : Colors.transparent;
     return Padding(
       padding: const EdgeInsets.only(bottom: 1),
       child: MouseRegion(

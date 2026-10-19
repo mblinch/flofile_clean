@@ -36,7 +36,7 @@ Future<void> showCaptionV2VerbEditor(
   await controller.reloadVerbCatalog();
 }
 
-/// Right-click menu, drawn with the same card as the session dropdown.
+/// Right-click menu, using the caption workspace colors.
 Future<T?> showCaptionV2PopupMenu<T>({
   required BuildContext context,
   required RelativeRect position,
