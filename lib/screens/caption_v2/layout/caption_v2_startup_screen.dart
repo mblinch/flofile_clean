@@ -301,7 +301,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
       final savedSport = (await _prefs!.getCurrentSport()).trim();
       if (savedSport.isNotEmpty && _sports.contains(savedSport)) {
-        await _selectSport(savedSport, persist: false, restoreTeams: true);
+        // Favorites still apply. Last home/away picks do not — blank each launch.
+        await _selectSport(savedSport, persist: false, restoreTeams: false);
       }
     } catch (e) {
       if (!mounted) return;
@@ -469,7 +470,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       away = _favoriteAway;
     }
 
-    if (restoreLastTeams || (home == null && away == null)) {
+    // Only restore the previous matchup when asked. Otherwise leave blank sides
+    // empty so a launch without favorites starts with no teams selected.
+    if (restoreLastTeams) {
       final last = await _prefs?.getStartupLastTeams(sport: _sport!) ??
           const MapEntry(null, null);
       if (home == null &&
@@ -3064,6 +3067,18 @@ class _TeamDropdownState extends State<_TeamDropdown> {
   OverlayEntry? _entry;
   bool _open = false;
 
+  /// Row order at open time. Starring must not reshuffle the open menu —
+  /// the jump to Favorites looks like a glitch.
+  List<String> _menuFavorites = const [];
+  List<String> _menuRest = const [];
+
+  void _captureMenuOrder() {
+    _menuFavorites =
+        widget.teams.where(widget.favoriteNames.contains).toList();
+    _menuRest =
+        widget.teams.where((t) => !widget.favoriteNames.contains(t)).toList();
+  }
+
   @override
   void didUpdateWidget(covariant _TeamDropdown oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -3095,6 +3110,7 @@ class _TeamDropdownState extends State<_TeamDropdown> {
   }
 
   void _show() {
+    _captureMenuOrder();
     final box = context.findRenderObject() as RenderBox?;
     final width = box?.size.width ?? 240;
     _entry = OverlayEntry(
@@ -3132,14 +3148,14 @@ class _TeamDropdownState extends State<_TeamDropdown> {
     _entry = null;
     final wasOpen = _open;
     _open = false;
+    _menuFavorites = const [];
+    _menuRest = const [];
     if (notify && wasOpen) widget.onMenuOpenChanged(false);
   }
 
   Widget _menu() {
-    final favorites =
-        widget.teams.where(widget.favoriteNames.contains).toList();
-    final rest =
-        widget.teams.where((t) => !widget.favoriteNames.contains(t)).toList();
+    final favorites = _menuFavorites;
+    final rest = _menuRest;
     return FfMenuSurface(
       child: ListView(
           padding: const EdgeInsets.all(6),

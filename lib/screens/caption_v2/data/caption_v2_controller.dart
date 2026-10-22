@@ -2876,6 +2876,7 @@ class CaptionV2Controller extends ChangeNotifier {
     await _prefs?.saveFtpModeEnabled(enabled);
   }
 
+  /// Prefer [setFirebarEnabled] from UI — [hidden] is the stored preference.
   Future<void> setHideFirebar(bool hidden) async {
     if (hidden == hideFirebar) return;
     hideFirebar = hidden;
@@ -2883,6 +2884,9 @@ class CaptionV2Controller extends ChangeNotifier {
     notifyListeners();
     await _prefs?.saveHideFirebar(hidden);
   }
+
+  /// Positive Firebar on/off (inverse of [hideFirebar]).
+  Future<void> setFirebarEnabled(bool enabled) => setHideFirebar(!enabled);
 
   Future<void> setSerialBylinesEnabled(bool enabled) async {
     if (enabled == serialBylinesEnabled) return;
@@ -6513,8 +6517,53 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Up to 12 roster and verb matches for the autocomplete menu.
   List<FirebarResult> get firebarMenuResults {
     if (!firebarMenuOpen) return const [];
-    final query = _firebarFocusedQuery;
     final preferVerbs = firebarMenuPrefersVerbs;
+    final normalized = _normalizedFirebarQuery;
+    final compound = _parseFirebarJerseyVerbCompound(normalized);
+    final jerseyTokens =
+        compound?.jerseys ?? _parseFirebarJerseyTokens(normalized);
+
+    // `3 battles` / `88 92 look` — menu uses the same jersey+verb split as the
+    // roster and verb columns, not the full typed string as one blob.
+    if (jerseyTokens != null) {
+      final hits = <_FirebarMenuHit>[];
+      for (final result in [...firebarHomeResults, ...firebarAwayResults]) {
+        hits.add(
+          _FirebarMenuHit(
+            result: result,
+            score: 100 + (preferVerbs ? 0 : 15),
+            name: result.player?.fullName ?? '',
+          ),
+        );
+      }
+      if (compound != null) {
+        final verbQuery = compound.verbQuery;
+        for (final result in firebarVerbResults) {
+          final label = verbDefinition(result.verbKey ?? '')?.label ??
+              result.verbKey ??
+              '';
+          var score = _firebarMenuTextScore(label, verbQuery);
+          if (score < 0) score = 70;
+          hits.add(
+            _FirebarMenuHit(
+              result: result,
+              score: score + (preferVerbs ? 15 : 0),
+              name: label,
+            ),
+          );
+        }
+      }
+      hits.sort((a, b) {
+        final byScore = b.score.compareTo(a.score);
+        if (byScore != 0) return byScore;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+      return [
+        for (final hit in hits.take(12)) hit.result,
+      ];
+    }
+
+    final query = _firebarFocusedQuery;
     final sideMatch = RegExp(r'^([hv])(\d+)$').firstMatch(query);
     final digitQuery = sideMatch?.group(2) ??
         (RegExp(r'^\d+$').hasMatch(query) ? query : null);
@@ -6668,6 +6717,20 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// Enter or a menu click. Tab and Space leave the query as typed.
   void commitFirebarMenu() {
+    final compound = _parseFirebarJerseyVerbCompound(_normalizedFirebarQuery);
+    if (compound != null) {
+      // Prefer the highlighted menu row when home/away or verbs collide.
+      final menuSel = firebarMenuSelection;
+      if (menuSel != null) {
+        final index = firebarOrderedResults
+            .indexWhere((result) => result.key == menuSel.key);
+        if (index >= 0) firebarSelectionIndex = index;
+      }
+      _commitFirebarJerseyVerbCompound(compound);
+      firebarMenuIndex = 0;
+      firebarChipCursor = -1;
+      return;
+    }
     final selected = firebarMenuSelection;
     if (selected != null) {
       commitFirebarResult(selected);
@@ -8882,34 +8945,56 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<bool> deleteImage(String path) async {
-    try {
-      final file = File(path);
-      if (!await file.exists()) return false;
-      await file.delete();
-    } catch (_) {
-      return false;
+    return (await deleteImages([path])) == 1;
+  }
+
+  /// Deletes every path that still exists on disk. One persist / IPTC refresh.
+  Future<int> deleteImages(List<String> paths) async {
+    final unique = <String>{
+      for (final path in paths)
+        if (path.trim().isNotEmpty) path,
+    };
+    if (unique.isEmpty) return 0;
+
+    final removed = <String>[];
+    for (final path in unique) {
+      try {
+        final file = File(path);
+        if (!await file.exists()) continue;
+        await file.delete();
+        removed.add(path);
+      } catch (_) {}
     }
-    final removedIndex = imagePaths.indexOf(path);
-    imagePaths.remove(path);
-    captureByPath.remove(path);
-    savedImages.remove(path);
-    _clicksByPath.remove(path);
-    _restoreClicksOnOpen.remove(path);
-    captionedImages.remove(path);
-    sentImages.remove(path);
-    selectedImagePaths.remove(path);
+    if (removed.isEmpty) return 0;
+
+    final removedSet = removed.toSet();
+    final previousPath = currentPath;
+    final previousIndex = currentIndex;
+    imagePaths.removeWhere(removedSet.contains);
+    for (final path in removed) {
+      captureByPath.remove(path);
+      savedImages.remove(path);
+      _clicksByPath.remove(path);
+      _restoreClicksOnOpen.remove(path);
+      captionedImages.remove(path);
+      sentImages.remove(path);
+      selectedImagePaths.remove(path);
+    }
+
     if (imagePaths.isEmpty) {
       currentIndex = 0;
-    } else if (removedIndex >= 0 && removedIndex < currentIndex) {
-      currentIndex--;
-    } else if (removedIndex >= 0 && currentIndex >= imagePaths.length) {
-      currentIndex = imagePaths.length - 1;
+    } else if (previousPath != null && !removedSet.contains(previousPath)) {
+      final kept = imagePaths.indexOf(previousPath);
+      currentIndex = kept >= 0 ? kept : 0;
+    } else {
+      currentIndex = previousIndex.clamp(0, imagePaths.length - 1);
     }
+
     await _persistSaved();
     notifyListeners();
     await _refreshFrameIptc();
     _scheduleJerseyOcr();
-    return true;
+    return removed.length;
   }
 
   Future<void> transmitPath(String path) => _transmitPaths([path]);
@@ -9580,16 +9665,30 @@ class CaptionV2Controller extends ChangeNotifier {
   }
 
   Future<bool> saveCurrent({bool advance = false}) async {
+    final selected = orderedSelectedImagePaths;
     final path = currentPath;
-    if (path == null) {
+    final targets = selected.length >= 2
+        ? selected
+        : (path == null ? const <String>[] : <String>[path]);
+    if (targets.isEmpty) {
       statusMessage = 'No image to save';
       notifyListeners();
       return false;
     }
     final keepFirebar = searchOpen;
-    final result = await savePaths([path]);
+    final result = await savePaths(targets);
+    if (selected.length >= 2) {
+      setSelectedImagePaths(result.failedPaths);
+    }
     if (result.anySucceeded && advance) {
-      nextFrame(keepSearchOpen: keepFirebar);
+      if (selected.length >= 2 && result.succeededPaths.isNotEmpty) {
+        advancePastHandledChain(
+          result.succeededPaths,
+          keepSearchOpen: keepFirebar,
+        );
+      } else {
+        nextFrame(keepSearchOpen: keepFirebar);
+      }
     }
     return result.anySucceeded;
   }

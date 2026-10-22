@@ -579,7 +579,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         event.logicalKey == LogicalKeyboardKey.numpadEnter;
     final isS = event.logicalKey == LogicalKeyboardKey.keyS;
 
-    // Burst picker: Enter / ⌘S confirm "Save selected" even if focus left
+    // Burst picker: Enter / ⌘S confirm the primary action even if focus left
     // the dialog Shortcuts subtree (e.g. landed on Cancel).
     if (_burstSaveDialogOpen) {
       final confirmSelected = isEnter &&
@@ -823,6 +823,26 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     await _saveInDirection(next: false);
   }
 
+  /// Open the burst picker and mark frames for the next caption Save.
+  Future<void> _applyCaptionToBurst() async {
+    if (_burstSaveDialogOpen) return;
+    final chain = _controller.forwardBurstChain;
+    if (chain.length < 2) return;
+
+    final decision = await _showBurstSaveDialog(
+      chain,
+      selectionOnly: true,
+    );
+    if (!mounted || decision == null) return;
+
+    final paths = decision.currentOnly
+        ? [
+            if (_controller.currentPath != null) _controller.currentPath!,
+          ]
+        : decision.paths;
+    _controller.setSelectedImagePaths(paths);
+  }
+
   Future<void> _saveTransmitAndNext() async {
     await _saveInDirection(next: true, transmit: true);
   }
@@ -886,8 +906,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     }
 
     final selected = _controller.orderedSelectedImagePaths;
-    if (selected.length >= 2 && _controller.burstDetectionEnabled) {
-      final burstGroup = _controller.burstGroupOverlapping(selected);
+    // 2+ thumbs selected → write the same caption to every selected image.
+    if (selected.length >= 2) {
+      final burstGroup = _controller.burstDetectionEnabled
+          ? _controller.burstGroupOverlapping(selected)
+          : null;
       final alreadySaved = selected.every(_controller.savedImages.contains);
       final result = await _controller.savePaths(selected);
       if (!mounted) return;
@@ -903,9 +926,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         );
       }
       if (result.anySucceeded && advance && mounted) {
-        next
-            ? _controller.nextFrame(keepSearchOpen: keepFirebar)
-            : _controller.prevFrame(keepSearchOpen: keepFirebar);
+        if (next) {
+          // Land on the frame after the last saved selection, not current+1.
+          _controller.advancePastHandledChain(
+            result.succeededPaths,
+            keepSearchOpen: keepFirebar,
+          );
+        } else {
+          _controller.prevFrame(keepSearchOpen: keepFirebar);
+        }
       }
       restoreFirebarFocus();
       return;
@@ -953,6 +982,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   Future<_BurstSaveDecision?> _showBurstSaveDialog(
     List<String> chain, {
     Set<String>? initiallySelected,
+    bool selectionOnly = false,
   }) async {
     final fromSelection = initiallySelected != null;
     final selected = <String>{
@@ -984,7 +1014,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
 
           return StatefulBuilder(
             builder: (context, setDialogState) {
-              void saveSelected() {
+              void confirmSelected() {
                 if (selected.isEmpty || closed) return;
                 closeWith(
                   _BurstSaveDecision.burst(
@@ -993,12 +1023,12 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                 );
               }
 
-              void saveCurrentOnly() {
+              void confirmCurrentOnly() {
                 if (closed) return;
                 closeWith(_BurstSaveDecision.current());
               }
 
-              _confirmBurstSaveSelected = saveSelected;
+              _confirmBurstSaveSelected = confirmSelected;
 
               // Enter / ⌘S are handled by the screen hardware key handler so we
               // do not also bind them here (that double-popped the root nav).
@@ -1032,12 +1062,15 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          fromSelection
-                              ? 'Your selection is part of a ${chain.length}-frame '
-                                  'burst. Save the selection only, or choose frames '
-                                  'from the full burst?'
-                              : 'Apply this caption to the current frame only, or '
-                                  'choose frames from the forward burst?',
+                          selectionOnly
+                              ? 'Choose which burst frames should get the caption '
+                                  'when you Save. Nothing is written until then.'
+                              : fromSelection
+                                  ? 'Your selection is part of a ${chain.length}-frame '
+                                      'burst. Save the selection only, or choose frames '
+                                      'from the full burst?'
+                                  : 'Apply this caption to the current frame only, or '
+                                      'choose frames from the forward burst?',
                           style: t.secondaryLabelStyle,
                         ),
                         const SizedBox(height: 14),
@@ -1134,7 +1167,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                                                     version: _controller
                                                         .imageContentStamp(
                                                             path),
-                                                    fit: BoxFit.cover,
+                                                    fit: BoxFit.contain,
                                                     cacheWidth: cacheW,
                                                     filterQuality:
                                                         FilterQuality.medium,
@@ -1159,7 +1192,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                                                         ),
                                                         child: InkWell(
                                                           onTap:
-                                                              saveCurrentOnly,
+                                                              confirmCurrentOnly,
                                                           borderRadius:
                                                               BorderRadius
                                                                   .circular(
@@ -1240,18 +1273,23 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
                             ),
                             const Spacer(),
                             OutlinedButton(
-                              onPressed: saveCurrentOnly,
+                              onPressed: confirmCurrentOnly,
                               child: Text(
-                                fromSelection
-                                    ? 'Selection only'
-                                    : 'Current only',
+                                selectionOnly
+                                    ? 'This photo only'
+                                    : fromSelection
+                                        ? 'Selection only'
+                                        : 'Current only',
                               ),
                             ),
                             const SizedBox(width: 8),
                             FilledButton(
-                              onPressed: selected.isEmpty ? null : saveSelected,
+                              onPressed:
+                                  selected.isEmpty ? null : confirmSelected,
                               child: Text(
-                                'Save selected (${selected.length})',
+                                selectionOnly
+                                    ? 'Apply to these photos (${selected.length})'
+                                    : 'Save selected (${selected.length})',
                               ),
                             ),
                           ],
@@ -1747,12 +1785,21 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
         (c.hasVerbSelection && !c.pinDefersCaptionUntilPlayer) ||
         c.originalCaption.trim().isNotEmpty;
     final captionText = c.displayedCaption;
+    final multiWriteCount = c.orderedSelectedImagePaths.length;
+    final burstChain =
+        c.burstDetectionEnabled ? c.forwardBurstChain : const <String>[];
+    final burstApplyCount =
+        burstChain.length > 1 ? burstChain.length - 1 : 0;
     return CaptionStrip(
       leading: '',
       chips: const [],
       trailing: '',
       fillHeight: fillHeight,
       fullCaption: captionText,
+      multiWriteCount: multiWriteCount,
+      burstApplyCount: burstApplyCount,
+      onApplyToBurst:
+          burstApplyCount > 0 ? () => unawaited(_applyCaptionToBurst()) : null,
       highlightPhrases: c.firebarInsertedHighlights,
       provenanceSpans: c.captionProvenanceSpans,
       unmatchedTip: c.captionUnmatchedTip,
@@ -2633,10 +2680,10 @@ class _ModesMenuState extends State<_ModesMenu> {
         onChanged: c.setSerialBylinesEnabled,
       ),
       _ModeRow(
-        icon: PhosphorIconsRegular.eyeSlash,
-        label: 'Hide Firebar',
-        on: c.hideFirebar,
-        onChanged: c.setHideFirebar,
+        icon: PhosphorIconsRegular.lightning,
+        label: 'Firebar',
+        on: !c.hideFirebar,
+        onChanged: c.setFirebarEnabled,
       ),
     ];
     final sizeLabel = _windowSizeLabel(MediaQuery.sizeOf(context));

@@ -87,6 +87,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
           controller.hoverFirebarMenu(index);
         }
       }
+      if (mounted) setState(() {});
     }
     final show = widget.focusNode.hasFocus && controller.firebarMenuOpen;
     if (show && !_menuPortal.isShowing) {
@@ -242,10 +243,6 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
       });
     }
 
-    final menuResults = controller.firebarMenuResults;
-    final menuIndex = menuResults.isEmpty
-        ? 0
-        : controller.firebarMenuIndex.clamp(0, menuResults.length - 1);
     final showMenu =
         widget.focusNode.hasFocus && controller.firebarMenuOpen;
     if (showMenu != _menuPortal.isShowing) {
@@ -264,31 +261,43 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
     return OverlayPortal(
       controller: _menuPortal,
       overlayChildBuilder: (context) {
-        return CompositedTransformFollower(
-          link: _menuLink,
-          showWhenUnlinked: false,
-          targetAnchor: Alignment.bottomLeft,
-          followerAnchor: Alignment.topLeft,
-          offset: const Offset(0, 8),
-          child: FirebarAutocompleteMenu(
-              key: _menuKey,
-              controller: controller,
-              tokens: tokens,
-              results: menuResults,
-              selectedIndex: menuIndex,
-              scrollController: _menuScroll,
-              onHover: (index, position) {
-                if (_menuPointer == position) return;
-                _menuPointer = position;
-                controller.hoverFirebarMenu(index);
-              },
-              onCommit: (index) {
-                controller.hoverFirebarMenu(index);
-                controller.commitFirebarMenu();
-                widget.textController.clear();
-                widget.focusNode.requestFocus();
-              },
-            ),
+        // Read matches from the controller here so the overlay stays in sync
+        // even when the portal was opened before a later query rebuild.
+        return ListenableBuilder(
+          listenable: controller,
+          builder: (context, _) {
+            final menuResults = controller.firebarMenuResults;
+            final menuIndex = menuResults.isEmpty
+                ? 0
+                : controller.firebarMenuIndex
+                    .clamp(0, menuResults.length - 1);
+            return CompositedTransformFollower(
+              link: _menuLink,
+              showWhenUnlinked: false,
+              targetAnchor: Alignment.bottomLeft,
+              followerAnchor: Alignment.topLeft,
+              offset: const Offset(0, 8),
+              child: FirebarAutocompleteMenu(
+                key: _menuKey,
+                controller: controller,
+                tokens: tokens,
+                results: menuResults,
+                selectedIndex: menuIndex,
+                scrollController: _menuScroll,
+                onHover: (index, position) {
+                  if (_menuPointer == position) return;
+                  _menuPointer = position;
+                  controller.hoverFirebarMenu(index);
+                },
+                onCommit: (index) {
+                  controller.hoverFirebarMenu(index);
+                  controller.commitFirebarMenu();
+                  widget.textController.clear();
+                  widget.focusNode.requestFocus();
+                },
+              ),
+            );
+          },
         );
       },
       child: CompositedTransformTarget(

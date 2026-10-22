@@ -15,9 +15,13 @@ List<Map<String, dynamic>> _verbRecordList(Object? raw) {
   ];
 }
 
+final RegExp _hockeyAnimalSkatePhrase = RegExp(
+  r'\bskat(?:e|es|ing)\s+like\s+a(?:\s+fucking)?\s+animal\b',
+  caseSensitive: false,
+);
+
 bool _hockeyTextBanned(Object? value) {
-  const phrase = 'skates like an animal';
-  if (value is String) return value.toLowerCase().contains(phrase);
+  if (value is String) return _hockeyAnimalSkatePhrase.hasMatch(value);
   if (value is Map) {
     for (final entry in value.entries) {
       if (_hockeyTextBanned(entry.key) || _hockeyTextBanned(entry.value)) {
@@ -32,6 +36,32 @@ bool _hockeyTextBanned(Object? value) {
     }
   }
   return false;
+}
+
+String _replaceHockeyAnimalSkatePhrase(String value) {
+  final next = value.replaceAll(_hockeyAnimalSkatePhrase, 'skates');
+  return next.replaceAll(
+    RegExp(r'\bskates(\s+skates)+\b', caseSensitive: false),
+    'skates',
+  );
+}
+
+Map<String, dynamic> _scrubHockeyAnimalSkateVerb(Map raw) {
+  final out = <String, dynamic>{};
+  for (final entry in raw.entries) {
+    final key = entry.key is String
+        ? _replaceHockeyAnimalSkatePhrase(entry.key as String)
+        : entry.key.toString();
+    final value = entry.value;
+    if (value is String) {
+      out[key] = _replaceHockeyAnimalSkatePhrase(value);
+    } else if (value is Map) {
+      out[key] = _scrubHockeyAnimalSkateVerb(value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 class VerbUserCatalogService {
@@ -78,23 +108,12 @@ class VerbUserCatalogService {
         value.toString(),
       ...localDeleted.map((value) => value.toString()),
     };
-    // "Fuck" (key "Untitled verb 2") and any "skates like an animal" wording
-    // were removed from the shared hockey catalog. Older accounts still have
-    // them in local custom verbs and overrides.
+    // "Fuck" (key "Untitled verb 2") was removed from the shared hockey catalog.
+    // Animal skate wordings are rewritten to plain "skates" instead of deleted.
     if (sport.trim().toLowerCase() == 'hockey') {
       deleted.add('Untitled verb 2');
       deleted.add('Fuck');
-      for (final raw in [
-        ...((base['customVerbs'] as List?) ?? const []),
-        ...localCustoms,
-      ]) {
-        if (raw is! Map) continue;
-        if (!_hockeyTextBanned(raw)) continue;
-        final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-        final label = (raw['label'] ?? '').toString().trim();
-        if (key.isNotEmpty) deleted.add(key);
-        if (label.isNotEmpty) deleted.add(label);
-      }
+      deleted.removeWhere((value) => _hockeyTextBanned(value));
     }
     // getSportDefault prefers the published catalog, whose deleted list
     // includes verbs this device still has in its own saved catalog.
@@ -121,12 +140,14 @@ class VerbUserCatalogService {
     }
 
     for (final raw in personalCustoms) {
-      if (sport.trim().toLowerCase() == 'hockey' && _hockeyTextBanned(raw)) {
-        continue;
-      }
-      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-      final label = (raw['label'] ?? '').toString().trim();
-      final phrase = (raw['verbPhrase'] ?? '').toString().trim();
+      final scrubbed = sport.trim().toLowerCase() == 'hockey' &&
+              _hockeyTextBanned(raw)
+          ? _scrubHockeyAnimalSkateVerb(raw)
+          : Map<String, dynamic>.from(raw);
+      final key =
+          (scrubbed['key'] ?? scrubbed['label'] ?? '').toString().trim();
+      final label = (scrubbed['label'] ?? '').toString().trim();
+      final phrase = (scrubbed['verbPhrase'] ?? '').toString().trim();
       if (personallyDeleted(key) ||
           personallyDeleted(label) ||
           personallyDeleted(phrase)) {
@@ -149,14 +170,20 @@ class VerbUserCatalogService {
           deletedLower.contains(trimmed.toLowerCase());
     }
 
+    Map<String, dynamic> hockeySafeVerb(Map raw) {
+      final map = Map<String, dynamic>.from(raw);
+      if (sport.trim().toLowerCase() != 'hockey' || !_hockeyTextBanned(map)) {
+        return map;
+      }
+      return _scrubHockeyAnimalSkateVerb(map);
+    }
+
     bool customRecordDeleted(Map raw) {
-      final key = (raw['key'] ?? '').toString();
-      final label = (raw['label'] ?? '').toString();
-      final phrase = (raw['verbPhrase'] ?? '').toString();
-      return isDeleted(key) ||
-          isDeleted(label) ||
-          isDeleted(phrase) ||
-          (sport.trim().toLowerCase() == 'hockey' && _hockeyTextBanned(raw));
+      final scrubbed = hockeySafeVerb(raw);
+      final key = (scrubbed['key'] ?? '').toString();
+      final label = (scrubbed['label'] ?? '').toString();
+      final phrase = (scrubbed['verbPhrase'] ?? '').toString();
+      return isDeleted(key) || isDeleted(label) || isDeleted(phrase);
     }
 
     // Published customs first, then the user's copies. A verb only in app
@@ -165,43 +192,57 @@ class VerbUserCatalogService {
     final customsByKey = <String, Map<String, dynamic>>{};
     for (final raw in ((base['customVerbs'] as List?) ?? const [])) {
       if (raw is! Map) continue;
-      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-      if (key.isEmpty || customRecordDeleted(raw)) continue;
-      customsByKey[key] = Map<String, dynamic>.from(raw);
+      final scrubbed = hockeySafeVerb(raw);
+      final key =
+          (scrubbed['key'] ?? scrubbed['label'] ?? '').toString().trim();
+      if (key.isEmpty || customRecordDeleted(scrubbed)) continue;
+      customsByKey[key] = scrubbed;
     }
     if (hasLocalCustoms || localCustoms.isNotEmpty) {
       for (final raw in localCustoms) {
-        final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-        if (key.isEmpty || customRecordDeleted(raw)) continue;
-        customsByKey[key] = Map<String, dynamic>.from(raw);
+        final scrubbed = hockeySafeVerb(raw);
+        final key =
+            (scrubbed['key'] ?? scrubbed['label'] ?? '').toString().trim();
+        if (key.isEmpty || customRecordDeleted(scrubbed)) continue;
+        customsByKey[key] = scrubbed;
       }
     }
     for (final raw in personalCustoms) {
-      final key = (raw['key'] ?? raw['label'] ?? '').toString().trim();
-      if (key.isEmpty || customRecordDeleted(raw)) continue;
-      customsByKey[key] = Map<String, dynamic>.from(raw);
+      final scrubbed = hockeySafeVerb(raw);
+      final key =
+          (scrubbed['key'] ?? scrubbed['label'] ?? '').toString().trim();
+      if (key.isEmpty || customRecordDeleted(scrubbed)) continue;
+      customsByKey[key] = scrubbed;
     }
     base['customVerbs'] = customsByKey.values.toList();
 
-    final overrides = Map<String, dynamic>.from(
-      (base['verbOverrides'] as Map?) ?? const {},
-    );
-    localOverrides.forEach((key, value) {
-      overrides[key] = Map<String, dynamic>.from(value);
+    final overrides = <String, dynamic>{};
+    void putOverride(String key, Map value) {
+      final scrubbedKey = sport.trim().toLowerCase() == 'hockey'
+          ? _replaceHockeyAnimalSkatePhrase(key)
+          : key;
+      final scrubbedValue = hockeySafeVerb(value);
+      if (isDeleted(scrubbedKey)) return;
+      overrides[scrubbedKey] = scrubbedValue;
+    }
+
+    ((base['verbOverrides'] as Map?) ?? const {}).forEach((key, value) {
+      if (value is Map) putOverride(key.toString(), value);
     });
-    overrides.removeWhere((key, value) {
-      if (isDeleted(key)) return true;
-      if (sport.trim().toLowerCase() != 'hockey') return false;
-      return _hockeyTextBanned(value) || _hockeyTextBanned(key);
-    });
+    localOverrides.forEach(putOverride);
     base['verbOverrides'] = overrides;
     if (sport.trim().toLowerCase() == 'hockey') {
       final wordings = base['customVerbWordings'];
       if (wordings is Map) {
-        wordings.removeWhere(
-          (key, value) =>
-              _hockeyTextBanned(key) || _hockeyTextBanned(value),
-        );
+        final scrubbed = <String, dynamic>{};
+        wordings.forEach((key, value) {
+          final nextKey = _replaceHockeyAnimalSkatePhrase(key.toString());
+          final nextValue = value is String
+              ? _replaceHockeyAnimalSkatePhrase(value)
+              : value;
+          scrubbed[nextKey] = nextValue;
+        });
+        base['customVerbWordings'] = scrubbed;
       }
     }
     // Local pins win, but a published move (Pre-Game, Post-Game, …) stays
@@ -219,24 +260,41 @@ class VerbUserCatalogService {
     // Favorites are personal — never inherit starred verbs from app defaults.
     base['favoriteVerbs'] = localFavorites.toList();
 
+    String orderKey(String raw) {
+      final value = sport.trim().toLowerCase() == 'hockey'
+          ? _replaceHockeyAnimalSkatePhrase(raw)
+          : raw;
+      return value.trim();
+    }
+
     final order = <String, List<String>>{};
     final catalogOrder = base['verbOrder'];
     if (catalogOrder is Map) {
       catalogOrder.forEach((key, value) {
         order[key.toString()] = value is List
-            ? value.map((item) => item.toString()).toList()
+            ? [
+                for (final item in value)
+                  orderKey(item.toString()),
+              ]
             : <String>[];
       });
     }
     localOrder.forEach((category, keys) {
       final list = order.putIfAbsent(category, () => <String>[]);
       for (final key in keys) {
-        if (!list.contains(key)) list.add(key);
+        final next = orderKey(key);
+        if (next.isNotEmpty && !list.contains(next)) list.add(next);
       }
     });
     // Drop tombstoned keys from order lists so they can't linger in the UI.
     for (final entry in order.entries) {
-      entry.value.removeWhere(isDeleted);
+      final seen = <String>{};
+      entry.value.removeWhere((key) {
+        if (isDeleted(key)) return true;
+        final lower = key.trim().toLowerCase();
+        if (lower.isEmpty) return true;
+        return !seen.add(lower);
+      });
     }
     base['verbOrder'] = order;
 

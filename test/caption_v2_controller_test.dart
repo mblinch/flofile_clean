@@ -1760,6 +1760,39 @@ void main() {
     );
   });
 
+  test('Firebar menu lists jersey+verb compound matches', () {
+    final blankenburg = player('Nick Blankenburg', '3');
+    final controller = CaptionV2Controller()
+      ..sport = 'hockey'
+      ..homeTeam = 'Toronto Maple Leafs'
+      ..awayTeam = 'San Jose Sharks'
+      ..homeRoster = [blankenburg]
+      ..awayRoster = [player('Away Skater', '12')];
+    // CaptionV2Controller defaults to baseball verbs until a session loads.
+    controller.showVerbBundle(const {});
+    controller.setSearchOpen(true);
+
+    controller.setSearchQuery('3 battles');
+
+    expect(controller.firebarMenuOpen, isTrue);
+    expect(controller.firebarMenuLabel, 'Matches');
+    expect(
+      controller.firebarMenuResults.map((result) => result.player?.fullName),
+      contains('Nick Blankenburg'),
+    );
+    expect(
+      controller.firebarMenuResults
+          .where((result) => result.kind == FirebarResultKind.verb)
+          .map((result) => result.verbKey),
+      contains('Battles'),
+    );
+
+    controller.commitFirebarMenu();
+    expect(controller.selectedPlayers.single.player, same(blankenburg));
+    expect(controller.selectedVerb, 'Battles');
+    expect(controller.searchQuery, isEmpty);
+  });
+
   test('Firebar menu ranks an exact jersey ahead of prefixes', () {
     final exact = player('Exact', '11');
     final prefix = player('Prefix', '110');

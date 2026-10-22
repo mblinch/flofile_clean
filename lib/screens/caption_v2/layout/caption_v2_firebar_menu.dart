@@ -176,7 +176,19 @@ class _FirebarMenuRow extends StatelessWidget {
     final meta = isPlayer
         ? controller.teamNameLabel(isHome: result.isHome == true)
         : 'Verb';
-    final markQuery = RegExp(r'^\d+$').hasMatch(query) ? '' : query;
+    // Jersey-only digits skip name marks. Compound `3 battles` marks the
+    // verb fragment on verb rows and leaves player names unmarked.
+    final markQuery = () {
+      if (RegExp(r'^\d+$').hasMatch(query)) return '';
+      final parts = query.trim().split(RegExp(r'\s+'));
+      if (parts.length >= 2 && RegExp(r'^(?:[hv])?\d+$').hasMatch(parts.first)) {
+        if (result.kind == FirebarResultKind.verb) {
+          return parts.skip(1).join(' ');
+        }
+        return '';
+      }
+      return query;
+    }();
     return MouseRegion(
       onHover: (event) => onHover(event.position),
       child: Listener(

@@ -16,9 +16,13 @@ import 'camera_serial_service.dart';
 import 'iptc_template_apply_service.dart';
 import 'user_preferences_firestore_service.dart';
 
+final RegExp _hockeyAnimalSkatePhrase = RegExp(
+  r'\bskat(?:e|es|ing)\s+like\s+a(?:\s+fucking)?\s+animal\b',
+  caseSensitive: false,
+);
+
 bool _hockeySaysSkatesLikeAnAnimal(Object? value) {
-  const phrase = 'skates like an animal';
-  if (value is String) return value.toLowerCase().contains(phrase);
+  if (value is String) return _hockeyAnimalSkatePhrase.hasMatch(value);
   if (value is Map) {
     for (final entry in value.entries) {
       if (_hockeySaysSkatesLikeAnAnimal(entry.key) ||
@@ -36,17 +40,43 @@ bool _hockeySaysSkatesLikeAnAnimal(Object? value) {
   return false;
 }
 
+String _replaceHockeyAnimalSkatePhrase(String value) {
+  final next = value.replaceAll(_hockeyAnimalSkatePhrase, 'skates');
+  return next.replaceAll(RegExp(r'\bskates(\s+skates)+\b', caseSensitive: false), 'skates');
+}
+
+Object? _scrubHockeyAnimalSkateValue(Object? value) {
+  if (value is String) return _replaceHockeyAnimalSkatePhrase(value);
+  if (value is Map) {
+    final out = <String, dynamic>{};
+    for (final entry in value.entries) {
+      final key = entry.key is String
+          ? _replaceHockeyAnimalSkatePhrase(entry.key as String)
+          : entry.key.toString();
+      out[key] = _scrubHockeyAnimalSkateValue(entry.value);
+    }
+    return out;
+  }
+  if (value is List) {
+    return [
+      for (final item in value) _scrubHockeyAnimalSkateValue(item),
+    ];
+  }
+  return value;
+}
+
 Map<String, String> _withoutHockeyAnimalWordings(
   String sport,
   Map<String, String> wordings,
 ) {
   if (sport.trim().toLowerCase() != 'hockey') return wordings;
-  wordings.removeWhere(
-    (key, value) =>
-        _hockeySaysSkatesLikeAnAnimal(key) ||
-        _hockeySaysSkatesLikeAnAnimal(value),
-  );
-  return wordings;
+  final out = <String, String>{};
+  for (final entry in wordings.entries) {
+    final key = _replaceHockeyAnimalSkatePhrase(entry.key);
+    final value = _replaceHockeyAnimalSkatePhrase(entry.value);
+    out[key] = value;
+  }
+  return out;
 }
 
 List<Map<String, dynamic>> _withoutHockeyAnimalVerbs(
@@ -54,8 +84,12 @@ List<Map<String, dynamic>> _withoutHockeyAnimalVerbs(
   List<Map<String, dynamic>> verbs,
 ) {
   if (sport.trim().toLowerCase() != 'hockey') return verbs;
-  verbs.removeWhere(_hockeySaysSkatesLikeAnAnimal);
-  return verbs;
+  return [
+    for (final verb in verbs)
+      Map<String, dynamic>.from(
+        (_scrubHockeyAnimalSkateValue(verb) as Map).cast<String, dynamic>(),
+      ),
+  ];
 }
 
 class AdminVerbChoice {

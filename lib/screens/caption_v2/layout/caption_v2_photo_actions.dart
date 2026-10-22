@@ -175,7 +175,9 @@ Future<void> showCaptionV2PhotoMenu({
       const FfMenuChoice<_PhotoAction>.divider(),
       item(
         _PhotoAction.delete,
-        'Delete Image',
+        targets.length > 1
+            ? 'Delete ${targets.length} Images'
+            : 'Delete Image',
         PhosphorIconsRegular.trash,
         destructive: true,
       ),
@@ -242,7 +244,7 @@ Future<void> showCaptionV2PhotoMenu({
       await _renameImage(context, controller, imagePath);
       break;
     case _PhotoAction.delete:
-      await _deleteImage(context, controller, imagePath);
+      await _deleteImages(context, controller, targets);
       break;
   }
 }
@@ -365,21 +367,33 @@ Future<void> _renameImage(
   }
 }
 
-Future<void> _deleteImage(
+Future<void> _deleteImages(
   BuildContext context,
   CaptionV2Controller controller,
-  String imagePath,
+  List<String> imagePaths,
 ) async {
+  final paths = imagePaths.toSet().toList(growable: false);
+  if (paths.isEmpty) return;
+  final n = paths.length;
   final confirmed = await _showConfirmDialog(
     context,
-    title: 'Delete image?',
-    body: '${p.basename(imagePath)} will be permanently deleted.',
+    title: n == 1 ? 'Delete image?' : 'Delete $n images?',
+    body: n == 1
+        ? '${p.basename(paths.first)} will be permanently deleted.'
+        : '$n selected photos will be permanently deleted.',
     confirmLabel: 'Delete',
   );
   if (!confirmed) return;
-  final ok = await controller.deleteImage(imagePath);
-  if (context.mounted) {
-    _message(context, ok ? 'Image deleted' : 'Could not delete image');
+  final deleted = await controller.deleteImages(paths);
+  if (!context.mounted) return;
+  if (deleted == 0) {
+    _message(context, 'Could not delete images');
+  } else if (deleted == 1 && n == 1) {
+    _message(context, 'Image deleted');
+  } else if (deleted == n) {
+    _message(context, '$deleted images deleted');
+  } else {
+    _message(context, 'Deleted $deleted of $n images');
   }
 }
 

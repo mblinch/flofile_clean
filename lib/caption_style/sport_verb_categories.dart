@@ -181,6 +181,7 @@ class SportVerbCategories {
       'Battles',
       'Faceoff',
       'Goes to the Net',
+      'Hops the Boards',
       'Scores',
       'Shoots',
       'Skates',

@@ -89,6 +89,8 @@ class VerbCaptionWording {
         return 'celebrates a goal';
       case 'Goes to the Net':
         return 'goes to the net';
+      case 'Hops the Boards':
+        return 'hops the boards';
       case 'Goes to the Basket':
         return 'goes to the basket';
       case 'Guards the Net':
@@ -259,6 +261,7 @@ class VerbCaptionWording {
       'Post Game Win': 'celebrate',
       'Post Game Loss': 'react',
       'Goes to the Net': 'go to the net',
+      'Hops the Boards': 'hop the boards',
       'Goes to the Basket': 'go to the basket',
       'Drives': 'drive',
       'Dribbles': 'dribble',
@@ -326,6 +329,7 @@ class VerbCaptionWording {
       'Post Game Win': 'celebrating',
       'Post Game Loss': 'reacting',
       'Goes to the Net': 'going to the net',
+      'Hops the Boards': 'hopping the boards',
       'Goes to the Basket': 'going to the basket',
       'Drives': 'driving',
       'Dribbles': 'dribbling',

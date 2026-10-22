@@ -76,6 +76,9 @@ class CaptionStrip extends StatelessWidget {
     this.onEditTap,
     this.footer,
     this.fillHeight = false,
+    this.multiWriteCount = 0,
+    this.burstApplyCount = 0,
+    this.onApplyToBurst,
   });
 
   /// Static text before the first chip (e.g. "Toronto Blue Jays ").
@@ -164,6 +167,14 @@ class CaptionStrip extends StatelessWidget {
   /// it is taller than the box.
   final bool fillHeight;
 
+  /// When ≥ 2, the caption panel alerts that Save writes to this many photos.
+  final int multiWriteCount;
+
+  /// Remaining frames after the current one in a detected burst (burst mode).
+  /// When > 0, the panel uses a teal alert and shows [onApplyToBurst].
+  final int burstApplyCount;
+  final VoidCallback? onApplyToBurst;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
@@ -179,6 +190,9 @@ class CaptionStrip extends StatelessWidget {
                 tokens: t,
                 onTap: onEditTap,
                 fillHeight: true,
+                multiWriteCount: multiWriteCount,
+                burstApplyCount: burstApplyCount,
+                onApplyToBurst: onApplyToBurst,
                 headerTrailing: onPersonalityChanged == null
                     ? null
                     : _PersonalityBar(
@@ -197,6 +211,9 @@ class CaptionStrip extends StatelessWidget {
             _CaptionPanel(
               tokens: t,
               onTap: onEditTap,
+              multiWriteCount: multiWriteCount,
+              burstApplyCount: burstApplyCount,
+              onApplyToBurst: onApplyToBurst,
               headerTrailing: onPersonalityChanged == null
                   ? null
                   : _PersonalityBar(
@@ -866,6 +883,9 @@ class _CaptionPanel extends StatefulWidget {
     this.headerTrailing,
     this.onTap,
     this.fillHeight = false,
+    this.multiWriteCount = 0,
+    this.burstApplyCount = 0,
+    this.onApplyToBurst,
   });
 
   final FfTokens tokens;
@@ -873,6 +893,9 @@ class _CaptionPanel extends StatefulWidget {
   final Widget? headerTrailing;
   final VoidCallback? onTap;
   final bool fillHeight;
+  final int multiWriteCount;
+  final int burstApplyCount;
+  final VoidCallback? onApplyToBurst;
 
   @override
   State<_CaptionPanel> createState() => _CaptionPanelState();
@@ -894,6 +917,13 @@ class _CaptionPanelState extends State<_CaptionPanel> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
+    // Multi-select (after Apply to these photos) wins over burst teal.
+    final multi = widget.multiWriteCount >= 2;
+    final burst = !multi && widget.burstApplyCount > 0;
+    // Burst → bright cyan. Multi-select → yellow (not Firebar).
+    const burstAlert = Color(0xFF2EE6C5);
+    const multiAlert = Color(0xFFF5D000);
+    final Color? alert = multi ? multiAlert : (burst ? burstAlert : null);
     final sizeStepper = _CaptionSizeStepper(
       tokens: t,
       canDecrease: _captionSize > _minCaptionSize,
@@ -901,11 +931,25 @@ class _CaptionPanelState extends State<_CaptionPanel> {
       onDecrease: () => _stepCaptionSize(-1),
       onIncrease: () => _stepCaptionSize(1),
     );
+    final applyBurst = burst && widget.onApplyToBurst != null
+        ? _BurstApplyButton(
+            count: widget.burstApplyCount,
+            color: burstAlert,
+            onPressed: widget.onApplyToBurst!,
+          )
+        : null;
+    final n = widget.multiWriteCount;
+    final multiLabel = n == 1
+        ? 'Applying to this photo'
+        : 'Applying to these $n photos';
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
       decoration: BoxDecoration(
-        color: t.surface,
+        color: alert != null ? alert.withValues(alpha: 0.10) : t.surface,
         borderRadius: BorderRadius.circular(FfTokens.radiusCard),
+        border: alert != null
+            ? Border.all(color: alert.withValues(alpha: 0.85), width: 1.5)
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -914,10 +958,27 @@ class _CaptionPanelState extends State<_CaptionPanel> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Text(
-                'CAPTION',
-                style: FfTokens.panelLabel(color: t.textTertiary),
+                multi
+                    ? multiLabel
+                    : burst
+                        ? 'Burst Mode Detected'
+                        : 'CAPTION',
+                style: FfTokens.panelLabel(
+                  color: alert ?? t.textTertiary,
+                ),
               ),
-              const SizedBox(width: 4),
+              if (applyBurst != null) ...[
+                const SizedBox(width: 10),
+                applyBurst,
+              ],
+              if (widget.headerTrailing != null) ...[
+                const SizedBox(width: 14),
+                Expanded(child: widget.headerTrailing!),
+              ] else
+                const Spacer(),
+              const SizedBox(width: 8),
+              sizeStepper,
+              const SizedBox(width: 2),
               MouseRegion(
                 onEnter: (_) => setState(() => _hovered = true),
                 onExit: (_) => setState(() => _hovered = false),
@@ -937,13 +998,6 @@ class _CaptionPanelState extends State<_CaptionPanel> {
                   ),
                 ),
               ),
-              if (widget.headerTrailing != null) ...[
-                const SizedBox(width: 14),
-                Expanded(child: widget.headerTrailing!),
-              ] else
-                const Spacer(),
-              const SizedBox(width: 8),
-              sizeStepper,
             ],
           ),
           const SizedBox(height: 6),
@@ -952,6 +1006,52 @@ class _CaptionPanelState extends State<_CaptionPanel> {
           else
             widget.childBuilder(_captionSize),
         ],
+      ),
+    );
+  }
+}
+
+class _BurstApplyButton extends StatelessWidget {
+  const _BurstApplyButton({
+    required this.count,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final int count;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = count == 1
+        ? 'Apply to next image'
+        : 'Apply to next $count images';
+    return Tooltip(
+      message: 'Choose which burst frames get this caption',
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: color,
+          backgroundColor: color.withValues(alpha: 0.16),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(6),
+            side: BorderSide(color: color.withValues(alpha: 0.55)),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontFamily: FfTokens.fontFamily,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
       ),
     );
   }

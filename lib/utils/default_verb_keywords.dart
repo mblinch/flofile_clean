@@ -57,6 +57,7 @@ final Map<String, List<String>> _defaults = {
   'Battles': ['battle', 'battles', 'battling', 'compete'],
   'Scores': ['score', 'scores', 'scoring', 'goal'],
   'Goes to the Net': ['net', 'front of the net', 'crease attack'],
+  'Hops the Boards': ['hops', 'boards', 'hop the boards'],
   'Faceoff': ['faceoff', 'face-off', 'draw', 'centerman'],
   'Celebrates a Goal': ['celebrate', 'celebration', 'goal'],
   'Celebrates': ['celebrate', 'celebration', 'celly'],
