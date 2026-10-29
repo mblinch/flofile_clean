@@ -10,6 +10,7 @@ class FirebarAutocompleteMenu extends StatelessWidget {
     super.key,
     required this.controller,
     required this.tokens,
+    required this.sections,
     required this.results,
     required this.selectedIndex,
     required this.scrollController,
@@ -19,6 +20,7 @@ class FirebarAutocompleteMenu extends StatelessWidget {
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
+  final List<FirebarMenuSection> sections;
   final List<FirebarResult> results;
   final int selectedIndex;
   final ScrollController scrollController;
@@ -37,6 +39,7 @@ class FirebarAutocompleteMenu extends StatelessWidget {
       letterSpacing: 0.6,
       color: FfTokens.nocturneT3,
     );
+    final multiSection = sections.length > 1;
     return Align(
       alignment: Alignment.topLeft,
       child: ConstrainedBox(
@@ -63,25 +66,29 @@ class FirebarAutocompleteMenu extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _MatchParentWidth(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
-                        child: Row(
-                          children: [
-                            Text(
-                              controller.firebarMenuLabel.toUpperCase(),
-                              style: labelStyle,
-                            ),
-                            const Spacer(),
-                            if (results.isNotEmpty)
+                    if (!multiSection)
+                      _MatchParentWidth(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 4, 8, 2),
+                          child: Row(
+                            children: [
                               Text(
-                                '${selectedIndex + 1} / ${results.length}',
+                                (sections.isEmpty
+                                        ? controller.firebarMenuLabel
+                                        : sections.first.title)
+                                    .toUpperCase(),
                                 style: labelStyle,
                               ),
-                          ],
+                              const Spacer(),
+                              if (results.isNotEmpty)
+                                Text(
+                                  '${selectedIndex + 1} / ${results.length}',
+                                  style: labelStyle,
+                                ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
                     ConstrainedBox(
                       constraints: BoxConstraints(maxHeight: maxHeight - 28),
                       child: results.isEmpty
@@ -102,18 +109,44 @@ class FirebarAutocompleteMenu extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  for (var index = 0;
-                                      index < results.length;
-                                      index++)
-                                    _FirebarMenuRow(
-                                      result: results[index],
-                                      controller: controller,
-                                      query: query,
-                                      selected: index == selectedIndex,
-                                      onHover: (position) =>
-                                          onHover(index, position),
-                                      onCommit: () => onCommit(index),
-                                    ),
+                                  for (final section in sections) ...[
+                                    if (multiSection)
+                                      Padding(
+                                        padding: const EdgeInsets.fromLTRB(
+                                          8,
+                                          6,
+                                          8,
+                                          2,
+                                        ),
+                                        child: Text(
+                                          section.title.toUpperCase(),
+                                          style: labelStyle,
+                                        ),
+                                      ),
+                                    for (final result in section.results)
+                                      Builder(
+                                        builder: (context) {
+                                          final index =
+                                              results.indexWhere(
+                                            (row) => row.key == result.key,
+                                          );
+                                          return _FirebarMenuRow(
+                                            result: result,
+                                            controller: controller,
+                                            query: query,
+                                            selected: index == selectedIndex,
+                                            onHover: (position) {
+                                              if (index < 0) return;
+                                              onHover(index, position);
+                                            },
+                                            onCommit: () {
+                                              if (index < 0) return;
+                                              onCommit(index);
+                                            },
+                                          );
+                                        },
+                                      ),
+                                  ],
                                 ],
                               ),
                             ),

@@ -192,7 +192,11 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
       } else {
         controller.commitSelectedFirebarResult();
       }
-      widget.textController.clear();
+      final left = controller.searchQuery;
+      widget.textController.value = TextEditingValue(
+        text: left,
+        selection: TextSelection.collapsed(offset: left.length),
+      );
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
@@ -266,6 +270,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
         return ListenableBuilder(
           listenable: controller,
           builder: (context, _) {
+            final menuSections = controller.firebarMenuSections;
             final menuResults = controller.firebarMenuResults;
             final menuIndex = menuResults.isEmpty
                 ? 0
@@ -281,6 +286,7 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                 key: _menuKey,
                 controller: controller,
                 tokens: tokens,
+                sections: menuSections,
                 results: menuResults,
                 selectedIndex: menuIndex,
                 scrollController: _menuScroll,
@@ -292,7 +298,13 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                 onCommit: (index) {
                   controller.hoverFirebarMenu(index);
                   controller.commitFirebarMenu();
-                  widget.textController.clear();
+                  // Player picks in `41 skates` leave the verb text; don't
+                  // wipe the field. Sync from the controller instead.
+                  final left = controller.searchQuery;
+                  widget.textController.value = TextEditingValue(
+                    text: left,
+                    selection: TextSelection.collapsed(offset: left.length),
+                  );
                   widget.focusNode.requestFocus();
                 },
               ),
@@ -385,29 +397,8 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                 Container(width: 1, height: 14, color: tokens.divider),
               ],
             ),
-            _FirebarTypingField(
-              active: active,
-              focusNode: widget.focusNode,
-              textController: widget.textController,
-              tokens: tokens,
-              onKey: _handleKey,
-              onChanged: controller.setSearchQuery,
-              onTapOutside: (event) {
-                if (_tapInsideMenu(event.position)) {
-                  widget.focusNode.requestFocus();
-                  return;
-                }
-                widget.focusNode.unfocus();
-              },
-              onSubmitted: () {
-                if (controller.firebarMenuOpen) {
-                  controller.commitFirebarMenu();
-                } else {
-                  controller.commitSelectedFirebarResult();
-                }
-                widget.textController.clear();
-              },
-            ),
+            // Chips first, then the typing caret — cursor sits to the right
+            // of each committed entry (Gmail-style).
             for (var index = 0;
                 index < controller.firebarCommitted.length;
                 index++)
@@ -433,6 +424,33 @@ class _CaptionV2SearchBarState extends State<CaptionV2SearchBar> {
                         )
                     : null,
               ),
+            _FirebarTypingField(
+              active: active,
+              focusNode: widget.focusNode,
+              textController: widget.textController,
+              tokens: tokens,
+              onKey: _handleKey,
+              onChanged: controller.setSearchQuery,
+              onTapOutside: (event) {
+                if (_tapInsideMenu(event.position)) {
+                  widget.focusNode.requestFocus();
+                  return;
+                }
+                widget.focusNode.unfocus();
+              },
+              onSubmitted: () {
+                if (controller.firebarMenuOpen) {
+                  controller.commitFirebarMenu();
+                } else {
+                  controller.commitSelectedFirebarResult();
+                }
+                final left = controller.searchQuery;
+                widget.textController.value = TextEditingValue(
+                  text: left,
+                  selection: TextSelection.collapsed(offset: left.length),
+                );
+              },
+            ),
             if (controller.firebarOptions.isNotEmpty) ...[
               Text(
                 controller.firebarOptionPrompt ?? 'Choose:',

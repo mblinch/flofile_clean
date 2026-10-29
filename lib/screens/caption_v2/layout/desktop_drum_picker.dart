@@ -1372,15 +1372,16 @@ class _VerbAccordion extends StatelessWidget {
           }
         }
         final headerSlots = showHeaders ? categories.length : 0;
-        final allTitleHeight = showHeaders ? 0.0 : preferredHeaderHeight;
         final minContentHeight = headerSlots * minHeader +
-            allTitleHeight +
             openBodyHeight +
             pinnedHeight;
         final bounded =
             constraints.hasBoundedHeight && constraints.maxHeight.isFinite;
-        final needsScroll =
-            bounded && minContentHeight > constraints.maxHeight + 0.5;
+        // Prefer scroll when within a few pixels — letter headers / rounding
+        // used to leave a Column that overflowed by 2–3px instead of scrolling.
+        const scrollSlack = 4.0;
+        final needsScroll = bounded &&
+            minContentHeight > constraints.maxHeight - scrollSlack;
 
         final double headerHeight;
         if (!showHeaders || categories.isEmpty) {
@@ -1397,10 +1398,10 @@ class _VerbAccordion extends StatelessWidget {
         // Re-check with the resolved header height — float/rounding can leave
         // a couple of pixels short of what the Column actually paints.
         final resolvedHeight = pinnedHeight +
-            (showHeaders ? categories.length * headerHeight : allTitleHeight) +
+            (showHeaders ? categories.length * headerHeight : 0.0) +
             openBodyHeight;
-        final stillOverflows =
-            bounded && resolvedHeight > constraints.maxHeight + 0.5;
+        final stillOverflows = bounded &&
+            resolvedHeight > constraints.maxHeight - scrollSlack;
 
         if (needsScroll || stillOverflows) {
           return ListView(
@@ -1436,7 +1437,6 @@ class _VerbAccordion extends StatelessWidget {
                 onCelebrationChanged: controller.setCelebrationType,
                 showBar: showPinnedBar,
               ),
-              if (!showHeaders) _AllVerbsTitle(tokens: tokens),
               for (final category in categories)
                 _VerbAccordionSection(
                   controller: controller,
@@ -1494,7 +1494,6 @@ class _VerbAccordion extends StatelessWidget {
               onCelebrationChanged: controller.setCelebrationType,
               showBar: showPinnedBar,
             ),
-            if (!showHeaders) _AllVerbsTitle(tokens: tokens),
             for (final category in categories)
               _VerbAccordionSection(
                 controller: controller,
@@ -1518,28 +1517,6 @@ class _VerbAccordion extends StatelessWidget {
 
         return column;
       },
-    );
-  }
-}
-
-class _AllVerbsTitle extends StatelessWidget {
-  const _AllVerbsTitle({required this.tokens});
-
-  final FfTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: _VerbAccordion.preferredHeaderHeight,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: tokens.divider)),
-      ),
-      child: Text(
-        'All verbs',
-        style: FfTokens.categoryLabel(color: tokens.text),
-      ),
     );
   }
 }
@@ -1665,6 +1642,7 @@ class _VerbAccordionSection extends StatelessWidget {
               leadingPadding: 26,
               fontSize: fontSize,
               gold: isFavorites,
+              letterBands: category == 'All',
               scrollable: true,
               onVerbArmed: onVerbArmed,
               onToggleFavorite: onToggleFavorite,
@@ -1686,6 +1664,7 @@ class _VerbAccordionSection extends StatelessWidget {
                     leadingPadding: 26,
                     fontSize: fontSize,
                     gold: isFavorites,
+                    letterBands: category == 'All',
                     onVerbArmed: onVerbArmed,
                     onToggleFavorite: onToggleFavorite,
                   )
@@ -1788,6 +1767,7 @@ class _VerbRows extends StatefulWidget {
     this.fontSize = 13.5,
     this.scrollable = false,
     this.gold = false,
+    this.letterBands = false,
   });
 
   final CaptionV2Controller controller;
@@ -1802,6 +1782,8 @@ class _VerbRows extends StatefulWidget {
   final double fontSize;
   final bool scrollable;
   final bool gold;
+  /// Inline A–Z marker on the first verb of each letter band.
+  final bool letterBands;
 
   @override
   State<_VerbRows> createState() => _VerbRowsState();
@@ -1841,7 +1823,7 @@ class _VerbRowsState extends State<_VerbRows> {
     super.dispose();
   }
 
-  Widget _row(int index) {
+  Widget _row(int index, {String? bandLetter}) {
     final verb = widget.verbs[index];
     // Only the committed/caption verb gets the selected fill.
     // Do not highlight the keyboard cursor index (often 0) when nothing is
@@ -1863,6 +1845,7 @@ class _VerbRowsState extends State<_VerbRows> {
       fontSize: widget.fontSize,
       gold: widget.gold,
       tokens: widget.tokens,
+      bandLetter: bandLetter,
       showRbi: showRbi,
       showBase: showBase,
       showCelebration: showCelebration,
@@ -1881,12 +1864,41 @@ class _VerbRowsState extends State<_VerbRows> {
     );
   }
 
+  List<Widget> _bandedChildren() {
+    final bands = verbLetterBands(widget.verbs);
+    final out = <Widget>[];
+    var index = 0;
+    for (final band in bands) {
+      for (var i = 0; i < band.$2.length; i++) {
+        // Letter shares the first verb's row; later verbs keep an empty lane.
+        out.add(_row(index, bandLetter: i == 0 ? band.$1 : ''));
+        index++;
+      }
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.verbs.isEmpty) {
       return Center(
         child: Text('No verbs', style: widget.tokens.metaStyle),
       );
+    }
+    if (widget.letterBands) {
+      final children = _bandedChildren();
+      if (widget.scrollable) {
+        return Scrollbar(
+          controller: _scrollController,
+          thumbVisibility: true,
+          child: ListView(
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            children: children,
+          ),
+        );
+      }
+      return Column(children: children);
     }
     if (widget.scrollable) {
       return Scrollbar(
@@ -2157,6 +2169,7 @@ class _HoverVerbBlock extends StatefulWidget {
     required this.fontSize,
     this.gold = false,
     required this.tokens,
+    this.bandLetter,
     required this.showRbi,
     required this.showBase,
     required this.showCelebration,
@@ -2180,6 +2193,7 @@ class _HoverVerbBlock extends StatefulWidget {
   final double fontSize;
   final bool gold;
   final FfTokens tokens;
+  final String? bandLetter;
   final bool showRbi;
   final bool showBase;
   final bool showCelebration;
@@ -2236,6 +2250,7 @@ class _HoverVerbBlockState extends State<_HoverVerbBlock> {
           leadingPadding: widget.leadingPadding,
           gold: widget.gold,
           tokens: widget.tokens,
+          bandLetter: widget.bandLetter,
           onTap: widget.onTap,
           onToggleFavorite: widget.onToggleFavorite,
         ),
@@ -2332,6 +2347,7 @@ class _VerbAccordionRow extends StatelessWidget {
     this.boxed = false,
     this.leadingPadding = 26,
     this.gold = false,
+    this.bandLetter,
   });
 
   final CaptionV2Controller controller;
@@ -2347,6 +2363,7 @@ class _VerbAccordionRow extends StatelessWidget {
   final VoidCallback onToggleFavorite;
   final double leadingPadding;
   final bool gold;
+  final String? bandLetter;
 
   @override
   Widget build(BuildContext context) {
@@ -2377,7 +2394,10 @@ class _VerbAccordionRow extends StatelessWidget {
                     : _VerbAccordion.rowHeight) *
                 controller.verbFontScale,
             clipBehavior: Clip.none,
-            padding: EdgeInsets.only(left: leadingPadding - 6, right: 4),
+            padding: EdgeInsets.only(
+              left: bandLetter != null ? 8 : leadingPadding - 6,
+              right: 4,
+            ),
             decoration: BoxDecoration(
               color: fill,
               borderRadius: BorderRadius.circular(7),
@@ -2389,6 +2409,10 @@ class _VerbAccordionRow extends StatelessWidget {
             ),
             child: Row(
               children: [
+                if (bandLetter != null) ...[
+                  VerbBandLetter(letter: bandLetter, tokens: tokens),
+                  const SizedBox(width: 4),
+                ],
                 SizedBox(
                   width: 14,
                   child: controller.isVerbPinned(verb.key)

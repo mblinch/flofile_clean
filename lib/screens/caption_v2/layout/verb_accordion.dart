@@ -76,6 +76,91 @@ void trimOpenVerbCategories(Set<String> extras, int limit) {
   }
 }
 
+/// Starting letter for alphabetical verb banding (A–Z, else #).
+String verbListInitial(EffectiveVerb verb) {
+  final label = verb.label.trim();
+  if (label.isEmpty) return '#';
+  final ch = label[0].toUpperCase();
+  if (ch.compareTo('A') >= 0 && ch.compareTo('Z') <= 0) return ch;
+  return '#';
+}
+
+/// Label a verb band from the initials actually in it, e.g. "A" or "M–P".
+String verbLetterRangeLabel(List<EffectiveVerb> group) {
+  if (group.isEmpty) return '';
+  final first = verbListInitial(group.first);
+  var last = first;
+  for (final verb in group) {
+    last = verbListInitial(verb);
+  }
+  if (first == last) return first;
+  return '$first–$last';
+}
+
+/// Groups an alphabetically sorted verb list into letter bands.
+///
+/// Same idea as the player number roster's "29–45" row labels: each band gets
+/// a compact range header from the initials it contains.
+List<(String, List<EffectiveVerb>)> verbLetterBands(List<EffectiveVerb> verbs) {
+  if (verbs.isEmpty) return const [];
+  final bands = <(String, List<EffectiveVerb>)>[];
+  String? currentLetter;
+  var current = <EffectiveVerb>[];
+  for (final verb in verbs) {
+    final letter = verbListInitial(verb);
+    if (currentLetter == null || letter != currentLetter) {
+      if (current.isNotEmpty && currentLetter != null) {
+        bands.add((verbLetterRangeLabel(current), List.of(current)));
+      }
+      currentLetter = letter;
+      current = [verb];
+    } else {
+      current.add(verb);
+    }
+  }
+  if (current.isNotEmpty) {
+    bands.add((verbLetterRangeLabel(current), current));
+  }
+  return bands;
+}
+
+/// Fixed-width letter glyph on the first verb of an A–Z band (empty for the rest).
+class VerbBandLetter extends StatelessWidget {
+  const VerbBandLetter({
+    super.key,
+    required this.letter,
+    required this.tokens,
+  });
+
+  /// Null hides the lane. Empty string reserves the lane with no glyph.
+  final String? letter;
+  final FfTokens tokens;
+
+  static const double width = 14;
+
+  @override
+  Widget build(BuildContext context) {
+    if (letter == null) return const SizedBox.shrink();
+    return SizedBox(
+      width: width,
+      child: letter!.isEmpty
+          ? null
+          : Text(
+              letter!,
+              maxLines: 1,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+                color: tokens.textTertiary,
+                height: 1,
+              ),
+            ),
+    );
+  }
+}
+
 /// Header chrome that accepts a category drop. Favorites and All are fixed.
 class VerbCategoryDropTarget extends StatelessWidget {
   const VerbCategoryDropTarget({
@@ -463,7 +548,6 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                       onEditVerb: widget.onEditVerb,
                       onVerbArmed: widget.onVerbArmed,
                     ),
-                    _AllVerbsTitle(tokens: t),
                     Expanded(
                       child: Scrollbar(
                         child: SingleChildScrollView(
@@ -1492,28 +1576,6 @@ class _AccordionSection extends StatelessWidget {
   }
 }
 
-class _AllVerbsTitle extends StatelessWidget {
-  const _AllVerbsTitle({required this.tokens});
-
-  final FfTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: DefaultVerbAccordion.headerH,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      alignment: Alignment.centerLeft,
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: tokens.divider)),
-      ),
-      child: Text(
-        'All verbs',
-        style: FfTokens.categoryLabel(color: tokens.text),
-      ),
-    );
-  }
-}
-
 class _PinnedVerbSlot extends StatelessWidget {
   const _PinnedVerbSlot({
     required this.height,
@@ -1777,6 +1839,30 @@ class _VerbBoard extends StatelessWidget {
       );
     }
     if (!twoUp) {
+      if (category == 'All') {
+        final bands = verbLetterBands(verbs);
+        var index = 0;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final band in bands) ...[
+              for (var i = 0; i < band.$2.length; i++)
+                _AccordionVerbRow(
+                  controller: controller,
+                  verb: band.$2[i],
+                  index: index++,
+                  rowHeight: rowHeight,
+                  gold: false,
+                  tokens: tokens,
+                  onEditVerb: onEditVerb,
+                  onVerbArmed: onVerbArmed,
+                  // Letter shares the first verb's row; later verbs keep the lane.
+                  bandLetter: i == 0 ? band.$1 : '',
+                ),
+            ],
+          ],
+        );
+      }
       return Column(
         children: [
           for (var i = 0; i < verbs.length; i++)
@@ -1850,6 +1936,7 @@ class _AccordionVerbRow extends StatefulWidget {
     this.onVerbArmed,
     this.showDragHandle = false,
     this.gold = false,
+    this.bandLetter,
   });
 
   final CaptionV2Controller controller;
@@ -1861,6 +1948,8 @@ class _AccordionVerbRow extends StatefulWidget {
   final VoidCallback? onVerbArmed;
   final bool showDragHandle;
   final bool gold;
+  /// Inline A–Z marker on the first verb of a letter band (`''` = empty lane).
+  final String? bandLetter;
 
   @override
   State<_AccordionVerbRow> createState() => _AccordionVerbRowState();
@@ -1924,6 +2013,13 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
 
     final label = Row(
                   children: [
+                    if (widget.bandLetter != null) ...[
+                      VerbBandLetter(
+                        letter: widget.bandLetter,
+                        tokens: tokens,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     if (widget.showDragHandle)
                       Padding(
                         padding: const EdgeInsets.only(right: 4),
@@ -1996,13 +2092,16 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
           )
         : null;
 
+    final leftPad = armed
+        ? 8.0
+        : (widget.bandLetter != null ? 8.0 : 12.0);
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: armed ? 4 : 0,
         vertical: armed ? 2 : 1,
       ),
       child: Container(
-        padding: EdgeInsets.fromLTRB(armed ? 8 : 12, 0, armed ? 8 : 4, 0),
+        padding: EdgeInsets.fromLTRB(leftPad, 0, armed ? 8 : 4, 0),
         decoration: BoxDecoration(
           color: armed ? tokens.selected : null,
           borderRadius: BorderRadius.circular(FfTokens.radiusRow),

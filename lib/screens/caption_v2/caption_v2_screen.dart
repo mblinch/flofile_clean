@@ -434,6 +434,7 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (_finishCropOnEnter(event)) return true;
     if (_handleSaveShortcut(event)) return true;
     if (_handleBurstReviewShortcut(event)) return true;
+    if (_handleFirebarUndoShortcut(event)) return true;
     if (_handleFirebarFocusShortcut(event)) return true;
     if (_searchFocus.hasFocus && _handleFirebarMenuKey(event)) return true;
     if (_handleJerseySideChoiceKey(event)) return true;
@@ -498,6 +499,24 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     if (!chord) return false;
     _openSearch();
     return true;
+  }
+
+  /// ⌘Z / Ctrl+Z undoes the last Firebar commit or chip removal.
+  bool _handleFirebarUndoShortcut(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final keys = HardwareKeyboard.instance;
+    final chord = (keys.isMetaPressed || keys.isControlPressed) &&
+        !keys.isAltPressed &&
+        !keys.isShiftPressed &&
+        event.logicalKey == LogicalKeyboardKey.keyZ;
+    if (!chord) return false;
+    if (!_controller.canUndoFirebar) return false;
+    // Prefer Firebar undo while Firebar is open, or whenever a Firebar
+    // snapshot exists and focus isn't in another multiline editor.
+    if (!_controller.searchOpen && _searchFocus.hasFocus == false) {
+      if (captionV2FocusIsEditable()) return false;
+    }
+    return _controller.undoFirebar();
   }
 
   /// Menu keys run before the text field so arrows move the menu instead of

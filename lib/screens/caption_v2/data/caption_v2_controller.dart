@@ -326,6 +326,44 @@ class _FirebarMenuHit {
   final String name;
 }
 
+/// One token's autocomplete block (e.g. jersey `#41` or verb `skates`).
+class FirebarMenuSection {
+  const FirebarMenuSection({
+    required this.title,
+    required this.results,
+  });
+
+  final String title;
+  final List<FirebarResult> results;
+}
+
+/// Snapshot for ⌘Z undo of Firebar commits / chip removals.
+class _FirebarUndoSnapshot {
+  _FirebarUndoSnapshot({
+    required this.players,
+    required this.selectedVerb,
+    required this.customVerbPhrase,
+    required this.committed,
+    required this.personality,
+    required this.basePersonalityNames,
+    required this.captionSelectionStarted,
+    required this.rbi,
+    required this.selectedBase,
+    required this.celebrationType,
+  });
+
+  final List<RosterHit> players;
+  final String? selectedVerb;
+  final String customVerbPhrase;
+  final List<FirebarResult> committed;
+  final String personality;
+  final Set<String> basePersonalityNames;
+  final bool captionSelectionStarted;
+  final int rbi;
+  final String? selectedBase;
+  final String? celebrationType;
+}
+
 class _FirebarJerseyToken {
   const _FirebarJerseyToken({this.side, required this.jersey});
 
@@ -889,6 +927,7 @@ class CaptionV2Controller extends ChangeNotifier {
   int firebarChipCursor = -1;
 
   final List<FirebarResult> _firebarCommitted = [];
+  final List<_FirebarUndoSnapshot> _firebarUndoStack = [];
 
   /// Player keys auto-applied while Firebar search narrows to roster match(es).
   final Set<String> _firebarAutoPreviewKeys = {};
@@ -4803,6 +4842,25 @@ class CaptionV2Controller extends ChangeNotifier {
       merged.add(trimmed);
     }
 
+    final rosterKeys = <String>{
+      for (final player in homeRoster) player.fullName.trim().toLowerCase(),
+      for (final player in awayRoster) player.fullName.trim().toLowerCase(),
+    };
+    final selectedKeys = <String>{
+      for (final row in selectedPlayers)
+        row.player.fullName.trim().toLowerCase(),
+    };
+
+    // Once captioning / Firebar selection is active, personality only keeps
+    // people who are currently selected (roster button or typed+selected chip).
+    // Roster names left over from IPTC or a prior pick must leave.
+    if (captionSelectionStarted || selectedPlayers.isNotEmpty) {
+      _basePersonalityNames.removeWhere((name) {
+        final key = name.trim().toLowerCase();
+        return rosterKeys.contains(key) && !selectedKeys.contains(key);
+      });
+    }
+
     for (final name in _basePersonalityNames) {
       add(name);
     }
@@ -6385,7 +6443,118 @@ class CaptionV2Controller extends ChangeNotifier {
         retained >= 0 ? retained : (results.isEmpty ? -1 : 0);
     _syncFirebarPlayerPreview();
     _syncFirebarVerbPreview();
+    // Unique token(s) write the caption immediately; ambiguous ones keep the
+    // per-token dropdown open.
+    if (_maybeAutoCommitUniqueFirebar()) return;
     notifyListeners();
+  }
+
+  /// True when every typed Firebar token has exactly one match.
+  bool get firebarQueryIsUnique {
+    final sections = firebarMenuSections;
+    if (sections.isEmpty) return false;
+    for (final section in sections) {
+      if (section.results.length != 1) return false;
+    }
+    return true;
+  }
+
+  /// When each token has only one option, commit and write the caption.
+  /// Returns true if a commit happened (caller should skip a second notify).
+  bool _maybeAutoCommitUniqueFirebar() {
+    if (!searchOpen || firebarOptions.isNotEmpty) return false;
+    if (!firebarQueryIsUnique) return false;
+    final compound = _parseFirebarJerseyVerbCompound(_normalizedFirebarQuery);
+    if (compound != null) {
+      // Still need a side pick for home+away collisions.
+      if (_pendingJerseySideFor(_normalizedFirebarQuery) != null) return false;
+      final players = _resolveFirebarJerseyPlayers(compound.jerseys);
+      if (players == null || players.length != compound.jerseys.length) {
+        return false;
+      }
+      if (firebarVerbResults.length != 1) return false;
+      // Drop live previews so ⌘Z restores the pre-commit selection, not the
+      // half-applied preview of this same query.
+      _clearFirebarAutoPlayerPreview();
+      _clearFirebarVerbPreview();
+      _commitFirebarJerseyVerbCompound(compound);
+      return true;
+    }
+    final query = _normalizedFirebarQuery;
+    // Bare jersey numbers wait for a verb (or Enter). Auto-commit only when
+    // the typed text is already a unique name/verb — not mid `41 skates`.
+    if (RegExp(r'^([hv])?\d+$').hasMatch(query)) return false;
+    final results = firebarMenuResults;
+    if (results.length != 1) return false;
+    _clearFirebarAutoPlayerPreview();
+    _clearFirebarVerbPreview();
+    commitFirebarResult(results.single);
+    return true;
+  }
+
+  void _pushFirebarUndoSnapshot() {
+    _firebarUndoStack.add(
+      _FirebarUndoSnapshot(
+        players: [
+          for (final row in selectedPlayers)
+            RosterHit(
+              player: row.player,
+              isHome: row.isHome,
+              source: row.source,
+              recognitionDetail: row.recognitionDetail,
+            ),
+        ],
+        selectedVerb: selectedVerb,
+        customVerbPhrase: customVerbPhrase,
+        committed: List<FirebarResult>.from(_firebarCommitted),
+        personality: personality,
+        basePersonalityNames: Set<String>.from(_basePersonalityNames),
+        captionSelectionStarted: captionSelectionStarted,
+        rbi: rbi,
+        selectedBase: selectedBase,
+        celebrationType: celebrationType,
+      ),
+    );
+    if (_firebarUndoStack.length > 40) {
+      _firebarUndoStack.removeAt(0);
+    }
+  }
+
+  bool get canUndoFirebar => _firebarUndoStack.isNotEmpty;
+
+  /// ⌘Z — restore the Firebar / caption selection from before the last commit.
+  bool undoFirebar() {
+    if (_firebarUndoStack.isEmpty) return false;
+    final snap = _firebarUndoStack.removeLast();
+    selectedPlayers
+      ..clear()
+      ..addAll(snap.players);
+    selectedVerb = snap.selectedVerb;
+    customVerbPhrase = snap.customVerbPhrase;
+    _firebarCommitted
+      ..clear()
+      ..addAll(snap.committed);
+    personality = snap.personality;
+    _basePersonalityNames
+      ..clear()
+      ..addAll(snap.basePersonalityNames);
+    captionSelectionStarted = snap.captionSelectionStarted;
+    rbi = snap.rbi;
+    selectedBase = snap.selectedBase;
+    celebrationType = snap.celebrationType;
+    _firebarAutoPreviewKeys.clear();
+    _firebarVerbPreviewKey = null;
+    _firebarVerbPreviewPriorSelected = null;
+    searchQuery = '';
+    firebarSelectionIndex = -1;
+    firebarMenuIndex = 0;
+    firebarChipCursor = -1;
+    _clearFirebarOptions();
+    _syncPrimaryPlayer();
+    _syncPersonality();
+    _syncKeywords();
+    notifyListeners();
+    return true;
   }
 
   void setSearchOpen(bool open) {
@@ -6514,8 +6683,8 @@ class CaptionV2Controller extends ChangeNotifier {
     return _normalizeFirebarText(searchQuery).isNotEmpty;
   }
 
-  /// Up to 12 roster and verb matches for the autocomplete menu.
-  List<FirebarResult> get firebarMenuResults {
+  /// Per-token blocks for the autocomplete menu (`#41`, then `skates`, …).
+  List<FirebarMenuSection> get firebarMenuSections {
     if (!firebarMenuOpen) return const [];
     final preferVerbs = firebarMenuPrefersVerbs;
     final normalized = _normalizedFirebarQuery;
@@ -6523,28 +6692,47 @@ class CaptionV2Controller extends ChangeNotifier {
     final jerseyTokens =
         compound?.jerseys ?? _parseFirebarJerseyTokens(normalized);
 
-    // `3 battles` / `88 92 look` — menu uses the same jersey+verb split as the
-    // roster and verb columns, not the full typed string as one blob.
     if (jerseyTokens != null) {
-      final hits = <_FirebarMenuHit>[];
-      for (final result in [...firebarHomeResults, ...firebarAwayResults]) {
-        hits.add(
-          _FirebarMenuHit(
-            result: result,
-            score: 100 + (preferVerbs ? 0 : 15),
-            name: result.player?.fullName ?? '',
+      final sections = <FirebarMenuSection>[];
+      for (final token in jerseyTokens) {
+        final hits = <_FirebarMenuHit>[];
+        for (final result in [...firebarHomeResults, ...firebarAwayResults]) {
+          final jersey = (result.player?.jerseyNumber ?? '').trim();
+          if (jersey != token.jersey) continue;
+          if (token.side == 'h' && result.isHome != true) continue;
+          if (token.side == 'v' && result.isHome != false) continue;
+          hits.add(
+            _FirebarMenuHit(
+              result: result,
+              score: 100 + (preferVerbs ? 0 : 15),
+              name: result.player?.fullName ?? '',
+            ),
+          );
+        }
+        hits.sort((a, b) {
+          final byScore = b.score.compareTo(a.score);
+          if (byScore != 0) return byScore;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
+        final title = token.side == null
+            ? '#${token.jersey}'
+            : '${token.side}${token.jersey}';
+        sections.add(
+          FirebarMenuSection(
+            title: title,
+            results: [for (final hit in hits.take(8)) hit.result],
           ),
         );
       }
       if (compound != null) {
-        final verbQuery = compound.verbQuery;
+        final verbHits = <_FirebarMenuHit>[];
         for (final result in firebarVerbResults) {
           final label = verbDefinition(result.verbKey ?? '')?.label ??
               result.verbKey ??
               '';
-          var score = _firebarMenuTextScore(label, verbQuery);
+          var score = _firebarMenuTextScore(label, compound.verbQuery);
           if (score < 0) score = 70;
-          hits.add(
+          verbHits.add(
             _FirebarMenuHit(
               result: result,
               score: score + (preferVerbs ? 15 : 0),
@@ -6552,15 +6740,19 @@ class CaptionV2Controller extends ChangeNotifier {
             ),
           );
         }
+        verbHits.sort((a, b) {
+          final byScore = b.score.compareTo(a.score);
+          if (byScore != 0) return byScore;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        });
+        sections.add(
+          FirebarMenuSection(
+            title: compound.verbQuery,
+            results: [for (final hit in verbHits.take(8)) hit.result],
+          ),
+        );
       }
-      hits.sort((a, b) {
-        final byScore = b.score.compareTo(a.score);
-        if (byScore != 0) return byScore;
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      });
-      return [
-        for (final hit in hits.take(12)) hit.result,
-      ];
+      return sections;
     }
 
     final query = _firebarFocusedQuery;
@@ -6627,7 +6819,17 @@ class CaptionV2Controller extends ChangeNotifier {
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
     return [
-      for (final hit in hits.take(12)) hit.result,
+      FirebarMenuSection(
+        title: firebarMenuLabel,
+        results: [for (final hit in hits.take(12)) hit.result],
+      ),
+    ];
+  }
+
+  /// Flat menu rows (keyboard ↑↓ / Enter). Built from [firebarMenuSections].
+  List<FirebarResult> get firebarMenuResults {
+    return [
+      for (final section in firebarMenuSections) ...section.results,
     ];
   }
 
@@ -6718,22 +6920,36 @@ class CaptionV2Controller extends ChangeNotifier {
   /// Enter or a menu click. Tab and Space leave the query as typed.
   void commitFirebarMenu() {
     final compound = _parseFirebarJerseyVerbCompound(_normalizedFirebarQuery);
-    if (compound != null) {
-      // Prefer the highlighted menu row when home/away or verbs collide.
-      final menuSel = firebarMenuSelection;
-      if (menuSel != null) {
-        final index = firebarOrderedResults
-            .indexWhere((result) => result.key == menuSel.key);
-        if (index >= 0) firebarSelectionIndex = index;
+    final menuSel = firebarMenuSelection;
+    if (compound != null && menuSel != null) {
+      // Player row under `#41`: chip that player only, keep the verb text so
+      // its dropdown stays open. Verb row: write the full caption.
+      if (menuSel.kind == FirebarResultKind.player) {
+        final verbLeft = compound.verbQuery;
+        commitFirebarResult(menuSel);
+        firebarMenuIndex = 0;
+        firebarChipCursor = -1;
+        if (verbLeft.isNotEmpty) {
+          setSearchQuery(verbLeft);
+        }
+        return;
       }
+      final index = firebarOrderedResults
+          .indexWhere((result) => result.key == menuSel.key);
+      if (index >= 0) firebarSelectionIndex = index;
       _commitFirebarJerseyVerbCompound(compound);
       firebarMenuIndex = 0;
       firebarChipCursor = -1;
       return;
     }
-    final selected = firebarMenuSelection;
-    if (selected != null) {
-      commitFirebarResult(selected);
+    if (compound != null) {
+      _commitFirebarJerseyVerbCompound(compound);
+      firebarMenuIndex = 0;
+      firebarChipCursor = -1;
+      return;
+    }
+    if (menuSel != null) {
+      commitFirebarResult(menuSel);
       firebarMenuIndex = 0;
       firebarChipCursor = -1;
       return;
@@ -6926,6 +7142,7 @@ class CaptionV2Controller extends ChangeNotifier {
       verbResult = verbs.first;
     }
 
+    _pushFirebarUndoSnapshot();
     for (final playerResult in playersToCommit) {
       final player = playerResult.player!;
       final isHome = playerResult.isHome!;
@@ -6940,7 +7157,7 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     _syncPrimaryPlayer();
     _syncPersonality();
-    commitFirebarResult(verbResult);
+    commitFirebarResult(verbResult, recordUndo: false);
   }
 
   /// Shift+Enter from Firebar: commit the highlighted player/verb match, or pick
@@ -6982,7 +7199,11 @@ class CaptionV2Controller extends ChangeNotifier {
     return false;
   }
 
-  void commitFirebarResult(FirebarResult result) {
+  void commitFirebarResult(
+    FirebarResult result, {
+    bool recordUndo = true,
+  }) {
+    if (recordUndo) _pushFirebarUndoSnapshot();
     captionSelectionStarted = true;
     manualCaptionOverride = null;
     if (result.kind == FirebarResultKind.player) {
@@ -7298,6 +7519,7 @@ class CaptionV2Controller extends ChangeNotifier {
   void removeFirebarChip(FirebarResult result) {
     final removed = _firebarCommitted.any((item) => item.key == result.key);
     if (!removed) return;
+    _pushFirebarUndoSnapshot();
     _firebarCommitted.removeWhere((item) => item.key == result.key);
     if (result.kind == FirebarResultKind.player) {
       selectedPlayers.removeWhere(
