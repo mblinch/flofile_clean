@@ -3820,11 +3820,25 @@ class MobileFrameBanner extends StatelessWidget {
     required this.controller,
     required this.editSession,
     required this.onOpen,
+    this.aspectRatio = 16 / 9,
+    this.showMeta = true,
+    this.height = 212,
+    this.onSwipePrevious,
+    this.onSwipeNext,
   });
 
   final CaptionV2Controller controller;
   final PhotoEditSession editSession;
   final VoidCallback onOpen;
+
+  /// Wider than 16/10 keeps the banner short so caption + swipe fit.
+  final double aspectRatio;
+  final bool showMeta;
+
+  /// Fixed height matching the mobile mock (null → aspect ratio).
+  final double? height;
+  final VoidCallback? onSwipePrevious;
+  final VoidCallback? onSwipeNext;
 
   @override
   Widget build(BuildContext context) {
@@ -3840,67 +3854,134 @@ class MobileFrameBanner extends StatelessWidget {
         final cropping = editSession.cropping;
         final viewCrop =
             path == null || cropping ? null : editSession.cropFor(path);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 10,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: t.sunken,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: t.divider),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      GestureDetector(
-                        onTap: cropping ? null : onOpen,
-                        child: path == null
-                            ? Center(
-                                child: PhosphorIcon(
-                                  PhosphorIconsRegular.image,
-                                  color: t.textSecondary,
-                                  size: 36,
-                                ),
-                              )
-                            : OrientedFilePreview(
-                                key: ValueKey(
-                                  'mobile-banner-$path-${controller.imageContentStamp(path)}',
-                                ),
-                                path: path,
-                                version: controller.imageContentStamp(path),
-                                fit: cropping ? BoxFit.contain : BoxFit.cover,
-                                cacheWidth: 780,
-                                adjustments: grade.isNeutral ? null : grade,
-                                viewCrop: viewCrop != null && !viewCrop.isFull
-                                    ? viewCrop
-                                    : null,
-                              ),
-                      ),
-                      if (cropping && path != null)
-                        PhotoCropOverlay(
-                          session: editSession,
+        final count = paths.isEmpty
+            ? ''
+            : '${controller.currentIndex + 1} / ${paths.length}';
+        final statusLabel = path == null
+            ? ''
+            : '${controller.currentFileName}';
+        final frame = DecoratedBox(
+          decoration: BoxDecoration(
+            color: t.sunken,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: t.divider),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                GestureDetector(
+                  onTap: cropping ? null : onOpen,
+                  onHorizontalDragEnd: cropping
+                      ? null
+                      : (details) {
+                          final v = details.primaryVelocity ?? 0;
+                          if (v < -200) {
+                            onSwipeNext?.call();
+                          } else if (v > 200) {
+                            onSwipePrevious?.call();
+                          }
+                        },
+                  child: path == null
+                      ? Center(
+                          child: PhosphorIcon(
+                            PhosphorIconsRegular.image,
+                            color: t.textSecondary,
+                            size: 36,
+                          ),
+                        )
+                      : OrientedFilePreview(
+                          key: ValueKey(
+                            'mobile-banner-$path-${controller.imageContentStamp(path)}',
+                          ),
                           path: path,
                           version: controller.imageContentStamp(path),
-                          fit: BoxFit.contain,
+                          fit: cropping ? BoxFit.contain : BoxFit.cover,
+                          cacheWidth: 780,
+                          adjustments: grade.isNeutral ? null : grade,
+                          viewCrop: viewCrop != null && !viewCrop.isFull
+                              ? viewCrop
+                              : null,
                         ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: PhotoEditModeButton(
-                          session: editSession,
-                          controller: controller,
-                        ),
-                      ),
-                    ],
+                ),
+                if (cropping && path != null)
+                  PhotoCropOverlay(
+                    session: editSession,
+                    path: path,
+                    version: controller.imageContentStamp(path),
+                    fit: BoxFit.contain,
+                  ),
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: PhotoEditModeButton(
+                    session: editSession,
+                    controller: controller,
                   ),
                 ),
-              ),
+                if (!showMeta && statusLabel.isNotEmpty)
+                  Positioned(
+                    left: 8,
+                    bottom: 8,
+                    child: _MobilePhotoChip(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          PhosphorIcon(
+                            PhosphorIconsBold.check,
+                            size: 12,
+                            color: const Color(0xFF7FD1A3),
+                          ),
+                          const SizedBox(width: 5),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 160),
+                            child: Text(
+                              statusLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (!showMeta && count.isNotEmpty)
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: _MobilePhotoChip(
+                      child: Text(
+                        count,
+                        style: const TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
-            const SizedBox(height: 6),
+          ),
+        );
+        if (!showMeta) {
+          // Parent supplies a fixed height (mobile stack).
+          return SizedBox(height: height, child: frame);
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AspectRatio(aspectRatio: aspectRatio, child: frame),
+            const SizedBox(height: 4),
             Text(
               path == null
                   ? (controller.sessionReady
@@ -3914,6 +3995,24 @@ class MobileFrameBanner extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _MobilePhotoChip extends StatelessWidget {
+  const _MobilePhotoChip({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xBF0C1016),
+        borderRadius: BorderRadius.circular(7),
+      ),
+      child: child,
     );
   }
 }

@@ -541,17 +541,21 @@ class CaptionV2Controller extends ChangeNotifier {
     return verbCascadeLimit > max ? max : verbCascadeLimit;
   }
 
-  /// Steps from the default verb-menu type size. Each step is 10%.
-  /// Range is 80%–140% (default 100%).
+  /// Steps from the default verb-menu type size. Each step is 0.5px
+  /// at the default 13.5px size (~3.7% per click).
   int verbFontStep = 0;
 
   /// False keeps categories. True lists every verb once, A–Z.
   bool verbListAll = false;
 
-  static const int verbFontStepMin = -2;
-  static const int verbFontStepMax = 4;
+  static const double verbFontBasePx = 13.5;
+  static const double verbFontStepPx = 0.5;
+  /// About −3px … +6px around the default, matching the old 80%–140% span.
+  static const int verbFontStepMin = -6;
+  static const int verbFontStepMax = 12;
 
-  double get verbFontScale => 1 + verbFontStep * 0.10;
+  double get verbFontScale =>
+      1 + verbFontStep * (verbFontStepPx / verbFontBasePx);
   Map<String, int> _verbUsageCounts = {};
 
   // --- Game / teams ---
@@ -904,6 +908,10 @@ class CaptionV2Controller extends ChangeNotifier {
 
   /// When true, the caption Firebar search row is hidden.
   bool hideFirebar = false;
+
+  /// Mobile dock: after a player with no verb → Verbs; after a verb that
+  /// wants an opposing player → that roster. Default on.
+  bool autoAdvanceTabs = true;
 
   // --- Search / focus ---
   String searchQuery = '';
@@ -2948,6 +2956,7 @@ class CaptionV2Controller extends ChangeNotifier {
     _prefs = prefs;
     ftpModeEnabled = await prefs.getFtpModeEnabled();
     hideFirebar = await prefs.getHideFirebar();
+    autoAdvanceTabs = await prefs.getAutoAdvanceTabs();
     serialBylinesEnabled = await prefs.getSerialNumberBylines();
     if (!serialBylinesEnabled) _releaseSerialBylinesGate();
     burstDetectionEnabled = await prefs.getBurstDetectionEnabled();
@@ -4432,10 +4441,12 @@ class CaptionV2Controller extends ChangeNotifier {
   }) {
     captionSelectionStarted = true;
     teamPlayersIsHome = null;
+    final hadVerb = hasVerbSelection;
     final existingIndex = selectedPlayers.indexWhere(
       (row) => row.isHome == isHome && _samePlayer(row.player, player),
     );
-    if (existingIndex >= 0) {
+    final removed = existingIndex >= 0;
+    if (removed) {
       selectedPlayers.removeAt(existingIndex);
     } else {
       selectedPlayers.add(RosterHit(
@@ -4451,6 +4462,10 @@ class CaptionV2Controller extends ChangeNotifier {
     _syncPrimaryPlayer();
     _dropTeammatesIfSubjectLeft();
     _syncKeywords();
+    if (autoAdvanceTabs && !removed && !hadVerb) {
+      // Player first, no verb yet → Verbs tab (same order as desktop columns).
+      columnFocus = 1;
+    }
     notifyListeners();
   }
 
@@ -5450,6 +5465,43 @@ class CaptionV2Controller extends ChangeNotifier {
     }
     _syncKeywords();
     unawaited(_recordVerbUsage(verb));
+    if (autoAdvanceTabs) {
+      final def = verbDefinition(verb);
+      // Mode-3 style: wants an opposing player and none is chosen yet.
+      final needsSecond = def != null &&
+          def.wantsOpponent &&
+          opposingPlayers.isEmpty &&
+          subjectPlayers.isNotEmpty;
+      if (needsSecond) {
+        columnFocus = subjectPlayers.first.isHome ? 2 : 0;
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> setAutoAdvanceTabs(bool enabled) async {
+    if (autoAdvanceTabs == enabled) return;
+    autoAdvanceTabs = enabled;
+    await _prefs?.saveAutoAdvanceTabs(enabled);
+    notifyListeners();
+  }
+
+  /// Mobile Clear — wipe this frame's players/verb/personality (pins stay).
+  void clearFrameCaption() {
+    selectedPlayers.clear();
+    selectedPlayer = null;
+    teamPlayersIsHome = null;
+    withTeammatesIsHome = null;
+    selectedVerb = null;
+    customVerbPhrase = '';
+    celebrationType = null;
+    personality = '';
+    manualCaptionOverride = null;
+    rbi = 0;
+    selectedBase = null;
+    captionSelectionStarted = false;
+    columnFocus = 0;
+    _syncKeywords();
     notifyListeners();
   }
 

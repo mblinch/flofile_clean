@@ -85,8 +85,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   bool _serialBylinesPromptOpen = false;
   /// Burst available after a normal save — user opts in via Review burst / B.
   _PendingBurstOffer? _pendingBurst;
+  bool _mobileThumbsOpen = false;
+  bool _captionExpanded = false;
+  int _lastSyncedColumnFocus = -1;
 
-  static const double _desktopBreakpoint = 1100;
+  static const double _desktopBreakpoint = kCaptionV2MobileBreakpoint;
   static double get _gap => 10;
 
   @override
@@ -158,6 +161,24 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         unawaited(_promptSerialBylines());
       });
+    }
+    final focus = _controller.columnFocus.clamp(0, 2);
+    if (focus != _lastSyncedColumnFocus) {
+      _lastSyncedColumnFocus = focus;
+      final pc = _pageController;
+      if (pc != null && pc.hasClients) {
+        final page = pc.page?.round() ?? pc.initialPage;
+        if (page != focus) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || _pageController == null) return;
+            _pageController!.animateToPage(
+              focus,
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+            );
+          });
+        }
+      }
     }
     setState(() {});
   }
@@ -1350,24 +1371,108 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     );
   }
 
+  void _toggleMobileLayoutPreview() {
+    final next = !captionV2ForceMobilePreview.value;
+    if (next && _photoEdit.editing) {
+      _photoEdit.toggleEditing();
+    }
+    captionV2ForceMobilePreview.value = next;
+  }
+
   Widget _withChrome(
     Widget body, {
     bool sessionActive = false,
     String? title,
     bool sessionChrome = false,
+    bool mobile = false,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _TopChrome(
-          controller: sessionActive ? _controller : null,
-          onResetSession: sessionActive ? _controller.resetToStartup : null,
-          title: title,
-          sessionChrome: sessionChrome,
-        ),
+        if (mobile && sessionActive)
+          _MobileTopBar(
+            controller: _controller,
+            onMenu: _controller.resetToStartup,
+            onFirebar: () => _openMobileFirebarSheet(),
+            onGear: () => _TopChrome._openPreferences(context, _controller),
+          )
+        else
+          _TopChrome(
+            controller: sessionActive ? _controller : null,
+            onResetSession: sessionActive ? _controller.resetToStartup : null,
+            onToggleMobileLayout:
+                sessionActive ? _toggleMobileLayoutPreview : null,
+            title: title,
+            sessionChrome: sessionChrome,
+          ),
         Expanded(child: body),
       ],
     );
+  }
+
+  Future<void> _openMobileFirebarSheet() async {
+    final c = _controller;
+    if (c.hideFirebar) return;
+    _openSearch();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: Material(
+            color: t.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: t.divider,
+                        borderRadius: BorderRadius.circular(99),
+                      ),
+                    ),
+                    CaptionV2SearchBar(
+                      controller: c,
+                      focusNode: _searchFocus,
+                      textController: _searchText,
+                      onActivate: _openSearch,
+                      onExit: () {
+                        _closeSearch();
+                        Navigator.of(context).maybePop();
+                      },
+                      onSave: () {
+                        if (c.searchOpen &&
+                            (c.firebarCanQuickSavePlayer ||
+                                c.firebarCanQuickSaveVerb)) {
+                          c.commitSelectedFirebarResult();
+                          _searchText.clear();
+                        }
+                        unawaited(_saveAndNext());
+                      },
+                      onTransmit: () {
+                        unawaited(_saveTransmitAndNext());
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (mounted) _closeSearch();
   }
 
   @override
@@ -1518,59 +1623,61 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
             backgroundColor: t.bg,
             body: _onGround(
               t,
-              LayoutBuilder(
-              builder: (context, constraints) {
-                final useMobile = kCaptionV2MobilePreview ||
-                    constraints.maxWidth < _desktopBreakpoint;
-                final workspace = AnimatedBuilder(
-                  animation: _photoEdit,
-                  builder: (context, _) {
-                    if (_photoEdit.editing &&
-                        AdminService.isCurrentUserAdminSync()) {
-                      return PhotoEditWorkspace(
-                        session: _photoEdit,
-                        controller: c,
-                      );
-                    }
-                    if (!useMobile) {
-                      return _buildDesktopWorkspace(
-                        c,
-                        t,
-                        constraints.maxWidth,
-                      );
-                    }
-                    return _buildMobileWorkspace(c, t);
-                  },
-                );
-                if (!useMobile) {
-                  return _withChrome(workspace, sessionActive: true);
-                }
-                final mobile = _withChrome(workspace, sessionActive: true);
-                if (!kCaptionV2MobilePreview) return mobile;
-                // Phone-width frame so desktop can preview the swipe layout.
-                return DecoratedBox(
-                  decoration: BoxDecoration(gradient: t.groundWash),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: 390,
-                        maxHeight: 844,
-                      ),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: t.divider),
-                          borderRadius: BorderRadius.circular(12),
+              ValueListenableBuilder<bool>(
+                valueListenable: captionV2ForceMobilePreview,
+                builder: (context, forceMobile, _) {
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Read the flag from this rebuild — do not rely on a
+                      // stale width-only check when the admin toggle flips.
+                      final useMobile = forceMobile ||
+                          constraints.maxWidth < kCaptionV2MobileBreakpoint;
+                      return _withChrome(
+                        AnimatedBuilder(
+                          animation: _photoEdit,
+                          builder: (context, _) {
+                            if (!useMobile &&
+                                _photoEdit.editing &&
+                                AdminService.isCurrentUserAdminSync()) {
+                              return PhotoEditWorkspace(
+                                session: _photoEdit,
+                                controller: c,
+                              );
+                            }
+                            if (!useMobile) {
+                              return _buildDesktopWorkspace(
+                                c,
+                                t,
+                                constraints.maxWidth,
+                              );
+                            }
+                            // Forced preview: phone-width column, full height.
+                            // Natural narrow windows: fill the workspace.
+                            final mobile = _buildMobileWorkspace(c, t);
+                            if (!forceMobile) return mobile;
+                            return ColoredBox(
+                              color: t.bg,
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: SizedBox(
+                                  width: math.min(
+                                    kCaptionV2MobilePreviewWidth,
+                                    constraints.maxWidth,
+                                  ),
+                                  child: mobile,
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: mobile,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            ),
+                        sessionActive: true,
+                        // Keep desktop chrome (with the toggle) while previewing.
+                        mobile: false,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ),
         ),
@@ -1664,97 +1771,155 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
   }
 
   Widget _buildMobileWorkspace(CaptionV2Controller c, FfTokens t) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Stack(
-        children: [
-          Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          MobileFrameBanner(
-            controller: c,
-            editSession: _photoEdit,
-            onOpen: _openFrameReview,
-          ),
-          const SizedBox(height: 8),
-          Expanded(
-            child: PhotoEditCover(
-              session: _photoEdit,
+    // Thin mobile shell: same CaptionStrip / DrumPicker / action row as
+    // desktop — only the arrangement matches Mobile Captioning.html.
+    final pageController = _pageController;
+    final column = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: SizedBox(
+            height: _captionExpanded ? 120 : 148,
+            child: MobileFrameBanner(
               controller: c,
-              sheetOnly: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  MobilePhotoFilmstrip(controller: c),
-                  if (c.missingCaptionIptcLabels.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    _MissingCaptionIptcBanner(
-                      labels: c.missingCaptionIptcLabels,
-                      tokens: t,
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  _resizableCaption(c, inningStepperOnly: true),
-                  _buildSearchBlock(c),
-                  SizedBox(height: _gap),
-                  Expanded(
-                    child: _MobileBody(
-                      controller: c,
-                      pageController: _pageController!,
-                      onPageChanged: (i) => c.setColumnFocus(i),
-                      onEditRosters: _editRosters,
-                    ),
+              editSession: _photoEdit,
+              onOpen: _openFrameReview,
+              showMeta: false,
+              height: _captionExpanded ? 120 : 148,
+              onSwipePrevious: () {
+                if (c.currentIndex > 0) {
+                  c.goToIndex(c.currentIndex - 1);
+                }
+              },
+              onSwipeNext: () {
+                if (c.currentIndex < c.imagePaths.length - 1) {
+                  c.goToIndex(c.currentIndex + 1);
+                }
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: _buildCaptionStrip(
+            c,
+            compact: true,
+            inningStepperOnly: true,
+            captionExpanded: _captionExpanded,
+            onCaptionExpandedChanged: (v) =>
+                setState(() => _captionExpanded = v),
+            onClear: () {
+              c.clearFrameCaption();
+              setState(() => _captionExpanded = false);
+            },
+            hideFirebarFooter: true,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: Material(
+            color: t.surface,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(20),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: pageController == null
+                ? const SizedBox.shrink()
+                : _MobileBody(
+                    controller: c,
+                    pageController: pageController,
+                    onPageChanged: (i) {
+                      _lastSyncedColumnFocus = i;
+                      c.setColumnFocus(i);
+                    },
+                    onEditRosters: _editRosters,
                   ),
-                ],
+          ),
+        ),
+        Material(
+          color: t.surface,
+          child: SafeArea(
+            top: false,
+            child: _buildSearchBlock(
+              c,
+              mobileDock: true,
+              thumbsOpen: _mobileThumbsOpen,
+              onThumbs: () => setState(
+                () => _mobileThumbsOpen = !_mobileThumbsOpen,
               ),
             ),
           ),
-        ],
-          ),
-          if (_pendingBurst != null)
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              child: _BurstAvailableBanner(
-                frameCount: _pendingBurst!.chain.length,
-                tokens: t,
-                onReview: () => unawaited(_reviewPendingBurst()),
-                onDismiss: () => setState(_clearPendingBurst),
-              ),
+        ),
+      ],
+    );
+    if (!_mobileThumbsOpen && _pendingBurst == null) return column;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        column,
+        if (_mobileThumbsOpen)
+          Positioned.fill(
+            child: _MobileThumbsOverlay(
+              controller: c,
+              tokens: t,
+              onClose: () => setState(() => _mobileThumbsOpen = false),
             ),
-        ],
-      ),
+          ),
+        if (_pendingBurst != null)
+          Positioned(
+            left: 12,
+            right: 12,
+            top: 8,
+            child: _BurstAvailableBanner(
+              frameCount: _pendingBurst!.chain.length,
+              tokens: t,
+              onReview: () => unawaited(_reviewPendingBurst()),
+              onDismiss: () => setState(_clearPendingBurst),
+            ),
+          ),
+      ],
     );
   }
 
-  Widget _buildSearchBlock(CaptionV2Controller c) {
+  Widget _buildSearchBlock(
+    CaptionV2Controller c, {
+    bool singleRow = false,
+    bool mobileDock = false,
+    bool thumbsOpen = false,
+    VoidCallback? onThumbs,
+  }) {
     return CaptionV2ActionRow(
-        onSavePrevious: _saveAndPrevious,
-        onCopy: _copySelection,
-        onPaste: _pasteSelection,
-        onPastePrevious: _pastePreviousSelection,
-        pasteEnabled: true,
-        onSaveNext: _saveAndNext,
-        onTransmit: () => unawaited(_saveAndFtpCurrent()),
-        transmitLabel: c.ftpButtonLabel,
-        transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
-        showTransmit: c.ftpModeEnabled,
-        hideOrangeActions: false,
-        ftpActive: c.transmitting,
-        ftpProgress: c.ftpFileProgress,
-        ftpThumbPath: c.ftpPreviewPath,
-        onFtpCancel: c.transmitting ? c.cancelFtp : null,
-        ftpQueued: c.transmitting ? c.queuedCount : 0,
-        ftpBatchIndex: c.ftpBatchIndex,
-        ftpBatchTotal: c.ftpBatchTotal,
-        onFtpHistory: c.ftpModeEnabled
-            ? () => showFtpHistoryDialog(context, c)
-            : null,
-        onFtpProgress: c.transmitting
-            ? () => showFtpActiveDialog(context, c)
-            : null,
-      );
+      onSavePrevious: _saveAndPrevious,
+      onCopy: _copySelection,
+      onPaste: _pasteSelection,
+      onPastePrevious: _pastePreviousSelection,
+      pasteEnabled: true,
+      onSaveNext: _saveAndNext,
+      onTransmit: () => unawaited(_saveAndFtpCurrent()),
+      transmitLabel: c.ftpButtonLabel,
+      transmitEnabled: c.savedNotSentCount > 0 || c.currentPath != null,
+      showTransmit: c.ftpModeEnabled && !mobileDock,
+      hideOrangeActions: false,
+      ftpActive: c.transmitting,
+      ftpProgress: c.ftpFileProgress,
+      ftpThumbPath: c.ftpPreviewPath,
+      onFtpCancel: c.transmitting ? c.cancelFtp : null,
+      ftpQueued: c.transmitting ? c.queuedCount : 0,
+      ftpBatchIndex: c.ftpBatchIndex,
+      ftpBatchTotal: c.ftpBatchTotal,
+      onFtpHistory: c.ftpModeEnabled
+          ? () => showFtpHistoryDialog(context, c)
+          : null,
+      onFtpProgress: c.transmitting
+          ? () => showFtpActiveDialog(context, c)
+          : null,
+      singleRow: singleRow,
+      mobileDock: mobileDock,
+      thumbsSelected: thumbsOpen,
+      onThumbs: onThumbs,
+    );
   }
 
   Widget _resizableCaption(
@@ -1797,6 +1962,11 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
     CaptionV2Controller c, {
     bool inningStepperOnly = false,
     bool fillHeight = false,
+    bool compact = false,
+    bool captionExpanded = false,
+    ValueChanged<bool>? onCaptionExpandedChanged,
+    VoidCallback? onClear,
+    bool hideFirebarFooter = false,
   }) {
     final isBaseball = c.sport.toLowerCase() == 'baseball';
     final hasLiveCaption = c.manualCaptionOverride != null ||
@@ -1814,6 +1984,10 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       chips: const [],
       trailing: '',
       fillHeight: fillHeight,
+      compact: compact,
+      captionExpanded: captionExpanded,
+      onCaptionExpandedChanged: onCaptionExpandedChanged,
+      onClear: onClear,
       fullCaption: captionText,
       multiWriteCount: multiWriteCount,
       burstApplyCount: burstApplyCount,
@@ -1828,12 +2002,16 @@ class _CaptionV2ScreenState extends State<CaptionV2Screen> {
       onCaptionChanged: c.setManualCaption,
       personality: c.personality,
       onPersonalityChanged: c.showPersonalityField ? c.setPersonality : null,
-      headline: c.headline,
-      onHeadlineChanged: c.showHeadlineField ? c.setHeadline : null,
-      keywords: c.keywords,
-      onKeywordsChanged: c.showKeywordsField ? c.setKeywords : null,
+      headline: compact
+          ? null
+          : c.headline,
+      onHeadlineChanged:
+          compact || !c.showHeadlineField ? null : c.setHeadline,
+      keywords: compact ? null : c.keywords,
+      onKeywordsChanged:
+          compact || !c.showKeywordsField ? null : c.setKeywords,
       onEditTap: () => _openCaptionStyleEditor(c),
-      footer: c.hideFirebar
+      footer: hideFirebarFooter || c.hideFirebar
           ? null
           : CaptionV2SearchBar(
           controller: c,
@@ -2167,12 +2345,14 @@ class _TopChrome extends StatelessWidget {
   const _TopChrome({
     this.controller,
     this.onResetSession,
+    this.onToggleMobileLayout,
     this.title,
     this.sessionChrome = false,
   });
 
   final CaptionV2Controller? controller;
   final VoidCallback? onResetSession;
+  final VoidCallback? onToggleMobileLayout;
   final String? title;
   final bool sessionChrome;
 
@@ -2190,139 +2370,128 @@ class _TopChrome extends StatelessWidget {
       height: 36,
       padding: const EdgeInsets.fromLTRB(10, 0, 8, 0),
       color: Colors.transparent,
-      child: Row(
-        children: [
-          if (onResetSession != null)
-            Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(9),
-              child: InkWell(
-                onTap: () async {
-                  final startNew = await showAppConfirmDialog(
-                    context: context,
-                    title: 'New session',
-                    message:
-                        'Leave this caption session and start a new one?',
-                    cancelLabel: 'Cancel',
-                    confirmLabel: 'New session',
-                  );
-                  if (startNew == true) onResetSession!();
-                },
-                borderRadius: BorderRadius.circular(9),
-                hoverColor: t.hover,
-                child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: t.surface,
-                    borderRadius: BorderRadius.circular(9),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 420;
+          return Row(
+            children: [
+              if (c != null && onResetSession != null)
+                _SessionInfoBar(
+                  controller: c,
+                  tokens: t,
+                  compact: compact,
+                  onNewSession: () async {
+                    final startNew = await showAppConfirmDialog(
+                      context: context,
+                      title: 'New session',
+                      message:
+                          'Leave this caption session and start a new one?',
+                      cancelLabel: 'Cancel',
+                      confirmLabel: 'New session',
+                    );
+                    if (startNew == true) onResetSession!();
+                  },
+                )
+              else if (onResetSession != null)
+                _NewSessionButton(
+                  tokens: t,
+                  compact: compact,
+                  onTap: () async {
+                    final startNew = await showAppConfirmDialog(
+                      context: context,
+                      title: 'New session',
+                      message:
+                          'Leave this caption session and start a new one?',
+                      cancelLabel: 'Cancel',
+                      confirmLabel: 'New session',
+                    );
+                    if (startNew == true) onResetSession!();
+                  },
+                )
+              else if (headerTitle != null && headerTitle.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(left: 4),
+                  child: Text(
+                    headerTitle,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.2,
+                      height: 1,
+                      color: t.text,
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        PhosphorIconsRegular.plusCircle,
-                        size: 16,
+                ),
+              const Spacer(),
+              if (c?.rostersLoading == true) ...[
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: t.accent,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (AdminService.isCurrentUserAdminSync()) ...[
+                if (defaultTargetPlatform == TargetPlatform.macOS) ...[
+                  _AdminExportSizeButton(tokens: t, compact: compact),
+                  const SizedBox(width: 8),
+                ],
+                if (onToggleMobileLayout != null) ...[
+                  _AdminMobileLayoutButton(
+                    tokens: t,
+                    compact: compact,
+                    onToggle: onToggleMobileLayout!,
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ],
+              if (AuthService.instance.isSignedIn)
+                _SessionAvatar(
+                  tokens: t,
+                  admin: AdminService.isCurrentUserAdminSync(),
+                  onAdminClosed: () async {
+                    final sport = c?.sport;
+                    if (sport != null &&
+                        sport.trim().isNotEmpty &&
+                        context.mounted) {
+                      await VerbAdminChoice.offer(
+                        context: context,
+                        sport: sport,
+                      );
+                    }
+                    await c?.reloadVerbCatalog();
+                    await c?.reloadCaptionStyle();
+                  },
+                ),
+              const SizedBox(width: 4),
+              Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(9),
+                child: InkWell(
+                  onTap: () => _openPreferences(context, c),
+                  borderRadius: BorderRadius.circular(9),
+                  hoverColor: t.hover,
+                  child: Tooltip(
+                    message: 'Options',
+                    child: SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: Icon(
+                        PhosphorIconsRegular.gearSix,
+                        size: 18,
                         color: t.textSecondary,
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'New session',
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                          color: t.text,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            )
-          else if (headerTitle != null && headerTitle.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Text(
-                headerTitle,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.2,
-                  height: 1,
-                  color: t.text,
-                ),
-              ),
-            ),
-          if (c != null) ...[
-            const SizedBox(width: 8),
-            _GameChip(
-              controller: c,
-              tokens: t,
-            ),
-          ],
-          const Spacer(),
-          if (c?.rostersLoading == true) ...[
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: t.accent,
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (c != null) ...[
-            _ModesMenu(
-              controller: c,
-              tokens: t,
-            ),
-            const SizedBox(width: 8),
-          ],
-          if (AuthService.instance.isSignedIn)
-            _SessionAvatar(
-              tokens: t,
-              admin: AdminService.isCurrentUserAdminSync(),
-              onAdminClosed: () async {
-                final sport = c?.sport;
-                if (sport != null &&
-                    sport.trim().isNotEmpty &&
-                    context.mounted) {
-                  await VerbAdminChoice.offer(
-                    context: context,
-                    sport: sport,
-                  );
-                }
-                await c?.reloadVerbCatalog();
-                await c?.reloadCaptionStyle();
-              },
-            ),
-          const SizedBox(width: 4),
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(9),
-            child: InkWell(
-              onTap: () => _openPreferences(context, c),
-              borderRadius: BorderRadius.circular(9),
-              hoverColor: t.hover,
-              child: Tooltip(
-                message: 'Options',
-                child: SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: Icon(
-                    PhosphorIconsRegular.gearSix,
-                    size: 18,
-                    color: t.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }
@@ -2510,15 +2679,132 @@ Future<void> _openGameGoogleSearch(CaptionV2Controller controller) async {
   }
 }
 
-/// Game identity on the left of the session bar. Opens a Google search.
-class _GameChip extends StatelessWidget {
-  const _GameChip({
+/// Shared surface sized to content: session/matchup + Google, then New session.
+class _SessionInfoBar extends StatelessWidget {
+  const _SessionInfoBar({
     required this.controller,
     required this.tokens,
+    required this.onNewSession,
+    this.compact = false,
   });
 
   final CaptionV2Controller controller;
   final FfTokens tokens;
+  final VoidCallback onNewSession;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 32,
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(9),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _GameChip(
+            controller: controller,
+            tokens: tokens,
+            embedded: true,
+          ),
+          Container(
+            width: 1,
+            height: 18,
+            color: tokens.divider,
+          ),
+          _NewSessionButton(
+            tokens: tokens,
+            compact: compact,
+            onTap: onNewSession,
+            embedded: true,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NewSessionButton extends StatelessWidget {
+  const _NewSessionButton({
+    required this.tokens,
+    required this.onTap,
+    this.compact = false,
+    this.embedded = false,
+  });
+
+  final FfTokens tokens;
+  final VoidCallback onTap;
+  final bool compact;
+  final bool embedded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(embedded ? 0 : 9),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(embedded ? 8 : 9),
+        hoverColor: tokens.hover,
+        child: Tooltip(
+          message: 'New session',
+          child: Container(
+            height: 32,
+            padding: EdgeInsets.fromLTRB(
+              embedded ? 4 : (compact ? 8 : 10),
+              0,
+              compact ? 8 : 10,
+              0,
+            ),
+            decoration: embedded
+                ? null
+                : BoxDecoration(
+                    color: tokens.surface,
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  PhosphorIconsRegular.plusCircle,
+                  size: 16,
+                  color: tokens.textSecondary,
+                ),
+                if (!compact) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    'New session',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      height: 1,
+                      color: tokens.text,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Game identity. Opens a Google search.
+class _GameChip extends StatelessWidget {
+  const _GameChip({
+    required this.controller,
+    required this.tokens,
+    this.embedded = false,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+  final bool embedded;
 
   @override
   Widget build(BuildContext context) {
@@ -2526,15 +2812,27 @@ class _GameChip extends StatelessWidget {
     final enabled = query.isNotEmpty;
     final away = mlbTeamAbbreviation(controller.awayTeam);
     final home = mlbTeamAbbreviation(controller.homeTeam);
-    final date = controller.currentGameInfoForCaption().gameDate ?? DateTime.now();
+    final date =
+        controller.currentGameInfoForCaption().gameDate ?? DateTime.now();
     final venue = controller.venue.trim();
-    final detail = [
-      _shortMonthDay(date),
+    final labelStyle = TextStyle(
+      fontFamily: FfTokens.fontFamily,
+      fontSize: 11,
+      fontWeight: FontWeight.w400,
+      height: 1,
+      color: tokens.text,
+    );
+    final matchup = away.isNotEmpty && home.isNotEmpty
+        ? '$away @ $home'
+        : (home.isNotEmpty
+            ? home
+            : (away.isNotEmpty ? away : 'Game'));
+    final sessionBits = <String>[
+      matchup,
       if (venue.isNotEmpty) venue,
-    ].join(' · ');
-    final color = enabled ? tokens.text : tokens.textSecondary;
-    final muted = tokens.textSecondary;
-    final showMeta = MediaQuery.sizeOf(context).width >= 1300;
+      _shortMonthDayYear(date),
+    ];
+    final searchColor = enabled ? tokens.text : tokens.textTertiary;
 
     return Tooltip(
       message: enabled
@@ -2547,75 +2845,36 @@ class _GameChip extends StatelessWidget {
           onTap: enabled
               ? () => unawaited(_openGameGoogleSearch(controller))
               : null,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(embedded ? 8 : 10),
           child: Container(
             height: 32,
-            padding: const EdgeInsets.fromLTRB(6, 0, 10, 0),
-            decoration: BoxDecoration(
-              color: tokens.surface,
-              borderRadius: BorderRadius.circular(10),
-            ),
+            padding: EdgeInsets.fromLTRB(embedded ? 10 : 6, 0, embedded ? 6 : 8, 0),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (away.isNotEmpty && home.isNotEmpty) ...[
-                  _AbbrChip(label: away, tokens: tokens),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Text(
-                      '@',
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: tokens.textTertiary,
-                      ),
-                    ),
-                  ),
-                  _AbbrChip(label: home, tokens: tokens),
-                  if (showMeta) ...[
-                    const SizedBox(width: 8),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 220),
-                      child: Text(
-                        detail,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          height: 1,
-                          color: muted,
-                        ),
-                      ),
-                    ),
-                  ],
-                ] else
+                if (embedded) ...[
                   Text(
-                    'Game',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: muted,
-                    ),
+                    'Session:',
+                    style: labelStyle.copyWith(fontWeight: FontWeight.w500),
                   ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 5),
+                ],
+                Text(sessionBits.join(' · '), style: labelStyle),
+                const SizedBox(width: 6),
                 PhosphorIcon(
                   PhosphorIconsRegular.magnifyingGlass,
-                  size: 14,
-                  color: enabled ? tokens.text : tokens.textTertiary,
+                  size: 12,
+                  color: searchColor,
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: 3),
                 Text(
-                  'Google',
+                  'Search game info',
                   style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
                     height: 1,
-                    color: enabled ? tokens.text : tokens.textTertiary,
+                    color: searchColor,
                   ),
                 ),
               ],
@@ -2645,68 +2904,30 @@ String _shortMonthDay(DateTime date) {
   return '${months[date.month - 1]} ${date.day}';
 }
 
-/// Modes and window size in one menu. The bar only shows the summary.
-class _ModesMenu extends StatefulWidget {
-  const _ModesMenu({
-    required this.controller,
+String _shortMonthDayYear(DateTime date) =>
+    '${_shortMonthDay(date)}, ${date.year}';
+
+/// Admin-only window size picker in the top chrome.
+class _AdminExportSizeButton extends StatefulWidget {
+  const _AdminExportSizeButton({
     required this.tokens,
+    this.compact = false,
   });
 
-  final CaptionV2Controller controller;
   final FfTokens tokens;
+  final bool compact;
 
   @override
-  State<_ModesMenu> createState() => _ModesMenuState();
+  State<_AdminExportSizeButton> createState() => _AdminExportSizeButtonState();
 }
 
-class _ModesMenuState extends State<_ModesMenu> {
+class _AdminExportSizeButtonState extends State<_AdminExportSizeButton> {
   final MenuController _menu = MenuController();
-  bool _sizesOpen = false;
-
-  bool get _showSize =>
-      AdminService.isCurrentUserAdminSync() &&
-      defaultTargetPlatform == TargetPlatform.macOS;
 
   @override
   Widget build(BuildContext context) {
     final t = widget.tokens;
-    final c = widget.controller;
-    final showOcr = defaultTargetPlatform == TargetPlatform.macOS;
-    final modes = <_ModeRow>[
-      _ModeRow(
-        icon: PhosphorIconsRegular.cloudArrowUp,
-        label: 'FTP upload',
-        on: c.ftpModeEnabled,
-        onChanged: c.setFtpModeEnabled,
-      ),
-      _ModeRow(
-        icon: PhosphorIconsRegular.stack,
-        label: 'Burst',
-        on: c.burstDetectionEnabled,
-        onChanged: c.setBurstDetectionEnabled,
-      ),
-      if (showOcr)
-        _ModeRow(
-          icon: PhosphorIconsRegular.textAa,
-          label: 'Text',
-          on: c.jerseyOcrPreferenceEnabled,
-          onChanged: c.setJerseyOcrPreferenceEnabled,
-        ),
-      _ModeRow(
-        icon: PhosphorIconsRegular.hash,
-        label: 'Serial',
-        on: c.serialBylinesEnabled,
-        onChanged: c.setSerialBylinesEnabled,
-      ),
-      _ModeRow(
-        icon: PhosphorIconsRegular.lightning,
-        label: 'Firebar',
-        on: !c.hideFirebar,
-        onChanged: c.setFirebarEnabled,
-      ),
-    ];
     final sizeLabel = _windowSizeLabel(MediaQuery.sizeOf(context));
-
     return MenuAnchor(
       controller: _menu,
       alignmentOffset: const Offset(0, 6),
@@ -2730,14 +2951,13 @@ class _ModesMenuState extends State<_ModesMenu> {
               if (controller.isOpen) {
                 controller.close();
               } else {
-                setState(() => _sizesOpen = false);
                 controller.open();
               }
             },
             borderRadius: BorderRadius.circular(9),
             child: Container(
               height: 32,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: EdgeInsets.symmetric(horizontal: widget.compact ? 8 : 10),
               decoration: BoxDecoration(
                 color: t.surface,
                 borderRadius: BorderRadius.circular(9),
@@ -2746,53 +2966,24 @@ class _ModesMenuState extends State<_ModesMenu> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   PhosphorIcon(
-                    PhosphorIconsRegular.slidersHorizontal,
+                    PhosphorIconsRegular.cornersOut,
                     size: 16,
                     color: t.textSecondary,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Modes',
-                    style: TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      height: 1,
-                      color: t.text,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7FB3E8),
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                    child: Text(
-                      '${modes.where((mode) => mode.on).length} on',
-                      style: TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        height: 1.1,
-                        color: t.bg,
-                      ),
-                    ),
-                  ),
-                  if (_showSize) ...[
-                    const SizedBox(width: 8),
+                  if (!widget.compact) ...[
+                    const SizedBox(width: 6),
                     Text(
-                      sizeLabel.replaceAll(' ', ''),
+                      sizeLabel,
                       style: TextStyle(
                         fontFamily: FfTokens.monoFamily,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                         height: 1,
-                        color: t.textTertiary,
+                        color: t.text,
                       ),
                     ),
                   ],
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   PhosphorIcon(
                     PhosphorIconsRegular.caretDown,
                     size: 11,
@@ -2805,230 +2996,86 @@ class _ModesMenuState extends State<_ModesMenu> {
         );
       },
       menuChildren: [
-        for (final mode in modes)
-          _ModeToggleTile(
-            tokens: t,
-            icon: mode.icon,
-            label: mode.label,
-            value: mode.on,
-            onChanged: (value) => unawaited(mode.onChanged(value)),
-          ),
-        if (c.rosterHistoryCanSwitch)
+        for (final option in _windowSizeOptions)
           MenuItemButton(
-            onPressed: () => unawaited(c.switchRosterHistorySource()),
+            onPressed: () {
+              _menu.close();
+              unawaited(_resizeWindow(context, option.$1));
+            },
             child: Text(
-              c.usingGameDateRoster
-                  ? "Switch to today's roster"
-                  : 'Switch to game-date roster',
+              option.$2,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 13,
+                fontWeight:
+                    option.$2 == sizeLabel ? FontWeight.w600 : FontWeight.w500,
+                color: option.$2 == sizeLabel ? t.accent : t.text,
+              ),
             ),
           ),
-        if (_showSize) ...[
-          Divider(height: 1, thickness: 1, color: t.divider),
-          _ExportSizeTile(
-            tokens: t,
-            label: sizeLabel,
-            expanded: _sizesOpen,
-            onToggle: () => setState(() => _sizesOpen = !_sizesOpen),
-          ),
-          if (_sizesOpen)
-            for (final option in _windowSizeOptions)
-              _ExportSizeOption(
-                tokens: t,
-                label: option.$2,
-                selected: option.$2 == sizeLabel,
-                onPick: () => unawaited(_resizeWindow(context, option.$1)),
-              ),
-        ],
       ],
     );
   }
 }
 
-class _ModeRow {
-  const _ModeRow({
-    required this.icon,
-    required this.label,
-    required this.on,
-    required this.onChanged,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool on;
-  final Future<void> Function(bool) onChanged;
-}
-
-class _ModeToggleTile extends StatelessWidget {
-  const _ModeToggleTile({
+/// Admin-only mobile layout preview toggle in the top chrome.
+class _AdminMobileLayoutButton extends StatelessWidget {
+  const _AdminMobileLayoutButton({
     required this.tokens,
-    required this.icon,
-    required this.label,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final FfTokens tokens;
-  final IconData icon;
-  final String label;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 248,
-      height: 36,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(
-          children: [
-            PhosphorIcon(icon, size: 16, color: tokens.textSecondary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: tokens.text,
-                ),
-              ),
-            ),
-            Transform.scale(
-              scale: 0.62,
-              alignment: Alignment.centerRight,
-              child: Switch(
-                value: value,
-                onChanged: onChanged,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                // Material 3 draws a smaller thumb when off. A blank icon
-                // keeps the off knob the same diameter as the on knob.
-                thumbIcon: const WidgetStatePropertyAll(
-                  Icon(Icons.circle, size: 0, color: Colors.transparent),
-                ),
-                thumbColor: const WidgetStatePropertyAll(Colors.white),
-                trackColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) {
-                    return tokens.accent;
-                  }
-                  return tokens.sunken;
-                }),
-                trackOutlineColor: const WidgetStatePropertyAll(
-                  Colors.transparent,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ExportSizeTile extends StatelessWidget {
-  const _ExportSizeTile({
-    required this.tokens,
-    required this.label,
-    required this.expanded,
     required this.onToggle,
+    this.compact = false,
   });
 
   final FfTokens tokens;
-  final String label;
-  final bool expanded;
   final VoidCallback onToggle;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 248,
-      height: 36,
-      child: InkWell(
-        onTap: onToggle,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Row(
-            children: [
-              PhosphorIcon(
-                PhosphorIconsRegular.crop,
-                size: 16,
-                color: tokens.textSecondary,
+    return ValueListenableBuilder<bool>(
+      valueListenable: captionV2ForceMobilePreview,
+      builder: (context, on, _) {
+        final t = tokens;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onToggle,
+            borderRadius: BorderRadius.circular(9),
+            child: Container(
+              height: 32,
+              padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 10),
+              decoration: BoxDecoration(
+                color: on ? t.hover : t.surface,
+                borderRadius: BorderRadius.circular(9),
+                border: on ? Border.all(color: t.divider) : null,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Export size',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: tokens.text,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PhosphorIcon(
+                    PhosphorIconsRegular.deviceMobile,
+                    size: 16,
+                    color: on ? t.text : t.textSecondary,
                   ),
-                ),
+                  if (!compact) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      'Mobile layout',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        height: 1,
+                        color: on ? t.text : t.textSecondary,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: FfTokens.fontFamily,
-                  fontSize: 12,
-                  color: tokens.textSecondary,
-                ),
-              ),
-              PhosphorIcon(
-                expanded
-                    ? PhosphorIconsRegular.caretUp
-                    : PhosphorIconsRegular.caretRight,
-                size: 12,
-                color: tokens.textSecondary,
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ExportSizeOption extends StatelessWidget {
-  const _ExportSizeOption({
-    required this.tokens,
-    required this.label,
-    required this.selected,
-    required this.onPick,
-  });
-
-  final FfTokens tokens;
-  final String label;
-  final bool selected;
-  final VoidCallback onPick;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 248,
-      height: 32,
-      child: InkWell(
-        onTap: onPick,
-        child: Padding(
-          padding: const EdgeInsets.only(left: 38, right: 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                    color: selected ? tokens.accent : tokens.text,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -3111,7 +3158,7 @@ class _SessionAvatar extends StatelessWidget {
       initials: true,
       showStatusDot: false,
       avatarFill: sessionChrome ? FfTokens.sessionHv : null,
-      initialsDiameter: sessionChrome ? 34 : 32,
+      initialsDiameter: sessionChrome ? 26 : 24,
       initialsBorder: !sessionChrome,
     );
     if (!admin) return avatar;
@@ -3288,7 +3335,225 @@ class _DesktopBodyState extends State<_DesktopBody> {
   }
 }
 
-class _MobileBody extends StatelessWidget {
+/// Dimmed overlay with the frame filmstrip. Tap outside or pick a frame to close.
+class _MobileThumbsOverlay extends StatefulWidget {
+  const _MobileThumbsOverlay({
+    required this.controller,
+    required this.tokens,
+    required this.onClose,
+  });
+
+  final CaptionV2Controller controller;
+  final FfTokens tokens;
+  final VoidCallback onClose;
+
+  @override
+  State<_MobileThumbsOverlay> createState() => _MobileThumbsOverlayState();
+}
+
+class _MobileThumbsOverlayState extends State<_MobileThumbsOverlay> {
+  late int _openedAtIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _openedAtIndex = widget.controller.currentIndex;
+    widget.controller.addListener(_onController);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onController);
+    super.dispose();
+  }
+
+  void _onController() {
+    if (widget.controller.currentIndex != _openedAtIndex) {
+      widget.onClose();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tokens;
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onClose,
+            child: ColoredBox(
+              color: Colors.black.withValues(alpha: 0.5),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          top: 0,
+          child: Material(
+            color: t.surface,
+            elevation: 10,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      PhosphorIcon(
+                        PhosphorIconsRegular.images,
+                        size: 16,
+                        color: t.textSecondary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Frames',
+                          style: t.labelStyle.copyWith(color: t.text),
+                        ),
+                      ),
+                      Text(
+                        '${widget.controller.currentIndex + 1}'
+                        '/${widget.controller.imagePaths.length}',
+                        style: t.metaStyle,
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        tooltip: 'Close',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: widget.onClose,
+                        icon: PhosphorIcon(
+                          PhosphorIconsRegular.x,
+                          size: 18,
+                          color: t.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 88,
+                    child: MobilePhotoFilmstrip(
+                      controller: widget.controller,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Mobile top bar from the mock — menu, matchup, Firebar, gear.
+class _MobileTopBar extends StatelessWidget {
+  const _MobileTopBar({
+    required this.controller,
+    required this.onMenu,
+    required this.onFirebar,
+    required this.onGear,
+  });
+
+  final CaptionV2Controller controller;
+  final VoidCallback? onMenu;
+  final VoidCallback onFirebar;
+  final VoidCallback onGear;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    final matchup = _gameMatchupLabel(controller);
+    final date = controller.currentGameInfoForCaption().gameDate;
+    final dateBit = date == null ? '' : _shortMonthDay(date);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+      child: Row(
+        children: [
+          _MobileIconButton(
+            icon: PhosphorIconsRegular.list,
+            onTap: onMenu,
+            tokens: t,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: t.text,
+                ),
+                children: [
+                  TextSpan(text: matchup.isEmpty ? 'Game' : matchup),
+                  if (dateBit.isNotEmpty)
+                    TextSpan(
+                      text: '  $dateBit',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
+                        color: t.textTertiary,
+                      ),
+                    ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          _MobileIconButton(
+            icon: PhosphorIconsFill.fire,
+            color: FfTokens.firebar,
+            onTap: onFirebar,
+            tokens: t,
+          ),
+          _MobileIconButton(
+            icon: PhosphorIconsRegular.gearSix,
+            onTap: onGear,
+            tokens: t,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MobileIconButton extends StatelessWidget {
+  const _MobileIconButton({
+    required this.icon,
+    required this.onTap,
+    required this.tokens,
+    this.color,
+  });
+
+  final IconData icon;
+  final VoidCallback? onTap;
+  final FfTokens tokens;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          width: 36,
+          height: 36,
+          child: Icon(icon, size: 19, color: color ?? tokens.textSecondary),
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileBody extends StatefulWidget {
   const _MobileBody({
     required this.controller,
     required this.pageController,
@@ -3302,87 +3567,199 @@ class _MobileBody extends StatelessWidget {
   final VoidCallback onEditRosters;
 
   @override
+  State<_MobileBody> createState() => _MobileBodyState();
+}
+
+class _MobileBodyState extends State<_MobileBody> {
+  double _tabProgress = 1;
+  int _scrollLock = -1;
+  Timer? _unlock;
+
+  CaptionV2Controller get controller => widget.controller;
+  PageController get pageController => widget.pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabProgress = controller.columnFocus.clamp(0, 2).toDouble();
+    pageController.addListener(_onPageScroll);
+  }
+
+  @override
+  void dispose() {
+    pageController.removeListener(_onPageScroll);
+    _unlock?.cancel();
+    super.dispose();
+  }
+
+  void _onPageScroll() {
+    if (!pageController.hasClients) return;
+    final page = pageController.page ?? _tabProgress;
+    if (_scrollLock >= 0) return;
+    if ((page - _tabProgress).abs() > 0.001) {
+      setState(() => _tabProgress = page);
+    }
+  }
+
+  void _go(int i) {
+    _scrollLock = i;
+    setState(() => _tabProgress = i.toDouble());
+    widget.onPageChanged(i);
+    pageController.animateToPage(
+      i,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+    );
+    _unlock?.cancel();
+    _unlock = Timer(const Duration(milliseconds: 320), () {
+      if (mounted) setState(() => _scrollLock = -1);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
     final single = controller.singleTeamMode;
-    final focus = controller.columnFocus.clamp(0, 2);
     final pageCount = single ? 2 : 3;
+    final focus = _tabProgress.round().clamp(0, pageCount - 1);
 
     return Column(
       children: [
-        Row(
-          children: [
-            _MobileTab(
-              label: controller.homeAbbr,
-              selected: focus == 0,
-              tokens: t,
-              onTap: () {
-                onPageChanged(0);
-                pageController.animateToPage(
-                  0,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOut,
-                );
-              },
-            ),
-            _MobileTab(
-              label: 'VERBS',
-              selected: focus == 1,
-              tokens: t,
-              onTap: () {
-                onPageChanged(1);
-                pageController.animateToPage(
-                  1,
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOut,
-                );
-              },
-            ),
-            if (!single)
-              _MobileTab(
-                label: controller.awayAbbr,
-                selected: focus == 2,
-                tokens: t,
-                onTap: () {
-                  onPageChanged(2);
-                  pageController.animateToPage(
-                    2,
-                    duration: const Duration(milliseconds: 220),
-                    curve: Curves.easeOut,
-                  );
-                },
-              ),
-          ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final tabW =
+                  (constraints.maxWidth - 6 - (pageCount - 1) * 2) / pageCount;
+              return Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: t.bg,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Stack(
+                  children: [
+                    AnimatedPositioned(
+                      duration: _scrollLock >= 0
+                          ? const Duration(milliseconds: 250)
+                          : Duration.zero,
+                      curve: const Cubic(0.3, 0.7, 0.2, 1),
+                      left: 3 + _tabProgress * (tabW + 2),
+                      top: 3,
+                      bottom: 3,
+                      width: tabW,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: t.hover,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(color: t.divider),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        _MobileSegTab(
+                          label: controller.homeAbbr,
+                          sub: 'Home',
+                          selected: focus == 0,
+                          tokens: t,
+                          onTap: () => _go(0),
+                        ),
+                        _MobileSegTab(
+                          label: 'Verbs',
+                          selected: focus == 1,
+                          tokens: t,
+                          onTap: () => _go(1),
+                        ),
+                        if (!single)
+                          _MobileSegTab(
+                            label: controller.awayAbbr,
+                            sub: 'Away',
+                            selected: focus == 2,
+                            tokens: t,
+                            onTap: () => _go(2),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ),
-        const SizedBox(height: 10),
         Expanded(
           child: DrumPicker(
             controller: controller,
             layout: DrumLayout.paged,
             mode: DrumPickerMode.infinite,
             pageController: pageController,
-            onPageChanged: onPageChanged,
-            onEditRosters: onEditRosters,
+            onPageChanged: (i) {
+              if (_scrollLock < 0) {
+                setState(() => _tabProgress = i.toDouble());
+              }
+              widget.onPageChanged(i);
+            },
+            onEditRosters: widget.onEditRosters,
+            compactMobile: true,
+            numberColumns: 5,
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            for (var i = 0; i < pageCount; i++)
-              Container(
-                width: 7,
-                height: 7,
-                margin: const EdgeInsets.symmetric(horizontal: 3),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: focus == i ? t.accent : t.badgeFill,
+      ],
+    );
+  }
+}
+
+class _MobileSegTab extends StatelessWidget {
+  const _MobileSegTab({
+    required this.label,
+    required this.selected,
+    required this.tokens,
+    required this.onTap,
+    this.sub,
+  });
+
+  final String label;
+  final String? sub;
+  final bool selected;
+  final FfTokens tokens;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(9),
+        child: SizedBox(
+          height: 36,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? tokens.text : tokens.textTertiary,
                 ),
               ),
-          ],
+              if (sub != null) ...[
+                const SizedBox(width: 6),
+                Text(
+                  sub!,
+                  style: TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: tokens.textTertiary,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
-        if (controller.searchOpen) _FirebarMatchFooter(controller: controller),
-      ],
+      ),
     );
   }
 }

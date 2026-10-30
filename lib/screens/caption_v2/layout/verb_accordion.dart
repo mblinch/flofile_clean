@@ -261,7 +261,7 @@ class DefaultVerbAccordion extends StatefulWidget {
   final VoidCallback? onVerbArmed;
 
   static const headerH = 32.0;
-  static const verbRowH = 20.0;
+  static const verbRowH = 18.0;
   static const laneHeaderH = 28.0;
   static const pinnedBarH = 22.0;
   static const categoryFontSize = 15.0;
@@ -504,7 +504,7 @@ class DefaultVerbAccordionState extends State<DefaultVerbAccordion> {
                   openVerbs.length * verbRowH;
               if (worstOneUp > bodyH && bodyH > 0) {
                 headerH = 28 * controller.verbFontScale;
-                verbRowH = 20 * controller.verbFontScale;
+                verbRowH = DefaultVerbAccordion.verbRowH * controller.verbFontScale;
               }
 
               // Always show the pinned bar (title + verb on one row).
@@ -2052,6 +2052,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
                         ).copyWith(
                           fontSize: DefaultVerbAccordion.verbFontSize *
                               controller.verbFontScale,
+                          height: 1.05,
                         ),
                       ),
                     ),
@@ -2098,7 +2099,7 @@ class _AccordionVerbRowState extends State<_AccordionVerbRow> {
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: armed ? 4 : 0,
-        vertical: armed ? 2 : 1,
+        vertical: armed ? 2 : 0,
       ),
       child: Container(
         padding: EdgeInsets.fromLTRB(leftPad, 0, armed ? 8 : 4, 0),

@@ -76,42 +76,52 @@ class _MobilePhotoFilmstripState extends State<MobilePhotoFilmstrip> {
         final paths = widget.controller.imagePaths;
         if (paths.isEmpty) return const SizedBox.shrink();
         final current = widget.controller.currentIndex;
-        return SizedBox(
-          height: MobilePhotoFilmstrip.height,
-          child: ListView.builder(
-            controller: _scroll,
-            scrollDirection: Axis.horizontal,
-            itemExtent: MobilePhotoFilmstrip.itemExtent,
-            itemCount: paths.length,
-            itemBuilder: (context, index) {
-              final path = paths[index];
-              final selected = index == current;
-              return Padding(
-                padding: const EdgeInsets.only(right: 6, bottom: 2, top: 2),
-                child: GestureDetector(
-                  onTap: () => widget.controller.goToIndex(index),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(
-                        color: selected ? tokens.accent : tokens.divider,
-                        width: selected ? 2 : 1,
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final h = constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : MobilePhotoFilmstrip.height;
+            final extent = (h - 4).clamp(48.0, MobilePhotoFilmstrip.itemExtent);
+            return SizedBox(
+              height: h,
+              child: ListView.builder(
+                controller: _scroll,
+                scrollDirection: Axis.horizontal,
+                itemExtent: extent + 6,
+                itemCount: paths.length,
+                itemBuilder: (context, index) {
+                  final path = paths[index];
+                  final selected = index == current;
+                  return Padding(
+                    padding:
+                        const EdgeInsets.only(right: 6, bottom: 2, top: 2),
+                    child: GestureDetector(
+                      onTap: () => widget.controller.goToIndex(index),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: selected ? tokens.accent : tokens.divider,
+                            width: selected ? 2 : 1,
+                          ),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(5),
+                          child: OrientedFilePreview(
+                            path: path,
+                            version:
+                                widget.controller.imageContentStamp(path),
+                            fit: BoxFit.cover,
+                            cacheWidth: 144,
+                          ),
+                        ),
                       ),
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(5),
-                      child: OrientedFilePreview(
-                        path: path,
-                        version: widget.controller.imageContentStamp(path),
-                        fit: BoxFit.cover,
-                        cacheWidth: 144,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
+                  );
+                },
+              ),
+            );
+          },
         );
       },
     );

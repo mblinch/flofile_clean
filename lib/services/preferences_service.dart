@@ -195,6 +195,7 @@ class PreferencesService {
   static const String _keyFtpModeEnabled = 'ftp_mode_enabled';
   static const String _keyFtpCompleteSoundPath = 'ftp_complete_sound_path';
   static const String _keyHideFirebar = 'hide_firebar';
+  static const String _keyAutoAdvanceTabs = 'auto_advance_tabs';
   /// JSON list of recent `{away,home}` matchups per sport (startup screen).
   static const String _keyRecentMatchupsPrefix = 'startup_recent_matchups_';
   /// Last home/away team picks on the V2 startup screen (per sport).
@@ -511,6 +512,17 @@ class PreferencesService {
     final prefs = await _getPrefs();
     await prefs.setBool(_keyHideFirebar, hidden);
     applicationModesRevision.value = applicationModesRevision.value + 1;
+    _afterLocalPreferencesChanged();
+  }
+
+  Future<bool> getAutoAdvanceTabs() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_keyAutoAdvanceTabs) ?? true;
+  }
+
+  Future<void> saveAutoAdvanceTabs(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_keyAutoAdvanceTabs, enabled);
     _afterLocalPreferencesChanged();
   }
 

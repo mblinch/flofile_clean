@@ -40,6 +40,8 @@ class DrumPicker extends StatefulWidget {
     this.onEditRosters,
     this.pageController,
     this.onPageChanged,
+    this.compactMobile = false,
+    this.numberColumns,
   });
 
   final CaptionV2Controller controller;
@@ -50,6 +52,12 @@ class DrumPicker extends StatefulWidget {
   final VoidCallback? onEditRosters;
   final PageController? pageController;
   final ValueChanged<int>? onPageChanged;
+
+  /// Mobile stack: denser roster grid (5×56) and taller verb rows.
+  final bool compactMobile;
+
+  /// Override numbers-mode column count (mobile mock uses 5).
+  final int? numberColumns;
 
   @override
   State<DrumPicker> createState() => _DrumPickerState();
@@ -67,7 +75,7 @@ class _DrumPickerState extends State<DrumPicker> {
   String? _awayLetterFilter;
   bool _numberMode = true;
   /// Squares across each numbers-mode row. Fewer columns means larger squares.
-  int _numberColumns = _NumberRoster.defaultColumns;
+  late int _numberColumns;
   bool _verbAccordionCollapsed = false;
   int? _appliedCascadeLimit;
   final Set<String> _extraOpenVerbCategories = {};
@@ -112,6 +120,8 @@ class _DrumPickerState extends State<DrumPicker> {
   @override
   void initState() {
     super.initState();
+    _numberColumns = widget.numberColumns ??
+        (widget.compactMobile ? 5 : _NumberRoster.defaultColumns);
     controller.addListener(_onController);
     _seenPlayerSearchClearGeneration = controller.playerSearchClearGeneration;
     _customVerbController.text = controller.customVerbPhrase;
@@ -1092,46 +1102,53 @@ class _DrumPickerState extends State<DrumPicker> {
       controller.selectVerb(verb.key);
     }
 
-    return Column(
-      children: [
-        _verbTopLine(tokens, selectPinnedVerb),
-        Expanded(
-          child: _VerbAccordion(
-            controller: controller,
-            categories: _categories,
-            showHeaders: !controller.verbListAll,
-            verbsByCategory: orderedVerbsByCategory,
-            selectedCategory: _category,
-            openCategories: _openVerbCategories,
-            selectedIndex: _verbIndex,
-            selectedVerbKey: selectedKey,
-            armed: armed,
-            tokens: tokens,
-            onCategorySelected: _selectCategory,
-            onPinnedVerbTap: selectPinnedVerb,
-            showPinnedBar: false,
-            onVerbArmed: (index) {
-              _arm(DrumLane.verbs);
-              _setIndex(DrumLane.verbs, index);
-              _commit(DrumLane.verbs, index);
-            },
-            onToggleFavorite: _toggleVerbFavorite,
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-          child: _DrumCustomVerbField(
-            textController: _customVerbController,
-            focusNode: _customVerbFocusNode,
-            tokens: tokens,
-            pinned: controller.customVerbPinned,
-            canUseLast: controller.lastCustomVerbPhrase.trim().isNotEmpty,
-            onChanged: controller.setCustomVerbPhrase,
-            onTogglePin: controller.toggleCustomVerbPin,
-            onUseLast: controller.useLastCustomVerb,
-          ),
-        ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showCustom = constraints.maxHeight >= 140;
+        return Column(
+          children: [
+            _verbTopLine(tokens, selectPinnedVerb),
+            Expanded(
+              child: _VerbAccordion(
+                controller: controller,
+                categories: _categories,
+                showHeaders: !controller.verbListAll,
+                verbsByCategory: orderedVerbsByCategory,
+                selectedCategory: _category,
+                openCategories: _openVerbCategories,
+                selectedIndex: _verbIndex,
+                selectedVerbKey: selectedKey,
+                armed: armed,
+                tokens: tokens,
+                onCategorySelected: _selectCategory,
+                onPinnedVerbTap: selectPinnedVerb,
+                showPinnedBar: false,
+                onVerbArmed: (index) {
+                  _arm(DrumLane.verbs);
+                  _setIndex(DrumLane.verbs, index);
+                  _commit(DrumLane.verbs, index);
+                },
+                onToggleFavorite: _toggleVerbFavorite,
+              ),
+            ),
+            if (showCustom)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                child: _DrumCustomVerbField(
+                  textController: _customVerbController,
+                  focusNode: _customVerbFocusNode,
+                  tokens: tokens,
+                  pinned: controller.customVerbPinned,
+                  canUseLast:
+                      controller.lastCustomVerbPhrase.trim().isNotEmpty,
+                  onChanged: controller.setCustomVerbPhrase,
+                  onTogglePin: controller.toggleCustomVerbPin,
+                  onUseLast: controller.useLastCustomVerb,
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1275,8 +1292,8 @@ class _VerbAccordion extends StatelessWidget {
   static const minHeaderHeight = 26.0;
   /// Must match [_PinnedHintBar] fixed height (padding + label + bottom border).
   static const pinnedBarHeight = 26.0;
-  static const rowHeight = 20.0;
-  static const selectedRowHeight = 20.0;
+  static const rowHeight = 18.0;
+  static const selectedRowHeight = 18.0;
   /// Vertical padding around an unselected row.
   static const rowOuterPadding = 0.0;
   /// Vertical padding around a selected row.

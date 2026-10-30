@@ -49,6 +49,10 @@ class CaptionV2ActionRow extends StatelessWidget {
     this.ftpBatchIndex = 0,
     this.ftpBatchTotal = 0,
     this.onFtpCancel,
+    this.singleRow = false,
+    this.mobileDock = false,
+    this.onThumbs,
+    this.thumbsSelected = false,
   });
 
   final VoidCallback? onSavePrevious;
@@ -85,16 +89,39 @@ class CaptionV2ActionRow extends StatelessWidget {
   final int ftpBatchTotal;
   final VoidCallback? onFtpCancel;
 
+  /// Keep save / copy / paste / next on one horizontal row (mobile).
+  final bool singleRow;
+
+  /// Mobile captioning mock: 56px Prev/Next squares + icon-over-label mid.
+  final bool mobileDock;
+
+  /// Optional filmstrip toggle (mobile).
+  final VoidCallback? onThumbs;
+  final bool thumbsSelected;
+
   @override
   Widget build(BuildContext context) {
+    if (mobileDock) {
+      return _MobileDockBar(
+        onSavePrevious: onSavePrevious,
+        onCopy: onCopy,
+        onPaste: onPaste,
+        onPastePrevious: onPastePrevious,
+        pasteEnabled: pasteEnabled,
+        onSaveNext: onSaveNext,
+        saveNextEnabled: saveNextEnabled,
+        onThumbs: onThumbs,
+        thumbsSelected: thumbsSelected,
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final compact = width <= 1060;
-        final narrow = width <= 640;
-        final pad = compact ? 12.0 : 16.0;
+        final compact = singleRow || width <= 1060;
+        final narrow = !singleRow && width <= 640;
+        final pad = singleRow ? 8.0 : (compact ? 12.0 : 16.0);
         final prev = _NavButton(
-          label: 'Save & Prev',
+          label: singleRow ? 'Prev' : 'Save & Prev',
           tooltip: 'Save & Prev',
           icon: PhosphorIconsRegular.caretLeft,
           iconAtEnd: false,
@@ -104,6 +131,7 @@ class CaptionV2ActionRow extends StatelessWidget {
         );
         final clip = _ClipGroup(
           compact: compact,
+          iconOnly: singleRow,
           onCopy: onCopy,
           onPaste: onPaste,
           onPasteLast: onPastePrevious,
@@ -112,17 +140,23 @@ class CaptionV2ActionRow extends StatelessWidget {
         final next = hideOrangeActions
             ? null
             : _NavButton(
-          label: 'Save & Next',
-          tooltip: 'Save & Next',
-          icon: PhosphorIconsRegular.caretRight,
-          enabled: saveNextEnabled,
-          padding: EdgeInsets.symmetric(horizontal: pad),
-          trailingPad: compact ? pad : 12,
-          onPressed: onSaveNext,
-        );
+                label: singleRow ? 'Next' : 'Save & Next',
+                tooltip: 'Save & Next',
+                icon: PhosphorIconsRegular.caretRight,
+                enabled: saveNextEnabled,
+                padding: EdgeInsets.symmetric(horizontal: pad),
+                trailingPad: compact ? pad : 12,
+                onPressed: onSaveNext,
+              );
+        final thumbs = onThumbs == null
+            ? null
+            : _ThumbsButton(
+                selected: thumbsSelected,
+                onPressed: onThumbs,
+              );
         final ftp = showTransmit && !hideOrangeActions
             ? _FtpGroup(
-                narrow: narrow,
+                narrow: narrow || singleRow,
                 label: transmitLabel,
                 enabled: transmitEnabled,
                 onTransmit: onTransmit,
@@ -150,6 +184,7 @@ class CaptionV2ActionRow extends StatelessWidget {
                     runSpacing: 8,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
+                      if (thumbs != null) thumbs,
                       prev,
                       clip,
                       if (next != null) next,
@@ -171,15 +206,19 @@ class CaptionV2ActionRow extends StatelessWidget {
               )
             : Row(
                 children: [
+                  if (thumbs != null) ...[
+                    thumbs,
+                    const SizedBox(width: 6),
+                  ],
                   prev,
-                  const SizedBox(width: 8),
-                  clip,
+                  const SizedBox(width: 6),
+                  Flexible(child: clip),
                   if (next != null) ...[
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     next,
                   ],
                   if (ftp != null) ...[
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, slot) {
@@ -189,7 +228,8 @@ class CaptionV2ActionRow extends StatelessWidget {
                           // The profile name gives up space first. The photo
                           // drops next so Sending and the thumbnail never
                           // paint on top of the button.
-                          final showThumb = thumb && slot.maxWidth >= 168;
+                          final showThumb =
+                              !singleRow && thumb && slot.maxWidth >= 168;
                           return Row(
                             children: [
                               Flexible(
@@ -209,7 +249,9 @@ class CaptionV2ActionRow extends StatelessWidget {
                                   onTap: openActive,
                                 ),
                               ],
-                              if (ftpActive && progress != null) ...[
+                              if (!singleRow &&
+                                  ftpActive &&
+                                  progress != null) ...[
                                 const SizedBox(width: 8),
                                 Flexible(child: progress),
                               ],
@@ -218,7 +260,9 @@ class CaptionV2ActionRow extends StatelessWidget {
                         },
                       ),
                     ),
-                  ] else if (ftpActive && progress != null) ...[
+                  ] else if (!singleRow &&
+                      ftpActive &&
+                      progress != null) ...[
                     const SizedBox(width: 8),
                     Expanded(child: progress),
                   ],
@@ -227,7 +271,7 @@ class CaptionV2ActionRow extends StatelessWidget {
 
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(8),
+          padding: EdgeInsets.all(singleRow ? 6 : 8),
           decoration: BoxDecoration(
             color: FfTokens.nocturneEl,
             borderRadius: BorderRadius.circular(14),
@@ -235,6 +279,201 @@ class CaptionV2ActionRow extends StatelessWidget {
           child: bar,
         );
       },
+    );
+  }
+}
+
+class _ThumbsButton extends StatelessWidget {
+  const _ThumbsButton({
+    required this.onPressed,
+    required this.selected,
+  });
+
+  final VoidCallback? onPressed;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BarTap(
+      tooltip: selected ? 'Hide thumbs' : 'Show thumbs',
+      enabled: onPressed != null,
+      onTap: onPressed,
+      builder: (hovered, pressed) {
+        final bg = selected
+            ? (hovered ? FfTokens.accentHover : FfTokens.nocturneAc)
+            : (hovered ? FfTokens.nocturneHv : FfTokens.nocturneSunken);
+        final fg = selected ? FfTokens.nocturneBg : FfTokens.nocturneTx;
+        return _BarShell(
+          height: _kActionRowHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          background: bg,
+          pressed: pressed,
+          child: Icon(
+            PhosphorIconsRegular.images,
+            size: 18,
+            color: fg,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Mobile mock action bar — same callbacks as [CaptionV2ActionRow].
+class _MobileDockBar extends StatelessWidget {
+  const _MobileDockBar({
+    required this.onSavePrevious,
+    required this.onCopy,
+    required this.onPaste,
+    required this.onPastePrevious,
+    required this.pasteEnabled,
+    required this.onSaveNext,
+    required this.saveNextEnabled,
+    this.onThumbs,
+    this.thumbsSelected = false,
+  });
+
+  final VoidCallback? onSavePrevious;
+  final VoidCallback? onCopy;
+  final VoidCallback? onPaste;
+  final VoidCallback? onPastePrevious;
+  final bool pasteEnabled;
+  final VoidCallback? onSaveNext;
+  final bool saveNextEnabled;
+  final VoidCallback? onThumbs;
+  final bool thumbsSelected;
+
+  static const _on = Color(0xFF7FB3E8);
+
+  @override
+  Widget build(BuildContext context) {
+    Widget nav({
+      required IconData icon,
+      required String tip,
+      required VoidCallback? onTap,
+      required bool filled,
+      required bool enabled,
+    }) {
+      return _BarTap(
+        tooltip: tip,
+        enabled: enabled && onTap != null,
+        onTap: onTap,
+        builder: (hovered, pressed) {
+          final bg = filled
+              ? (hovered ? const Color(0xFF95C0EC) : _on)
+              : (hovered ? FfTokens.nocturneHv : FfTokens.nocturneEl);
+          final fg = filled ? const Color(0xFF0C1016) : FfTokens.nocturneTx;
+          return Container(
+            width: 56,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 18, color: fg),
+          );
+        },
+      );
+    }
+
+    Widget mid({
+      required IconData icon,
+      required String label,
+      required VoidCallback? onTap,
+      required bool enabled,
+    }) {
+      return Expanded(
+        child: _BarTap(
+          tooltip: label,
+          enabled: enabled && onTap != null,
+          onTap: onTap,
+          builder: (hovered, pressed) {
+            return SizedBox(
+              height: 44,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    icon,
+                    size: 17,
+                    color: hovered ? FfTokens.nocturneTx : FfTokens.nocturneT3,
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: hovered ? FfTokens.nocturneTx : FfTokens.nocturneT2,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Row(
+        children: [
+          if (onThumbs != null) ...[
+            _ThumbsButton(onPressed: onThumbs, selected: thumbsSelected),
+            const SizedBox(width: 6),
+          ],
+          nav(
+            icon: PhosphorIconsBold.caretLeft,
+            tip: 'Save & Prev',
+            onTap: onSavePrevious,
+            filled: false,
+            enabled: true,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: FfTokens.nocturneBg,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  mid(
+                    icon: PhosphorIconsRegular.copy,
+                    label: 'Copy',
+                    onTap: onCopy,
+                    enabled: true,
+                  ),
+                  mid(
+                    icon: PhosphorIconsRegular.clipboardText,
+                    label: 'Paste',
+                    onTap: onPaste,
+                    enabled: pasteEnabled,
+                  ),
+                  mid(
+                    icon: PhosphorIconsRegular.clockCounterClockwise,
+                    label: 'Last',
+                    onTap: onPastePrevious,
+                    enabled: true,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          nav(
+            icon: PhosphorIconsBold.caretRight,
+            tip: 'Save & Next',
+            onTap: onSaveNext,
+            filled: true,
+            enabled: saveNextEnabled,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -325,9 +564,11 @@ class _ClipGroup extends StatelessWidget {
     required this.onPaste,
     required this.onPasteLast,
     required this.pasteEnabled,
+    this.iconOnly = false,
   });
 
   final bool compact;
+  final bool iconOnly;
   final VoidCallback? onCopy;
   final VoidCallback? onPaste;
   final VoidCallback? onPasteLast;
@@ -335,7 +576,7 @@ class _ClipGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pad = compact ? 10.0 : 12.0;
+    final pad = iconOnly ? 8.0 : (compact ? 10.0 : 12.0);
     final gap = compact ? 6.0 : 8.0;
     Widget item({
       required IconData icon,
@@ -355,17 +596,19 @@ class _ClipGroup extends StatelessWidget {
             padding: EdgeInsets.symmetric(horizontal: pad),
             background: hovered ? FfTokens.nocturneHv : Colors.transparent,
             pressed: pressed,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 18, color: iconColor),
-                SizedBox(width: gap),
-                Text(
-                  label,
-                  style: _barLabel(fg, weight: FontWeight.w500),
-                ),
-              ],
-            ),
+            child: iconOnly
+                ? Icon(icon, size: 18, color: iconColor)
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 18, color: iconColor),
+                      SizedBox(width: gap),
+                      Text(
+                        label,
+                        style: _barLabel(fg, weight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
           );
         },
       );

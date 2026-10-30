@@ -79,6 +79,11 @@ class CaptionStrip extends StatelessWidget {
     this.multiWriteCount = 0,
     this.burstApplyCount = 0,
     this.onApplyToBurst,
+    this.compact = false,
+    this.collapsedLines = 3,
+    this.captionExpanded = false,
+    this.onCaptionExpandedChanged,
+    this.onClear,
   });
 
   /// Static text before the first chip (e.g. "Toronto Blue Jays ").
@@ -175,9 +180,20 @@ class CaptionStrip extends StatelessWidget {
   final int burstApplyCount;
   final VoidCallback? onApplyToBurst;
 
+  /// Mobile stack: personality + Clear, caption clamped to [collapsedLines],
+  /// tap/caret expands. Same caption/period controls as desktop.
+  final bool compact;
+  final int collapsedLines;
+  final bool captionExpanded;
+  final ValueChanged<bool>? onCaptionExpandedChanged;
+  final VoidCallback? onClear;
+
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).extension<FfTokens>() ?? FfTokens.dark;
+    if (compact) {
+      return _CompactCaptionStrip(strip: this, tokens: t);
+    }
 
     return SizedBox(
       width: double.infinity,
@@ -360,6 +376,182 @@ class CaptionStrip extends StatelessWidget {
           footer!,
         ],
       ],
+    );
+  }
+}
+
+/// Mobile arrangement of the same [CaptionStrip] fields — not a fork.
+class _CompactCaptionStrip extends StatelessWidget {
+  const _CompactCaptionStrip({
+    required this.strip,
+    required this.tokens,
+  });
+
+  final CaptionStrip strip;
+  final FfTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    final expanded = strip.captionExpanded;
+    final text = (strip.fullCaption ?? '').trim();
+    final pers = (strip.personality ?? '').trim();
+    final captionStyle = tokens.captionStyle.copyWith(
+      fontSize: 13,
+      height: 19 / 13,
+      color: tokens.textSecondary,
+    );
+    final body = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(
+              'PERSONALITY',
+              style: FfTokens.panelLabel(color: tokens.textTertiary),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                pers.isEmpty ? '—' : pers,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: tokens.text,
+                  height: 1,
+                ),
+              ),
+            ),
+            if (strip.onClear != null)
+              TextButton(
+                onPressed: strip.onClear,
+                style: TextButton.styleFrom(
+                  minimumSize: const Size(44, 32),
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  foregroundColor: tokens.textTertiary,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PhosphorIcon(
+                      PhosphorIconsRegular.xCircle,
+                      size: 15,
+                      color: tokens.textTertiary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Clear',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: tokens.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            IconButton(
+              tooltip: expanded ? 'Collapse' : 'Expand',
+              visualDensity: VisualDensity.compact,
+              onPressed: strip.onCaptionExpandedChanged == null
+                  ? null
+                  : () => strip.onCaptionExpandedChanged!(!expanded),
+              icon: PhosphorIcon(
+                expanded
+                    ? PhosphorIconsRegular.caretUp
+                    : PhosphorIconsRegular.caretDown,
+                size: 16,
+                color: tokens.textTertiary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: strip.onCaptionExpandedChanged == null
+              ? null
+              : () => strip.onCaptionExpandedChanged!(!expanded),
+          child: expanded
+              ? ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 160),
+                  child: SingleChildScrollView(
+                    child: strip.onCaptionChanged != null
+                        ? _CaptionEditor(
+                            value: strip.fullCaption ?? '',
+                            hintText: strip.captionHint,
+                            tokens: tokens,
+                            fontSize: 13,
+                            highlightPhrases: strip.highlightPhrases,
+                            provenanceSpans: strip.provenanceSpans,
+                            unmatchedTip: strip.unmatchedTip,
+                            onChanged: strip.onCaptionChanged!,
+                          )
+                        : Text(
+                            text.isEmpty ? strip.captionHint : text,
+                            style: captionStyle,
+                          ),
+                  ),
+                )
+              : Text(
+                  text.isEmpty ? strip.captionHint : text,
+                  maxLines: strip.collapsedLines,
+                  overflow: TextOverflow.ellipsis,
+                  style: captionStyle,
+                ),
+        ),
+        if (strip.inningLabel != null ||
+            strip.onPreTap != null ||
+            strip.onPostTap != null) ...[
+          const SizedBox(height: 8),
+          _InningCard(
+            inningLabel: strip.inningLabel,
+            timingUnitLabel: strip.timingUnitLabel,
+            inning: strip.inning,
+            regulationCount: strip.regulationCount,
+            extraLabel: strip.extraLabel,
+            maxInning: strip.maxInning,
+            segmentPrefix: strip.segmentPrefix,
+            selectedHalf: strip.selectedHalf,
+            quarterMode: strip.quarterMode,
+            onQuarterModeChanged: strip.onQuarterModeChanged,
+            onHalfSelected: strip.onHalfSelected,
+            onInningSelected: strip.onInningSelected,
+            onInningDecrement: strip.onInningDecrement,
+            onInningIncrement: strip.onInningIncrement,
+            inningDisabled: strip.inningDisabled,
+            onInningActivate: strip.onInningActivate,
+            timingPhraseEnabled: strip.timingPhraseEnabled,
+            onTimingPhraseEnabledChanged:
+                strip.onTimingPhraseEnabledChanged,
+            preSelected: strip.preSelected,
+            postSelected: strip.postSelected,
+            onPreTap: strip.onPreTap,
+            onPostTap: strip.onPostTap,
+            mlbTimestampVisible: strip.mlbTimestampVisible,
+            mlbTimestampEnabled: strip.mlbTimestampEnabled,
+            mlbTimestampLoading: strip.mlbTimestampLoading,
+            mlbTimestampMatched: strip.mlbTimestampMatched,
+            onMlbTimestampTap: strip.onMlbTimestampTap,
+            stepperOnly: strip.inningStepperOnly,
+            tokens: tokens,
+          ),
+        ],
+      ],
+    );
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: body,
     );
   }
 }
@@ -954,51 +1146,71 @@ class _CaptionPanelState extends State<_CaptionPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                multi
-                    ? multiLabel
-                    : burst
-                        ? 'Burst Mode Detected'
-                        : 'CAPTION',
-                style: FfTokens.panelLabel(
-                  color: alert ?? t.textTertiary,
+          SizedBox(
+            height: 28,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  multi
+                      ? multiLabel
+                      : burst
+                          ? 'Burst Mode Detected'
+                          : 'CAPTION',
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: FfTokens.panelLabel(
+                    color: alert ?? t.text,
+                  ).copyWith(fontSize: 15, letterSpacing: 1.2, height: 1),
                 ),
-              ),
-              if (applyBurst != null) ...[
-                const SizedBox(width: 10),
-                applyBurst,
-              ],
-              if (widget.headerTrailing != null) ...[
-                const SizedBox(width: 14),
-                Expanded(child: widget.headerTrailing!),
-              ] else
-                const Spacer(),
-              const SizedBox(width: 8),
-              sizeStepper,
-              const SizedBox(width: 2),
-              MouseRegion(
-                onEnter: (_) => setState(() => _hovered = true),
-                onExit: (_) => setState(() => _hovered = false),
-                child: Tooltip(
-                  message: 'Edit caption style',
-                  child: InkWell(
-                    onTap: widget.onTap,
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: PhosphorIcon(
-                        PhosphorIconsRegular.pencilSimple,
-                        size: 14,
-                        color: t.text.withValues(alpha: _hovered ? 1 : 0.55),
+                if (applyBurst != null) ...[
+                  const SizedBox(width: 8),
+                  Flexible(fit: FlexFit.loose, child: applyBurst),
+                ],
+                // Personality fills the middle; +/- and edit stay pinned right.
+                Expanded(
+                  child: widget.headerTrailing == null
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(left: 10, right: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 1,
+                                height: 14,
+                                color: t.divider,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(child: widget.headerTrailing!),
+                            ],
+                          ),
+                        ),
+                ),
+                sizeStepper,
+                const SizedBox(width: 2),
+                MouseRegion(
+                  onEnter: (_) => setState(() => _hovered = true),
+                  onExit: (_) => setState(() => _hovered = false),
+                  child: Tooltip(
+                    message: 'Edit caption style',
+                    child: InkWell(
+                      onTap: widget.onTap,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: PhosphorIcon(
+                          PhosphorIconsRegular.pencilSimple,
+                          size: 14,
+                          color: t.text.withValues(alpha: _hovered ? 1 : 0.55),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 6),
           if (widget.fillHeight)
@@ -1513,54 +1725,64 @@ class _PersonalityBarState extends State<_PersonalityBar> {
       color: t.text,
       height: 1,
     );
-    final labelStyle = FfTokens.panelLabel(color: t.textTertiary);
+    final labelStyle = FfTokens.panelLabel(color: t.textTertiary).copyWith(
+      letterSpacing: 0.6,
+      height: 1,
+    );
     // EditableText, not TextField. The field decoration was placing the names
     // below the label even when the row was centered.
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          'PERSONALITY',
-          softWrap: false,
-          style: labelStyle,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _focusNode.requestFocus(),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              heightFactor: 1,
-              child: Stack(
-                alignment: Alignment.centerLeft,
-                children: [
-                  if (_controller.text.isEmpty)
-                    IgnorePointer(
-                      child: Text(
-                        '—',
-                        style: nameStyle.copyWith(color: t.textTertiary),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showLabel = constraints.maxWidth >= 160;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            if (showLabel) ...[
+              Text('PERSONALITY', softWrap: false, style: labelStyle),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _focusNode.requestFocus(),
+                child: SizedBox(
+                  height: 18,
+                  child: Stack(
+                    alignment: Alignment.centerLeft,
+                    clipBehavior: Clip.none,
+                    children: [
+                      if (_controller.text.isEmpty)
+                        IgnorePointer(
+                          child: Text(
+                            '—',
+                            style: nameStyle.copyWith(color: t.textTertiary),
+                          ),
+                        ),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: EditableText(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          style: nameStyle,
+                          cursorColor: t.accent,
+                          backgroundCursorColor: t.surface,
+                          cursorWidth: 1.2,
+                          maxLines: 1,
+                          selectionColor: t.accent.withValues(alpha: 0.35),
+                          spellCheckConfiguration:
+                              floSpellCheckConfiguration(),
+                          contextMenuBuilder: floSpellCheckContextMenuBuilder,
+                          onChanged: widget.onChanged,
+                        ),
                       ),
-                    ),
-                  EditableText(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    style: nameStyle,
-                    cursorColor: t.accent,
-                    backgroundCursorColor: t.surface,
-                    cursorWidth: 1.2,
-                    maxLines: 1,
-                    selectionColor: t.accent.withValues(alpha: 0.35),
-                    spellCheckConfiguration: floSpellCheckConfiguration(),
-                    contextMenuBuilder: floSpellCheckContextMenuBuilder,
-                    onChanged: widget.onChanged,
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }

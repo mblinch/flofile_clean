@@ -410,6 +410,7 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
     final serialBylines = _currentPreferences?['serialNumberBylines'] == true;
     final burstOn = _currentPreferences?['burstDetectionEnabled'] == true;
     final jerseyOcr = _currentPreferences?['jerseyOcrEnabled'] == true;
+    final firebarOn = _currentPreferences?['hideFirebar'] != true;
     final showJerseyOcr = defaultTargetPlatform == TargetPlatform.macOS;
     final resolutionThreshold =
         _currentPreferences?['resolutionWarningThreshold'] as int? ?? 3000;
@@ -496,6 +497,18 @@ class _PreferencesDialogState extends State<PreferencesDialog> {
                   ),
                 );
               },
+            ),
+            _PrefsModeBuffButton(
+              icon: PhosphorIconsRegular.lightning,
+              label: 'Firebar',
+              tooltip:
+                  'Show the Firebar under the caption for quick player and verb search.',
+              enabled: firebarOn,
+              onToggle: () => _setApplicationPref(
+                'hideFirebar',
+                firebarOn,
+                _preferencesService.saveHideFirebar,
+              ),
             ),
             ],
           ),
