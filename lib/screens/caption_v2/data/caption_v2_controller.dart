@@ -4210,14 +4210,12 @@ class CaptionV2Controller extends ChangeNotifier {
       if (preset.isEmpty) return;
       final index = imagePaths.indexOf(imagePath);
       final cleared = await _loadIptcClearedFields();
-      final listMode = await _prefs!.getIptcOnLoadListMode();
       final result = await IptcTemplateApplyService.applyToImage(
         imagePath,
         preset,
         imageIndex: index >= 0 ? index : null,
         replaceExisting: true,
         preserveOnLoad: true,
-        onLoadListMode: listMode,
         fieldsToClear: cleared.isNotEmpty ? cleared : null,
       );
       if (result.success && !result.skipped) {
@@ -4273,7 +4271,6 @@ class CaptionV2Controller extends ChangeNotifier {
       }
       notifyListeners();
       final cleared = await _loadIptcClearedFields();
-      final listMode = await _prefs!.getIptcOnLoadListMode();
       var i = 0;
       for (final path in imagePaths) {
         final result = await IptcTemplateApplyService.applyToImage(
@@ -4282,7 +4279,6 @@ class CaptionV2Controller extends ChangeNotifier {
           imageIndex: i,
           replaceExisting: true,
           preserveOnLoad: true,
-          onLoadListMode: listMode,
           fieldsToClear: cleared.isNotEmpty ? cleared : null,
         );
         if (result.success && !result.skipped) {
@@ -9291,7 +9287,6 @@ class CaptionV2Controller extends ChangeNotifier {
       statusMessage =
           'Writing IPTC template to ${imagePaths.length} images…';
       notifyListeners();
-      final listMode = await _prefs!.getIptcOnLoadListMode();
       var i = 0;
       for (final path in imagePaths) {
         final result = await IptcTemplateApplyService.applyToImage(
@@ -9300,7 +9295,6 @@ class CaptionV2Controller extends ChangeNotifier {
           imageIndex: i,
           replaceExisting: true,
           preserveOnLoad: true,
-          onLoadListMode: listMode,
           fieldsToClear: cleared.isNotEmpty ? cleared : null,
         );
         if (result.success && !result.skipped) {

@@ -537,6 +537,7 @@ class _CaptionV2MetadataEditorState extends State<_CaptionV2MetadataEditor> {
                 onSaveTemplate: null,
                 loadEnabled: false,
                 clearEnabled: !_saving,
+                captionTemplate: widget.controller.captionTemplate,
                 onCancel: () {
                   if (_saving) return;
                   Navigator.of(context).pop();

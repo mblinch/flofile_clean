@@ -406,7 +406,7 @@ class CaptionStyleCatalog {
       case tokCp:
         return _wireLabel(WireStyle.cp, 'CP');
       case tokGettyIntl:
-        return _wireLabel(WireStyle.gettyInternational, 'Getty International');
+        return _wireLabel(WireStyle.gettyInternational, 'Getty');
       case tokCustom:
         return 'Custom';
       default:

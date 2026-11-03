@@ -2171,7 +2171,7 @@ class _MissingCaptionIptcBanner extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Missing IPTC for caption: ${labels.join(', ')}',
+                  'Missing fields',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

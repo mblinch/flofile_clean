@@ -2410,6 +2410,9 @@ class PreferencesService {
       'captionTemplate': (await getCaptionTemplateRaw()).toJson(),
       'captionStyleLibrary':
           (await getCaptionStyleLibrary()).map((e) => e.toJson()).toList(),
+      'localIptcTemplates':
+          (await getLocalIptcTemplates()).map((e) => e.toFirestore()).toList(),
+      'selectedIptcTemplateId': await getSelectedIptcTemplateId(),
       'captionTemplateWireDefaults': <String, dynamic>{
         if (captionWireDefaultGetty != null)
           'getty': CaptionTemplate.wireMasterJsonFromTemplate(
@@ -2763,6 +2766,26 @@ class PreferencesService {
           } catch (_) {}
         }
         await _saveCaptionStyleLibrary(list);
+      }
+    }
+    if (preferences.containsKey('localIptcTemplates')) {
+      final raw = preferences['localIptcTemplates'];
+      if (raw is List) {
+        final list = <IptcTemplateCatalogEntry>[];
+        for (final e in raw) {
+          if (e is! Map) continue;
+          final parsed = IptcTemplateCatalogEntry.fromMap(
+            Map<String, dynamic>.from(e),
+          );
+          if (parsed != null) list.add(parsed);
+        }
+        await saveLocalIptcTemplates(list, syncCloud: false);
+      }
+    }
+    if (preferences.containsKey('selectedIptcTemplateId')) {
+      final id = preferences['selectedIptcTemplateId']?.toString().trim() ?? '';
+      if (id.isNotEmpty) {
+        await setSelectedIptcTemplateId(id, syncCloud: false);
       }
     }
     if (preferences.containsKey('captionWireLabels')) {
@@ -3454,9 +3477,13 @@ class PreferencesService {
     return v.trim();
   }
 
-  Future<void> setSelectedIptcTemplateId(String id) async {
+  Future<void> setSelectedIptcTemplateId(
+    String id, {
+    bool syncCloud = true,
+  }) async {
     final prefs = await _getPrefs();
     await prefs.setString(_keySelectedIptcTemplateId, id.trim());
+    if (syncCloud) _afterLocalPreferencesChanged();
   }
 
   Future<List<IptcTemplateCatalogEntry>> getLocalIptcTemplates() async {
@@ -3482,13 +3509,15 @@ class PreferencesService {
   }
 
   Future<void> saveLocalIptcTemplates(
-    List<IptcTemplateCatalogEntry> templates,
-  ) async {
+    List<IptcTemplateCatalogEntry> templates, {
+    bool syncCloud = true,
+  }) async {
     final prefs = await _getPrefs();
     await prefs.setString(
       _keyLocalIptcTemplates,
       json.encode(templates.map((e) => e.toFirestore()).toList()),
     );
+    if (syncCloud) _afterLocalPreferencesChanged();
   }
 
   String _iptcWirePresetKey(WireStyle wire) =>

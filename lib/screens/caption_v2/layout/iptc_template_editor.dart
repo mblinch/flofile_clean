@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 
+import '../../../caption_style/caption_formula_renderer.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/app_defaults_firestore_service.dart';
@@ -9,8 +10,231 @@ import '../../../services/iptc_template_apply_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../widgets/teal_action_button.dart';
 
-const Color _warn = Color(0xFFE8B547);
-const Color _warnLine = Color(0x73E8B547);
+/// Blank field the caption structure still needs.
+const Color _captionWarn = FfTokens.danger;
+final Color _captionWarnLine = FfTokens.danger.withValues(alpha: 0.45);
+
+/// Blank field the wire still needs for filing (e.g. Getty).
+const Color _filingWarn = Color(0xFFE8B547);
+const Color _filingWarnLine = Color(0x73E8B547);
+
+enum _FieldAlert { none, caption, filing }
+
+Color _alertColor(_FieldAlert alert) {
+  switch (alert) {
+    case _FieldAlert.caption:
+      return _captionWarn;
+    case _FieldAlert.filing:
+      return _filingWarn;
+    case _FieldAlert.none:
+      return Colors.transparent;
+  }
+}
+
+/// Hover/tap tip for list fields — always merge, never overwrite.
+String _listMergeTip(String field) {
+  final subject = field == 'Personality' ? 'Personality names' : field;
+  return '$subject are added to what’s already in the IPTC — never '
+      'overwritten. Duplicates will not be added.';
+}
+
+enum _LegendFocus { none, caption, filing }
+
+/// Shared tap group: fields + legend buttons. Outside taps dismiss focus mode.
+const Object _legendFocusTapGroup = Object();
+
+/// Visual tab order for IPTC panel fields (Story → Credit → Location → Filing).
+const List<String> _iptcTabOrder = [
+  'Headline',
+  'Personality',
+  'Keywords',
+  'Special Instructions',
+  'Creator',
+  'Job Title',
+  'Description Writers',
+  'Credit',
+  'Source',
+  'Copyright',
+  'Location',
+  'City',
+  'Province/State',
+  'Country',
+  'Country Code',
+  'MEID',
+  'Object Name',
+  'Category',
+  'Supp Cat 1',
+  'Supp Cat 2',
+  'Supp Cat 3',
+  'Urgency',
+];
+
+class _IptcTabField {
+  _IptcTabField({
+    required this.id,
+    required this.node,
+    required this.needsCaptionFill,
+    required this.needsFilingFill,
+  });
+
+  final String id;
+  final FocusNode node;
+  bool Function() needsCaptionFill;
+  bool Function() needsFilingFill;
+
+  int get order {
+    final i = _iptcTabOrder.indexOf(id);
+    return i < 0 ? 999 : i;
+  }
+}
+
+/// Footer legend focus — dim fields that aren’t in the selected alert group.
+class _LegendFocusScope extends InheritedWidget {
+  const _LegendFocusScope({
+    required this.focus,
+    required this.onToggleCaption,
+    required this.onToggleFiling,
+    required this.dismissFocus,
+    required this.registerTabField,
+    required this.unregisterTabField,
+    required this.focusNextNeeded,
+    required super.child,
+  });
+
+  final _LegendFocus focus;
+  final VoidCallback onToggleCaption;
+  final VoidCallback onToggleFiling;
+  final VoidCallback dismissFocus;
+  final void Function(_IptcTabField field) registerTabField;
+  final void Function(FocusNode node) unregisterTabField;
+  final bool Function({required FocusNode from, required bool reverse})
+      focusNextNeeded;
+
+  static _LegendFocusScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<_LegendFocusScope>();
+
+  @override
+  bool updateShouldNotify(_LegendFocusScope oldWidget) =>
+      focus != oldWidget.focus;
+}
+
+class _LegendFocusHost extends StatefulWidget {
+  const _LegendFocusHost({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_LegendFocusHost> createState() => _LegendFocusHostState();
+}
+
+class _LegendFocusHostState extends State<_LegendFocusHost> {
+  _LegendFocus _focus = _LegendFocus.none;
+  final List<_IptcTabField> _tabFields = [];
+
+  void _toggle(_LegendFocus target) {
+    final next = _focus == target ? _LegendFocus.none : target;
+    setState(() => _focus = next);
+    if (next == _LegendFocus.none) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _focus != next) return;
+      final sorted = [..._tabFields]..sort((a, b) => a.order.compareTo(b.order));
+      for (final field in sorted) {
+        final needed = next == _LegendFocus.caption
+            ? field.needsCaptionFill()
+            : field.needsFilingFill();
+        if (needed) {
+          field.node.requestFocus();
+          return;
+        }
+      }
+    });
+  }
+
+  void _dismissFocus() {
+    if (_focus == _LegendFocus.none) return;
+    setState(() => _focus = _LegendFocus.none);
+  }
+
+  void _registerTabField(_IptcTabField field) {
+    _tabFields.removeWhere((e) => e.node == field.node || e.id == field.id);
+    _tabFields.add(field);
+  }
+
+  void _unregisterTabField(FocusNode node) {
+    _tabFields.removeWhere((e) => e.node == node);
+  }
+
+  bool _focusNextNeeded({required FocusNode from, required bool reverse}) {
+    if (_focus == _LegendFocus.none) return false;
+    final sorted = [..._tabFields]..sort((a, b) => a.order.compareTo(b.order));
+    if (sorted.isEmpty) return false;
+
+    bool needed(_IptcTabField f) {
+      switch (_focus) {
+        case _LegendFocus.caption:
+          return f.needsCaptionFill();
+        case _LegendFocus.filing:
+          return f.needsFilingFill();
+        case _LegendFocus.none:
+          return false;
+      }
+    }
+
+    final neededFields = sorted.where(needed).toList();
+    if (neededFields.isEmpty) return false;
+
+    final fromIndex = sorted.indexWhere((f) => f.node == from);
+    if (fromIndex < 0) {
+      neededFields.first.node.requestFocus();
+      return true;
+    }
+
+    if (reverse) {
+      for (var i = fromIndex - 1; i >= 0; i--) {
+        if (needed(sorted[i])) {
+          sorted[i].node.requestFocus();
+          return true;
+        }
+      }
+      neededFields.last.node.requestFocus();
+      return true;
+    }
+
+    for (var i = fromIndex + 1; i < sorted.length; i++) {
+      if (needed(sorted[i])) {
+        sorted[i].node.requestFocus();
+        return true;
+      }
+    }
+    neededFields.first.node.requestFocus();
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _LegendFocusScope(
+      focus: _focus,
+      onToggleCaption: () => _toggle(_LegendFocus.caption),
+      onToggleFiling: () => _toggle(_LegendFocus.filing),
+      dismissFocus: _dismissFocus,
+      registerTabField: _registerTabField,
+      unregisterTabField: _unregisterTabField,
+      focusNextNeeded: _focusNextNeeded,
+      child: widget.child,
+    );
+  }
+}
+
+Color _alertLine(_FieldAlert alert) {
+  switch (alert) {
+    case _FieldAlert.caption:
+      return _captionWarnLine;
+    case _FieldAlert.filing:
+      return _filingWarnLine;
+    case _FieldAlert.none:
+      return Colors.transparent;
+  }
+}
 
 /// Session colors for the start-menu template. Workspace colors match captioning.
 class IptcEditorColors {
@@ -63,6 +287,7 @@ class IptcTemplateEditor extends StatelessWidget {
     required this.onLoadTemplate,
     required this.onClearTemplate,
     required this.onSaveTemplate,
+    this.onDeleteTemplate,
     required this.onCancel,
     required this.onDone,
     this.loadEnabled = true,
@@ -76,6 +301,9 @@ class IptcTemplateEditor extends StatelessWidget {
     this.leading,
     this.applyMode,
     this.onApplyModeChanged,
+    this.captionTemplate,
+    this.captionStyleLabel,
+    this.wireLabels = const {},
   });
 
   final WireStyle wire;
@@ -90,6 +318,7 @@ class IptcTemplateEditor extends StatelessWidget {
   final VoidCallback? onLoadTemplate;
   final VoidCallback? onClearTemplate;
   final VoidCallback? onSaveTemplate;
+  final ValueChanged<IptcTemplateCatalogEntry>? onDeleteTemplate;
   final VoidCallback onCancel;
   final VoidCallback onDone;
   final bool loadEnabled;
@@ -112,6 +341,15 @@ class IptcTemplateEditor extends StatelessWidget {
   final IptcApplyMode? applyMode;
   final ValueChanged<IptcApplyMode>? onApplyModeChanged;
 
+  /// Active caption style — blank fields it needs for the caption are marked red.
+  final CaptionTemplate? captionTemplate;
+
+  /// Label for the active caption style shown in the header.
+  final String? captionStyleLabel;
+
+  /// Optional custom wire names for grouped template labels.
+  final Map<WireStyle, String> wireLabels;
+
   static const _monoKeys = {
     'MEID',
     'Object Name',
@@ -132,7 +370,8 @@ class IptcTemplateEditor extends StatelessWidget {
         : const IptcEditorColors.session();
     return IptcEditorPalette(
       colors: colors,
-      child: LayoutBuilder(
+      child: _LegendFocusHost(
+        child: LayoutBuilder(
         builder: (context, constraints) {
           // Match IPTC Editor v2.html breakpoints.
           final h = constraints.maxHeight.isFinite
@@ -223,26 +462,33 @@ class IptcTemplateEditor extends StatelessWidget {
           );
 
           // Always 2×2: Story | Credit / Location | Filing.
-          final grid = Column(
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: story),
-                  SizedBox(width: gap),
-                  Expanded(child: credit),
-                ],
-              ),
-              SizedBox(height: gap),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: location),
-                  SizedBox(width: gap),
-                  Expanded(child: filing),
-                ],
-              ),
-            ],
+          // TapRegion keeps red/yellow mode on while editing fields.
+          final grid = TapRegion(
+            groupId: _legendFocusTapGroup,
+            onTapOutside: (_) {
+              _LegendFocusScope.maybeOf(context)?.dismissFocus();
+            },
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: story),
+                    SizedBox(width: gap),
+                    Expanded(child: credit),
+                  ],
+                ),
+                SizedBox(height: gap),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: location),
+                    SizedBox(width: gap),
+                    Expanded(child: filing),
+                  ],
+                ),
+              ],
+            ),
           );
 
           final body = ListView(
@@ -277,12 +523,15 @@ class IptcTemplateEditor extends StatelessWidget {
                 templates: templates,
                 selectedTemplateId: selectedTemplateId,
                 onTemplateSelected: onTemplateSelected,
+                onDeleteTemplate: onDeleteTemplate,
                 onLoad: loadEnabled ? onLoadTemplate : null,
                 onClear: clearEnabled ? onClearTemplate : null,
                 onSave: fieldsEnabled ? onSaveTemplate : null,
                 loadingTemplate: loadingTemplate,
                 onClose: onCancel,
                 compact: compact,
+                captionStyleLabel: captionStyleLabel,
+                wireLabels: wireLabels,
               ),
               Expanded(
                 child: leading == null
@@ -296,15 +545,17 @@ class IptcTemplateEditor extends StatelessWidget {
                       ),
               ),
               _Footer(
-                missingLabels: _emptyRequiredLabels(specs),
+                wireLabel: WireIptcSpecs.factoryWireLabel(wire),
                 compact: compact,
                 doneLabel: doneLabel,
                 onCancel: onCancel,
+                onClear: clearEnabled ? onClearTemplate : null,
                 onDone: onDone,
               ),
             ],
           );
         },
+        ),
       ),
     );
   }
@@ -341,6 +592,53 @@ class IptcTemplateEditor extends StatelessWidget {
   bool _required(WireIptcFieldSpec? spec) =>
       spec?.level == IptcFieldLevel.required;
 
+  /// Blank IPTC fields the active caption style still needs to build a caption.
+  List<String> _captionMissingLabels() {
+    final template = captionTemplate;
+    if (template == null) return const [];
+    return CaptionFormulaRenderer.missingCaptionIptcLabels(
+      template: template,
+      game: IptcTemplateApplyService.gameInfoFromPanelValues(values),
+      includeCreator: true,
+    );
+  }
+
+  /// Caption-structure fields — stay bright in red focus even after filled.
+  List<String> _captionGroupLabels() {
+    final template = captionTemplate;
+    if (template == null) return const [];
+    return CaptionFormulaRenderer.captionIptcLabels(
+      template: template,
+      includeCreator: true,
+    );
+  }
+
+  bool _captionMissing(String label) {
+    for (final missing in _captionMissingLabels()) {
+      if (missing.toLowerCase() == label.toLowerCase()) return true;
+    }
+    return false;
+  }
+
+  bool _inCaptionGroup(String label) {
+    for (final needed in _captionGroupLabels()) {
+      if (needed.toLowerCase() == label.toLowerCase()) return true;
+    }
+    return false;
+  }
+
+  bool _inFilingGroup(String label, WireIptcFieldSpec? spec) {
+    if (_gettyNeedsOneSupp && _suppLabels.contains(label)) return true;
+    return _required(spec);
+  }
+
+  /// Caption needs (red) win over wire filing needs (yellow).
+  _FieldAlert _alertFor(String label, WireIptcFieldSpec? spec) {
+    if (_captionMissing(label)) return _FieldAlert.caption;
+    if (_required(spec) && _blank(label, spec)) return _FieldAlert.filing;
+    return _FieldAlert.none;
+  }
+
   /// Keywords use a comma and a space. Personality uses a semicolon and no space.
   String _listText(String raw, String separator, {bool commas = true}) {
     final seen = <String>{};
@@ -367,49 +665,6 @@ class IptcTemplateEditor extends StatelessWidget {
 
   bool _allSuppBlank(Map<String, WireIptcFieldSpec> specs) =>
       _suppLabels.every((label) => _suppBlank(specs, label));
-
-  List<String> _emptyRequiredLabels(Map<String, WireIptcFieldSpec> specs) {
-    const keys = [
-      'Headline',
-      'Personality',
-      'Keywords',
-      'Special Instructions',
-      'Creator',
-      'Job Title',
-      'Description Writers',
-      'Credit',
-      'Source',
-      'Copyright',
-      'Location',
-      'City',
-      'Province/State',
-      'Country',
-      'Country Code',
-      'MEID',
-      'Object Name',
-      'Category',
-      'Supp Cat 1',
-      'Supp Cat 2',
-      'Supp Cat 3',
-      'Urgency',
-    ];
-    final out = <String>[];
-    var countedSupp = false;
-    for (final label in keys) {
-      final spec = specs[label];
-      if (label == 'Urgency') continue;
-      if (_gettyNeedsOneSupp && _suppLabels.contains(label)) {
-        if (!countedSupp && _allSuppBlank(specs)) {
-          out.add('Supplemental Category');
-          countedSupp = true;
-        }
-        continue;
-      }
-      if (!_required(spec)) continue;
-      if (_blank(label, spec)) out.add(label);
-    }
-    return out;
-  }
 
   Widget _group({
     required IptcEditorColors colors,
@@ -472,23 +727,33 @@ class IptcTemplateEditor extends StatelessWidget {
     final spec = specs[label];
     final key = spec?.storageKey ?? label;
     final value = _display(label, spec);
-    final required = _required(spec);
-    final empty = required && _blank(label, spec);
+    final alert = _alertFor(label, spec);
     return _FieldSlot(
       label: display ?? label,
-      required: required,
-      empty: empty,
+      alert: alert,
+      inCaptionGroup: _inCaptionGroup(label),
+      inFilingGroup: _inFilingGroup(label, spec),
       narrow: narrow,
       height: fieldH,
+      labelTip: (label == 'Personality' || label == 'Keywords')
+          ? _listMergeTip(label)
+          : null,
       child: _TextInput(
         key: ValueKey('$key-$revision'),
+        tabId: label,
         value: value,
         enabled: fieldsEnabled,
         mono: _monoKeys.contains(label),
-        missing: empty,
+        alert: alert,
+        inCaptionGroup: _inCaptionGroup(label),
+        inFilingGroup: _inFilingGroup(label, spec),
         height: fieldH,
         narrow: narrow,
         maxLength: label == 'Country Code' ? 3 : null,
+        center: label == 'Country Code',
+        needsCaptionFill: () => _captionMissing(label),
+        needsFilingFill: () =>
+            _inFilingGroup(label, spec) && _blank(label, spec),
         normalize: label == 'Keywords'
             ? (v) => _listText(v, ', ')
             : label == 'Personality'
@@ -504,48 +769,24 @@ class IptcTemplateEditor extends StatelessWidget {
     bool narrow,
     double fieldH,
   ) {
-    final country = specs['Country'];
-    final code = specs['Country Code'];
-    final countryEmpty = _required(country) && _blank('Country', country);
-    final codeEmpty = _required(code) && _blank('Country Code', code);
-    return _FieldSlot(
-      label: 'Country',
-      required: _required(country) || _required(code),
-      empty: countryEmpty || codeEmpty,
-      narrow: narrow,
-      height: fieldH,
-      child: Row(
-        children: [
-          Expanded(
-            child: _TextInput(
-              key: ValueKey('Country-$revision'),
-              value: _display('Country', country),
-              enabled: fieldsEnabled,
-              missing: countryEmpty,
-              height: fieldH,
-              narrow: narrow,
-              onChanged: (v) => onValueChanged(country?.storageKey ?? 'Country', v),
-            ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _text(specs, 'Country', narrow, fieldH),
+        ),
+        SizedBox(width: narrow ? 6 : 8),
+        SizedBox(
+          width: narrow ? 108 : 178,
+          child: _text(
+            specs,
+            'Country Code',
+            narrow,
+            fieldH,
+            display: 'Country Code',
           ),
-          const SizedBox(width: 4),
-          SizedBox(
-            width: 64,
-            child: _TextInput(
-              key: ValueKey('Country Code-$revision'),
-              value: _display('Country Code', code),
-              enabled: fieldsEnabled,
-              mono: true,
-              missing: codeEmpty,
-              height: fieldH,
-              narrow: narrow,
-              center: true,
-              maxLength: 3,
-              onChanged: (v) =>
-                  onValueChanged(code?.storageKey ?? 'Country Code', v),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -558,17 +799,22 @@ class IptcTemplateEditor extends StatelessWidget {
     final labels = _suppLabels;
     final shorts = ['Supp 1', 'Supp 2', 'Supp 3'];
     final groupMissing = _gettyNeedsOneSupp && _allSuppBlank(specs);
-    final empties = [
+    final alerts = [
       for (final label in labels)
         _gettyNeedsOneSupp
-            ? groupMissing
-            : _required(specs[label]) && _blank(label, specs[label]),
+            ? (groupMissing ? _FieldAlert.filing : _FieldAlert.none)
+            : _alertFor(label, specs[label]),
     ];
+    final slotAlert = alerts.contains(_FieldAlert.caption)
+        ? _FieldAlert.caption
+        : (alerts.contains(_FieldAlert.filing)
+            ? _FieldAlert.filing
+            : _FieldAlert.none);
     return _FieldSlot(
       label: 'Supp cats',
-      required: _gettyNeedsOneSupp ||
-          labels.any((label) => _required(specs[label])),
-      empty: empties.any((e) => e),
+      alert: slotAlert,
+      inCaptionGroup: false,
+      inFilingGroup: labels.any((l) => _inFilingGroup(l, specs[l])),
       hideLabel: narrow,
       narrow: narrow,
       height: fieldH,
@@ -581,13 +827,26 @@ class IptcTemplateEditor extends StatelessWidget {
                 children: [
                   _TextInput(
                     key: ValueKey('${labels[i]}-$revision'),
+                    tabId: labels[i],
                     value: _display(labels[i], specs[labels[i]]),
                     enabled: fieldsEnabled,
                     mono: true,
-                    missing: empties[i],
+                    alert: alerts[i],
+                    inCaptionGroup: false,
+                    inFilingGroup: _inFilingGroup(labels[i], specs[labels[i]]),
                     height: fieldH,
                     narrow: narrow,
                     center: true,
+                    needsCaptionFill: () => _captionMissing(labels[i]),
+                    needsFilingFill: () {
+                      final label = labels[i];
+                      final spec = specs[label];
+                      if (_gettyNeedsOneSupp) {
+                        return _allSuppBlank(specs) && _blank(label, spec);
+                      }
+                      return _inFilingGroup(label, spec) &&
+                          _blank(label, spec);
+                    },
                     onChanged: (v) => onValueChanged(
                       specs[labels[i]]?.storageKey ?? labels[i],
                       v,
@@ -599,16 +858,32 @@ class IptcTemplateEditor extends StatelessWidget {
                       left: 0,
                       right: 0,
                       child: IgnorePointer(
-                        child: Text(
-                          shorts[i].toUpperCase(),
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.4,
-                            color: empties[i] ? _warn : colors.t3,
-                          ),
+                        child: Builder(
+                          builder: (context) {
+                            final focus = _LegendFocusScope.maybeOf(context)
+                                    ?.focus ??
+                                _LegendFocus.none;
+                            final paint = focus == _LegendFocus.filing &&
+                                    _inFilingGroup(
+                                      labels[i],
+                                      specs[labels[i]],
+                                    )
+                                ? _FieldAlert.filing
+                                : alerts[i];
+                            return Text(
+                              shorts[i].toUpperCase(),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontFamily: FfTokens.fontFamily,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.4,
+                                color: paint != _FieldAlert.none
+                                    ? _alertColor(paint)
+                                    : colors.t3,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -634,8 +909,9 @@ class IptcTemplateEditor extends StatelessWidget {
         : IptcTemplateApplyService.normalizeUrgencyValue(raw);
     return _FieldSlot(
       label: 'Urgency',
-      required: false,
-      empty: false,
+      alert: _FieldAlert.none,
+      inCaptionGroup: false,
+      inFilingGroup: _inFilingGroup('Urgency', spec),
       narrow: narrow,
       height: fieldH,
       child: _UrgencyInput(
@@ -663,6 +939,9 @@ class _Header extends StatelessWidget {
     required this.loadingTemplate,
     required this.onClose,
     required this.compact,
+    this.onDeleteTemplate,
+    this.captionStyleLabel,
+    this.wireLabels = const {},
   });
 
   final String title;
@@ -671,17 +950,20 @@ class _Header extends StatelessWidget {
   final List<IptcTemplateCatalogEntry> templates;
   final String selectedTemplateId;
   final ValueChanged<IptcTemplateCatalogEntry> onTemplateSelected;
+  final ValueChanged<IptcTemplateCatalogEntry>? onDeleteTemplate;
   final VoidCallback? onLoad;
   final VoidCallback? onClear;
   final VoidCallback? onSave;
   final bool loadingTemplate;
   final VoidCallback onClose;
   final bool compact;
+  final String? captionStyleLabel;
+  final Map<WireStyle, String> wireLabels;
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
-    final entries = templates;
+    final styleLabel = captionStyleLabel?.trim() ?? '';
     return Container(
       padding: EdgeInsets.fromLTRB(20, compact ? 8 : 12, 12, compact ? 8 : 12),
       decoration: BoxDecoration(
@@ -689,16 +971,16 @@ class _Header extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: colors.tx,
-            ),
-          ),
           if (!showTemplateControls) ...[
+            Text(
+              title,
+              style: TextStyle(
+                fontFamily: FfTokens.fontFamily,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: colors.tx,
+              ),
+            ),
             if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
               const SizedBox(width: 12),
               Expanded(
@@ -722,19 +1004,37 @@ class _Header extends StatelessWidget {
               onTap: onClose,
             ),
           ] else ...[
-            const SizedBox(width: 8),
-            _TemplateDropdown(
-              entries: entries,
-              selectedTemplateId: selectedTemplateId,
-              onSelected: onTemplateSelected,
-            ),
-            const SizedBox(width: 4),
-            _LinkButton(
-              icon: PhosphorIconsRegular.floppyDisk,
-              label: 'Save template',
-              tooltip: 'Save changes to this template',
-              onTap: onSave,
-              compact: compact,
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'Caption Style',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: colors.t3,
+                    ),
+                  ),
+                  TextSpan(
+                    text: ' — ',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      color: colors.t3,
+                    ),
+                  ),
+                  TextSpan(
+                    text: styleLabel.isEmpty ? title : styleLabel,
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: colors.tx,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const Spacer(),
             _LinkButton(
@@ -744,13 +1044,24 @@ class _Header extends StatelessWidget {
                   : 'Import from JPG, Getty TXT, or XMP',
               tooltip: 'Import from JPG, Getty TXT, or XMP',
               onTap: onLoad,
+              fontSize: 11,
+              iconSize: 14,
             ),
-            _ClearLink(onTap: onClear, compact: compact),
-            Container(
-              width: 1,
-              height: 20,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              color: colors.line,
+            const SizedBox(width: 8),
+            _TemplateDropdown(
+              entries: templates,
+              selectedTemplateId: selectedTemplateId,
+              onSelected: onTemplateSelected,
+              onDelete: onDeleteTemplate,
+              captionStyleLabel: styleLabel,
+              wireLabels: wireLabels,
+            ),
+            _LinkButton(
+              icon: PhosphorIconsRegular.floppyDisk,
+              label: 'Save template',
+              tooltip: 'Save IPTC template',
+              onTap: onSave,
+              compact: compact,
             ),
             _IconButton(
               icon: PhosphorIconsRegular.x,
@@ -870,72 +1181,177 @@ class _TemplateDropdown extends StatelessWidget {
     required this.entries,
     required this.selectedTemplateId,
     required this.onSelected,
+    this.onDelete,
+    this.captionStyleLabel = '',
+    this.wireLabels = const {},
   });
 
   final List<IptcTemplateCatalogEntry> entries;
   final String selectedTemplateId;
   final ValueChanged<IptcTemplateCatalogEntry> onSelected;
+  final ValueChanged<IptcTemplateCatalogEntry>? onDelete;
+  final String captionStyleLabel;
+  final Map<WireStyle, String> wireLabels;
+
+  String _wireName(WireStyle wire) =>
+      WireIptcSpecs.displayWireLabel(wire, wireLabels[wire]);
+
+  String _selectedLabel() {
+    for (final e in entries) {
+      if (e.id == selectedTemplateId) return e.displayName;
+    }
+    return 'Nothing saved yet';
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
-    final ids = entries.map((e) => e.id).toSet();
-    final selected =
-        ids.contains(selectedTemplateId) ? selectedTemplateId : null;
-    return Container(
-      width: 220,
-      height: 34,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: colors.field,
-        borderRadius: BorderRadius.circular(8),
+    final wires = <WireStyle>[
+      for (final w in WireIptcSpecs.builtInWires)
+        if (entries.any((e) => e.wireStyle == w)) w,
+    ];
+    return PopupMenuButton<String>(
+      tooltip: 'Saved IPTC templates',
+      offset: const Offset(0, 36),
+      color: colors.group,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: colors.line),
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: selected,
-          hint: Text(
-            'Choose',
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: colors.t3,
-            ),
-          ),
-          isExpanded: true,
-          isDense: true,
-          dropdownColor: colors.group,
-          icon: PhosphorIcon(
-            PhosphorIconsRegular.caretDown,
-            size: 12,
-            color: colors.t3,
-          ),
-          style: TextStyle(
-            fontFamily: FfTokens.fontFamily,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: colors.tx,
-          ),
-          items: [
-            for (final entry in entries)
-              DropdownMenuItem(
-                value: entry.id,
-                child: Text(
-                  entry.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+      onSelected: (id) {
+        for (final entry in entries) {
+          if (entry.id == id) {
+            onSelected(entry);
+            return;
+          }
+        }
+      },
+      itemBuilder: (context) {
+        if (entries.isEmpty) {
+          return [
+            PopupMenuItem<String>(
+              enabled: false,
+              height: 36,
+              child: Text(
+                'Nothing saved yet',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                  color: colors.t3,
                 ),
               ),
+            ),
+          ];
+        }
+        final items = <PopupMenuEntry<String>>[];
+        for (var i = 0; i < wires.length; i++) {
+          final wire = wires[i];
+          if (i > 0) items.add(const PopupMenuDivider(height: 8));
+          items.add(
+            PopupMenuItem<String>(
+              enabled: false,
+              height: 28,
+              child: Text(
+                _wireName(wire),
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: colors.t3,
+                ),
+              ),
+            ),
+          );
+          for (final entry in entries.where((e) => e.wireStyle == wire)) {
+            final selected = entry.id == selectedTemplateId;
+            items.add(
+              PopupMenuItem<String>(
+                value: entry.id,
+                height: 36,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        entry.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontFamily: FfTokens.fontFamily,
+                          fontSize: 13,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                          color: colors.tx,
+                        ),
+                      ),
+                    ),
+                    if (selected)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 6),
+                        child: PhosphorIcon(
+                          PhosphorIconsBold.check,
+                          size: 14,
+                          color: colors.tx,
+                        ),
+                      ),
+                    if (onDelete != null)
+                      Tooltip(
+                        message: 'Delete template',
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () {
+                            // Close menu without selecting this template.
+                            Navigator.pop(context);
+                            onDelete!(entry);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: PhosphorIcon(
+                              PhosphorIconsRegular.trash,
+                              size: 14,
+                              color: colors.t3,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          }
+        }
+        return items;
+      },
+      child: Container(
+        width: 260,
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: colors.field,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                _selectedLabel(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: entries.isEmpty ? colors.t3 : colors.tx,
+                ),
+              ),
+            ),
+            PhosphorIcon(
+              PhosphorIconsRegular.caretDown,
+              size: 12,
+              color: colors.t3,
+            ),
           ],
-          onChanged: (id) {
-            if (id == null) return;
-            for (final entry in entries) {
-              if (entry.id == id) {
-                onSelected(entry);
-                return;
-              }
-            }
-          },
         ),
       ),
     );
@@ -949,6 +1365,8 @@ class _LinkButton extends StatelessWidget {
     required this.tooltip,
     required this.onTap,
     this.compact = false,
+    this.fontSize = 13,
+    this.iconSize = 16,
   });
 
   final IconData icon;
@@ -956,6 +1374,8 @@ class _LinkButton extends StatelessWidget {
   final String tooltip;
   final VoidCallback? onTap;
   final bool compact;
+  final double fontSize;
+  final double iconSize;
 
   @override
   Widget build(BuildContext context) {
@@ -973,14 +1393,14 @@ class _LinkButton extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            PhosphorIcon(icon, size: 16, color: colors.t2),
+            PhosphorIcon(icon, size: iconSize, color: colors.t2),
             if (!compact) ...[
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontFamily: FfTokens.fontFamily,
-                  fontSize: 13,
+                  fontSize: fontSize,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1116,11 +1536,7 @@ class _CaptionOmittedNote extends StatelessWidget {
           Expanded(
             child: Text(
               'Caption isn’t in this template — existing captions stay on your '
-              'photos and are written later when you caption in the session.\n'
-              '\n'
-              'If photos already have Personality or Keywords, Go time asks '
-              'whether to merge (add onto what’s there) or overwrite with '
-              'these values.',
+              'photos and are written later when you caption in the session.',
               style: TextStyle(
                 fontFamily: FfTokens.fontFamily,
                 fontSize: 12,
@@ -1138,47 +1554,78 @@ class _CaptionOmittedNote extends StatelessWidget {
 class _FieldSlot extends StatelessWidget {
   const _FieldSlot({
     required this.label,
-    required this.required,
-    required this.empty,
+    required this.alert,
+    required this.inCaptionGroup,
+    required this.inFilingGroup,
     required this.narrow,
     required this.height,
     required this.child,
     this.hideLabel = false,
+    this.labelTip,
   });
 
   final String label;
-  final bool required;
-  final bool empty;
+  final _FieldAlert alert;
+  /// Stays bright in red focus mode even after the field is filled.
+  final bool inCaptionGroup;
+  /// Stays bright in yellow focus mode even after the field is filled.
+  final bool inFilingGroup;
   final bool narrow;
   final double height;
   final Widget child;
   final bool hideLabel;
+  /// Tooltip shown via a small warning icon beside the label.
+  final String? labelTip;
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
-    final labelColor = empty ? _warn : (narrow ? colors.t3 : colors.t2);
-    final dot = required
-        ? Padding(
-            padding: const EdgeInsets.only(left: 5),
-            child: Container(
-              width: narrow ? 4 : 5,
-              height: narrow ? 4 : 5,
-              decoration: BoxDecoration(
-                color: empty ? _warn : colors.t3,
-                shape: BoxShape.circle,
+    final legendFocus =
+        _LegendFocusScope.maybeOf(context)?.focus ?? _LegendFocus.none;
+    final dimOthers = (legendFocus == _LegendFocus.caption && !inCaptionGroup) ||
+        (legendFocus == _LegendFocus.filing && !inFilingGroup);
+    // In yellow/red focus mode, paint every field in that group — filled too.
+    final paintAlert = legendFocus == _LegendFocus.filing && inFilingGroup
+        ? _FieldAlert.filing
+        : legendFocus == _LegendFocus.caption && inCaptionGroup
+            ? _FieldAlert.caption
+            : alert;
+    final alertOn = paintAlert != _FieldAlert.none;
+    final labelColor =
+        alertOn ? _alertColor(paintAlert) : (narrow ? colors.t3 : colors.t2);
+    final tip = labelTip;
+    final tipIcon = tip == null
+        ? null
+        : Tooltip(
+            message: tip,
+            waitDuration: const Duration(milliseconds: 280),
+            child: Padding(
+              padding: EdgeInsets.only(left: narrow ? 3 : 4),
+              child: PhosphorIcon(
+                PhosphorIconsRegular.warning,
+                size: narrow ? 11 : 13,
+                color: colors.t3,
               ),
             ),
-          )
-        : const SizedBox.shrink();
-    final labelWidget = Text.rich(
+          );
+    final labelText = Text.rich(
       TextSpan(
         children: [
           TextSpan(text: label),
-          if (required)
+          if (alertOn)
             WidgetSpan(
               alignment: PlaceholderAlignment.middle,
-              child: dot,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 5),
+                child: Container(
+                  width: narrow ? 4 : 5,
+                  height: narrow ? 4 : 5,
+                  decoration: BoxDecoration(
+                    color: _alertColor(paintAlert),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
             ),
         ],
       ),
@@ -1192,10 +1639,17 @@ class _FieldSlot extends StatelessWidget {
         color: labelColor,
       ),
     );
+    final labelRow = Row(
+      children: [
+        Flexible(child: labelText),
+        if (tipIcon != null) tipIcon,
+      ],
+    );
 
+    final Widget slot;
     if (narrow) {
       // Fixed height — never use Positioned.fill in a scroll view (unbounded).
-      return Padding(
+      slot = Padding(
         padding: const EdgeInsets.only(bottom: 4),
         child: SizedBox(
           height: height,
@@ -1207,26 +1661,41 @@ class _FieldSlot extends StatelessWidget {
                   top: 3,
                   left: 8,
                   right: 8,
-                  child: IgnorePointer(child: labelWidget),
+                  child: tipIcon == null
+                      ? IgnorePointer(child: labelText)
+                      : Row(
+                          children: [
+                            Flexible(
+                              child: IgnorePointer(child: labelText),
+                            ),
+                            tipIcon,
+                          ],
+                        ),
                 ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      slot = Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: SizedBox(
+          height: height,
+          child: Row(
+            children: [
+              SizedBox(width: 118, child: labelRow),
+              const SizedBox(width: 10),
+              Expanded(child: child),
             ],
           ),
         ),
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: SizedBox(
-        height: height,
-        child: Row(
-          children: [
-            SizedBox(width: 104, child: labelWidget),
-            const SizedBox(width: 10),
-            Expanded(child: child),
-          ],
-        ),
-      ),
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 160),
+      opacity: dimOthers ? 0.2 : 1,
+      child: slot,
     );
   }
 }
@@ -1236,10 +1705,15 @@ class _TextInput extends StatefulWidget {
     super.key,
     required this.value,
     required this.enabled,
-    required this.missing,
+    required this.alert,
     required this.height,
     required this.narrow,
     required this.onChanged,
+    this.tabId,
+    this.needsCaptionFill,
+    this.needsFilingFill,
+    this.inCaptionGroup = false,
+    this.inFilingGroup = false,
     this.mono = false,
     this.center = false,
     this.maxLength,
@@ -1248,10 +1722,15 @@ class _TextInput extends StatefulWidget {
 
   final String value;
   final bool enabled;
-  final bool missing;
+  final _FieldAlert alert;
   final double height;
   final bool narrow;
   final ValueChanged<String> onChanged;
+  final String? tabId;
+  final bool Function()? needsCaptionFill;
+  final bool Function()? needsFilingFill;
+  final bool inCaptionGroup;
+  final bool inFilingGroup;
   final bool mono;
   final bool center;
   final int? maxLength;
@@ -1265,12 +1744,35 @@ class _TextInputState extends State<_TextInput> {
   late final TextEditingController _controller;
   late final FocusNode _focus;
   bool _hover = false;
+  _IptcTabField? _tabField;
+  _LegendFocusScope? _tabScope;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.value);
-    _focus = FocusNode()..addListener(_onFocus);
+    _focus = FocusNode(onKeyEvent: _onKeyEvent)..addListener(_onFocus);
+  }
+
+  KeyEventResult _onKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey != LogicalKeyboardKey.tab) {
+      return KeyEventResult.ignored;
+    }
+    final scope = _tabScope ?? _LegendFocusScope.maybeOf(context);
+    if (scope == null || scope.focus == _LegendFocus.none) {
+      return KeyEventResult.ignored;
+    }
+    final reverse = HardwareKeyboard.instance.logicalKeysPressed.contains(
+      LogicalKeyboardKey.shiftLeft,
+    ) ||
+        HardwareKeyboard.instance.logicalKeysPressed.contains(
+          LogicalKeyboardKey.shiftRight,
+        );
+    final moved = scope.focusNextNeeded(from: node, reverse: reverse);
+    return moved ? KeyEventResult.handled : KeyEventResult.ignored;
   }
 
   void _onFocus() {
@@ -1285,24 +1787,75 @@ class _TextInputState extends State<_TextInput> {
     setState(() {});
   }
 
+  void _syncTabRegistration() {
+    final scope = _LegendFocusScope.maybeOf(context);
+    final id = widget.tabId;
+    if (scope == null || id == null || !widget.enabled) {
+      if (_tabField != null) {
+        _tabScope?.unregisterTabField(_focus);
+        _tabField = null;
+        _tabScope = null;
+      }
+      return;
+    }
+    final field = _tabField;
+    if (field != null && identical(_tabScope, scope)) {
+      field.needsCaptionFill =
+          widget.needsCaptionFill ?? field.needsCaptionFill;
+      field.needsFilingFill = widget.needsFilingFill ?? field.needsFilingFill;
+      return;
+    }
+    _tabScope?.unregisterTabField(_focus);
+    final next = _IptcTabField(
+      id: id,
+      node: _focus,
+      needsCaptionFill: widget.needsCaptionFill ?? () => false,
+      needsFilingFill: widget.needsFilingFill ?? () => false,
+    );
+    scope.registerTabField(next);
+    _tabField = next;
+    _tabScope = scope;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _syncTabRegistration();
+  }
+
   @override
   void didUpdateWidget(_TextInput oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _syncTabRegistration();
     if (_focus.hasFocus) return;
     if (_controller.text != widget.value) _controller.text = widget.value;
   }
 
   @override
   void dispose() {
+    _tabScope?.unregisterTabField(_focus);
     _focus.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  _FieldAlert _paintAlert(BuildContext context) {
+    final focus =
+        _LegendFocusScope.maybeOf(context)?.focus ?? _LegendFocus.none;
+    if (focus == _LegendFocus.filing && widget.inFilingGroup) {
+      return _FieldAlert.filing;
+    }
+    if (focus == _LegendFocus.caption && widget.inCaptionGroup) {
+      return _FieldAlert.caption;
+    }
+    return widget.alert;
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
     final focused = _focus.hasFocus;
+    final paintAlert = _paintAlert(context);
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
@@ -1316,8 +1869,8 @@ class _TextInputState extends State<_TextInput> {
           border: Border.all(
             color: focused
                 ? colors.focus
-                : widget.missing
-                    ? _warnLine
+                : paintAlert != _FieldAlert.none
+                    ? _alertLine(paintAlert)
                     : colors.workspace
                         ? FfTokens.nocturneLn
                         : Colors.transparent,
@@ -1436,26 +1989,26 @@ class _UrgencyInputState extends State<_UrgencyInput> {
 
 class _Footer extends StatelessWidget {
   const _Footer({
-    required this.missingLabels,
+    required this.wireLabel,
     required this.compact,
     required this.doneLabel,
     required this.onCancel,
     required this.onDone,
+    this.onClear,
   });
 
-  final List<String> missingLabels;
+  final String wireLabel;
   final bool compact;
   final String doneLabel;
   final VoidCallback onCancel;
+  final VoidCallback? onClear;
   final VoidCallback onDone;
 
   @override
   Widget build(BuildContext context) {
     final colors = IptcEditorPalette.of(context);
-    final ok = missingLabels.isEmpty;
-    final label = ok
-        ? 'All suggested fields filled'
-        : 'Missing: ${missingLabels.join(', ')}';
+    final focus = _LegendFocusScope.maybeOf(context);
+    final filingName = wireLabel.trim().isEmpty ? 'wire' : wireLabel;
     return Container(
       padding: EdgeInsets.fromLTRB(20, compact ? 8 : 10, 12, compact ? 8 : 12),
       decoration: BoxDecoration(
@@ -1463,43 +2016,34 @@ class _Footer extends StatelessWidget {
       ),
       child: Row(
         children: [
-          PhosphorIcon(
-            ok ? PhosphorIconsFill.checkCircle : PhosphorIconsFill.warningCircle,
-            size: 16,
-            color: ok ? colors.ok : _warn,
-          ),
-          const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontFamily: FfTokens.fontFamily,
-                fontSize: 13,
-                color: ok ? colors.t2 : _warn,
+            child: TapRegion(
+              groupId: _legendFocusTapGroup,
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _LegendButton(
+                    color: _captionWarn,
+                    label: 'Red - Required to build captions',
+                    selected: focus?.focus == _LegendFocus.caption,
+                    onTap: focus?.onToggleCaption,
+                    tooltipOff: 'Highlight fields required to build captions',
+                  ),
+                  _LegendButton(
+                    color: _filingWarn,
+                    label: 'Yellow - Needed for filing to $filingName',
+                    selected: focus?.focus == _LegendFocus.filing,
+                    onTap: focus?.onToggleFiling,
+                    tooltipOff:
+                        'Highlight fields needed for filing to $filingName',
+                  ),
+                ],
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            width: 5,
-            height: 5,
-            decoration: BoxDecoration(
-              color: colors.t3,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            'Suggested',
-            style: TextStyle(
-              fontFamily: FfTokens.fontFamily,
-              fontSize: 12,
-              color: colors.t3,
-            ),
-          ),
-          const SizedBox(width: 16),
           TextButton(
             onPressed: onCancel,
             style: TextButton.styleFrom(
@@ -1515,6 +2059,24 @@ class _Footer extends StatelessWidget {
               ),
             ),
           ),
+          if (onClear != null) ...[
+            const SizedBox(width: 4),
+            TextButton(
+              onPressed: onClear,
+              style: TextButton.styleFrom(
+                foregroundColor: colors.t2,
+                minimumSize: const Size(0, 38),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              child: const Text(
+                'Clear',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(width: 8),
           if (colors.workspace)
             TealActionButton(
@@ -1529,6 +2091,101 @@ class _Footer extends StatelessWidget {
           else
             _DoneButton(label: doneLabel, onPressed: onDone),
         ],
+      ),
+    );
+  }
+}
+
+class _LegendButton extends StatefulWidget {
+  const _LegendButton({
+    required this.color,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    required this.tooltipOff,
+  });
+
+  final Color color;
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+  final String tooltipOff;
+
+  @override
+  State<_LegendButton> createState() => _LegendButtonState();
+}
+
+class _LegendButtonState extends State<_LegendButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = IptcEditorPalette.of(context);
+    final selected = widget.selected;
+    final hover = _hover;
+    final fill = selected
+        ? widget.color.withValues(alpha: 0.18)
+        : hover
+            ? widget.color.withValues(alpha: 0.10)
+            : colors.field;
+    final border = selected || hover
+        ? widget.color.withValues(alpha: selected ? 0.85 : 0.55)
+        : colors.line;
+    final labelColor = selected || hover ? widget.color : colors.t2;
+
+    return Tooltip(
+      message: selected ? 'Show all fields' : widget.tooltipOff,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(9),
+            mouseCursor: SystemMouseCursors.click,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: fill,
+                borderRadius: BorderRadius.circular(9),
+                border: Border.all(color: border),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: widget.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 320),
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        fontWeight:
+                            selected ? FontWeight.w700 : FontWeight.w600,
+                        color: labelColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

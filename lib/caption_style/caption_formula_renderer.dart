@@ -52,89 +52,146 @@ class CaptionFormulaRenderer {
 
   /// IPTC panel labels needed by [template] that are empty on [game].
   ///
-  /// Used for startup / session warnings when location, venue, or byline
-  /// would fall back to placeholders ("—", "Venue", "Photographer").
+  /// IPTC fields still empty that the caption **structure** asks for.
+  ///
+  /// Flags every variable present in [CaptionTemplate.segmentOrder] / location
+  /// chips — including both State and Country when the structure lists both
+  /// (Getty auto-adapt does not hide either for this check).
   ///
   /// [includeCreator] is false on startup (Creator often comes from serial
   /// bylines per frame) and true in-session / IPTC dialog.
+  /// IPTC panel labels the caption structure uses, whether filled or blank.
+  static List<String> captionIptcLabels({
+    required CaptionTemplate template,
+    bool includeCreator = true,
+  }) {
+    // Structure UI expands legacy [location] into city/state/country tokens.
+    final expanded = template.expandLocationSegments();
+    final order = expanded.segmentOrder;
+    final labels = <String>[];
+
+    var needsCity = order.contains(CaptionSegment.city);
+    var needsState = order.contains(CaptionSegment.state);
+    var needsCountry = order.contains(CaptionSegment.country);
+    var needsCountryCode = order.contains(CaptionSegment.countryCode);
+
+    // Location chips in the structure (base + US/intl lists). Auto-adapt
+    // styles still ask for city, state, and country across both formulas.
+    var locOcc = 0;
+    for (final seg in template.segmentOrder) {
+      if (seg != CaptionSegment.location) continue;
+      final opts = locationLineOptionsForOccurrence(template, locOcc++);
+      if (opts.autoAdaptUsIntl) {
+        needsCity = true;
+        needsState = true;
+        needsCountry = true;
+      }
+      for (final chip in _structureGeoChips(opts)) {
+        switch (chip.kind) {
+          case LocationChipKind.city:
+            needsCity = true;
+          case LocationChipKind.region:
+            needsState = true;
+          case LocationChipKind.country:
+            if (chip.countryVariant == LocationCountryVariant.isoCode) {
+              needsCountryCode = true;
+            } else {
+              needsCountry = true;
+            }
+          case LocationChipKind.countryCode:
+            needsCountryCode = true;
+          case LocationChipKind.literal:
+            break;
+        }
+      }
+    }
+
+    // Expanded city/state/country tokens from an auto-adapt location line.
+    final locOpts = locationLineOptionsForOccurrence(template, 0);
+    if (locOpts.autoAdaptUsIntl &&
+        (order.contains(CaptionSegment.city) ||
+            order.contains(CaptionSegment.state) ||
+            order.contains(CaptionSegment.country))) {
+      needsCity = true;
+      needsState = true;
+      needsCountry = true;
+    }
+
+    if (needsCity) labels.add('City');
+    if (needsState) labels.add('Province/State');
+    if (needsCountry) labels.add('Country');
+    if (needsCountryCode) labels.add('Country Code');
+    if (order.contains(CaptionSegment.venue)) labels.add('Location');
+    if (includeCreator &&
+        (order.contains(CaptionSegment.credit) ||
+            order.contains(CaptionSegment.creator))) {
+      labels.add('Creator');
+    }
+    if (order.contains(CaptionSegment.agency) ||
+        order.contains(CaptionSegment.credit)) {
+      labels.add('Credit');
+    }
+    return labels;
+  }
+
   static List<String> missingCaptionIptcLabels({
     required CaptionTemplate template,
     required GameInfo game,
     bool includeCreator = true,
   }) {
-    final order = template.segmentOrder;
+    final needed = captionIptcLabels(
+      template: template,
+      includeCreator: includeCreator,
+    );
     final missing = <String>[];
-
-    final hasGeo = order.contains(CaptionSegment.location) ||
-        order.contains(CaptionSegment.city) ||
-        order.contains(CaptionSegment.state) ||
-        order.contains(CaptionSegment.country) ||
-        order.contains(CaptionSegment.countryCode);
-    if (hasGeo) {
-      final locOpts = locationLineOptionsForOccurrence(template, 0);
-      // Getty only: US↔intl auto-hide. Imagn keeps province and country together.
-      final gettyWire = template.wireStyle == WireStyle.getty ||
-          template.wireStyle == WireStyle.gettyInternational;
-      final us = isUnitedStatesGame(game);
-      final autoAdapt = locOpts.autoAdaptUsIntl || gettyWire;
-
-      bool needsCity() =>
-          order.contains(CaptionSegment.city) ||
-          order.contains(CaptionSegment.location);
-      bool needsState() {
-        if (order.contains(CaptionSegment.location)) return true;
-        if (!order.contains(CaptionSegment.state)) return false;
-        if (autoAdapt && !us) return false;
-        return true;
-      }
-
-      bool needsCountry() {
-        if (order.contains(CaptionSegment.location)) return true;
-        if (!order.contains(CaptionSegment.country)) return false;
-        if (autoAdapt && us) return false;
-        return true;
-      }
-
-      if (needsCity() && game.city.trim().isEmpty) {
-        missing.add('City');
-      }
-      final hasCountry = game.resolvedCountryName.isNotEmpty ||
-          game.resolvedCountryCode.isNotEmpty;
-      if (needsState()) {
-        if (game.resolvedRegionName.isEmpty &&
-            game.resolvedRegionShort.isEmpty) {
-          missing.add('Province/State');
-        }
-      }
-      if (needsCountry() && !hasCountry) {
-        missing.add('Country');
-      }
-      if (order.contains(CaptionSegment.countryCode) &&
-          game.resolvedCountryCode.isEmpty) {
-        missing.add('Country code');
+    for (final label in needed) {
+      switch (label) {
+        case 'City':
+          if (game.city.trim().isEmpty) missing.add(label);
+        case 'Province/State':
+          if (game.resolvedRegionName.isEmpty &&
+              game.resolvedRegionShort.isEmpty) {
+            missing.add(label);
+          }
+        case 'Country':
+          // Country name is its own IPTC field — a filled Country Code must
+          // not clear the Country highlight.
+          if (game.resolvedCountryName.isEmpty) missing.add(label);
+        case 'Country Code':
+          if (game.resolvedCountryCode.isEmpty) missing.add('Country code');
+        case 'Location':
+          if (storedVenue(game).isEmpty) missing.add(label);
+        case 'Creator':
+          if (game.photographerName.trim().isEmpty) missing.add(label);
+        case 'Credit':
+          if (game.agencyName.trim().isEmpty &&
+              _iptcLookup(game.iptcMetadata, const ['IPTC:Credit', 'Credit'])
+                  .isEmpty) {
+            missing.add(label);
+          }
       }
     }
-
-    if (order.contains(CaptionSegment.venue) &&
-        storedVenue(game).isEmpty) {
-      missing.add('Location');
-    }
-
-    if (includeCreator &&
-        (order.contains(CaptionSegment.credit) ||
-            order.contains(CaptionSegment.creator)) &&
-        game.photographerName.trim().isEmpty) {
-      missing.add('Creator');
-    }
-
-    if (order.contains(CaptionSegment.agency) &&
-        game.agencyName.trim().isEmpty &&
-        _iptcLookup(game.iptcMetadata, const ['IPTC:Credit', 'Credit'])
-            .isEmpty) {
-      missing.add('Credit');
-    }
-
     return missing;
+  }
+
+  /// Enabled geo chips the structure defines (union of base + territory lists).
+  static Iterable<LocationChip> _structureGeoChips(LocationLineOptions opts) {
+    final seen = <LocationChipKind>{};
+    final out = <LocationChip>[];
+    void take(List<LocationChip>? list) {
+      if (list == null) return;
+      for (final chip in list) {
+        if (chip.kind == LocationChipKind.literal) continue;
+        if (!chip.enabled) continue;
+        if (!seen.add(chip.kind)) continue;
+        out.add(chip);
+      }
+    }
+
+    take(opts.chips);
+    take(opts.usChips);
+    take(opts.intlChips);
+    return out;
   }
 
   static String formatDate(

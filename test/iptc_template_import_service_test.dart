@@ -57,6 +57,16 @@ void main() {
     });
   });
 
+  group('panelValuesFromExiftool', () {
+    test('maps bare Rights tag from XMP JSON to Copyright', () {
+      final v = IptcTemplateImportService.panelValuesFromExiftool({
+        'SourceFile': 'template.xmp',
+        'Rights': '2026 Getty Images',
+      });
+      expect(v['Copyright'], '2026 Getty Images');
+    });
+  });
+
   group('formatExifDateTimeForPanel', () {
     test('drops sub-second precision from display', () {
       final formatted = IptcTemplateImportService.formatExifDateTimeForPanel({

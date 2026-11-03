@@ -1123,15 +1123,26 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
     }
   }
 
-  /// Parent sport changed — refresh examples only; keep the wire master as-is.
+  /// Parent sport changed — load that sport’s Structure draft + preview sample.
   Future<void> _applyAdminSportChange() async {
     _sessionSport = widget.initialSport ?? _sessionSport;
     await _loadGameIdByWire();
     if (!mounted) return;
+    final seeded = widget.wireDraftsSeed?[_selectedWire] ??
+        widget.initialTemplate;
     final gid = _gameIdByWire[_selectedWire] ??
+        seeded?.gameIdentifierText ??
         defaultGameIdentifierText(_sessionSport);
     setState(() {
-      _template = _template.copyWith(gameIdentifierText: gid);
+      if (seeded != null) {
+        _template = seeded.copyWith(
+          wireStyle: _selectedWire,
+          gameIdentifierText: gid,
+        );
+        _wireDrafts[_selectedWire] = _template;
+      } else {
+        _template = _template.copyWith(gameIdentifierText: gid);
+      }
       if (_gameIdentifierCtrl.text != gid) {
         _gameIdentifierCtrl.text = gid;
       }
@@ -1143,6 +1154,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
       _rosterPreviewLoading = false;
       _previewHomeVenue = null;
     });
+    _syncBylineControllersFromTemplate();
     _ensureExampleTeams();
     unawaited(_loadAdminPreviewTeamList(force: true));
     unawaited(_refreshRosterPreviewPlayers(clearFirst: true));
@@ -1892,9 +1904,8 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
   String _factoryWireLabel(WireStyle w) {
     switch (w) {
       case WireStyle.getty:
-        return 'Getty';
       case WireStyle.gettyInternational:
-        return 'Getty International';
+        return 'Getty';
       case WireStyle.imagn:
         return 'Imagn';
       case WireStyle.ap:
@@ -6777,8 +6788,7 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
               const SizedBox(width: 6),
               _gettyPreviewToggle(),
             ],
-            // Sport is preview-only (sample verbs / teams / Game ID). Structure
-            // itself is one master per wire. Non-admin Imagn hides this.
+            // Admin: each sport has its own Structure for this wire.
             // Session startup already chose the league — don't re-pick sport.
             if (!_isSessionStartupEmbed &&
                 (!_isImagnWire || widget.adminMode)) ...[
@@ -6787,8 +6797,9 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
                 flex: 3,
                 maxWidth: 176,
                 child: Tooltip(
-                  message:
-                      'Example sport for preview only — does not change the wire Structure',
+                  message: widget.adminMode
+                      ? 'Edit Structure for this sport within the wire style'
+                      : 'Example sport for preview — sample verbs, teams, and game ID',
                   waitDuration: const Duration(milliseconds: 250),
                   child: _nocturneSelectShell(
                     icon: _sportPhosphorIcon(sport),
@@ -8343,9 +8354,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
           _nbaeToggle(),
           const SizedBox(width: 4),
           Tooltip(
-            message:
-                'One Structure per wire. Sport only changes preview sample, '
-                'teams, verbs, and the start-screen game-identifier variation.',
+            message: widget.adminMode
+                ? 'Each sport has its own Structure for this wire. '
+                    'Switch sport to edit that sport’s caption layout.'
+                : 'Sport changes preview sample, teams, verbs, and game ID.',
             waitDuration: const Duration(milliseconds: 300),
             child: PhosphorIcon(
               PhosphorIconsRegular.info,
@@ -9610,9 +9622,10 @@ class CaptionLayoutBuilderDialogState extends State<CaptionLayoutBuilderDialog> 
         SizedBox(width: 148, height: 34, child: _buildCaptionStyleDropdown()),
         const SizedBox(width: 8),
         Tooltip(
-          message:
-              'One Structure per wire. Sport only changes preview sample, '
-              'teams, verbs, and the start-screen game-identifier variation.',
+          message: widget.adminMode
+              ? 'Each sport has its own Structure for this wire. '
+                  'Switch sport to edit that sport’s caption layout.'
+              : 'Sport changes preview sample, teams, verbs, and game ID.',
           waitDuration: const Duration(milliseconds: 300),
           child: PhosphorIcon(
             PhosphorIconsRegular.info,

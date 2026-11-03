@@ -20,6 +20,7 @@ class _ClickHandCursorState extends State<ClickHandCursor> {
   MouseCursor _cursor = MouseCursor.defer;
 
   void _onHover(PointerHoverEvent event) {
+    if (!mounted) return;
     final result = HitTestResult();
     WidgetsBinding.instance.hitTestInView(
       result,
@@ -27,10 +28,12 @@ class _ClickHandCursorState extends State<ClickHandCursor> {
       event.viewId,
     );
     final next = _cursorFor(result);
+    if (!mounted) return;
     if (next != _cursor) setState(() => _cursor = next);
   }
 
   void _clearCursor() {
+    if (!mounted) return;
     if (_cursor != MouseCursor.defer) {
       setState(() => _cursor = MouseCursor.defer);
     }

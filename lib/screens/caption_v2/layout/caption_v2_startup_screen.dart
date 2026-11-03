@@ -134,18 +134,19 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   String? _favoriteHome;
   String? _favoriteAway;
+  /// All favorited team display names for the current sport (home, away, plain).
+  Set<String> _favoriteTeamNamesRaw = {};
   bool _useOfficialLeagueApis = false;
   IptcApplyMode _iptcMode = IptcApplyMode.none;
   String _iptcStatus = 'Off';
   List<String> _missingCaptionIptc = const [];
+  List<String> _missingFilingIptc = const [];
   bool _scanningIptc = false;
   int _iptcScanGen = 0;
 
   /// Latest folder + template IPTC panel values (for caption / structure preview).
   Map<String, String> _iptcPanelForPreview = const {};
 
-  /// True when sampled folder photos already have Personality and/or Keywords.
-  bool _folderHasPersonalityOrKeywords = false;
   bool _ftpModeEnabled = true;
   bool _fileRenamingEnabled = true;
   String _fileRenameTemplate = '';
@@ -209,10 +210,28 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   bool get _tank01Supported => _sport != null && tank01SupportsSport(_sport!);
 
   Set<String> get _favoriteTeamNames {
-    final out = <String>{};
+    final out = <String>{..._favoriteTeamNamesRaw};
     if (_favoriteHome != null) out.add(_favoriteHome!);
     if (_favoriteAway != null) out.add(_favoriteAway!);
     return out;
+  }
+
+  /// Map a saved favorite onto a name from the live team list.
+  String? _resolveFavoriteToTeam(String favorite, List<String> names) {
+    final trimmed = favorite.trim();
+    if (trimmed.isEmpty) return null;
+    if (names.contains(trimmed)) return trimmed;
+    final lower = trimmed.toLowerCase();
+    for (final n in names) {
+      if (n.toLowerCase() == lower) return n;
+    }
+    for (final n in names) {
+      final nl = n.toLowerCase();
+      if (lower.endsWith(nl) || nl.endsWith(lower) || lower.contains(nl) || nl.contains(lower)) {
+        return n;
+      }
+    }
+    return null;
   }
 
   String get _apiLabel {
@@ -286,19 +305,25 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
   }
 
-  String? get _iptcWarningText {
-    if (!_folderChosen) return null;
-    if (_scanningIptc) return 'Scanning folder IPTC…';
-    if (_missingCaptionIptc.isEmpty) return null;
-    final fields = _missingCaptionIptc.join(', ');
-    if (_writeIptc) {
-      return 'Missing IPTC: $fields';
-    }
-    return 'Missing IPTC: $fields — add them in Images · IPTC';
+  String get _filingWireLabel {
+    final wire = _captionTemplate?.wireStyle ?? WireStyle.getty;
+    final labelWire = wire == WireStyle.gettyInternational ||
+            wire == WireStyle.custom
+        ? WireStyle.getty
+        : wire;
+    return WireIptcSpecs.factoryWireLabel(labelWire);
   }
 
-  bool get _iptcComplete =>
+  bool get _hasIptcFieldWarnings =>
+      _missingCaptionIptc.isNotEmpty || _missingFilingIptc.isNotEmpty;
+
+  /// Caption structure fields are filled (does not require wire filing fields).
+  bool get _captionIptcReady =>
       _folderChosen && !_scanningIptc && _missingCaptionIptc.isEmpty;
+
+  /// Caption + wire filing fields are filled.
+  bool get _iptcComplete =>
+      _captionIptcReady && _missingFilingIptc.isEmpty;
 
   @override
   void initState() {
@@ -418,6 +443,14 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         _gettyNoteIsNbae = nbae;
         _loadingStyles = false;
       });
+      // Styles may finish after teams unlock — open IPTC once the Caption box
+      // is available and this wire's caption fields are still missing.
+      if (_postTeamsUnlocked) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          unawaited(_maybeOpenIptcAfterWirePick());
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -480,12 +513,27 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
   Future<void> _loadFavorites(String sport) async {
     final favs = await _prefs?.getFavoriteTeams(sport: sport) ?? <String>{};
-    _favoriteHome = null;
-    _favoriteAway = null;
+    String? home;
+    String? away;
+    final names = <String>{};
     for (final t in favs) {
-      if (t.startsWith('HOME:')) _favoriteHome = t.substring(5);
-      if (t.startsWith('AWAY:')) _favoriteAway = t.substring(5);
+      final raw = t.trim();
+      if (raw.isEmpty) continue;
+      if (raw.startsWith('HOME:')) {
+        home = raw.substring(5).trim();
+        if (home.isNotEmpty) names.add(home);
+      } else if (raw.startsWith('AWAY:')) {
+        away = raw.substring(5).trim();
+        if (away.isNotEmpty) names.add(away);
+      } else {
+        names.add(raw);
+        home ??= raw;
+        if (away == null && raw != home) away = raw;
+      }
     }
+    _favoriteHome = home?.isEmpty == true ? null : home;
+    _favoriteAway = away?.isEmpty == true ? null : away;
+    _favoriteTeamNamesRaw = names;
   }
 
   Future<void> _loadTeams({bool restoreLastTeams = false}) async {
@@ -520,15 +568,31 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     bool restoreLastTeams = false,
     String? error,
   }) async {
+    // Resolve saved favorites onto the live team list (Tank01 / API names
+    // can differ slightly from what was stored).
+    final resolvedFavs = <String>{};
+    for (final fav in _favoriteTeamNames) {
+      final resolved = _resolveFavoriteToTeam(fav, names);
+      if (resolved != null) resolvedFavs.add(resolved);
+    }
+    _favoriteTeamNamesRaw = resolvedFavs;
+    final resolvedHome = _favoriteHome == null
+        ? null
+        : _resolveFavoriteToTeam(_favoriteHome!, names);
+    final resolvedAway = _favoriteAway == null
+        ? null
+        : _resolveFavoriteToTeam(_favoriteAway!, names);
+    _favoriteHome = resolvedHome;
+    _favoriteAway =
+        resolvedAway != null && resolvedAway != resolvedHome ? resolvedAway : null;
+
     String? home;
     String? away;
 
-    if (_favoriteHome != null && names.contains(_favoriteHome)) {
+    if (_favoriteHome != null) {
       home = _favoriteHome;
     }
-    if (_favoriteAway != null &&
-        names.contains(_favoriteAway) &&
-        _favoriteAway != home) {
+    if (_favoriteAway != null && _favoriteAway != home) {
       away = _favoriteAway;
     }
 
@@ -556,6 +620,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     }
 
     if (!mounted) return;
+    final wasUnlocked = _postTeamsUnlocked;
     setState(() {
       _offline = offline;
       _teams = names;
@@ -564,8 +629,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       _awayTeam = away;
       _error = error;
       _captionPreviewPlayers = const [];
+      if (!_postTeamsUnlocked) _iptcOpenedForStyleToken = null;
     });
     unawaited(_refreshCaptionPreviewPlayers());
+    _onCaptionStepUnlocked(wasUnlocked: wasUnlocked);
   }
 
   Future<void> _setFolder(String path) async {
@@ -767,7 +834,13 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     final favs = await _prefs!.getFavoriteTeams(sport: _sport!);
     final prefix = isHome ? 'HOME:' : 'AWAY:';
     final currently = isHome ? _favoriteHome == team : _favoriteAway == team;
-    favs.removeWhere((e) => e.startsWith(prefix));
+    // Drop this side’s tagged entry and any plain duplicate of [team].
+    favs.removeWhere(
+      (e) =>
+          e.startsWith(prefix) ||
+          e.trim() == team ||
+          e.trim().toLowerCase() == team.toLowerCase(),
+    );
     if (!currently) {
       favs.add('$prefix$team');
       if (isHome) {
@@ -775,12 +848,19 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       } else {
         _favoriteAway = team;
       }
+      _favoriteTeamNamesRaw = {..._favoriteTeamNamesRaw, team};
     } else {
       if (isHome) {
         _favoriteHome = null;
       } else {
         _favoriteAway = null;
       }
+      _favoriteTeamNamesRaw = {
+        for (final n in _favoriteTeamNamesRaw)
+          if (n != team) n,
+      };
+      if (_favoriteHome != null) _favoriteTeamNamesRaw.add(_favoriteHome!);
+      if (_favoriteAway != null) _favoriteTeamNamesRaw.add(_favoriteAway!);
     }
     await _prefs!.saveFavoriteTeams(favs, sport: _sport!);
     if (mounted) setState(() {});
@@ -810,6 +890,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       folderPath: _folderPath,
       enableWriting: true,
       populateFromFolder: _folderChosen,
+      captionTemplate: _captionTemplate,
     );
     if (!mounted) return;
     if (summary == null || summary.mode == IptcApplyMode.none) {
@@ -839,7 +920,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       if (!mounted || gen != _iptcScanGen) return;
       setState(() {
         _missingCaptionIptc = const [];
-        _folderHasPersonalityOrKeywords = false;
+        _missingFilingIptc = const [];
         _scanningIptc = false;
       });
       return;
@@ -856,17 +937,25 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         hiddenIds: hidden,
       );
       final selectedId = await prefs.getSelectedIptcTemplateId() ?? 'getty';
-      var wire = WireStyle.getty;
+      final captionTemplate = _captionTemplate ?? CaptionTemplate.getty();
+      var wire = captionTemplate.wireStyle == WireStyle.custom
+          ? WireStyle.getty
+          : captionTemplate.wireStyle;
       for (final t in visible) {
         if (t.id == selectedId) {
-          wire = t.wireStyle;
+          // Prefer the active caption style’s wire; fall back to template id.
+          if (captionTemplate.wireStyle == WireStyle.custom) {
+            wire = t.wireStyle;
+          }
           break;
         }
       }
       if (visible.isEmpty) {
         for (final w in WireStyle.values) {
           if (AppDefaultsFirestoreService.templateIdForWire(w) == selectedId) {
-            wire = w;
+            if (captionTemplate.wireStyle == WireStyle.custom) {
+              wire = w;
+            }
             break;
           }
         }
@@ -919,38 +1008,31 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       final effective =
           _writeIptc ? previewPanel : Map<String, String>.from(fromFiles);
 
-      final captionTemplate = _captionTemplate ?? CaptionTemplate.getty();
       final missing = CaptionFormulaRenderer.missingCaptionIptcLabels(
         template: captionTemplate,
         game: IptcTemplateApplyService.gameInfoFromPanelValues(effective),
         includeCreator: false,
       );
-      final hasPersonality = IptcTemplateApplyService.lookupValue(
-            fromFiles,
-            'Personality',
-          )
-              ?.trim()
-              .isNotEmpty ==
-          true;
-      final hasKeywords = IptcTemplateApplyService.lookupValue(
-            fromFiles,
-            'Keywords',
-          )
-              ?.trim()
-              .isNotEmpty ==
-          true;
+      final filingMissing =
+          IptcTemplateApplyService.missingRequiredLabels(wire, effective)
+              .where(
+                (label) => !missing.any(
+                  (m) => m.toLowerCase() == label.toLowerCase(),
+                ),
+              )
+              .toList();
       if (!mounted || gen != _iptcScanGen) return;
       setState(() {
         _iptcPanelForPreview = previewPanel;
         _missingCaptionIptc = missing;
-        _folderHasPersonalityOrKeywords = hasPersonality || hasKeywords;
+        _missingFilingIptc = filingMissing;
         _scanningIptc = false;
       });
     } catch (_) {
       if (!mounted || gen != _iptcScanGen) return;
       setState(() {
         _missingCaptionIptc = const [];
-        _folderHasPersonalityOrKeywords = false;
+        _missingFilingIptc = const [];
         _scanningIptc = false;
       });
     }
@@ -1101,6 +1183,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       enableWriting: enableWriting,
       // Always fill the pad from folder IPTC when a folder is set.
       populateFromFolder: _folderChosen || populateFromFolder,
+      captionTemplate: _captionTemplate,
     );
     if (!mounted || summary == null) return;
     await _prefs?.saveIptcApplyMode(summary.mode);
@@ -1112,17 +1195,15 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     await _refreshIptcCaptionWarning();
   }
 
-  /// Opens IPTC on the Caption step after a wire is chosen, when caption
-  /// fields are still missing. Folder pick alone must not open the pad.
+  /// Opens IPTC when the Caption style box is reached (or wire changes) and
+  /// caption fields are still missing. Folder pick alone must not open the pad.
   Future<void> _maybeOpenIptcAfterWirePick() async {
     if (!_postTeamsUnlocked || !_folderChosen) return;
     final token = _selectedStyleToken;
     if (token == null || _captionTemplate == null) return;
 
-    if (_scanningIptc) {
-      await _refreshIptcCaptionWarning();
-      if (!mounted) return;
-    }
+    await _refreshIptcCaptionWarning();
+    if (!mounted) return;
     if (_missingCaptionIptc.isEmpty) {
       _iptcOpenedForStyleToken = token;
       return;
@@ -1136,7 +1217,16 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     if (!mounted) return;
     await _refreshIptcCaptionWarning();
     // Still missing after dismiss → allow another open on the next wire tap.
-    if (!_iptcComplete) _iptcOpenedForStyleToken = null;
+    if (!_captionIptcReady) _iptcOpenedForStyleToken = null;
+  }
+
+  /// Caption style box just unlocked (both teams chosen).
+  void _onCaptionStepUnlocked({required bool wasUnlocked}) {
+    if (wasUnlocked || !_postTeamsUnlocked) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_maybeOpenIptcAfterWirePick());
+    });
   }
 
   /// Opens IPTC when caption fields are missing. Returns true only when
@@ -1146,20 +1236,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       await _refreshIptcCaptionWarning();
       if (!mounted) return false;
     }
-    if (_iptcComplete) return true;
+    if (_captionIptcReady) return true;
 
     await _openIptc(populateFromFolder: true, enableWriting: true);
     if (!mounted) return false;
-    if (_iptcComplete) return true;
+    if (_captionIptcReady) return true;
 
-    final missing = _missingCaptionIptc;
-    if (missing.isNotEmpty) {
+    if (_missingCaptionIptc.isNotEmpty) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Need IPTC before starting: ${missing.join(', ')}',
-          ),
-          duration: const Duration(seconds: 4),
+        const SnackBar(
+          content: Text('Missing fields to build caption'),
+          duration: Duration(seconds: 4),
         ),
       );
     }
@@ -1271,174 +1358,68 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   Future<bool> _confirmWriteIptc() async {
-    final hasLists = _folderHasPersonalityOrKeywords;
-    final choice = await showDialog<Object>(
+    final confirmed = await showAppConfirmDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.55),
-      builder: (ctx) {
-        final body = hasLists
-            ? 'Template fields will be written to these photos. Existing '
-                'captions stay as they are.\n'
-                '\n'
-                'These photos already have personality and/or keywords. '
-                'Merge adds template values onto what’s already there. '
-                'Overwrite replaces them with the template values.'
-            : 'Template fields will be written to these photos. Existing '
-                'captions stay as they are.';
-        return Dialog(
-          backgroundColor: FfTokens.sessionPanel,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: FfTokens.sessionLn),
-          ),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Apply IPTC?',
-                          style: TextStyle(
-                            fontFamily: FfTokens.fontFamily,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: FfTokens.sessionTx,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => Navigator.pop(ctx),
-                        icon: const PhosphorIcon(
-                          PhosphorIconsRegular.x,
-                          size: 16,
-                          color: FfTokens.sessionT2,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Text(
-                      body,
-                      style: const TextStyle(
-                        fontFamily: FfTokens.fontFamily,
-                        fontSize: 13,
-                        height: 1.45,
-                        color: FfTokens.sessionT2,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Wrap(
-                      alignment: WrapAlignment.end,
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _Pressable(
-                          height: 34,
-                          radius: 8,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          color: FfTokens.sessionEl,
-                          hoverColor: FfTokens.sessionHv,
-                          borderColor: FfTokens.sessionLn2,
-                          borderWidth: 1,
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              fontFamily: FfTokens.fontFamily,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: FfTokens.sessionTx,
-                            ),
-                          ),
-                        ),
-                        if (hasLists) ...[
-                          _Pressable(
-                            height: 34,
-                            radius: 8,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            color: FfTokens.sessionEl,
-                            hoverColor: FfTokens.sessionHv,
-                            borderColor: FfTokens.sessionLn2,
-                            borderWidth: 1,
-                            onPressed: () => Navigator.pop(
-                              ctx,
-                              IptcOnLoadListMode.overwrite,
-                            ),
-                            child: const Text(
-                              'Overwrite',
-                              style: TextStyle(
-                                fontFamily: FfTokens.fontFamily,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: FfTokens.sessionTx,
-                              ),
-                            ),
-                          ),
-                          _Pressable(
-                            height: 34,
-                            radius: 8,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            color: FfTokens.sessionTx,
-                            hoverColor: FfTokens.sessionGoHover,
-                            onPressed: () => Navigator.pop(
-                              ctx,
-                              IptcOnLoadListMode.merge,
-                            ),
-                            child: const Text(
-                              'Merge',
-                              style: TextStyle(
-                                fontFamily: FfTokens.fontFamily,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: FfTokens.nocturneBg,
-                              ),
-                            ),
-                          ),
-                        ] else
-                          _Pressable(
-                            height: 34,
-                            radius: 8,
-                            padding: const EdgeInsets.symmetric(horizontal: 14),
-                            color: FfTokens.sessionTx,
-                            hoverColor: FfTokens.sessionGoHover,
-                            onPressed: () => Navigator.pop(
-                              ctx,
-                              IptcOnLoadListMode.merge,
-                            ),
-                            child: const Text(
-                              'Apply IPTC',
-                              style: TextStyle(
-                                fontFamily: FfTokens.fontFamily,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: FfTokens.nocturneBg,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+      title: 'Apply IPTC?',
+      message:
+          'Template fields will be written to these photos. Existing captions '
+          'stay as they are.',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Apply IPTC',
     );
-    if (choice is! IptcOnLoadListMode) return false;
-    await _prefs?.saveIptcOnLoadListMode(choice);
-    return true;
+    return confirmed == true;
+  }
+
+  Future<void> _restartSetup() async {
+    final hasProgress = _folderChosen ||
+        _homeFilled ||
+        _awayFilled ||
+        _writeIptc ||
+        _usingCustomRosters;
+    if (hasProgress) {
+      final confirmed = await showAppConfirmDialog(
+        context: context,
+        title: 'Restart setup?',
+        message:
+            'Clear the folder, teams, and IPTC write settings on this screen?',
+        cancelLabel: 'Cancel',
+        confirmLabel: 'Restart',
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    await _prefs?.saveIptcApplyMode(IptcApplyMode.none);
+    if (!mounted) return;
+    setState(() {
+      _folderPath = null;
+      _imageCount = 0;
+      _pickingFolder = false;
+      _folderDragOver = false;
+      _previewPhotoDate = DateTime.now();
+      _previewDateFromFolder = false;
+      _homeTeam = null;
+      _awayTeam = null;
+      _homeRoster = null;
+      _awayRoster = null;
+      _usingCustomRosters = false;
+      _captionPreviewPlayers = const [];
+      _previewHomeVenue = null;
+      _going = false;
+      _error = null;
+      _iptcMode = IptcApplyMode.none;
+      _iptcStatus = 'Off';
+      _missingCaptionIptc = const [];
+      _missingFilingIptc = const [];
+      _scanningIptc = false;
+      _iptcPanelForPreview = const {};
+      _iptcOpenedForStyleToken = null;
+      _homeWearsDark = null;
+    });
+    if (_sport != null) {
+      await _loadFavorites(_sport!);
+      if (mounted) setState(() {});
+    }
+    await _refreshIptcCaptionWarning();
   }
 
   Future<void> _goTime() async {
@@ -1548,6 +1529,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   }
 
   void _setAwayTeam(String? team) {
+    final wasUnlocked = _postTeamsUnlocked;
     setState(() {
       _usingCustomRosters = false;
       _awayTeam = team;
@@ -1561,9 +1543,11 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       if (!_postTeamsUnlocked) _iptcOpenedForStyleToken = null;
     });
     unawaited(_refreshCaptionPreviewPlayers());
+    _onCaptionStepUnlocked(wasUnlocked: wasUnlocked);
   }
 
   void _setHomeTeam(String? team) {
+    final wasUnlocked = _postTeamsUnlocked;
     setState(() {
       _usingCustomRosters = false;
       _homeTeam = team;
@@ -1577,6 +1561,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
       if (!_postTeamsUnlocked) _iptcOpenedForStyleToken = null;
     });
     unawaited(_refreshCaptionPreviewPlayers());
+    _onCaptionStepUnlocked(wasUnlocked: wasUnlocked);
   }
 
   Future<void> _refreshCaptionPreviewPlayers() async {
@@ -1683,9 +1668,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
             final width = constraints.maxWidth;
             const compact = true;
             final stackTeams = width <= 1000;
-            const padH = 24.0;
-            const padV = 16.0;
-            const gap = 12.0;
+            const padH = 20.0;
+            const padV = 10.0;
+            const gap = 8.0;
             return Padding(
               padding: const EdgeInsets.fromLTRB(padH, padV, padH, padV),
               child: Column(
@@ -1749,7 +1734,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     required bool stackTeams,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: FfTokens.sessionPanel,
         borderRadius: BorderRadius.circular(12),
@@ -1773,7 +1758,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 _setupGate(
                   unlocked: _teamsUnlocked,
                   child: _buildV4TeamsField(stack: true),
@@ -1810,7 +1795,7 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   Widget _v4FieldDivider() {
     return Container(
       width: 1,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
+      margin: const EdgeInsets.symmetric(horizontal: 12),
       color: FfTokens.sessionLn,
     );
   }
@@ -1940,10 +1925,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
   Widget _buildImagesIptcStrip() {
     final enabled = _folderChosen;
     final complete = _iptcComplete;
-    final missing = _missingCaptionIptc;
     final scanning = enabled && _scanningIptc;
-    final needsAdd = enabled && !scanning && !complete;
-    const warn = FfTokens.danger;
+    final needsAdd = enabled && !scanning && _hasIptcFieldWarnings;
+    const captionWarn = FfTokens.danger;
+    const filingWarn = Color(0xFFE8B547);
 
     final Widget statusIcon;
     if (!enabled) {
@@ -1965,10 +1950,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         color: FfTokens.sessionOk,
       );
     } else {
-      statusIcon = const PhosphorIcon(
+      statusIcon = PhosphorIcon(
         PhosphorIconsFill.warningCircle,
         size: 15,
-        color: warn,
+        color: _missingCaptionIptc.isNotEmpty ? captionWarn : filingWarn,
       );
     }
 
@@ -2008,14 +1993,17 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  missing.join(', '),
+                  'Missing fields',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: FfTokens.fontFamily,
                     fontSize: 12,
                     height: 1.1,
-                    color: warn,
+                    fontWeight: FontWeight.w500,
+                    color: _missingCaptionIptc.isNotEmpty
+                        ? captionWarn
+                        : filingWarn,
                   ),
                 ),
               ),
@@ -3012,9 +3000,9 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
     ];
     final body = LayoutBuilder(
       builder: (context, constraints) {
-        // Keep every option on one row whenever it fits.
+        // Two columns when needed so descriptions can read; one row when wide.
         final gap = compact ? 6.0 : 8.0;
-        final oneRow = constraints.maxWidth >= 640;
+        final oneRow = constraints.maxWidth >= 900;
         if (oneRow) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3062,6 +3050,8 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         );
       },
     );
+    // Title + one-line description; two rows when not wide enough for one.
+    final optionsHeight = compact ? 72.0 : 78.0;
     return Container(
       padding: EdgeInsets.fromLTRB(16, compact ? 8 : 10, 16, compact ? 8 : 10),
       decoration: BoxDecoration(
@@ -3073,17 +3063,18 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         children: [
           const Text('Session options', style: _kSectionLabel),
           const SizedBox(height: 6),
-          SizedBox(height: compact ? 34 : 36, child: body),
+          SizedBox(height: optionsHeight, child: body),
         ],
       ),
     );
   }
 
   Widget _buildReadyBar(FfTokens t, {required bool compact}) {
-    final note = _iptcWarningText;
-    final noteIsWarning = note != null &&
-        _missingCaptionIptc.isNotEmpty &&
-        !_scanningIptc;
+    final noteIsWarning = _folderChosen &&
+        !_scanningIptc &&
+        _hasIptcFieldWarnings;
+    const captionWarn = FfTokens.danger;
+    const filingWarn = Color(0xFFE8B547);
     final checks = <(String, bool)>[
       if (_folderChosen)
         (
@@ -3115,10 +3106,10 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
 
     return Container(
       padding: EdgeInsets.fromLTRB(
-        compact ? 12 : 16,
         compact ? 10 : 12,
-        compact ? 12 : 16,
+        compact ? 6 : 8,
         compact ? 10 : 12,
+        compact ? 6 : 8,
       ),
       decoration: BoxDecoration(
         color: FfTokens.sessionPanel,
@@ -3131,15 +3122,36 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
         children: [
           Expanded(
             child: noteIsWarning
-                ? Text(
-                    note!,
+                ? Text.rich(
+                    TextSpan(
+                      style: const TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      children: [
+                        if (_missingCaptionIptc.isNotEmpty)
+                          const TextSpan(
+                            text:
+                                'IPTC Warning - Missing Fields to Build Caption',
+                            style: TextStyle(color: captionWarn),
+                          ),
+                        if (_missingCaptionIptc.isNotEmpty &&
+                            _missingFilingIptc.isNotEmpty)
+                          const TextSpan(
+                            text: '  ·  ',
+                            style: TextStyle(color: FfTokens.sessionT3),
+                          ),
+                        if (_missingFilingIptc.isNotEmpty)
+                          TextSpan(
+                            text:
+                                'IPTC Warning - Missing Fields to File to $_filingWireLabel',
+                            style: const TextStyle(color: filingWarn),
+                          ),
+                      ],
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: FfTokens.fontFamily,
-                      fontSize: 12,
-                      color: FfTokens.danger,
-                    ),
                   )
                 : Wrap(
                     spacing: 14,
@@ -3177,9 +3189,42 @@ class _CaptionV2StartupScreenState extends State<CaptionV2StartupScreen> {
                     ],
                   ),
           ),
-          SizedBox(width: compact ? 10 : 12),
+          SizedBox(width: compact ? 8 : 10),
+          _Pressable(
+            height: compact ? 32 : 34,
+            radius: 8,
+            padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12),
+            color: FfTokens.sessionEl,
+            hoverColor: FfTokens.sessionHv,
+            borderColor: FfTokens.sessionLn2,
+            borderWidth: 1,
+            onPressed: _going ? null : () => unawaited(_restartSetup()),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PhosphorIcon(
+                  PhosphorIconsRegular.arrowCounterClockwise,
+                  size: 15,
+                  color: FfTokens.sessionTx,
+                ),
+                if (!compact) ...[
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Restart',
+                    style: TextStyle(
+                      fontFamily: FfTokens.fontFamily,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: FfTokens.sessionTx,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(width: compact ? 6 : 8),
           SizedBox(
-            width: compact ? 148 : 168,
+            width: compact ? 132 : 148,
             child: _GoTimeButton(
               enabled: _canGo,
               loading: _going,
@@ -4212,77 +4257,92 @@ class _SessionOptionCard extends StatelessWidget {
     final showAction = actionLabel != null && onAction != null && value;
     return Opacity(
       opacity: enabled ? 1 : 0.55,
-      child: Tooltip(
-        message: description,
-        waitDuration: const Duration(milliseconds: 450),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: enabled ? () => onChanged(!value) : null,
-            borderRadius: BorderRadius.circular(8),
-            hoverColor: enabled ? FfTokens.sessionHv : Colors.transparent,
-            child: Ink(
-              decoration: BoxDecoration(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? () => onChanged(!value) : null,
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: enabled ? FfTokens.sessionHv : Colors.transparent,
+          child: Ink(
+            decoration: BoxDecoration(
+              color: value
+                  ? FfTokens.nocturneAccentRow
+                  : FfTokens.nocturneSf,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
                 color: value
-                    ? FfTokens.nocturneAccentRow
-                    : FfTokens.nocturneSf,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: value
-                      ? FfTokens.nocturneAccentEdge
-                      : Colors.transparent,
-                ),
+                    ? FfTokens.nocturneAccentEdge
+                    : Colors.transparent,
               ),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: compact ? 8 : 9,
-                  vertical: compact ? 6 : 7,
-                ),
-                child: Row(
-                  children: [
-                    PhosphorIcon(
-                      icon,
-                      size: 14,
-                      color: value
-                          ? FfTokens.accentHover
-                          : FfTokens.sessionT3,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        title,
-                        maxLines: 1,
-                        softWrap: false,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          height: 1.1,
-                          color: FfTokens.sessionTx,
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? 8 : 9,
+                vertical: compact ? 4 : 5,
+              ),
+              child: Row(
+                children: [
+                  PhosphorIcon(
+                    icon,
+                    size: 14,
+                    color: value
+                        ? FfTokens.accentHover
+                        : FfTokens.sessionT3,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          title,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            height: 1.1,
+                            color: FfTokens.sessionTx,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 2),
+                        Text(
+                          description,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontFamily: FfTokens.fontFamily,
+                            fontSize: 11,
+                            height: 1.15,
+                            color: FfTokens.sessionT3,
+                          ),
+                        ),
+                      ],
                     ),
-                    if (showAction) ...[
-                      const SizedBox(width: 4),
-                      Builder(
-                        builder: (context) {
-                          return _SessionOptionAction(
-                            label: actionLabel!,
-                            icon: actionIcon,
-                            onPressed:
-                                enabled ? () => onAction!(context) : null,
-                          );
-                        },
-                      ),
-                    ],
+                  ),
+                  if (showAction) ...[
                     const SizedBox(width: 4),
-                    _SessionSwitch(
-                      value: value,
-                      onChanged: enabled ? onChanged : null,
+                    Builder(
+                      builder: (context) {
+                        return _SessionOptionAction(
+                          label: actionLabel!,
+                          icon: actionIcon,
+                          onPressed:
+                              enabled ? () => onAction!(context) : null,
+                        );
+                      },
                     ),
                   ],
-                ),
+                  const SizedBox(width: 4),
+                  _SessionSwitch(
+                    value: value,
+                    onChanged: enabled ? onChanged : null,
+                  ),
+                ],
               ),
             ),
           ),
@@ -4618,6 +4678,17 @@ class _TeamDropdownState extends State<_TeamDropdown> {
     super.didUpdateWidget(oldWidget);
     if (_entry == null) return;
     final shouldClose = _open && widget.openMenuId != widget.menuId;
+    final favoritesChanged = !_sameStrings(
+      oldWidget.favoriteNames,
+      widget.favoriteNames,
+    );
+    if (_open && favoritesChanged) {
+      // Keep Favorites section in sync when stars change; don't reshuffle All.
+      _menuFavorites =
+          widget.teams.where(widget.favoriteNames.contains).toList();
+      _menuRest =
+          widget.teams.where((t) => !widget.favoriteNames.contains(t)).toList();
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _entry == null) return;
       if (shouldClose) {
@@ -4626,6 +4697,14 @@ class _TeamDropdownState extends State<_TeamDropdown> {
         _entry?.markNeedsBuild();
       }
     });
+  }
+
+  static bool _sameStrings(Set<String> a, Set<String> b) {
+    if (a.length != b.length) return false;
+    for (final s in a) {
+      if (!b.contains(s)) return false;
+    }
+    return true;
   }
 
   @override
@@ -4720,7 +4799,8 @@ class _TeamDropdownState extends State<_TeamDropdown> {
   }
 
   Widget _menuRow(String name) {
-    final favorite = widget.sideFavorite == name;
+    final favorite = widget.favoriteNames.contains(name) ||
+        widget.sideFavorite == name;
     return Padding(
       padding: const EdgeInsets.only(bottom: 1),
       child: Material(
@@ -4785,7 +4865,9 @@ class _TeamDropdownState extends State<_TeamDropdown> {
   Widget build(BuildContext context) {
     final value = widget.value;
     final hasValue = value != null && value.isNotEmpty;
-    final favorited = hasValue && widget.sideFavorite == value;
+    final favorited = hasValue &&
+        (widget.sideFavorite == value ||
+            widget.favoriteNames.contains(value));
     final field = CompositedTransformTarget(
           link: _link,
           child: Focus(
@@ -5033,7 +5115,7 @@ class _GoTimeButtonState extends State<_GoTimeButton> {
         onTap: enabled ? widget.onPressed : null,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          height: widget.compact ? 42 : 42,
+          height: widget.compact ? 32 : 34,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: active ? null : FfTokens.sessionEl,

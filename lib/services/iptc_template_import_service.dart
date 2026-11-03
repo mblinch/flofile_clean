@@ -327,6 +327,8 @@ class IptcTemplateImportService {
         'IPTC:CopyrightNotice',
         'CopyrightNotice',
         'Copyright',
+        // ExifTool -j without -G1 returns the short tag name for XMP-dc:Rights.
+        'Rights',
         'XMP:Rights',
         'XMP-dc:Rights',
       ]),

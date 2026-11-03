@@ -41,9 +41,8 @@ class WireIptcSpecs {
   static String factoryWireLabel(WireStyle wire) {
     switch (wire) {
       case WireStyle.getty:
-        return 'Getty USA';
       case WireStyle.gettyInternational:
-        return 'Getty International';
+        return 'Getty';
       case WireStyle.imagn:
         return 'Imagn';
       case WireStyle.ap:
@@ -59,7 +58,8 @@ class WireIptcSpecs {
     final trimmed = customLabel?.trim();
     if (trimmed != null && trimmed.isNotEmpty) {
       final lower = trimmed.toLowerCase();
-      if (lower == 'getty usa' ||
+      if (lower == 'getty' ||
+          lower == 'getty usa' ||
           lower == 'getty international' ||
           lower == 'getty images') {
         return factoryWireLabel(wire);
@@ -67,6 +67,32 @@ class WireIptcSpecs {
       return trimmed;
     }
     return factoryWireLabel(wire);
+  }
+
+  /// Menu / save label so users see which wire an IPTC template belongs to.
+  /// Example: `Getty - IPTC template`.
+  static String iptcTemplateLabel(
+    WireStyle wire, {
+    String? wireLabel,
+    String? templateName,
+  }) {
+    final wireName = displayWireLabel(wire, wireLabel);
+    var custom = templateName?.trim() ?? '';
+    // Drop legacy Getty USA / International prefixes so labels stay "Getty - …".
+    for (final legacy in const [
+      'Getty USA - ',
+      'Getty International - ',
+      'Getty - ',
+    ]) {
+      if (custom.toLowerCase().startsWith(legacy.toLowerCase())) {
+        custom = custom.substring(legacy.length).trim();
+        break;
+      }
+    }
+    if (custom.isEmpty || custom.toLowerCase() == 'iptc template') {
+      return '$wireName - IPTC template';
+    }
+    return '$wireName - $custom';
   }
 
   static List<WireIptcFieldSpec> fieldsFor(WireStyle wire) {
@@ -280,7 +306,7 @@ class WireIptcSpecs {
     WireIptcFieldSpec(
       label: 'Headline',
       iptcTag: 'IPTC:Headline',
-      level: IptcFieldLevel.recommended,
+      level: IptcFieldLevel.required,
     ),
     WireIptcFieldSpec(
       label: 'Keywords',

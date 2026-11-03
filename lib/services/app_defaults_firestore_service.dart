@@ -435,15 +435,27 @@ class AppDefaultsFirestoreService {
   static Future<void> publishCaptionWireDefaults(
     Map<String, Map<String, dynamic>> defaults, {
     Map<String, Map<String, String>>? gameIdentifierByWireAndSport,
+    Map<String, Map<String, Map<String, dynamic>>>?
+        captionTemplateByWireAndSport,
   }) async {
     await _assertCanPublish();
-    // Mirror each master into every sport slot for older readers.
+    // Prefer explicit per-sport Structures; otherwise mirror each wire master.
     final byWireAndSport = <String, Map<String, Map<String, dynamic>>>{};
-    defaults.forEach((wireName, masterJson) {
-      byWireAndSport[wireName] = {
-        for (final sport in catalogSports) sport: masterJson,
-      };
-    });
+    if (captionTemplateByWireAndSport != null &&
+        captionTemplateByWireAndSport.isNotEmpty) {
+      captionTemplateByWireAndSport.forEach((wireName, bySport) {
+        byWireAndSport[wireName] = {
+          for (final entry in bySport.entries)
+            entry.key: Map<String, dynamic>.from(entry.value),
+        };
+      });
+    } else {
+      defaults.forEach((wireName, masterJson) {
+        byWireAndSport[wireName] = {
+          for (final sport in catalogSports) sport: masterJson,
+        };
+      });
+    }
     final payload = <String, dynamic>{
       'schemaVersion': currentSchemaVersion,
       'updatedAt': FieldValue.serverTimestamp(),

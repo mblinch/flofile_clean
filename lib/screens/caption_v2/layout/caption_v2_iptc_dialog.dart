@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../caption_style/caption_formula_renderer.dart';
+import '../../../caption_style/caption_style_catalog.dart';
 import '../../../caption_style/caption_template.dart';
 import '../../../caption_style/wire_iptc_specs.dart';
 import '../../../services/app_defaults_firestore_service.dart';
@@ -14,6 +15,7 @@ import '../../../services/iptc_template_import_service.dart';
 import '../../../services/preferences_service.dart';
 import '../../../theme/ff_tokens.dart';
 import '../../../utils/native_file_picker.dart';
+import '../../../widgets/app_styled_dialogs.dart';
 import 'iptc_template_editor.dart';
 
 /// Result summary shown on the V2 startup form after closing the dialog.
@@ -49,6 +51,7 @@ Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
   String? folderPath,
   bool enableWriting = false,
   bool populateFromFolder = false,
+  CaptionTemplate? captionTemplate,
 }) {
   return showDialog<CaptionV2IptcSummary>(
     context: context,
@@ -57,6 +60,7 @@ Future<CaptionV2IptcSummary?> showCaptionV2IptcDialog(
       folderPath: folderPath,
       enableWriting: enableWriting,
       populateFromFolder: populateFromFolder,
+      captionTemplate: captionTemplate,
     ),
   );
 }
@@ -67,6 +71,7 @@ class CaptionV2IptcDialog extends StatefulWidget {
     this.folderPath,
     this.enableWriting = false,
     this.populateFromFolder = false,
+    this.captionTemplate,
   });
 
   final String? folderPath;
@@ -78,6 +83,9 @@ class CaptionV2IptcDialog extends StatefulWidget {
   /// When true (folder just chosen), fill the panel from image IPTC and show
   /// what is already populated vs still missing.
   final bool populateFromFolder;
+
+  /// Caption style from New Session — drives which IPTC fields are marked red.
+  final CaptionTemplate? captionTemplate;
 
   @override
   State<CaptionV2IptcDialog> createState() => _CaptionV2IptcDialogState();
@@ -99,6 +107,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
   bool _loadingFromFiles = false;
   bool _loadingExternal = false;
   CaptionTemplate _captionTemplate = CaptionTemplate.getty();
+  String _captionStyleLabel = 'Getty';
 
   @override
   void initState() {
@@ -112,26 +121,120 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     await AppDefaultsFirestoreService.fetchAndCacheAppDefaults();
     var mode = await _prefs.getIptcApplyMode();
     if (widget.enableWriting) mode = IptcApplyMode.onImport;
-    final captionTemplate = await _prefs.getCaptionTemplate();
+    final captionTemplate =
+        widget.captionTemplate ?? await _prefs.getCaptionTemplate();
     final locals = await _prefs.getLocalIptcTemplates();
+    final selectedId = await _prefs.getSelectedIptcTemplateId() ?? '';
+    final styleCatalog = await CaptionStyleCatalog.load(_prefs);
     await _loadWireLabels();
 
     if (!mounted) return;
+    final catalog = await _buildTemplateCatalog(
+      locals,
+      captionWire: captionTemplate.wireStyle,
+    );
+    var pickId = selectedId;
+    if (pickId.isEmpty || !catalog.any((t) => t.id == pickId)) {
+      pickId = catalog.isNotEmpty ? catalog.first.id : '';
+    }
+    IptcTemplateCatalogEntry? selected;
+    for (final t in catalog) {
+      if (t.id == pickId) {
+        selected = t;
+        break;
+      }
+    }
+
     setState(() {
       _mode = mode;
-      // User-created templates only — no built-in wire list.
-      _visibleTemplates = locals;
-      // Start unselected — dropdown shows "Choose" until the user picks one.
-      _selectedTemplateId = '';
-      _wire = captionTemplate.wireStyle;
+      _visibleTemplates = catalog;
+      _selectedTemplateId = pickId;
+      _wire = selected?.wireStyle ??
+          _panelWireForCaption(captionTemplate.wireStyle);
       _captionTemplate = captionTemplate;
-      _values = const {};
+      _captionStyleLabel = styleCatalog.labelFor(styleCatalog.activeToken);
+      _values = selected == null
+          ? const {}
+          : _withDefaultUrgency(
+              IptcTemplateApplyService.denormalizeForPanel(
+                Map<String, String>.from(selected.preset),
+              ),
+            );
+      _clearedFields = selected?.clearedFields.toSet() ?? {};
       _loading = false;
     });
+
+    if (selected == null) {
+      await _loadPresetForWire(
+        _panelWireForCaption(captionTemplate.wireStyle),
+        forceReplace: true,
+      );
+    } else if (selected.preset.isEmpty) {
+      await _loadPresetForWire(selected.wireStyle, forceReplace: true);
+    }
 
     if (widget.populateFromFolder) {
       await _loadOriginalFromFolder();
     }
+  }
+
+  /// Panel / preset wire for the active caption style.
+  WireStyle _panelWireForCaption(WireStyle wire) {
+    return wire == WireStyle.custom ? WireStyle.getty : wire;
+  }
+
+  /// Label wire for menus (Getty USA + International both read as Getty).
+  WireStyle _labelWireForCaption(WireStyle wire) {
+    switch (wire) {
+      case WireStyle.gettyInternational:
+      case WireStyle.custom:
+        return WireStyle.getty;
+      case WireStyle.getty:
+      case WireStyle.imagn:
+      case WireStyle.ap:
+      case WireStyle.cp:
+        return wire;
+    }
+  }
+
+  bool _templateMatchesCaptionWire(
+    IptcTemplateCatalogEntry t,
+    WireStyle captionWire,
+  ) {
+    final panel = _panelWireForCaption(captionWire);
+    if (panel == WireStyle.getty || panel == WireStyle.gettyInternational) {
+      return t.wireStyle == WireStyle.getty ||
+          t.wireStyle == WireStyle.gettyInternational;
+    }
+    return t.wireStyle == panel;
+  }
+
+  /// Saved templates for the active caption style’s wire only.
+  /// Empty when nothing has been saved yet (menu shows “Nothing saved yet”).
+  Future<List<IptcTemplateCatalogEntry>> _buildTemplateCatalog(
+    List<IptcTemplateCatalogEntry> locals, {
+    required WireStyle captionWire,
+  }) async {
+    final panelWire = _panelWireForCaption(captionWire);
+    final labelWire = _labelWireForCaption(captionWire);
+    final out = <IptcTemplateCatalogEntry>[];
+    for (final t in locals) {
+      if (!_templateMatchesCaptionWire(t, captionWire)) continue;
+      out.add(
+        IptcTemplateCatalogEntry(
+          id: t.id,
+          wireStyle: panelWire,
+          displayName: WireIptcSpecs.iptcTemplateLabel(
+            labelWire,
+            wireLabel: _wireLabels[labelWire],
+            templateName: t.displayName,
+          ),
+          preset: t.preset,
+          clearedFields: t.clearedFields,
+        ),
+      );
+    }
+    return out;
   }
 
   List<String> get _missingCaptionIptc =>
@@ -195,20 +298,16 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     if (!forceReplace && _hasActiveContent) {
       setState(() {
         _wire = wire;
-        _selectedTemplateId = AppDefaultsFirestoreService.templateIdForWire(wire);
-        _values = _withDefaultUrgency(
-          IptcTemplateApplyService.panelValuesFromImportedTemplate(
-            _values,
-            wire,
-          ),
-        );
         _revision++;
       });
       return;
     }
     setState(() {
       _wire = wire;
-      _selectedTemplateId = AppDefaultsFirestoreService.templateIdForWire(wire);
+      // Keep empty selection when nothing is saved yet.
+      if (!_visibleTemplates.any((t) => t.id == _selectedTemplateId)) {
+        _selectedTemplateId = '';
+      }
       _values = _withDefaultUrgency(
         IptcTemplateApplyService.denormalizeForPanel(preset),
       );
@@ -232,29 +331,119 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       _keysFoundInFiles.clear();
       _revision++;
     });
+    unawaited(_prefs.setSelectedIptcTemplateId(entry.id));
+  }
+
+  Future<void> _deleteNamedTemplate(IptcTemplateCatalogEntry entry) async {
+    final confirmed = await showAppConfirmDialog(
+      context: context,
+      title: 'Delete template?',
+      message: 'Remove “${entry.displayName}” from saved IPTC templates?',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Delete',
+    );
+    if (confirmed != true || !mounted) return;
+
+    final locals = await _prefs.getLocalIptcTemplates();
+    final nextLocals = <IptcTemplateCatalogEntry>[
+      for (final t in locals)
+        if (t.id != entry.id) t,
+    ];
+    await _prefs.saveLocalIptcTemplates(nextLocals);
+    final catalog = await _buildTemplateCatalog(
+      nextLocals,
+      captionWire: _captionTemplate.wireStyle,
+    );
+    if (!mounted) return;
+
+    final wasSelected = _selectedTemplateId == entry.id;
+    setState(() {
+      _visibleTemplates = catalog;
+      if (wasSelected) {
+        _selectedTemplateId =
+            catalog.isNotEmpty ? catalog.first.id : '';
+      }
+    });
+    await _prefs.setSelectedIptcTemplateId(_selectedTemplateId);
+    if (wasSelected && catalog.isNotEmpty) {
+      _onTemplateSelected(catalog.first);
+    }
+  }
+
+  bool get _hasSelectedSavedTemplate {
+    final id = _selectedTemplateId.trim();
+    if (id.isEmpty) return false;
+    if (id == AppDefaultsFirestoreService.templateIdForWire(_wire)) {
+      return false;
+    }
+    return _visibleTemplates.any((t) => t.id == id);
+  }
+
+  String _currentTemplateDisplayName() {
+    for (final t in _visibleTemplates) {
+      if (t.id == _selectedTemplateId) {
+        return WireIptcSpecs.iptcTemplateLabel(
+          _wire,
+          wireLabel: _wireLabels[_wire],
+          templateName: t.displayName,
+        );
+      }
+    }
+    return WireIptcSpecs.iptcTemplateLabel(
+      _wire,
+      wireLabel: _wireLabels[_wire],
+    );
   }
 
   Future<void> _saveNamedTemplate() async {
-    var currentName = '';
-    for (final t in _visibleTemplates) {
-      if (t.id == _selectedTemplateId) {
-        currentName = t.displayName;
-        break;
-      }
-    }
-    final name = await _askTemplateName(currentName);
-    if (name == null || !mounted) return;
-    final trimmed = name.trim();
+    final wireName = WireIptcSpecs.displayWireLabel(_wire, _wireLabels[_wire]);
+    final currentName = _currentTemplateDisplayName();
+    final canUpdate = _hasSelectedSavedTemplate;
+
+    final takenNames = <String>{
+      for (final t in _visibleTemplates)
+        WireIptcSpecs.iptcTemplateLabel(
+          _wire,
+          wireLabel: _wireLabels[_wire],
+          templateName: t.displayName,
+        ).toLowerCase(),
+    };
+    final result = await _askTemplateName(
+      wireName: wireName,
+      initialFullName: currentName,
+      canUpdate: canUpdate,
+      takenNames: takenNames,
+      allowedUpdateName: canUpdate ? currentName : null,
+    );
+    if (result == null || !mounted) return;
+
+    final trimmed = WireIptcSpecs.iptcTemplateLabel(
+      _wire,
+      wireLabel: _wireLabels[_wire],
+      templateName: result.name.trim(),
+    );
     if (trimmed.isEmpty) return;
 
-    final locals = await _prefs.getLocalIptcTemplates();
-    var id = 'local:${DateTime.now().millisecondsSinceEpoch}';
-    for (final t in locals) {
-      if (t.displayName.toLowerCase() == trimmed.toLowerCase()) {
-        id = t.id;
-        break;
-      }
+    final asNew = result.asNew || !canUpdate;
+    // Defense in depth — dialog already blocks duplicates.
+    final nameKey = trimmed.toLowerCase();
+    final nameTaken = takenNames.contains(nameKey) &&
+        (asNew || nameKey != currentName.toLowerCase());
+    if (nameTaken) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('A template named “$trimmed” already exists.'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      return;
     }
+
+    final locals = await _prefs.getLocalIptcTemplates();
+    final id = asNew
+        ? 'local:${DateTime.now().millisecondsSinceEpoch}'
+        : _selectedTemplateId;
+
     _values = _withDefaultUrgency(_values);
     final entry = IptcTemplateCatalogEntry(
       id: id,
@@ -266,121 +455,71 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       ),
       clearedFields: _computeClearedFields().toList(),
     );
-    final next = <IptcTemplateCatalogEntry>[
+    final nextLocals = <IptcTemplateCatalogEntry>[
       for (final t in locals)
         if (t.id != id) t,
       entry,
     ];
-    await _prefs.saveLocalIptcTemplates(next);
+    await _prefs.saveLocalIptcTemplates(nextLocals);
+    final catalog = await _buildTemplateCatalog(
+      nextLocals,
+      captionWire: _captionTemplate.wireStyle,
+    );
     if (!mounted) return;
     setState(() {
-      _visibleTemplates = next;
+      _visibleTemplates = catalog;
       _selectedTemplateId = id;
       _clearedFields = entry.clearedFields.toSet();
     });
+    await _prefs.setSelectedIptcTemplateId(id);
     await _persist();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Saved “$trimmed”'),
+        content: Text(
+          asNew ? 'Saved new template “$trimmed”' : 'Saved “$trimmed”',
+        ),
         duration: const Duration(seconds: 2),
       ),
     );
   }
 
-  Future<String?> _askTemplateName(String initial) {
-    final controller = TextEditingController(text: initial);
-    return showDialog<String>(
+  /// Returns name + whether to create a new template, or null if cancelled.
+  Future<({String name, bool asNew})?> _askTemplateName({
+    required String wireName,
+    required String initialFullName,
+    required bool canUpdate,
+    required Set<String> takenNames,
+    String? allowedUpdateName,
+  }) {
+    final prefix = '$wireName - ';
+    var suffix = initialFullName.trim();
+    // Keep only the part after the wire prefix in the editable field.
+    for (final legacy in [
+      prefix,
+      'Getty USA - ',
+      'Getty International - ',
+      'Getty - ',
+      'Imagn - ',
+      'AP - ',
+      'CP - ',
+    ]) {
+      if (suffix.toLowerCase().startsWith(legacy.toLowerCase())) {
+        suffix = suffix.substring(legacy.length).trim();
+        break;
+      }
+    }
+    return showDialog<({String name, bool asNew})>(
       context: context,
-      builder: (dialogContext) {
-        return Dialog(
-          backgroundColor: FfTokens.sessionPanel,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: FfTokens.sessionLn),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'Save template',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: FfTokens.sessionTx,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Name',
-                  style: TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 12,
-                    color: FfTokens.sessionT2,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: controller,
-                  autofocus: true,
-                  style: const TextStyle(
-                    fontFamily: FfTokens.fontFamily,
-                    fontSize: 13,
-                    color: FfTokens.sessionTx,
-                  ),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    filled: true,
-                    fillColor: FfTokens.sessionEl,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 10,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(7),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                  onSubmitted: (value) =>
-                      Navigator.of(dialogContext).pop(value),
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          fontFamily: FfTokens.fontFamily,
-                          color: FfTokens.sessionT2,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton(
-                      onPressed: () =>
-                          Navigator.of(dialogContext).pop(controller.text),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: FfTokens.sessionTx,
-                        foregroundColor: FfTokens.sessionBg,
-                      ),
-                      child: const Text('Save'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    ).whenComplete(controller.dispose);
+      builder: (dialogContext) => _SaveIptcTemplateNameDialog(
+        title: 'Save $wireName IPTC template',
+        prefix: prefix,
+        initialSuffix: suffix,
+        canUpdate: canUpdate,
+        takenNames: takenNames,
+        allowedUpdateName: allowedUpdateName,
+      ),
+    );
   }
 
   void _onWireSelected(WireStyle wire) {
@@ -637,7 +776,7 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
       messenger?.showSnackBar(
         SnackBar(
           content: Text(
-            'IPTC missing: ${missing.join(', ')}. You can fill these later.',
+            'Missing fields. You can fill these later.',
           ),
           duration: const Duration(seconds: 4),
         ),
@@ -684,16 +823,21 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
                   revision: _revision,
                   fieldsEnabled: fieldsEnabled,
                   onTemplateSelected: _onTemplateSelected,
+                  onDeleteTemplate: (entry) =>
+                      unawaited(_deleteNamedTemplate(entry)),
                   onValueChanged: _onValueChanged,
                   onLoadTemplate: _loadExternalTemplate,
                   onClearTemplate: _clearTemplate,
-                  onSaveTemplate: _saveNamedTemplate,
+                  onSaveTemplate: () => unawaited(_saveNamedTemplate()),
                   loadEnabled: !_loadingExternal && !_loadingFromFiles,
                   clearEnabled: !_loadingExternal,
                   loadingTemplate: _loadingExternal,
                   applyMode: _mode,
                   onApplyModeChanged: (mode) =>
                       unawaited(_onModeChanged(mode)),
+                  captionTemplate: _captionTemplate,
+                  captionStyleLabel: _captionStyleLabel,
+                  wireLabels: Map<WireStyle, String>.from(_wireLabels),
                   onCancel: () => Navigator.of(context).pop(),
                   onDone: _done,
                 ),
@@ -702,4 +846,190 @@ class _CaptionV2IptcDialogState extends State<CaptionV2IptcDialog> {
     );
   }
 
+}
+
+/// Owns the name field controller so it isn’t disposed while the route is
+/// still animating out (avoids `_dependents.isEmpty` assertion).
+class _SaveIptcTemplateNameDialog extends StatefulWidget {
+  const _SaveIptcTemplateNameDialog({
+    required this.title,
+    required this.prefix,
+    required this.initialSuffix,
+    required this.canUpdate,
+    required this.takenNames,
+    this.allowedUpdateName,
+  });
+
+  final String title;
+  final String prefix;
+  final String initialSuffix;
+  final bool canUpdate;
+  /// Lowercased full names already in use for this wire.
+  final Set<String> takenNames;
+  /// When updating, this name may be kept (Save only — not Save as new).
+  final String? allowedUpdateName;
+
+  @override
+  State<_SaveIptcTemplateNameDialog> createState() =>
+      _SaveIptcTemplateNameDialogState();
+}
+
+class _SaveIptcTemplateNameDialogState
+    extends State<_SaveIptcTemplateNameDialog> {
+  late final TextEditingController _controller;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialSuffix);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _pop({required bool asNew}) {
+    final fullName = '${widget.prefix}${_controller.text.trim()}';
+    final key = fullName.toLowerCase();
+    final allowed = widget.allowedUpdateName?.trim().toLowerCase();
+    final conflict = widget.takenNames.contains(key) &&
+        (asNew || allowed == null || key != allowed);
+    if (conflict) {
+      setState(() {
+        _error = 'A template with this name already exists.';
+      });
+      return;
+    }
+    Navigator.of(context).pop((
+      name: fullName,
+      asNew: asNew,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: FfTokens.sessionPanel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: FfTokens.sessionLn),
+      ),
+      child: SizedBox(
+        width: 380,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.title,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: FfTokens.sessionTx,
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Name',
+                style: TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 12,
+                  color: FfTokens.sessionT2,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _controller,
+                autofocus: true,
+                style: const TextStyle(
+                  fontFamily: FfTokens.fontFamily,
+                  fontSize: 13,
+                  color: FfTokens.sessionTx,
+                ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  filled: true,
+                  fillColor: FfTokens.sessionEl,
+                  prefixText: widget.prefix,
+                  prefixStyle: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.sessionTx,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 10,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(7),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+                onChanged: (_) {
+                  if (_error != null) setState(() => _error = null);
+                },
+                onSubmitted: (_) => _pop(asNew: !widget.canUpdate),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    fontFamily: FfTokens.fontFamily,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: FfTokens.danger,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        color: FfTokens.sessionT2,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => _pop(asNew: true),
+                    child: const Text(
+                      'Save as new',
+                      style: TextStyle(
+                        fontFamily: FfTokens.fontFamily,
+                        color: FfTokens.sessionT2,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton(
+                    onPressed: () => _pop(asNew: false),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: FfTokens.sessionTx,
+                      foregroundColor: FfTokens.sessionBg,
+                    ),
+                    child: const Text('Save'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

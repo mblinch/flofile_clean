@@ -1021,9 +1021,8 @@ class IptcTemplateApplyService {
   ///
   /// When [replaceExisting] is true, IPTC already on the file is cleared first,
   /// then the full template is written. On session load ([preserveOnLoad]),
-  /// Caption is never written. Personality / Keywords use [onLoadListMode]:
-  /// merge (default) adds template values onto what’s already there; overwrite
-  /// replaces file values with non-empty template values.
+  /// Caption is never written. Personality / Keywords are always merged onto
+  /// existing values (never overwritten); duplicates are skipped.
   static Future<IptcApplyToImageResult> applyToImage(
     String imagePath,
     Map<String, String> template, {
@@ -1033,7 +1032,6 @@ class IptcTemplateApplyService {
     Set<String>? fieldsToClear,
     bool replaceExisting = false,
     bool preserveOnLoad = false,
-    IptcOnLoadListMode onLoadListMode = IptcOnLoadListMode.merge,
   }) async {
     if (replaceExisting && !preserveOnLoad) {
       skipInAppGenerated = false;
@@ -1055,7 +1053,7 @@ class IptcTemplateApplyService {
     );
 
     // Capture Personality / Keywords before stripping preserve keys so load can
-    // merge or overwrite them instead of treating them like other fields.
+    // merge them (add-only, deduped) instead of treating them like other fields.
     String? loadListKeywords;
     String? loadListPersonality;
     if (preserveOnLoad) {
@@ -1081,8 +1079,6 @@ class IptcTemplateApplyService {
     final hasLoadListWork = (loadListKeywords != null &&
             loadListKeywords.isNotEmpty) ||
         (loadListPersonality != null && loadListPersonality.isNotEmpty);
-    final overwriteLists =
-        preserveOnLoad && onLoadListMode.overwrites && hasLoadListWork;
 
     if (preset.isEmpty && !hasClearWork && !hasLoadListWork) {
       return const IptcApplyToImageResult(success: true, skipped: true);
@@ -1091,14 +1087,9 @@ class IptcTemplateApplyService {
     if (replaceExisting) {
       final preserveKeys = <String>{
         if (preserveOnLoad) ...preserveOnLoadCaptionKeys,
-        if (preserveOnLoad && !overwriteLists) ...const {
+        if (preserveOnLoad) ...const {
           'Personality',
           'Keywords',
-        },
-        // Overwrite only clears list fields the template actually supplies.
-        if (preserveOnLoad && overwriteLists) ...{
-          if (loadListPersonality == null) 'Personality',
-          if (loadListKeywords == null) 'Keywords',
         },
       };
       final cleared = await _clearIptcForReplace(
@@ -1165,40 +1156,24 @@ class IptcTemplateApplyService {
       final existing = meta != null
           ? IptcTemplateImportService.panelValuesFromExiftool(meta)
           : <String, String>{};
-      if (overwriteLists) {
-        if (loadListKeywords != null && loadListKeywords.isNotEmpty) {
-          if (!_keywordsMatch(loadListKeywords, existing['Keywords'] ?? '')) {
-            keywordsToWrite = loadListKeywords;
-          }
+      if (loadListKeywords != null && loadListKeywords.isNotEmpty) {
+        final merged = mergeKeywords(
+          existing['Keywords'] ?? '',
+          loadListKeywords,
+        );
+        if (merged.isNotEmpty &&
+            !_keywordsMatch(merged, existing['Keywords'] ?? '')) {
+          keywordsToWrite = merged;
         }
-        if (loadListPersonality != null && loadListPersonality.isNotEmpty) {
-          if (!_personalityMatch(
-            loadListPersonality,
-            existing['Personality'] ?? '',
-          )) {
-            fieldsToWrite['Personality'] = loadListPersonality;
-          }
-        }
-      } else {
-        if (loadListKeywords != null && loadListKeywords.isNotEmpty) {
-          final merged = mergeKeywords(
-            existing['Keywords'] ?? '',
-            loadListKeywords,
-          );
-          if (merged.isNotEmpty &&
-              !_keywordsMatch(merged, existing['Keywords'] ?? '')) {
-            keywordsToWrite = merged;
-          }
-        }
-        if (loadListPersonality != null && loadListPersonality.isNotEmpty) {
-          final merged = mergePersonality(
-            existing['Personality'] ?? '',
-            loadListPersonality,
-          );
-          if (merged.isNotEmpty &&
-              !_personalityMatch(merged, existing['Personality'] ?? '')) {
-            fieldsToWrite['Personality'] = merged;
-          }
+      }
+      if (loadListPersonality != null && loadListPersonality.isNotEmpty) {
+        final merged = mergePersonality(
+          existing['Personality'] ?? '',
+          loadListPersonality,
+        );
+        if (merged.isNotEmpty &&
+            !_personalityMatch(merged, existing['Personality'] ?? '')) {
+          fieldsToWrite['Personality'] = merged;
         }
       }
     }

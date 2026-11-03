@@ -638,18 +638,17 @@ class _AdminScreenState extends State<AdminScreen> {
     _captionByWireAndSport.clear();
     _gameIdDrafts.clear();
     for (final wire in AppDefaultsFirestoreService.captionWireStyles) {
-      // One master Structure per wire; sport only changes game-identifier text.
-      final master = catalog?.captionWireMaster(wire) ??
-          AppDefaultsFirestoreService.factoryCaptionForWire(wire);
       final bySportTemplate = <String, CaptionTemplate>{};
       final bySportGid = <String, String>{};
       for (final sport in _sports) {
+        final structure = catalog?.captionForWireAndSport(wire, sport) ??
+            AppDefaultsFirestoreService.factoryCaptionForWire(wire);
         final gid = catalog?.gameIdentifierText(wire, sport) ??
             defaultGameIdentifierText(sport);
-        // Bare Structure — no sport phrase baked in (start screen later).
-        bySportTemplate[sport] = _cloneCaption(master)
-            .stripGameIdentifierForWireMaster()
-            .copyWith(wireStyle: wire, gameIdentifierText: gid);
+        bySportTemplate[sport] = _cloneCaption(structure).copyWith(
+          wireStyle: wire,
+          gameIdentifierText: gid,
+        );
         bySportGid[sport] = gid;
       }
       _captionByWireAndSport[wire] = bySportTemplate;
@@ -758,18 +757,9 @@ class _AdminScreenState extends State<AdminScreen> {
     final copy = _cloneCaption(template).copyWith(wireStyle: wire);
     _captionDrafts[wire] = copy;
     _stashGameIdFromTemplate(wire, copy);
-    // Structure is wire-level: mirror the master into every sport slot, keeping
-    // each sport's start-screen game-identifier variation.
-    final master = CaptionTemplate.fromJson(
-      CaptionTemplate.wireMasterJsonFromTemplate(copy),
-    ).copyWith(wireStyle: wire);
+    // Only the selected sport’s Structure slot — other sports stay independent.
     final bySport = _captionByWireAndSport.putIfAbsent(wire, () => {});
-    for (final sport in _sports) {
-      final gid = _gameIdDrafts[wire]?[sport] ??
-          defaultGameIdentifierText(sport);
-      bySport[sport] =
-          _cloneCaption(master).copyWith(gameIdentifierText: gid);
-    }
+    bySport[_captionSport] = _cloneCaption(copy);
     final pending = _captionPendingCount > 0;
     if (!mounted) {
       _captionDirty = pending;
@@ -778,11 +768,18 @@ class _AdminScreenState extends State<AdminScreen> {
     setState(() => _captionDirty = pending);
   }
 
-  /// Sport in Structure admin is preview-only (verbs / teams / Game ID sample).
-  /// Do not flush or swap the wire master when it changes.
+  /// Switch which sport Structure is being edited (flush, then load that slot).
   void _onCaptionSportChanged(String sport) {
     if (sport == _captionSport) return;
-    setState(() => _captionSport = sport);
+    unawaited(() async {
+      await _flushCaptionBuilderDrafts();
+      if (!mounted) return;
+      setState(() {
+        _captionSport = sport;
+        _showCaptionSport(sport);
+        _captionBuilderRevision++;
+      });
+    }());
   }
 
   void _onCaptionWireChanged(WireStyle wire) {
@@ -1034,10 +1031,10 @@ class _AdminScreenState extends State<AdminScreen> {
           ? 'Publish caption defaults?'
           : 'Save this structure as default?',
       message: allWires
-          ? 'Saves one master Structure per wire. Sport phrases '
-              '(game identifier, notes) stay start-screen variations.'
-          : 'Saves the master Structure for $wireLabel (all sports). '
-              'The $sportLabel game identifier is saved as a start-screen variation.',
+          ? 'Publishes Structure for every wire and sport slot, plus '
+              'per-sport game identifiers.'
+          : 'Saves the $wireLabel Structure for $sportLabel only. '
+              'Other sports keep their own Structures.',
       confirmLabel: allWires ? 'Publish' : 'Save',
     );
     if (!ok) return false;
@@ -1057,16 +1054,26 @@ class _AdminScreenState extends State<AdminScreen> {
       );
       if (allWires) {
         final defaults = <String, Map<String, dynamic>>{};
+        final byWireAndSport = <String, Map<String, Map<String, dynamic>>>{};
         for (final wire in wires) {
-          final template = _captionDrafts[wire] ??
+          final active = _captionDrafts[wire] ??
+              _captionByWireAndSport[wire]?[_captionSport] ??
               AppDefaultsFirestoreService.factoryCaptionForWire(wire);
           defaults[wire.name] = CaptionTemplate.wireMasterJsonFromTemplate(
-            template.copyWith(wireStyle: wire),
+            active.copyWith(wireStyle: wire),
           );
+          byWireAndSport[wire.name] = {
+            for (final sport in _sports)
+              sport: CaptionTemplate.wireMasterJsonFromTemplate(
+                (_captionByWireAndSport[wire]?[sport] ?? active)
+                    .copyWith(wireStyle: wire),
+              ),
+          };
         }
         await AppDefaultsFirestoreService.publishCaptionWireDefaults(
           defaults,
           gameIdentifierByWireAndSport: _gameIdDraftsForFirestore(),
+          captionTemplateByWireAndSport: byWireAndSport,
         );
       } else {
         final template = _captionDrafts[_captionWire] ??
@@ -1077,6 +1084,7 @@ class _AdminScreenState extends State<AdminScreen> {
           gameIdentifierForSport: _gameIdDrafts[_captionWire]?[_captionSport] ??
               template.gameIdentifierText,
           gameIdentifierSport: _captionSport,
+          structureSport: _captionSport,
         );
       }
       await _applyPublishedCaptionToWorkingTemplate();
@@ -1092,9 +1100,8 @@ class _AdminScreenState extends State<AdminScreen> {
         SnackBar(
           content: Text(
             allWires
-                ? 'Published master Structures for all wires.'
-                : 'Saved the $wireLabel master Structure'
-                    '${sportLabel.isEmpty ? '' : ' (+ $sportLabel game ID)'}.',
+                ? 'Published Structures for all wires and sports.'
+                : 'Saved $wireLabel Structure for $sportLabel.',
           ),
           backgroundColor: kFloTealLight,
         ),
